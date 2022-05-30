@@ -24,7 +24,6 @@ class TCN(nn.Module):
             emb_dim: int = 0, causal: bool = False, norm_type: str = 'gLN') -> None:
         super().__init__()
         self.causal = causal
-        self.padd = (kernel - 1) * dilation // 2 if not causal else (kernel - 1) * dilation
         self.norm_type = norm_type
         norm_cls = get_norm(norm_type)
         
@@ -67,12 +66,7 @@ class TCN(nn.Module):
         x = self.in_conv(x)
         x = self.dconv(x)
         x = self.out_conv(x)
-        
-        if self.causal:
-            x = x[..., :-self.padd] + res
-        
-        else:
-            x = x + res
+        x = x + res
         
         return x
 
@@ -196,6 +190,7 @@ class ConvTasNet(nn.Module):
         self.tcn_dilated_basic = tcn_dilated_basic
         self.tcn_with_embed = tcn_with_embed
         self.norm_type = norm_type
+        self.causal = causal
 
         if self.tcn_layer.lower() == 'gated':
             tcn_cls = GatedTCN
@@ -254,4 +249,5 @@ class ConvTasNet(nn.Module):
             'repeat_tcn': self.repeat_tcn,
             'per_tcn_stack': self.per_tcn_stack,
             'tcn_with_embed': self.tcn_with_embed,
+            'causal': self.causal,
             }
