@@ -6,7 +6,7 @@ import torch.nn as nn
 
 class SDRLoss(nn.Module):
     def __init__(self, scaled: bool = True, scale_dependent: bool = False, zero_mean: bool = True, source_aggregated: bool = False, sdr_max: int = None,
-                    eps: float = 1e-8, reduction: bool = True) -> None:
+                    eps: float = 1e-8, reduction: bool = True, threshold: Optional[float] = None) -> None:
         """
         Signal SDR/SNR loss function and its variations.
 
@@ -18,6 +18,7 @@ class SDRLoss(nn.Module):
             sdr_max: if not None, used Soft-maximum threshold, named t-SDR
             eps: small value protect divide zero case
             reduction: is Fasle, return batch result
+            threshold: set SDR loss range (minimum)
         """
         super().__init__()
         self.scaled = scaled
@@ -27,9 +28,10 @@ class SDRLoss(nn.Module):
         self.sdr_max = sdr_max
         self.eps = eps
         self.reduction = reduction
+        self.threshold = threshold
 
     @classmethod
-    def init_mode(cls, loss_func: str = 'sisnr', reduction: bool = True) -> None:
+    def init_mode(cls, loss_func: str = 'sisnr', reduction: bool = True, threshold: Optional[float] = None) -> None:
         """
         Init loss function module by alias name.\n
         You can implemented different SDR loss here.
@@ -66,16 +68,16 @@ class SDRLoss(nn.Module):
             sdr_max = None
         
         print(f"init loss function: {loss_func}")
-        return cls(scaled=scaled, scale_dependent=scale_dependent, zero_mean=True, source_aggregated=source_aggregated, sdr_max=sdr_max, eps=1e-8, reduction=reduction)
+        return cls(scaled=scaled, scale_dependent=scale_dependent, zero_mean=True, source_aggregated=source_aggregated,
+                    sdr_max=sdr_max, eps=1e-8, reduction=reduction, threshold=threshold)
     
-    def forward(self, s1: torch.Tensor, s2: torch.Tensor, threshold: Optional[float] = None) -> torch.Tensor:
+    def forward(self, s1: torch.Tensor, s2: torch.Tensor) -> torch.Tensor:
         """
         Compute SDR loss.
         
         Args:
             s1: enhanced signal tensor
             s2: reference signal tensor
-            threshold: set SDR loss range (minimum)
         
         Returns:
             loss
@@ -114,9 +116,9 @@ class SDRLoss(nn.Module):
 
         snr = -1 * snr
 
-        if threshold is not None:
+        if self.threshold is not None:
             # hard threshold
-            snr_to_keep = snr[snr > threshold]
+            snr_to_keep = snr[snr > self.threshold]
             if snr_to_keep.nelement() > 0:
                 snr = snr_to_keep.view(-1, 1)
 
