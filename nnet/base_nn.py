@@ -1,8 +1,10 @@
 from typing import Optional
 
+import numpy as np
 import torch
 import torch.nn as nn
-from .lobe.encoder import FreeEncDec, ConvEncDec
+
+from .lobe.encoder import ConvEncDec, FreeEncDec
 
 
 class BaseModel(nn.Module):
@@ -166,6 +168,18 @@ class TaskWarpModule(EncDecMaskerBaseModel):
     """
     Model wrapper for each task.
 
+    Args:
+        encoder: nn.Module, speech encoder convert the speech samples to latent feature
+        masker: nn.Module, mask generation backbone model
+        encoder_spk: nn.Module, speech encoder (for SpeakerNet) convert the speech samples to latent feature
+        speaker_net: nn.Module, speaker embedding generation backbone model
+        loss_func_wav: nn.Module, signal-domain loss function
+        loss_func_spk: nn.Module, classification or others loss function
+        f_type: latent feature type, for STFT encoder we have [real, complex, polar] format
+        mask_type: mask type, for STFT encoder we have [real, complex, polar] format
+        mask_constraint: activation function on mask generation, [linear, relu, softmax]
+        verbose: print model infomation
+
     Main structure has:
         Encoder -> Masker -> Decoder(inside encoder's inverse). // This is `Speech Enhancement` or `Speech Separation` Task
     
@@ -190,6 +204,7 @@ class TaskWarpModule(EncDecMaskerBaseModel):
                 f_type: str = 'real',
                 mask_type: str = 'real',
                 mask_constraint: str = 'linear',
+                verbose: bool = True,
                 ) -> None:
         super().__init__()
         self.f_type = f_type
@@ -202,6 +217,7 @@ class TaskWarpModule(EncDecMaskerBaseModel):
         self.loss_func_spk = loss_func_spk
         self.mask_constraint = mask_constraint
         self.task = self.check_task()
+        if verbose: self._verbose()
     
     def check_task(self):
         """
@@ -360,3 +376,52 @@ class TaskWarpModule(EncDecMaskerBaseModel):
             enh_wav = torch.clamp_(enh_wav, min=-1, max=1)
 
         return enh_wav
+    
+    @torch.no_grad()
+    def inference_tse_embedding(self, enroll: Optional[torch.Tensor] = None) -> torch.Tensor:
+        """Forward SpeakerNet to get speaker embedding in TSE-task setting."""
+        assert self.task == 1
+        # Enable shared encoder structure like SpEx+
+        if self.encoder_spk is None:
+            enroll = self.encoder(enroll) # [N, C, T]
+        else:
+            enroll = self.encoder_spk(enroll) # [N, C, T]
+
+        dvec = enroll
+        for layer in self.speaker_net:
+            dvec = layer(dvec) # [N, emb_dim]
+        
+        return dvec
+
+    def _verbose(self):
+        print(f"---------------Verbose logging---------------")
+        self.eval()
+        print(f"Current is training mode: {self.training}")
+        print(f"Total params: {self.overall_parameters}")
+                
+        # compute lookahead
+        x = torch.rand(1, 10*16000)
+        x[..., 5*16000:] = np.inf
+        x_spk = torch.rand(1, 10*16000)
+        y = self.inference(x, x_spk).detach()
+        lookahead = np.where(np.isnan(y) == True)[-1][0]
+        if lookahead == 0:
+            print('Lookahead(samples): infinite')
+        else:
+            lookahead = 80000 - lookahead
+            print(f'Lookahead(samples): {lookahead}')
+        
+        # compute receptive field
+        x = torch.rand(1, 10*16000)
+        x[..., :-5*16000] = np.inf
+        y = self.inference(x, x_spk).detach()
+        receptive = np.where(np.isnan(y) == True)[-1][-1]
+        if receptive - (80000 - 1) == 80000:
+            print(f'Receptive Fields(samples): infinite')
+        else:
+            receptive = receptive - (80000 - 1)
+            print(f'Receptive Fields(samples): {receptive}')
+
+        self.train()
+        print(f"Current is training mode: {self.training}")
+        print(f"---------------Verbose logging---------------")

@@ -71,9 +71,12 @@ class InstantLN(_LayerNorm):
 gLN = GlobLN
 cLN = ChanLN
 iLN = InstantLN
-
+bN1d = nn.BatchNorm1d
 
 def get_norm(name: str):
+    if name not in ['gLN', 'cLN', 'iLN', 'bN1d']:
+        raise NameError('Could not interpret normalization identifier')
+
     if isinstance(name, str):
         cls = globals().get(name)
         if cls is None:

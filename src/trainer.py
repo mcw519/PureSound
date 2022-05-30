@@ -110,6 +110,8 @@ class BaseTrainer():
     """
     def __init__(self, hparam: Dict, device_backend: str = 'cuda'):
         self.hparam = hparam
+        self.best_loss = torch.inf
+        self.best_epoch = torch.inf
 
         if device_backend.lower() == 'cuda':
             if torch.cuda.is_available():
@@ -166,13 +168,17 @@ class BaseTrainer():
                 "state_dict": model.state_dict(),
                 "epoch": epoch,
                 "learning_rate": learning_rate,
-                "loss": loss['total_loss']}
+                "loss": loss['total_loss'],
+                "best_epoch": self.best_loss,
+                "best_epoch": self.best_epoch,}
         else:
             ckpt = {
                 "state_dict": model.module.state_dict(),
                 "epoch": epoch,
                 "learning_rate": learning_rate,
-                "loss": loss['total_loss']}
+                "loss": loss['total_loss'],
+                "best_epoch": self.best_loss,
+                "best_epoch": self.best_epoch,}
         
         torch.save(ckpt, filename)
     
@@ -182,6 +188,8 @@ class BaseTrainer():
             f.write(f"epoch: {epoch}\n")
             f.write(f"lr: {learning_rate}\n")
             f.write(f"loss: {loss['total_loss']}\n")
+            f.write(f"best_epoch: {self.best_epoch}\n")
+            f.write(f"best_loss: {self.best_loss}\n")
     
     def load_ckpt(self, filename: str, model: Any) -> Tuple:
         """function to load pre-trained model."""
@@ -189,6 +197,13 @@ class BaseTrainer():
         epoch = ckpt['epoch']
         lr = ckpt['learning_rate']
         loss = ckpt['loss']
+        try:
+            self.best_epoch = ckpt['best_epoch']
+            self.best_loss = ckpt['best_loss']
+        except:
+            self.best_epoch = torch.inf
+            self.best_loss = torch.inf
+
         if self.hparam['TRAIN']['multi_gpu']:
             model.module.load_state_dict(ckpt['state_dict'])
         else:
@@ -216,6 +231,10 @@ class BaseTrainer():
             
             self.model.train()
             loss = self.train_one_epoch(current_epoch=epoch)
+            if loss <= self.best_loss:
+                self.best_loss = loss
+                self.best_epoch = epoch
+
             self.model.eval()
             dev_loss = self.compute_dev_loss(current_epoch=epoch)
 

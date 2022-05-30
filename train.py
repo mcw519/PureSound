@@ -2,10 +2,10 @@ import torch
 import torchaudio
 from tqdm import tqdm
 
+from model import init_loss, init_model
 from src.audio import AudioIO
 from src.trainer import BaseTrainer
 from src.utils import load_text_as_dict
-from model import get_model
 
 
 class TseTrainer(BaseTrainer):
@@ -16,7 +16,8 @@ class TseTrainer(BaseTrainer):
         self.dev_dataloader = dev_dataloader
     
     def build_model(self):
-        self.model = get_model(self.hparam['MODEL']['type'])
+        sig_loss, cls_loss = init_loss(self.hparam)
+        self.model = init_model(self.hparam['MODEL']['type'], sig_loss, cls_loss, verbose=True)
 
     def train_one_epoch(self, current_epoch):
         step = 0
@@ -34,7 +35,8 @@ class TseTrainer(BaseTrainer):
             self.optimizer.zero_grad()
             
             # Model forward
-            loss, loss_detail = self.model(noisy=noisy_wav, enroll=enroll_wav, ref_clean=clean_wav, spk_class=target_spk_class, alpha=1, return_loss_detail=True)
+            loss, loss_detail = self.model(noisy=noisy_wav, enroll=enroll_wav, ref_clean=clean_wav, spk_class=target_spk_class,
+                                    alpha=self.hparam['LOSS']['alpha'], return_loss_detail=True)
             loss = torch.mean(loss, dim=0) # aggregate loss from each device
             signal_loss = torch.mean(loss_detail[0], dim=0)
             class_loss = torch.mean(loss_detail[1], dim=0)
