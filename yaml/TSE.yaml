@@ -1,7 +1,7 @@
 DATASET:
-  type: #
+  type: TSE
   sample_rate: 16000
-  max_length:
+  max_length: # input snipit length
   train: # train set folder
   dev: # dev set folder
   eval: # eval set folder for tensorboard logging
@@ -19,8 +19,14 @@ MODEL:
   type: # model-name
   
 LOSS:
-  type: sisnr
-  threshold:
+  sig_loss: sisnr
+  sig_threshold: #-30
+  alpha: 1
+  cls_loss: aamsoftmax
+  embed_dim: 192 # for aamsoftmax
+  n_class: 251 # for aamsoftmax
+  margin: 0.2 # for aamsoftmax
+  scale: 30 # for aamsoftmax
 
 OPTIMIZER:
   gradiend_clip: 10
