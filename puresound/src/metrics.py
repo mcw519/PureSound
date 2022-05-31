@@ -1,8 +1,8 @@
 import numpy as np
 import torch
 from mir_eval.separation import bss_eval_sources
-from nnet.loss.sdr import si_snr
 from pesq import pesq
+from puresound.nnet.loss.sdr import si_snr
 from pystoi.stoi import stoi
 
 

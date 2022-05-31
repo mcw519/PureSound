@@ -396,7 +396,7 @@ class TaskWarpModule(EncDecMaskerBaseModel):
     def _verbose(self):
         print(f"---------------Verbose logging---------------")
         self.eval()
-        print(f"Current is training mode: {self.training}")
+        print(f"Current training mode is: {self.training}")
         print(f"Total params: {self.overall_parameters}")
                 
         # compute lookahead
@@ -423,5 +423,5 @@ class TaskWarpModule(EncDecMaskerBaseModel):
             print(f'Receptive Fields(samples): {receptive}')
 
         self.train()
-        print(f"Current is training mode: {self.training}")
+        print(f"Current training mode is: {self.training}")
         print(f"---------------Verbose logging---------------")

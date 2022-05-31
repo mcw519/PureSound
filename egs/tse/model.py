@@ -3,16 +3,13 @@ from typing import Optional
 import torch
 import torch.nn as nn
 
-from nnet.base_nn import TaskWarpModule
-from nnet.conv_tasnet import TCN, ConvTasNet, GatedTCN
-from nnet.lobe.encoder import ConvEncDec, FreeEncDec
-from nnet.lobe.pooling import AttentiveStatisticsPooling
-from nnet.loss.aamsoftmax import AAMsoftmax
-from nnet.loss.sdr import SDRLoss
+from puresound.nnet.base_nn import TaskWarpModule
+from puresound.nnet.conv_tasnet import TCN, ConvTasNet, GatedTCN
+from puresound.nnet.lobe.encoder import ConvEncDec, FreeEncDec
+from puresound.nnet.lobe.pooling import AttentiveStatisticsPooling
+from puresound.nnet.loss.aamsoftmax import AAMsoftmax
+from puresound.nnet.loss.sdr import SDRLoss
 
-# Modules
-# free_encoder = FreeEncDec(win_length=400, hop_length=200, laten_length=512)
-# stft_encoder = ConvEncDec(fft_length=512, win_type='hann', win_length=512, hop_length=160, output_format='Complex', trainable=True, sr=16000)
 
 # Loss
 def init_loss(hparam):

@@ -12,7 +12,7 @@ DATASET:
   speed_perturbed: False
   single_spk_prob: 0.
   inactive_training: 0.
-  enroll_rule: fixed_lenth
+  enroll_rule: fixed_length
   enroll_augment: False
 
 MODEL:
@@ -30,7 +30,7 @@ LOSS:
 
 OPTIMIZER:
   gradiend_clip: 10
-  lr: 0.001
+  lr: 0.0001
   num_epochs_decay: 0
   lr_scheduler: Plateau
   mode: min
@@ -38,7 +38,7 @@ OPTIMIZER:
   gamma: 0.5
   beta1: 0.9
   beta2: 0.999
-  weight_decay: 0.0001
+  weight_decay: 0.
 
 TRAIN:
   num_epochs: 200
@@ -51,5 +51,5 @@ TRAIN:
   num_workers: 10
   model_average:
   use_tensorboard: True
-  model_save_dir: ./exp/models
-  log_dir: ./exp/models/logs
+  model_save_dir: # model save folder
+  log_dir: # logging save folder

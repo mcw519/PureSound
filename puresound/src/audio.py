@@ -4,7 +4,7 @@ from typing import Dict, List, Optional, Tuple
 import torch
 import torchaudio
 
-from .utils import convolve, fftconvolve, recursive_read_folder
+from puresound.src.utils import convolve, fftconvolve, recursive_read_folder
 
 
 class AudioIO():

@@ -1,103 +1,14 @@
-import os
 import random
 from typing import Any, Dict, Optional, Tuple
 
 import torch
-from torch.nn.utils.rnn import pad_sequence
 import torchaudio
+from puresound.src.audio import AudioAugmentor, AudioIO
+from puresound.src.utils import load_text_as_dict
+from torch.nn.utils.rnn import pad_sequence
+from tqdm import tqdm
 
-from .audio import AudioAugmentor, AudioIO
-from .utils import load_text_as_dict
-
-
-class TaskDataset(torch.utils.data.Dataset):
-    """
-    Basic dataset follow Kaldi data preparation *.scp format.\n
-    handcraft data folder must include:
-        -- wav2scp.txt: audio path file
-        -- [options] wav2ref.txt: audio for which reference audio, used in noisy to clean mapping
-    
-    Include:
-        df: data frame
-        idx_df: mapping idx to an unique df's key
-    
-    Args:
-        folder: manifest folder
-        resample_to: if not None, open waveform will resample to this value
-    """
-    def __init__(self, folder, resample_to: Optional[int] = None):
-        super().__init__()
-        self.folder = folder
-        self.resample_to = resample_to
-        self.df = self._load_df(self.folder)
-        self.idx_df = self._idx2key(self.df)
-    
-    def __len__(self):
-        return len(self.idx_df)
-    
-    def __getitem__(self, index: Any):
-        raise NotImplementedError
-    
-    def get_feature(self, key: str):
-        raise NotImplementedError
-
-    @property
-    def folder_content(self):
-        """
-        Set like:
-            'wav2scp': wav2scp.txt
-            'wav2class': wav2class.txt
-            etc.
-        """
-        return {'wav2scp': 'wav2scp.txt'}
-
-    def _load_df(self, folder: str) -> Dict:
-        """method about loading manifest information."""
-        _df = {}
-        load_dct = self.folder_content
-
-        # check file, wav2scp is must needed
-        if not os.path.isfile(f"{folder}/{self.folder_content['wav2scp']}"):
-            raise FileNotFoundError(f"{self.folder_content['wav2scp']} is not found")
-        
-        else:
-            _wav2scp = load_text_as_dict(f"{folder}/wav2scp.txt")
-            for key in sorted(_wav2scp.keys()):
-                _df[key] = {'wav2scp': _wav2scp[key][0]}
-                        
-            del load_dct['wav2scp']
-
-        if load_dct.keys != {}:
-            for f in load_dct.keys():
-                if not os.path.isfile(f"{folder}/{load_dct[f]}"):
-                    raise FileNotFoundError(f"{load_dct[f]} is not found")
-                else:
-                    _temp = load_text_as_dict(f"{folder}/{load_dct[f]}")
-                    for key in sorted(_temp.keys()):
-                        try:
-                            if len(_temp[key]) != 1:
-                                _df[key].update({f: _temp[key][:]})
-                            else:
-                                _df[key].update({f: _temp[key][0]})
-                        except KeyError:
-                            print(f"Non match key {key}")
-
-        return _df
-    
-    def _idx2key(self, df) -> Dict:
-        """mapping df.keys to idx."""
-        _idx_key = {}
-        idx = 0
-        for key in df.keys():
-            _idx_key[idx] = key
-            idx += 1
-        return _idx_key
-
-    def _to_onehot(self, y: int, num_classes: int) -> torch.Tensor:
-        """Function to convert label(int) to onehot vector."""
-        target = torch.zeros(num_classes, dtype=torch.float)
-        target[y] = 1.
-        return target
+from .base import BaseTrainer, TaskDataset
 
 
 class TseCollateFunc:
@@ -412,3 +323,100 @@ class TseDataset(TaskDataset):
                 spk2utt_dct[spk].append(idx)
     
         return spk2utt_dct
+
+
+class TseTask(BaseTrainer):
+    def __init__(self, hparam, device_backend, train_dataloader, dev_dataloader):
+        super().__init__(hparam, device_backend)
+        self.overall_step = 0
+        self.train_dataloader = train_dataloader
+        self.dev_dataloader = dev_dataloader
+    
+    def train_one_epoch(self, current_epoch):
+        step = 0
+        total_loss = 0.
+        
+        for batch_idx, batch in enumerate(tqdm(self.train_dataloader)):
+            self.overall_step += 1
+            step += 1
+            clean_wav = batch['clean_wav'].to(self.device) # [N, L]
+            noisy_wav = batch['process_wav'].to(self.device) # [N, L]
+            enroll_wav = batch['enroll_wav'].to(self.device) # [N, L]
+            inactive_utts = batch['inactive_utts'] # [N]
+            target_spk_class = batch['spk_label'].to(self.device) # [N]
+            
+            self.optimizer.zero_grad()
+            
+            # Model forward
+            loss, loss_detail = self.model(noisy=noisy_wav, enroll=enroll_wav, ref_clean=clean_wav, spk_class=target_spk_class,
+                                    alpha=self.hparam['LOSS']['alpha'], return_loss_detail=True)
+            loss = torch.mean(loss, dim=0) # aggregate loss from each device
+            signal_loss = torch.mean(loss_detail[0], dim=0)
+            class_loss = torch.mean(loss_detail[1], dim=0)
+            print(f"epoch: {current_epoch}, iter: {batch_idx+1}, batch_loss: {loss}, signal_loss: {signal_loss}, class_loss: {class_loss}")
+            total_loss += loss.item()
+            loss.backward()
+
+            if self.hparam['OPTIMIZER']['gradiend_clip'] is not None:
+                torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.hparam['OPTIMIZER']['gradiend_clip'])
+            
+            self.optimizer.step()
+            
+            if self.tf_writer:
+                _log_name = 'train/batch_loss'
+                self.tf_writer.update_step_loss(_log_name, loss, self.overall_step)
+                _log_name = 'train/batch_signal_loss'
+                self.tf_writer.update_step_loss(_log_name, signal_loss, self.overall_step)
+                _log_name = 'train/batch_class_loss'
+                self.tf_writer.update_step_loss(_log_name, class_loss, self.overall_step)
+            
+        return {'total_loss': total_loss / step}
+    
+    def compute_dev_loss(self, current_epoch):
+        step = 0
+        dev_total_loss = 0.
+        
+        for _, batch in enumerate(tqdm(self.dev_dataloader)):
+            step += 1
+            clean_wav = batch['clean_wav'].to(self.device) # [N, L]
+            noisy_wav = batch['process_wav'].to(self.device) # [N, L]
+            enroll_wav = batch['enroll_wav'].to(self.device) # [N, L]
+            inactive_utts = batch['inactive_utts'] # [N]
+            
+            with torch.no_grad():
+                loss = self.model(noisy=noisy_wav, enroll=enroll_wav, ref_clean=clean_wav, spk_class=None, alpha=10, return_loss_detail=False)
+                loss = torch.mean(loss, dim=0) # aggregate loss from each device
+                dev_total_loss += loss.item()
+
+        print(f"dev average loss: {dev_total_loss / step}")
+        return {'total_loss': dev_total_loss / step}
+    
+    def gen_logging(self, epoch: int, prefix: str):
+        """
+        Generate samples on tensorboard for loggin
+        """
+        test_audio_dct = load_text_as_dict(f"{self.hparam['DATASET']['eval']}/wav2scp.txt")
+        test_enroll_dct = load_text_as_dict(f"{self.hparam['DATASET']['eval']}/ref2list.txt")
+        resample_to = self.hparam['DATASET']['sample_rate']
+
+        for _, key in enumerate(test_audio_dct.keys()):
+            uttid = key
+            print(f"Running inference: {uttid}")
+            wav, sr = AudioIO.open(f_path=test_audio_dct[key][0])
+            if sr != resample_to:
+                wav = torchaudio.transforms.Resample(orig_freq=sr, new_freq=resample_to)(wav)
+
+            enroll_wav, sr = AudioIO.open(f_path=test_enroll_dct[key][0], target_lvl=-28)
+            if sr != resample_to:
+                enroll_wav = torchaudio.transforms.Resample(orig_freq=sr, new_freq=resample_to)(enroll_wav)
+
+            wav = wav.to(self.device)
+            enroll_wav = enroll_wav.to(self.device)
+
+            if isinstance(self.model, torch.nn.DataParallel):
+                enh_wav = self.model.module.inference(noisy=wav, enroll=enroll_wav)
+            else:
+                enh_wav = self.model.inference(noisy=wav, enroll=enroll_wav)
+        
+            if self.tf_writer:
+                self.tf_writer.add_ep_audio(f"{prefix}{uttid}.wav", enh_wav, epoch, resample_to)
