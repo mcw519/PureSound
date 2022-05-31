@@ -278,7 +278,7 @@ class BaseTrainer():
             f.write(f"lr: {learning_rate}\n")
             f.write(f"loss: {loss['total_loss']}\n")
             f.write(f"best_epoch: {self.best_epoch}\n")
-            f.write(f"best_loss: {self.best_loss}\n")
+            f.write(f"best_dev_loss: {self.best_loss}\n")
     
     def load_ckpt(self, filename: str, model: Any) -> Tuple:
         """function to load pre-trained model."""
@@ -320,12 +320,13 @@ class BaseTrainer():
             
             self.model.train()
             loss = self.train_one_epoch(current_epoch=epoch)
-            if loss <= self.best_loss:
-                self.best_loss = loss
-                self.best_epoch = epoch
 
             self.model.eval()
             dev_loss = self.compute_dev_loss(current_epoch=epoch)
+            
+            if dev_loss['total_loss'] <= self.best_loss:
+                self.best_loss = dev_loss['total_loss']
+                self.best_epoch = epoch
 
             if self.tf_writer:
                 self.tf_writer.update_ep_lr(learning_rate, epoch)
