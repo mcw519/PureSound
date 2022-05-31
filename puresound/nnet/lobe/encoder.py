@@ -170,7 +170,7 @@ class ConvSTFT(nn.Module):
         x -- torch.Tensor -- [N, channel, L]
         
         output_format : str
-            Control the type of spectrogram to be return. Can be either ``Magnitude`` or ``Complex`` or ``Phase``.
+            Control the type of spectrogram to be return. Can be either ``Complex`` or ``MagPhase``.
             Default value is ``Complex``.  
             
         """
@@ -183,19 +183,9 @@ class ConvSTFT(nn.Module):
         spec_real = spec_real[:, :self.freq_bins, :]
         spec_imag = spec_imag[:, :self.freq_bins, :]
 
-        if output_format=='Magnitude':
-            spec = spec_real.pow(2) + spec_imag.pow(2)
-            if self.trainable==True:
-                return torch.sqrt(spec+1e-8)  # prevent Nan gradient when sqrt(0) due to output=0
-            else:
-                return torch.sqrt(spec)
-
-        elif output_format=='Complex':
+        if output_format=='Complex':
             return torch.stack((spec_real,-spec_imag), -1)  # Remember the minus sign for imaginary part
 
-        elif output_format=='Phase':
-            return torch.atan2(-spec_imag+0.0,spec_real)  # +0.0 removes -0.0 elements, which leads to error in calculating phase
-        
         elif output_format=='MagPhase':
             mags = spec_real.pow(2) + spec_imag.pow(2)
             if self.trainable==True:

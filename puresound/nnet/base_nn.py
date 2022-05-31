@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Optional, Tuple
 
 import numpy as np
 import torch
@@ -40,26 +40,36 @@ class EncDecMaskerBaseModel(BaseModel):
         Applies tf-masks on time-frequency feature representation.
 
         Args:
-            tf_rep: feature must in type (Complex, MagPhase) has shape [N, C, T, 2], or (real) has shape [N, C, T]
-            est_masks: tf-mask shape [N, C, T]
+            tf_rep: feature must in type (Complex, MagPhase) has [N, C, T] or [N, C*2, T]
+            est_masks: tf-mask shape [N, C, T], or [N, C*2, T]
             mask_type: mask type in (`complex`, `real`, `polar`)
             f_type: feature type in (`complex`, `real`, `polar`)
         
         Returns:
-            ComplexFloatTensor or FolatTensor -- Masked time-frequency representations.
-        
-        Raises:
-            mask_type not in (`complex`, `real`)
-            f_type not in (`complex`, `real`)
+            Masked time-frequency representations.
         """
         if mask_type.lower() == 'complex' and f_type.lower() == 'complex':
+            re, im = torch.chunk(tf_rep, 2, dim=1)
+            tf_rep = torch.stack([re, im], dim=-1) # [N, C, T, 2]
+            mask_re, mask_im = torch.chunk(est_masks, 2, dim=1)
+            est_masks = torch.stack([mask_re, mask_im], dim=1) # [N, C, T, 2]
             return self._apply_complex_mask_on_reim(tf_rep, est_masks)
+        
         elif mask_type.lower() == 'real' and f_type.lower() == 'complex':
+            re, im = torch.chunk(tf_rep, 2, dim=1)
+            tf_rep = torch.stack([re, im], dim=-1) # [N, C, T, 2]
             return self._apply_mag_mask_on_reim(tf_rep, est_masks)
+
         elif mask_type.lower() == 'real' and f_type.lower() == 'real':
             return self._apply_mag_mask_on_mag(tf_rep, est_masks)
-        if mask_type.lower() == 'polar' and f_type.lower() == 'polar':
+
+        elif mask_type.lower() == 'polar' and f_type.lower() == 'polar':
+            re, im = torch.chunk(tf_rep, 2, dim=1)
+            tf_rep = torch.stack([re, im], dim=-1) # [N, C, T, 2]
+            mask_re, mask_im = torch.chunk(est_masks, 2, dim=1)
+            est_masks = torch.stack([mask_re, mask_im], dim=1) # [N, C, T, 2]
             return self._apply_complex_mask_on_polar (tf_rep, est_masks)
+        
         else:
             raise NameError
     
@@ -100,12 +110,13 @@ class EncDecMaskerBaseModel(BaseModel):
 
         Args:
             tf_rep: feature has shape [N, C, T, 2]
-            est_masks: tf-mask shape [N, C, T]
+            est_masks: tf-mask shape [N, C, T] or [N, C*2, T]
 
         Returns:
             FloatTensor -- [N, C, T, 2]
         """
-        mask = torch.stack([est_masks, est_masks], dim=-1)
+        if mask.shape != tf_rep.shape:
+            mask = torch.stack([est_masks, est_masks], dim=-1)
         return tf_rep * mask
     
     def _apply_complex_mask_on_reim(self, tf_rep: torch.Tensor, est_masks: torch.Tensor) -> torch.Tensor:
@@ -164,9 +175,10 @@ class EncDecMaskerBaseModel(BaseModel):
         return torch.stack([est_re, est_im], dim=-1)
 
 
-class TaskWarpModule(EncDecMaskerBaseModel):
+class SoTaskWarpModule(EncDecMaskerBaseModel):
     """
-    Model wrapper for each task.
+    Model wrapper for a Single Input Singal Output(SISO) or Multi Input Singal Output (MISO) tasks.
+    Like single channel speech enhancement or target speech extraction.
 
     Args:
         encoder: nn.Module, speech encoder convert the speech samples to latent feature
@@ -178,6 +190,7 @@ class TaskWarpModule(EncDecMaskerBaseModel):
         f_type: latent feature type, for STFT encoder we have [real, complex, polar] format
         mask_type: mask type, for STFT encoder we have [real, complex, polar] format
         mask_constraint: activation function on mask generation, [linear, relu, softmax]
+        drop_first_bin: In STFT-based encoder, we can drop the DC bin (idx=0)
         verbose: print model infomation
 
     Main structure has:
@@ -204,6 +217,7 @@ class TaskWarpModule(EncDecMaskerBaseModel):
                 f_type: str = 'real',
                 mask_type: str = 'real',
                 mask_constraint: str = 'linear',
+                drop_first_bin: bool = False,
                 verbose: bool = True,
                 ) -> None:
         super().__init__()
@@ -216,6 +230,7 @@ class TaskWarpModule(EncDecMaskerBaseModel):
         self.loss_func_wav = loss_func_wav
         self.loss_func_spk = loss_func_spk
         self.mask_constraint = mask_constraint
+        self.drop_first_bin = drop_first_bin
         self.task = self.check_task()
         if verbose: self._verbose()
     
@@ -253,6 +268,67 @@ class TaskWarpModule(EncDecMaskerBaseModel):
 
         return class_label
     
+    def _get_feature(self, noisy: torch.Tensor, enroll: Optional[torch.Tensor] = None) -> Tuple[torch.Tensor, torch.Tensor]:
+        """
+        Forward encoder to get features.
+
+        Args:
+            noisy: Input noisy mixture tensor, [N, T]
+            enroll: Enrolment waveform tensor, [N, T], if None, skip it
+        """
+        noisy = self.encoder(noisy) # [N, C, T]
+        if isinstance(self.encoder, ConvEncDec):
+            # STFT: ConvEncDec returns shape [N, C, T, 2]
+            _re = noisy[..., 0]
+            _im = noisy[..., 1]
+            if self.drop_first_bin:
+                _re = _re[:, 1:, :]
+                _im = _im[:, 1:, :]
+            
+            noisy = torch.cat([_re, _im], dim=1)
+
+        if enroll is not None:
+            # Enable shared encoder structure like SpEx+
+            if self.encoder_spk is None:
+                enroll = self.encoder(enroll) # [N, C, T]
+                if isinstance(self.encoder, ConvEncDec):
+                    # STFT: ConvEncDec returns shape [N, C, T, 2]
+                    _re = enroll[..., 0]
+                    _im = enroll[..., 1]
+                    if self.drop_first_bin:
+                        _re = _re[:, 1:, :]
+                        _im = _im[:, 1:, :]
+                    
+                    enroll = torch.cat([_re, _im], dim=1)
+
+            else:
+                enroll = self.encoder_spk(enroll) # [N, C, T]
+                if isinstance(self.encoder_spk, ConvEncDec):
+                    # STFT: ConvEncDec returns shape [N, C, T, 2]
+                    _re = enroll[..., 0]
+                    _im = enroll[..., 1]
+                    if self.drop_first_bin:
+                        _re = _re[:, 1:, :]
+                        _im = _im[:, 1:, :]
+                    
+                    enroll = torch.cat([_re, _im], dim=1)
+
+        return noisy, enroll
+    
+    def _get_waveform(self, enh_feats: torch.Tensor) -> torch.Tensor:
+        if isinstance(self.encoder, ConvEncDec):
+            assert enh_feats.dim() == 4
+            if self.drop_first_bin:
+                _re = enh_feats[..., 0]
+                _im = enh_feats[..., 1]
+                pad = torch.zeros(_re.shape[0], 1, _re.shape[2], device=enh_feats.device)
+                _re = torch.cat([pad, _re], dim=1)
+                _im = torch.cat([pad, _im], dim=1)
+                enh_feats = torch.stack([_re, _im], dim=-1)
+            
+        enh_wav = self.encoder.inverse(enh_feats)
+        return enh_wav
+
     def _forward(self, noisy: torch.Tensor, enroll: torch.Tensor, ref_clean: torch.Tensor) -> torch.Tensor:
         """
         Getting input noisy(n-mixed speech) and enrollment speech(target enroll) to calculate the training loss. 
@@ -260,29 +336,39 @@ class TaskWarpModule(EncDecMaskerBaseModel):
 
         Args:
             noisy: Input noisy mixture tensor, [N, T]
-            enroll: Enrolment waveform tensor, [N, T]
+            enroll: Enrolment waveform tensor, [N, T] or None
             ref_clean: Target speech, [N, T]
             
         Return:
             Loss: loss_sdr
         """   
-        noisy = self.encoder(noisy) # [N, C, T]
+        # noisy = self.encoder(noisy) # [N, C, T]
 
-        # Enable shared encoder structure like SpEx+
-        if self.encoder_spk is None:
-            enroll = self.encoder(enroll) # [N, C, T]
-        else:
-            enroll = self.encoder_spk(enroll) # [N, C, T]
-        
+        # # Enable shared encoder structure like SpEx+
+        # if self.encoder_spk is None:
+        #     enroll = self.encoder(enroll) # [N, C, T]
+        # else:
+        #     enroll = self.encoder_spk(enroll) # [N, C, T]
+        noisy, enroll = self._get_feature(noisy, enroll) # [N, C, T]
         dvec = enroll
-        for layer in self.speaker_net:
-            dvec = layer(dvec)
+
+        if dvec is not None:
+            for layer in self.speaker_net:
+                dvec = layer(dvec)
         
-        dvec = dvec.squeeze(-1)
-        mask = self.masker(noisy, dvec)
+            dvec = dvec.squeeze(-1)
+
+        if dvec is not None:
+            # TSE task
+            mask = self.masker(noisy, dvec)
+        else:
+            # SE task
+            mask = self.masker(noisy)
+
         mask = self.get_mask(mask, self.mask_constraint)
         enh_feats = self.apply_tf_masks(noisy, mask, f_type=self.f_type, mask_type=self.mask_type) # [N, C, T]
-        enh_wav = self.encoder.inverse(enh_feats)
+        # enh_wav = self.encoder.inverse(enh_feats)
+        enh_wav = self._get_waveform(enh_feats)
         enh_wav = torch.clamp_(enh_wav, min=-1, max=1)
         loss_wav = self.loss_func_wav(enh_wav, ref_clean)
         
@@ -305,13 +391,14 @@ class TaskWarpModule(EncDecMaskerBaseModel):
         Return:
             Joint loss: loss_sdr + alpha * loss_class
         """   
-        noisy = self.encoder(noisy) # [N, C, T]
+        # noisy = self.encoder(noisy) # [N, C, T]
 
-        # Enable shared encoder structure like SpEx+
-        if self.encoder_spk is None:
-            enroll = self.encoder(enroll) # [N, C, T]
-        else:
-            enroll = self.encoder_spk(enroll) # [N, C, T]
+        # # Enable shared encoder structure like SpEx+
+        # if self.encoder_spk is None:
+        #     enroll = self.encoder(enroll) # [N, C, T]
+        # else:
+        #     enroll = self.encoder_spk(enroll) # [N, C, T]
+        noisy, enroll = self._get_feature(noisy, enroll) # [N, C, T]
         
         dvec = enroll
         for layer in self.speaker_net:
@@ -321,7 +408,8 @@ class TaskWarpModule(EncDecMaskerBaseModel):
         mask = self.masker(noisy, dvec)
         mask = self.get_mask(mask, self.mask_constraint)
         enh_feats = self.apply_tf_masks(noisy, mask, f_type=self.f_type, mask_type=self.mask_type) # [N, C, T]
-        enh_wav = self.encoder.inverse(enh_feats)
+        # enh_wav = self.encoder.inverse(enh_feats)
+        enh_wav = self._get_waveform(enh_feats)
         enh_wav = torch.clamp_(enh_wav, min=-1, max=1)
         loss_wav = self.loss_func_wav(enh_wav, ref_clean)
 
@@ -348,45 +436,35 @@ class TaskWarpModule(EncDecMaskerBaseModel):
 
     @torch.no_grad()
     def inference(self, noisy: torch.Tensor, enroll: Optional[torch.Tensor] = None) -> torch.Tensor:
-        noisy = self.encoder(noisy) # [N, C, T]
+        noisy, enroll = self._get_feature(noisy, enroll) # [N, C, T]
+        dvec = enroll
 
-        if enroll is not None:
-            # Enable shared encoder structure like SpEx+
-            if self.encoder_spk is None:
-                enroll = self.encoder(enroll) # [N, C, T]
-            else:
-                enroll = self.encoder_spk(enroll) # [N, C, T]
-
-            dvec = enroll
+        if dvec is not None:
             for layer in self.speaker_net:
-                dvec = layer(dvec) # [N, emb_dim]
-
-            dvec = dvec.squeeze(-1)
-            mask = self.masker(noisy, dvec)
-            mask = self.get_mask(mask, self.mask_constraint)
-            enh_feats = self.apply_tf_masks(noisy, mask, f_type=self.f_type, mask_type=self.mask_type) # [N, C, T]
-            enh_wav = self.encoder.inverse(enh_feats)
-            enh_wav = torch.clamp_(enh_wav, min=-1, max=1)
+                dvec = layer(dvec)
         
-        else:
-            mask = self.masker(noisy)
-            mask = self.get_mask(mask, self.mask_constraint)
-            enh_feats = self.apply_tf_masks(noisy, mask, f_type=self.f_type, mask_type=self.mask_type) # [N, C, T]
-            enh_wav = self.encoder.inverse(enh_feats)
-            enh_wav = torch.clamp_(enh_wav, min=-1, max=1)
+            dvec = dvec.squeeze(-1)
 
+        if dvec is not None:
+            # TSE task
+            mask = self.masker(noisy, dvec)
+        else:
+            # SE task
+            mask = self.masker(noisy)
+
+        mask = self.get_mask(mask, self.mask_constraint)
+        enh_feats = self.apply_tf_masks(noisy, mask, f_type=self.f_type, mask_type=self.mask_type) # [N, C, T]
+        # enh_wav = self.encoder.inverse(enh_feats)
+        enh_wav = self._get_waveform(enh_feats)
+        enh_wav = torch.clamp_(enh_wav, min=-1, max=1)
         return enh_wav
-    
+
     @torch.no_grad()
     def inference_tse_embedding(self, enroll: Optional[torch.Tensor] = None) -> torch.Tensor:
         """Forward SpeakerNet to get speaker embedding in TSE-task setting."""
         assert self.task == 1
         # Enable shared encoder structure like SpEx+
-        if self.encoder_spk is None:
-            enroll = self.encoder(enroll) # [N, C, T]
-        else:
-            enroll = self.encoder_spk(enroll) # [N, C, T]
-
+        _, enroll = self._get_feature(enroll, enroll)
         dvec = enroll
         for layer in self.speaker_net:
             dvec = layer(dvec) # [N, emb_dim]
