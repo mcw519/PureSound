@@ -42,9 +42,9 @@ def init_model(name: str, sig_loss: Optional[nn.Module] = None, cls_loss: Option
         model = SoTaskWrapModule(
             encoder=FreeEncDec(win_length=32, hop_length=16, laten_length=512),
             masker=ConvTasNet(512, 192, True, tcn_kernel=3, tcn_dim=256, repeat_tcn=3, tcn_dilated_basic=2, per_tcn_stack=8,
-                tcn_with_embed=[1, 0, 0, 0, 0, 0, 0, 0], norm_type='gLN', causal=False, tcn_layer='normal'),
+                tcn_with_embed=[1, 0, 0, 0, 0, 0, 0, 0], tcn_norm='gLN', dconv_norm='gGN', causal=False, tcn_layer='normal'),
             speaker_net=nn.ModuleList(
-                    [TCN(512, 256, 3, dilation=2**i, causal=False, norm_type='gLN') for i in range(5)] + \
+                    [TCN(512, 256, 3, dilation=2**i, causal=False, tcn_norm='gLN', dconv_norm='gGN') for i in range(5)] + \
                     [AttentiveStatisticsPooling(512, 128), nn.Conv1d(512*2, 192, 1, bias=False)]),
             loss_func_wav=sig_loss,
             loss_func_spk=cls_loss,
@@ -55,9 +55,9 @@ def init_model(name: str, sig_loss: Optional[nn.Module] = None, cls_loss: Option
         model = SoTaskWrapModule(
             encoder=FreeEncDec(win_length=32, hop_length=16, laten_length=512),
             masker=ConvTasNet(512, 192, True, tcn_kernel=3, tcn_dim=256, repeat_tcn=3, tcn_dilated_basic=2, per_tcn_stack=8,
-                tcn_with_embed=[1, 0, 0, 0, 0, 0, 0, 0], norm_type='cLN', causal=True, tcn_layer='normal'),
+                tcn_with_embed=[1, 0, 0, 0, 0, 0, 0, 0], tcn_norm='bN1d', dconv_norm='bN1d', causal=True, tcn_layer='normal'),
             speaker_net=nn.ModuleList(
-                    [TCN(512, 256, 3, dilation=2**i, causal=False, norm_type='gLN') for i in range(5)] + \
+                    [TCN(512, 256, 3, dilation=2**i, causal=False, tcn_norm='gLN', dconv_norm='gGN') for i in range(5)] + \
                     [AttentiveStatisticsPooling(512, 128), nn.Conv1d(512*2, 192, 1, bias=False)]),
             loss_func_wav=sig_loss,
             loss_func_spk=cls_loss,

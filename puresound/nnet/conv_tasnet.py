@@ -10,6 +10,8 @@ from .lobe.norm import get_norm
 
 class TCN(nn.Module):
     """
+    A TCN layer consist by Input-Conv1d, DepthwiseSeparableConv1d and Output-Conv1d.
+
     Args:
         in_channels: input feature(channel) dimension
         hid_channels: hidden feature(channel) dimension
@@ -18,19 +20,19 @@ class TCN(nn.Module):
         dropout: if not 0. applies dropout
         emb_dim (int): if not zero, concate in right_conv's input
         causal (bool): padding by causal scenario, others padding to same length between input and output
-        norm_type: the type of normalization layer
+        tcn_norm: the type of normalization layer for TCN layer
+        dconv_norm: the type of normalization layer for inside DepthwiseSeparableConv1d layer
     """
     def __init__(self, in_channels: int, hid_channels: int, kernel: int, dilation: int, dropout: float = 0.,
-            emb_dim: int = 0, causal: bool = False, norm_type: str = 'gLN') -> None:
+            emb_dim: int = 0, causal: bool = False, tcn_norm: str = 'gLN', dconv_norm: str = 'gGN') -> None:
         super().__init__()
-        self.causal = causal
-        self.norm_type = norm_type
-        norm_cls = get_norm(norm_type)
+
+        tcn_norm = get_norm(tcn_norm)
         
         self.in_conv = nn.Sequential(
             nn.Conv1d(in_channels+emb_dim, hid_channels, kernel_size=1, bias=False, groups=1),
             nn.PReLU(),
-            norm_cls(hid_channels))
+            tcn_norm(hid_channels))
         
         self.dconv = nn.Sequential(
             DepthwiseSeparableConv1d(
@@ -40,9 +42,10 @@ class TCN(nn.Module):
                 kernel=kernel,
                 dilation=dilation,
                 skip=False,
-                causal=causal),
+                causal=causal,
+                norm_cls=dconv_norm),
             nn.PReLU(),
-            norm_cls(hid_channels),
+            tcn_norm(hid_channels),
             nn.Dropout(p=dropout))
         
         self.out_conv = nn.Conv1d(hid_channels, in_channels, kernel_size=1, stride=1)
@@ -160,7 +163,8 @@ class ConvTasNet(nn.Module):
         per_tcn_stack: Number of TCN layers in one TNC-stack.
         repeat_tcn: Repeat N TCN-stacks.
         tcn_with_embed: In each TCN-stack, where need to inject the embedding.
-        norm_type: Normalization methods.
+        tcn_norm: the type of normalization layer for TCN layer
+        dconv_norm: the type of normalization layer for inside DepthwiseSeparableConv1d layer
 
     Note:
         We ignore the encoder/decoder here for easy optimizing different front-end encoder/decoder.
@@ -169,14 +173,15 @@ class ConvTasNet(nn.Module):
                 input_dim: int = 512,
                 embed_dim: int = 256,
                 embed_norm: bool = False,
-                tcn_layer: str = 'gated',
+                tcn_layer: str = 'normal',
                 tcn_kernel: int = 3,
                 tcn_dim: int = 256,
                 tcn_dilated_basic: int = 2,
                 per_tcn_stack: int = 5,
                 repeat_tcn: int = 4,
                 tcn_with_embed: List = [1, 0, 0, 0, 0],
-                norm_type: str = 'gLN',
+                tcn_norm: str = 'gLN',
+                dconv_norm: str = 'gGN',
                 causal: bool = True):
         super().__init__()
         self.input_dim = input_dim
@@ -189,13 +194,16 @@ class ConvTasNet(nn.Module):
         self.repeat_tcn = repeat_tcn
         self.tcn_dilated_basic = tcn_dilated_basic
         self.tcn_with_embed = tcn_with_embed
-        self.norm_type = norm_type
+        self.tcn_norm = tcn_norm
+        self.dconv_norm = dconv_norm
         self.causal = causal
 
-        if self.tcn_layer.lower() == 'gated':
+        if self.tcn_layer.lower() == 'normal':
+            tcn_cls = TCN
+        elif self.tcn_layer.lower() == 'gated':
             tcn_cls = GatedTCN
         else:
-            tcn_cls = TCN
+            raise NameError
 
         assert per_tcn_stack == len(tcn_with_embed)
         self.tcn_list = nn.ModuleList()
@@ -205,10 +213,10 @@ class ConvTasNet(nn.Module):
             for i in range(per_tcn_stack):
                 if tcn_with_embed[i]:
                     _tcn.append(tcn_cls(input_dim, tcn_dim, kernel=tcn_kernel, dilation=tcn_dilated_basic**i, emb_dim=embed_dim,
-                                        causal=causal, norm_type=norm_type))
+                                        causal=causal, tcn_norm=tcn_norm, dconv_norm=dconv_norm))
                 else:
                     _tcn.append(tcn_cls(input_dim, tcn_dim, kernel=tcn_kernel, dilation=tcn_dilated_basic**i, emb_dim=0,
-                                        causal=causal, norm_type=norm_type))
+                                        causal=causal, tcn_norm=tcn_norm, dconv_norm=dconv_norm))
 
             self.tcn_list.append(nn.ModuleList(_tcn))
             
@@ -241,7 +249,8 @@ class ConvTasNet(nn.Module):
             'input_dim': self.input_dim,
             'embed_dim': self.embed_dim,
             'embed_norm': self.embed_norm,
-            'norm_type': self.norm_type,
+            'tcn_norm': self.tcn_norm,
+            'dconv_norm': self.dconv_norm,
             'tcn_layer': self.tcn_layer,
             'tcn_dim': self.tcn_dim,
             'tcn_kernel': self.tcn_kernel,

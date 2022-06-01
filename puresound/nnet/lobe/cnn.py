@@ -4,7 +4,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from .norm import ChanLN, GlobLN
+from .norm import get_norm
 
 
 class DepthwiseSeparableConv1d(nn.Module):
@@ -21,52 +21,37 @@ class DepthwiseSeparableConv1d(nn.Module):
         skip: Skip-connection between input to output
         causal: If true, all of operating would be causal
     """
-    def __init__(self, in_channels: int, out_channels: int, hid_channels: Optional[int] = None,
-                    kernel: int = 3, stride: int = 1, dilation: int = 1, skip: bool = False, causal: bool = True) -> None:
+    def __init__(self, in_channels: int, out_channels: int, hid_channels: Optional[int] = None, norm_cls: str = 'gGN',
+                    kernel: int = 3, stride: int = 1, dilation: int = 1, skip: bool = False, causal: bool = False) -> None:
         super().__init__()
-
-        self.causal = causal
         self.skip = skip
         self.transform = False
 
+        # get normalization class and check is that sutible for causal setting
+        self.causal = causal
+        if self.causal: assert norm_cls not in ['gLN', 'gGN'], "Conflict setting between normalization layer and causal operation."
+        norm_cls = get_norm(norm_cls)       
+
         if hid_channels is not None:
+            # Dense transform
             self.transform = True
-            if self.causal:
-                self.in_conv = nn.Sequential(
-                    nn.Conv1d(in_channels, hid_channels, 1),
-                    nn.BatchNorm1d(hid_channels),
-                    nn.PReLU()
-                )
-            else:
-                self.in_conv = nn.Sequential(
-                    nn.Conv1d(in_channels, hid_channels, 1),
-                    nn.GroupNorm(1, hid_channels, eps=1e-8),
-                    nn.PReLU()
-                )
+            self.in_conv = nn.Sequential(
+                nn.Conv1d(in_channels, hid_channels, 1),
+                norm_cls(hid_channels),
+                nn.PReLU())
 
         self.hid_channels = hid_channels if hid_channels is not None else in_channels
 
-        if self.causal:
-            self.padding = (kernel - 1) * dilation
-            self.depthwise = nn.Sequential(
-                nn.Conv1d(self.hid_channels, self.hid_channels, kernel_size=kernel, stride=stride, dilation=dilation, padding=self.padding, groups=self.hid_channels),
-                nn.BatchNorm1d(self.hid_channels),
-                nn.PReLU())
-            self.pointwise = nn.Sequential(
-                nn.Conv1d(self.hid_channels, out_channels, kernel_size=1, stride=1),
-                nn.BatchNorm1d(out_channels),
-                nn.PReLU())
-        
-        else:
-            self.padding = ((kernel - 1) // 2 ) * dilation
-            self.depthwise = nn.Sequential(
-                nn.Conv1d(self.hid_channels, self.hid_channels, kernel_size=kernel, stride=stride, dilation=dilation, padding=self.padding, groups=self.hid_channels),
-                nn.GroupNorm(1, self.hid_channels, eps=1e-8),
-                nn.PReLU())
-            self.pointwise = nn.Sequential(
-                nn.Conv1d(self.hid_channels, out_channels, kernel_size=1, stride=1),
-                nn.GroupNorm(1, out_channels, eps=1e-8),
-                nn.PReLU())
+        self.padding = (kernel - 1) * dilation if self.causal else ((kernel - 1) // 2 ) * dilation
+
+        self.depthwise = nn.Sequential(
+            nn.Conv1d(self.hid_channels, self.hid_channels, kernel_size=kernel, stride=stride, dilation=dilation, padding=self.padding, groups=self.hid_channels),
+            norm_cls(self.hid_channels),
+            nn.PReLU())
+        self.pointwise = nn.Sequential(
+            nn.Conv1d(self.hid_channels, out_channels, kernel_size=1, stride=1),
+            norm_cls(out_channels),
+            nn.PReLU())
         
         if self.skip:
             self.skip_conv = nn.Conv1d(in_channels, out_channels, 1)
