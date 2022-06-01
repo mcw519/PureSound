@@ -175,7 +175,7 @@ class EncDecMaskerBaseModel(BaseModel):
         return torch.stack([est_re, est_im], dim=-1)
 
 
-class SoTaskWarpModule(EncDecMaskerBaseModel):
+class SoTaskWrapModule(EncDecMaskerBaseModel):
     """
     Model wrapper for a Single Input Singal Output(SISO) or Multi Input Singal Output (MISO) tasks.
     Like single channel speech enhancement or target speech extraction.
