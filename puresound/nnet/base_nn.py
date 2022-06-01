@@ -4,7 +4,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-from .lobe.encoder import ConvEncDec, FreeEncDec
+from .lobe.encoder import ConvEncDec
 
 
 class BaseModel(nn.Module):
@@ -190,7 +190,7 @@ class SoTaskWarpModule(EncDecMaskerBaseModel):
         f_type: latent feature type, for STFT encoder we have [real, complex, polar] format
         mask_type: mask type, for STFT encoder we have [real, complex, polar] format
         mask_constraint: activation function on mask generation, [linear, relu, softmax]
-        drop_first_bin: In STFT-based encoder, we can drop the DC bin (idx=0)
+        drop_first_bin: In STFT-based encoder, we can drop the DC bin (i.e idx=0).
         verbose: print model infomation
 
     Main structure has:
@@ -268,7 +268,7 @@ class SoTaskWarpModule(EncDecMaskerBaseModel):
 
         return class_label
     
-    def _get_feature(self, noisy: torch.Tensor, enroll: Optional[torch.Tensor] = None) -> Tuple[torch.Tensor, torch.Tensor]:
+    def _get_feature(self, noisy: Optional[torch.Tensor] = None, enroll: Optional[torch.Tensor] = None) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Forward encoder to get features.
 
@@ -276,16 +276,17 @@ class SoTaskWarpModule(EncDecMaskerBaseModel):
             noisy: Input noisy mixture tensor, [N, T]
             enroll: Enrolment waveform tensor, [N, T], if None, skip it
         """
-        noisy = self.encoder(noisy) # [N, C, T]
-        if isinstance(self.encoder, ConvEncDec):
-            # STFT: ConvEncDec returns shape [N, C, T, 2]
-            _re = noisy[..., 0]
-            _im = noisy[..., 1]
-            if self.drop_first_bin:
-                _re = _re[:, 1:, :]
-                _im = _im[:, 1:, :]
-            
-            noisy = torch.cat([_re, _im], dim=1)
+        if noisy is not None:
+            noisy = self.encoder(noisy) # [N, C, T] or [N, C, T, 2]
+            if isinstance(self.encoder, ConvEncDec):
+                # STFT: ConvEncDec returns shape [N, C, T, 2]
+                _re = noisy[..., 0]
+                _im = noisy[..., 1]
+                if self.drop_first_bin:
+                    _re = _re[:, 1:, :]
+                    _im = _im[:, 1:, :]
+                
+                noisy = torch.cat([_re, _im], dim=1)
 
         if enroll is not None:
             # Enable shared encoder structure like SpEx+
@@ -464,7 +465,7 @@ class SoTaskWarpModule(EncDecMaskerBaseModel):
         """Forward SpeakerNet to get speaker embedding in TSE-task setting."""
         assert self.task == 1
         # Enable shared encoder structure like SpEx+
-        _, enroll = self._get_feature(enroll, enroll)
+        _, enroll = self._get_feature(None, enroll)
         dvec = enroll
         for layer in self.speaker_net:
             dvec = layer(dvec) # [N, emb_dim]

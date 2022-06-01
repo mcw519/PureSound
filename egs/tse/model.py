@@ -3,7 +3,7 @@ from typing import Optional
 import torch
 import torch.nn as nn
 
-from puresound.nnet.base_nn import TaskWarpModule
+from puresound.nnet.base_nn import SoTaskWarpModule
 from puresound.nnet.conv_tasnet import TCN, ConvTasNet, GatedTCN
 from puresound.nnet.lobe.encoder import ConvEncDec, FreeEncDec
 from puresound.nnet.lobe.pooling import AttentiveStatisticsPooling
@@ -39,7 +39,7 @@ def init_loss(hparam):
 # Models
 def init_model(name: str, sig_loss: Optional[nn.Module] = None, cls_loss: Optional[nn.Module] = None, **kwargs):
     if name == 'td_tse_conv_tasnet_v0':
-        model = TaskWarpModule(
+        model = SoTaskWarpModule(
             encoder=FreeEncDec(win_length=32, hop_length=16, laten_length=512),
             masker=ConvTasNet(512, 192, True, tcn_kernel=3, tcn_dim=256, repeat_tcn=3, tcn_dilated_basic=2, per_tcn_stack=8,
                 tcn_with_embed=[1, 0, 0, 0, 0, 0, 0, 0], norm_type='gLN', causal=False, tcn_layer='normal'),
@@ -52,7 +52,7 @@ def init_model(name: str, sig_loss: Optional[nn.Module] = None, cls_loss: Option
             **kwargs)
 
     elif name == 'td_tse_conv_tasnet_v0_causal':
-        model = TaskWarpModule(
+        model = SoTaskWarpModule(
             encoder=FreeEncDec(win_length=32, hop_length=16, laten_length=512),
             masker=ConvTasNet(512, 192, True, tcn_kernel=3, tcn_dim=256, repeat_tcn=3, tcn_dilated_basic=2, per_tcn_stack=8,
                 tcn_with_embed=[1, 0, 0, 0, 0, 0, 0, 0], norm_type='cLN', causal=True, tcn_layer='normal'),

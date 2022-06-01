@@ -1,3 +1,5 @@
+from typing import Optional
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -24,24 +26,32 @@ class FreeEncDec(nn.Module):
         self.encoder = self.get_encoder(output_length=laten_length, win_length=win_length, hop_length=hop_length)
         self.decoder = self.get_decoder(input_dim=laten_length, win_length=win_length, hop_length=hop_length)
     
-    def get_encoder(self, output_length, win_length, hop_length):
+    def get_encoder(self, output_length: int, win_length: int, hop_length: int) -> nn.Module:
         encoder = nn.Conv1d(in_channels=1, out_channels=output_length, kernel_size=win_length, stride=hop_length, bias=False)
         return encoder
     
-    def get_decoder(self, input_dim, win_length, hop_length):
+    def get_decoder(self, input_dim: int, win_length: int, hop_length: int) -> nn.Module:
         decoder = nn.ConvTranspose1d(in_channels=input_dim, out_channels=1, kernel_size=win_length, stride=hop_length, bias=False)
         return decoder
     
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
-        x -- [N, L]
+        Args:
+            input tensor x shape is [N, L]
+        
+        Returns:
+            output tensor shape is [N, C, T]
         """
         x = x.unsqueeze(1) # [N, 1, L]
         return self.encoder(x)
     
-    def inverse(self,x):
+    def inverse(self, x: torch.Tensor) -> torch.Tensor:
         """
-        x -- [N, C, T]
+        Args:
+            input tensor shape is [N, C, T]
+        
+        Returns:
+            output tensor shape is [N, L]
         """
         x = self.decoder(x)
         return x.squeeze(1)
@@ -57,9 +67,9 @@ class ConvEncDec(nn.Module):
         Inverse:
         Complex-STFT / Magnitude+Phase -> generate wave -> de-emphasis
     """
-    def __init__(self, fft_length: int=512, win_type: str='hann', win_length=512, \
-        freq_bins=None, hop_length=128, freq_scale='no', iSTFT=True, fmin=0, fmax=8000, sr=16000, \
-        trainable=True, output_format="Complex"):
+    def __init__(self, fft_length: int = 512, win_type: str = 'hann', win_length: int = 512, \
+        freq_bins: int = None, hop_length: int = 128, freq_scale: str = 'no', iSTFT: bool = True, \
+        fmin: int = 0, fmax: int = 8000, sr: int = 16000, trainable: bool = True, output_format: str = "Complex"):
         super().__init__()
 
         self.n_fft = fft_length
@@ -79,37 +89,50 @@ class ConvEncDec(nn.Module):
             iSTFT=self.iSTFT, sr=self.sr, fmin=self.fmin, fmax=self.fmax, output_format=self.output_format, \
             trainable=self.trainable, hop_length=self.hop_length)
 
-    def get_windows(self, type):
+    def get_windows(self, type: str) -> torch.Tensor:
         if type.lower() == 'hann':
             win = torch.hann_window(self.win_length)
         else:
             raise NotImplementedError(f"window type not support")
         return win
     
-    def get_encoder(self, **kwargs):
+    def get_encoder(self, **kwargs) -> nn.Module:
         return ConvSTFT(self.window, **kwargs)
     
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
-        x -- [N, L]
+        Args:
+            input tensor shape is [N, L]
+        
+        Returns:
+            output tensor shape is [N, C, T, 2]
         """
         x = x.unsqueeze(1) # [N, 1, L]
         return self.encoder(x)
     
-    def inverse(self, x):
+    def inverse(self, x: torch.Tensor) -> torch.Tensor:
         """
-        x -- [N, C, T, 2]
+        Args:
+            input tensor shape is [N, C, T, 2]
+        
+        Returns:
+            output tensor shape is [N, L]
         """
         gen = self.encoder.inverse(x)
+        if gen.dim() == 3: gen = gen.squeeze(1)
         return gen
 
 
 class ConvSTFT(nn.Module):
     """
-    This code comes from nnAudio
+    This code majorly comes from nnAudio.
+
+    Reference:
+        https://github.com/KinWaiCheuk/nnAudio
     """
-    def __init__(self, window_mask, n_fft=2048, win_length=None, freq_bins=None, hop_length=None, freq_scale='no', \
-                iSTFT=False, fmin=50, fmax=6000, sr=22050, trainable=False, output_format="Complex"):
+    def __init__(self, window_mask: torch.Tensor, n_fft: int = 2048, win_length: Optional[int] = None, \
+                freq_bins: Optional[int] = None, hop_length: Optional[int] = None, freq_scale: str = 'no', \
+                iSTFT: bool = False, fmin: int = 50, fmax: int = 6000, sr: int = 22050, trainable: bool = False, output_format: str = "Complex"):
 
         super().__init__()
 
@@ -162,17 +185,15 @@ class ConvSTFT(nn.Module):
         # Prepare the shape of window mask so that it can be used later in inverse
         self.register_buffer('window_mask', window_mask.unsqueeze(0).unsqueeze(-1))
     
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
         Convert a batch of waveforms to spectrograms.
         ----------
         Input:
-        x -- torch.Tensor -- [N, channel, L]
-        
-        output_format : str
-            Control the type of spectrogram to be return. Can be either ``Complex`` or ``MagPhase``.
-            Default value is ``Complex``.  
-            
+            input tensor x shape is [N, channel, L]
+                
+        Returns:
+            output tensor shape is [N, C, T]
         """
         output_format = self.output_format
         
@@ -195,7 +216,7 @@ class ConvSTFT(nn.Module):
         else:
             raise NotImplementedError
 
-    def inverse(self, X, refresh_win=True):
+    def inverse(self, X: torch.Tensor, refresh_win: bool = True) -> torch.Tensor:
         """
         which is to convert spectrograms back to waveforms. 
         It only works for the complex value spectrograms. If you have the magnitude spectrograms,

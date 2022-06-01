@@ -16,3 +16,4 @@ mir_eval
 rir-generator
 plotly
 pandas
+kaleido
