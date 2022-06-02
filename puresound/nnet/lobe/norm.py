@@ -72,10 +72,11 @@ gLN = GlobLN
 cLN = ChanLN
 iLN = InstantLN
 bN1d = nn.BatchNorm1d
+bN2d = nn.BatchNorm2d
 gGN = lambda x: nn.GroupNorm(1, x, 1e-8)
 
 def get_norm(name: str):
-    if name not in ['gLN', 'cLN', 'iLN', 'bN1d', 'gGN']:
+    if name not in ['gLN', 'cLN', 'iLN', 'bN1d', 'gGN', 'bN2d']:
         raise NameError('Could not interpret normalization identifier')
 
     if isinstance(name, str):

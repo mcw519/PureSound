@@ -151,7 +151,6 @@ class GatedTCN(nn.Module):
 class ConvTasNet(nn.Module):
     """
     Re-implement Conv-TasNet structure for supporting multi-input which is waveform with dvec(embedding).
-    TCN layer refers from 
     
     Args:
         input_dim: Input feature dimension, in TF-based system this is FFT bin size.
@@ -182,7 +181,7 @@ class ConvTasNet(nn.Module):
                 tcn_with_embed: List = [1, 0, 0, 0, 0],
                 tcn_norm: str = 'gLN',
                 dconv_norm: str = 'gGN',
-                causal: bool = True):
+                causal: bool = False):
         super().__init__()
         self.input_dim = input_dim
         self.embed_dim = embed_dim
@@ -220,7 +219,7 @@ class ConvTasNet(nn.Module):
 
             self.tcn_list.append(nn.ModuleList(_tcn))
             
-    def forward(self, x: torch.Tensor, dvec: torch.Tensor):
+    def forward(self, x: torch.Tensor, dvec: Optional[torch.Tensor] = None):
         """
         Args:
             x: Input mixture feats [N, C, T]
@@ -230,7 +229,7 @@ class ConvTasNet(nn.Module):
             TF-mask as same shape of input_dim
         """
         # normalize
-        if self.embed_norm:
+        if self.embed_norm and dvec is not None:
             dvec = F.normalize(dvec, p=2, dim=1)
 
         # forward TCN block
