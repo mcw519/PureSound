@@ -2,12 +2,12 @@ from typing import Optional
 
 import torch
 import torch.nn as nn
-
 from puresound.nnet.base_nn import SoTaskWrapModule
 from puresound.nnet.conv_tasnet import TCN, ConvTasNet, GatedTCN
 from puresound.nnet.lobe.encoder import ConvEncDec, FreeEncDec
 from puresound.nnet.lobe.pooling import AttentiveStatisticsPooling
 from puresound.nnet.loss.aamsoftmax import AAMsoftmax
+from puresound.nnet.loss.metrics import GE2ELoss
 from puresound.nnet.loss.sdr import SDRLoss
 
 
@@ -30,6 +30,10 @@ def init_loss(hparam):
     elif cls_loss.lower() == 'aamsoftmax':
         cls_loss = AAMsoftmax(input_dim=hparam['LOSS']['embed_dim'], n_class=hparam['LOSS']['n_class'], margin=hparam['LOSS']['margin'], scale=hparam['LOSS']['scale'])
     
+    elif cls_loss.lower() == 'ge2e':
+        assert hparam['TRAIN']['contrastive_learning']
+        cls_loss = GE2ELoss(nspks=hparam['TRAIN']['p_spks'], putts=hparam['TRAIN']['p_utts'])
+
     else:
         cls_loss = None
 
