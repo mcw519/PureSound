@@ -1,0 +1,55 @@
+DATASET:
+  type: TSE
+  sample_rate: 16000
+  max_length: 3 # input snipit length
+  train: train # train set folder
+  dev: dev # dev set folder
+  eval: eval # eval set folder for tensorboard logging
+  noise_folder: # if not None, applies noise inject
+  rir_folder: # if not None, applies RIR
+  rir_mode: # image/direct/early
+  vol_perturbed: # Tuple
+  speed_perturbed: False
+  single_spk_prob: 0.
+  inactive_training: 0.
+  enroll_rule: fixed_length
+  enroll_augment: False
+
+MODEL:
+  type: td_tse_conv_tasnet_v0_causal # model-name
+  
+LOSS:
+  sig_loss: sisnr
+  sig_threshold: #-30
+  alpha: 1
+  cls_loss: aamsoftmax
+  embed_dim: 192 # for aamsoftmax
+  n_class: 251 # for aamsoftmax
+  margin: 0.2 # for aamsoftmax
+  scale: 30 # for aamsoftmax
+
+OPTIMIZER:
+  gradiend_clip: 10
+  lr: 0.0001
+  num_epochs_decay: 0
+  lr_scheduler: Plateau
+  mode: min
+  patience: 5
+  gamma: 0.5
+  beta1: 0.9
+  beta2: 0.999
+  weight_decay: 0.
+
+TRAIN:
+  num_epochs: 200
+  resume_epoch:
+  contrastive_learning: False
+  p_spks: 6
+  p_utts: 4
+  batch_size: 12
+  multi_gpu: True
+  num_workers: 10
+  model_average:
+  use_tensorboard: True
+  model_save_dir: models # model save folder
+  log_dir: logs # logging save folder
