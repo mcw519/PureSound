@@ -318,7 +318,10 @@ class SoTaskWrapModule(EncDecMaskerBaseModel):
     
     def _get_waveform(self, enh_feats: torch.Tensor) -> torch.Tensor:
         if isinstance(self.encoder, ConvEncDec):
-            assert enh_feats.dim() == 4
+            if enh_feats.dim() != 4:
+                _re, _im = torch.chunk(enh_feats, 2, dim=1)
+                enh_feats = torch.stack([_re, _im], dim=-1)
+
             if self.drop_first_bin:
                 _re = enh_feats[..., 0]
                 _im = enh_feats[..., 1]
@@ -342,14 +345,7 @@ class SoTaskWrapModule(EncDecMaskerBaseModel):
             
         Return:
             Loss: loss_sdr
-        """   
-        # noisy = self.encoder(noisy) # [N, C, T]
-
-        # # Enable shared encoder structure like SpEx+
-        # if self.encoder_spk is None:
-        #     enroll = self.encoder(enroll) # [N, C, T]
-        # else:
-        #     enroll = self.encoder_spk(enroll) # [N, C, T]
+        """
         noisy, enroll = self._get_feature(noisy, enroll) # [N, C, T]
         dvec = enroll
 
@@ -368,7 +364,6 @@ class SoTaskWrapModule(EncDecMaskerBaseModel):
 
         mask = self.get_mask(mask, self.mask_constraint)
         enh_feats = self.apply_tf_masks(noisy, mask, f_type=self.f_type, mask_type=self.mask_type) # [N, C, T]
-        # enh_wav = self.encoder.inverse(enh_feats)
         enh_wav = self._get_waveform(enh_feats)
         enh_wav = torch.clamp_(enh_wav, min=-1, max=1)
         loss_wav = self.loss_func_wav(enh_wav, ref_clean)
@@ -391,14 +386,7 @@ class SoTaskWrapModule(EncDecMaskerBaseModel):
     
         Return:
             Joint loss: loss_sdr + alpha * loss_class
-        """   
-        # noisy = self.encoder(noisy) # [N, C, T]
-
-        # # Enable shared encoder structure like SpEx+
-        # if self.encoder_spk is None:
-        #     enroll = self.encoder(enroll) # [N, C, T]
-        # else:
-        #     enroll = self.encoder_spk(enroll) # [N, C, T]
+        """
         noisy, enroll = self._get_feature(noisy, enroll) # [N, C, T]
         
         dvec = enroll
@@ -409,7 +397,6 @@ class SoTaskWrapModule(EncDecMaskerBaseModel):
         mask = self.masker(noisy, dvec)
         mask = self.get_mask(mask, self.mask_constraint)
         enh_feats = self.apply_tf_masks(noisy, mask, f_type=self.f_type, mask_type=self.mask_type) # [N, C, T]
-        # enh_wav = self.encoder.inverse(enh_feats)
         enh_wav = self._get_waveform(enh_feats)
         enh_wav = torch.clamp_(enh_wav, min=-1, max=1)
         loss_wav = self.loss_func_wav(enh_wav, ref_clean)
@@ -455,7 +442,6 @@ class SoTaskWrapModule(EncDecMaskerBaseModel):
 
         mask = self.get_mask(mask, self.mask_constraint)
         enh_feats = self.apply_tf_masks(noisy, mask, f_type=self.f_type, mask_type=self.mask_type) # [N, C, T]
-        # enh_wav = self.encoder.inverse(enh_feats)
         enh_wav = self._get_waveform(enh_feats)
         enh_wav = torch.clamp_(enh_wav, min=-1, max=1)
         return enh_wav
