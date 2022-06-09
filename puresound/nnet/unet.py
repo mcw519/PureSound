@@ -238,6 +238,7 @@ class UnetTcn(Unet):
                 dropout: float = 0.05,
                 channels: Tuple = (1, 1, 8, 8, 16, 16),
                 transpose_t_size: int = 2,
+                transpose_delay: bool = False,
                 skip_conv: bool = False,
                 kernel_t: Tuple = (5, 1, 9, 1, 1),
                 stride_t: Tuple = (1, 1, 1, 1, 1),
@@ -271,6 +272,7 @@ class UnetTcn(Unet):
         self.tcn_norm = tcn_norm
         self.dconv_norm = dconv_norm
         self.causal = causal
+        self.transpose_delay = transpose_delay
 
         # TCN module's
         temporal_input_dim = self.num_freq
@@ -354,7 +356,10 @@ class UnetTcn(Unet):
            
             x = cnn_layer(x)
             if self.t_kernel != 1:
-                x = x[..., :-(self.t_kernel-1)] # transpose-conv with t-kernel size would increase (t-1) length
+                if self.transpose_delay:
+                    x = x[..., (self.t_kernel-1):] # transpose-conv with t-kernel size would increase (t-1) length
+                else:
+                    x = x[..., :-(self.t_kernel-1)] # transpose-conv with t-kernel size would increase (t-1) length
         
         if self.input_type.lower() == 'ri':
             _re = x[:, 0, :, :]
@@ -376,6 +381,7 @@ class UnetTcn(Unet):
             'dropout': self.dropout,
             'channels': self.channels,
             'transpose_t_size': self.transpose_t_size,
+            'transpose_delay': self.transpose_delay,
             'skip_conv': self.skip_conv,
             'kernel_t': self.kernel_t,
             'stride_t': self.stride_t,
