@@ -3,6 +3,7 @@ from typing import Optional, Tuple
 import numpy as np
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 from .lobe.encoder import ConvEncDec
 
@@ -214,6 +215,7 @@ class SoTaskWrapModule(EncDecMaskerBaseModel):
                 speaker_net: Optional[nn.Module] = None,
                 loss_func_wav: Optional[nn.Module] = None,
                 loss_func_spk: Optional[nn.Module] = None,
+                loss_func_others: Optional[nn.Module] = None,
                 f_type: str = 'real',
                 mask_type: str = 'real',
                 mask_constraint: str = 'linear',
@@ -229,6 +231,7 @@ class SoTaskWrapModule(EncDecMaskerBaseModel):
         self.speaker_net = speaker_net
         self.loss_func_wav = loss_func_wav
         self.loss_func_spk = loss_func_spk
+        self.loss_func_others = loss_func_others
         self.mask_constraint = mask_constraint
         self.drop_first_bin = drop_first_bin
         self.task = self.check_task()
@@ -239,10 +242,10 @@ class SoTaskWrapModule(EncDecMaskerBaseModel):
         Checking initialized sucess and return task-label.
 
         Return:
-            task_label: 0: SE/BSS ; 1: TSE
+            task_label: 0: SE/BSS ; 1: TSE(wav+speaker) ; 2: TSE(contrastive learning via speaker loss)
         """
         if self.speaker_net is None:
-            class_label = 0
+            task_label = 0
             if self.encoder_spk is not None:
                 print(f"Initialized a SE or BSS model, ignored the Encoder-spk.")
             else:
@@ -250,23 +253,32 @@ class SoTaskWrapModule(EncDecMaskerBaseModel):
 
         else:
             if self.encoder_spk is not None:
-                class_label = 1
+                task_label = 1
                 assert self.speaker_net is not None, f"Multi-task trainer missed the SpeakerNet."
                 print(f"Initialized a multi-task model, including two separate speech encoder.")
             
             else:
-                class_label = 1
+                task_label = 1
                 print(f"Initialized a multi-task model, sharing a same speech encoder.")               
         
             if self.loss_func_spk is not None:
-                class_label = 1
-                print(f"Multi-task training has two loss function.")
+                if self.loss_func_wav is None:
+                    task_label = 2
+                    print(f"Contrastive learning via speaker loss function.")
+
+                else:
+                    if self.loss_func_others is None:
+                        task_label = 1
+                        print(f"Multi-task training has two loss function.")
+                    else:
+                        task_label = 3
+                        print(f"Multi-task training has three loss function.")
             
             else:
-                class_label = 1
+                task_label = 1
                 print(f"Multi-task training has only one loss function.")
 
-        return class_label
+        return task_label
     
     def _get_feature(self, noisy: Optional[torch.Tensor] = None, enroll: Optional[torch.Tensor] = None) -> Tuple[torch.Tensor, torch.Tensor]:
         """
@@ -275,6 +287,10 @@ class SoTaskWrapModule(EncDecMaskerBaseModel):
         Args:
             noisy: Input noisy mixture tensor, [N, T]
             enroll: Enrolment waveform tensor, [N, T], if None, skip it
+        
+        Returns:
+            noisy tensor with shape [N, C, T]
+            enroll tensor with shape [N, C, T] or None
         """
         if noisy is not None:
             noisy = self.encoder(noisy) # [N, C, T] or [N, C, T, 2]
@@ -333,6 +349,20 @@ class SoTaskWrapModule(EncDecMaskerBaseModel):
         enh_wav = self.encoder.inverse(enh_feats)
         return enh_wav
 
+    def _align_waveform(self, enh_wav: torch.Tensor, ref_wav: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+        """Assume last axis is the time."""
+        enh_wav_l = enh_wav.shape[-1]
+        ref_wav_l = ref_wav.shape[-1]
+        if enh_wav_l != ref_wav_l:
+            if ref_wav_l < enh_wav_l:
+                # align from last
+                pad_num = enh_wav_l - ref_wav_l
+                ref_wav = F.pad(ref_wav, (pad_num, 0))
+            else:
+                # align from begin
+                enh_wav = enh_wav[..., :ref_wav_l]
+        return enh_wav, ref_wav
+
     def _forward(self, noisy: torch.Tensor, enroll: torch.Tensor, ref_clean: torch.Tensor) -> torch.Tensor:
         """
         Getting input noisy(n-mixed speech) and enrollment speech(target enroll) to calculate the training loss. 
@@ -350,8 +380,11 @@ class SoTaskWrapModule(EncDecMaskerBaseModel):
         dvec = enroll
 
         if dvec is not None:
-            for layer in self.speaker_net:
-                dvec = layer(dvec)
+            if type(self.speaker_net) == nn.ModuleList:
+                for layer in self.speaker_net:
+                    dvec = layer(dvec)
+            else:
+                dvec = self.speaker_net(dvec)
         
             dvec = dvec.squeeze(-1)
 
@@ -366,6 +399,7 @@ class SoTaskWrapModule(EncDecMaskerBaseModel):
         enh_feats = self.apply_tf_masks(noisy, mask, f_type=self.f_type, mask_type=self.mask_type) # [N, C, T]
         enh_wav = self._get_waveform(enh_feats)
         enh_wav = torch.clamp_(enh_wav, min=-1, max=1)
+        enh_wav, ref_clean = self._align_waveform(enh_wav, ref_clean)
         loss_wav = self.loss_func_wav(enh_wav, ref_clean)
         
         return loss_wav
@@ -390,15 +424,19 @@ class SoTaskWrapModule(EncDecMaskerBaseModel):
         noisy, enroll = self._get_feature(noisy, enroll) # [N, C, T]
         
         dvec = enroll
-        for layer in self.speaker_net:
-            dvec = layer(dvec)
-        
+        if type(self.speaker_net) == nn.ModuleList:
+            for layer in self.speaker_net:
+                dvec = layer(dvec)
+        else:
+            dvec = self.speaker_net(dvec)
+                
         dvec = dvec.squeeze(-1)
         mask = self.masker(noisy, dvec)
         mask = self.get_mask(mask, self.mask_constraint)
         enh_feats = self.apply_tf_masks(noisy, mask, f_type=self.f_type, mask_type=self.mask_type) # [N, C, T]
         enh_wav = self._get_waveform(enh_feats)
         enh_wav = torch.clamp_(enh_wav, min=-1, max=1)
+        enh_wav, ref_clean = self._align_waveform(enh_wav, ref_clean)
         loss_wav = self.loss_func_wav(enh_wav, ref_clean)
 
         if self.loss_func_spk is not None and spk_class is not None:
@@ -412,6 +450,118 @@ class SoTaskWrapModule(EncDecMaskerBaseModel):
         else:
             return loss_wav
     
+    def _forward_contrastive(self, noisy: torch.Tensor, enroll: torch.Tensor, spk_class: torch.Tensor) -> torch.Tensor:
+        """
+        Getting input noisy(n-mixed speech) and enrollment speech(target enroll) to calculate the SDR based loss.
+        And also calculate the speaker classification loss.
+        This way can usage DP benifit for balance GPU'e memory to avoid single machine OOM problem.
+
+        Args:
+            noisy: Input noisy mixture tensor, [N, T]
+            enroll: Enrolment waveform tensor, [N, T]
+            spk_class: Speaker label
+    
+        Return:
+            Joint loss: loss_class
+        """
+        noisy, enroll = self._get_feature(noisy, enroll) # [N, C, T]
+        
+        dvec = enroll
+        if type(self.speaker_net) == nn.ModuleList:
+            for layer in self.speaker_net:
+                dvec = layer(dvec)
+        else:
+            dvec = self.speaker_net(dvec)
+                
+        dvec = dvec.squeeze(-1)
+        mask = self.masker(noisy, dvec)
+        mask = self.get_mask(mask, self.mask_constraint)
+        enh_feats = self.apply_tf_masks(noisy, mask, f_type=self.f_type, mask_type=self.mask_type) # [N, C, T]
+        enh_wav = self._get_waveform(enh_feats)
+        enh_wav = torch.clamp_(enh_wav, min=-1, max=1)
+
+        enh_feats, _ = self._get_feature(enh_wav, None)
+        enh_dvec = enh_feats
+        if type(self.speaker_net) == nn.ModuleList:
+            for layer in self.speaker_net:
+                enh_dvec = layer(enh_dvec)
+        else:
+            enh_dvec = self.speaker_net(enh_dvec)
+        
+        enh_dvec = enh_dvec.squeeze(-1)
+        N = dvec.shape[0]
+        total_dvec = torch.cat([dvec, enh_dvec], dim=-1).reshape(N*2, -1)
+        spk_class = torch.cat([spk_class, spk_class], dim=-1).reshape(N*2, -1)
+        loss_spk = self.loss_func_spk(total_dvec, spk_class)
+        return loss_spk
+
+    def _forward_join_loop(self, noisy: torch.Tensor, enroll: torch.Tensor, ref_clean: torch.Tensor, spk_class: torch.Tensor, alpha: float = 10,
+        return_loss_detail: bool = True) -> torch.Tensor:
+        """
+        Getting input noisy(n-mixed speech) and enrollment speech(target enroll) to calculate the SDR based loss.
+        And also calculate the speaker classification loss.
+        This way can usage DP benifit for balance GPU'e memory to avoid single machine OOM problem.
+
+        Args:
+            noisy: Input noisy mixture tensor, [N, T]
+            enroll: Enrolment waveform tensor, [N, T]
+            ref_clean: Target speech in the noisy
+            spk_class: Speaker label
+            alpha: Weight for loss combining
+    
+        Return:
+            Joint loss: loss_sdr + alpha * loss_class
+        """
+        noisy_wav = noisy.clone()
+        enroll_wav = enroll.clone()
+        noisy, enroll = self._get_feature(noisy, enroll) # [N, C, T]
+        
+        dvec = enroll
+        if type(self.speaker_net) == nn.ModuleList:
+            for layer in self.speaker_net:
+                dvec = layer(dvec)
+        else:
+            dvec = self.speaker_net(dvec)
+                
+        dvec = dvec.squeeze(-1)
+        mask = self.masker(noisy, dvec)
+        mask = self.get_mask(mask, self.mask_constraint)
+        enh_feats = self.apply_tf_masks(noisy, mask, f_type=self.f_type, mask_type=self.mask_type) # [N, C, T]
+        enh_wav = self._get_waveform(enh_feats)
+        enh_wav = torch.clamp_(enh_wav, min=-1, max=1)
+        pred_noise = noisy_wav - enh_wav
+        _, enh_dvec = self._get_feature(None, enh_wav)
+        _, noise_dvec = self._get_feature(None, pred_noise)
+
+        if type(self.speaker_net) == nn.ModuleList:
+            for layer in self.speaker_net:
+                enh_dvec = layer(enh_dvec)
+        else:
+            enh_dvec = self.speaker_net(enh_dvec)
+        
+        if type(self.speaker_net) == nn.ModuleList:
+            for layer in self.speaker_net:
+                noise_dvec = layer(noise_dvec)
+        else:
+            noise_dvec = self.speaker_net(noise_dvec)
+
+        triplet_dvec = torch.stack([dvec.squeeze(-1), enh_dvec.squeeze(-1), noise_dvec.squeeze(-1)], dim=1)
+        
+        enh_wav, ref_clean = self._align_waveform(enh_wav, ref_clean)
+        loss_wav = self.loss_func_wav(enh_wav, ref_clean)
+
+        if self.loss_func_spk is not None and spk_class is not None:
+            loss_spk = self.loss_func_spk(dvec, spk_class)
+            loss_spk_loop = self.loss_func_others(triplet_dvec)
+            if return_loss_detail:
+                return loss_wav + alpha * loss_spk + alpha * loss_spk_loop, (loss_wav, loss_spk, loss_spk_loop)
+            
+            else:
+                return loss_wav + alpha * loss_spk + alpha * loss_spk_loop
+        
+        else:
+            return loss_wav
+    
     def forward(self, **kwargs):
         if self.task == 0:
             return self._forward(**kwargs)
@@ -419,6 +569,12 @@ class SoTaskWrapModule(EncDecMaskerBaseModel):
         elif self.task == 1:
             return self._forward_join(**kwargs)
         
+        elif self.task == 2:
+            return self._forward_contrastive(**kwargs)
+        
+        elif self.task == 3:
+            return self._forward_join_loop(**kwargs)
+
         else:
             raise NotImplementedError
 
@@ -428,8 +584,11 @@ class SoTaskWrapModule(EncDecMaskerBaseModel):
         dvec = enroll
 
         if dvec is not None:
-            for layer in self.speaker_net:
-                dvec = layer(dvec)
+            if type(self.speaker_net) == nn.ModuleList:
+                for layer in self.speaker_net:
+                    dvec = layer(dvec)
+            else:
+                dvec = self.speaker_net(dvec)
         
             dvec = dvec.squeeze(-1)
 
@@ -453,8 +612,11 @@ class SoTaskWrapModule(EncDecMaskerBaseModel):
         # Enable shared encoder structure like SpEx+
         _, enroll = self._get_feature(None, enroll)
         dvec = enroll
-        for layer in self.speaker_net:
-            dvec = layer(dvec) # [N, emb_dim]
+        if type(self.speaker_net) == nn.ModuleList:
+            for layer in self.speaker_net:
+                dvec = layer(dvec) # [N, emb_dim]
+        else:
+            dvec = self.speaker_net(dvec)
         
         return dvec
 

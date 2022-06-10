@@ -86,15 +86,15 @@ class GatedTCN(nn.Module):
         dropout: if not 0. applies dropout
         emb_dim (int): if not zero, concate in right_conv's input
         causal (bool): padding by causal scenario, others padding to same length between input and output
-        norm_type: the type of normalization layer
+        tcn_norm: the type of normalization layer
     """
     def __init__(self, in_channels: int, hid_channels: int, kernel: int, dilation: int, dropout: float = 0.,
-            emb_dim: int = 0, causal: bool = False, norm_type: str = 'gLN') -> None:
+            emb_dim: int = 0, causal: bool = False, tcn_norm: str = 'gLN'):
         super().__init__()
         self.causal = causal
         self.padd = (kernel - 1) * dilation // 2 if not causal else (kernel - 1) * dilation
-        self.norm_type = norm_type
-        norm_cls = get_norm(norm_type)
+        self.tcn_norm = tcn_norm
+        norm_cls = get_norm(tcn_norm)
         
         self.in_conv = nn.Conv1d(in_channels, hid_channels, kernel_size=1, bias=False, groups=1)
         
@@ -211,11 +211,19 @@ class ConvTasNet(nn.Module):
             
             for i in range(per_tcn_stack):
                 if tcn_with_embed[i]:
-                    _tcn.append(tcn_cls(input_dim, tcn_dim, kernel=tcn_kernel, dilation=tcn_dilated_basic**i, emb_dim=embed_dim,
-                                        causal=causal, tcn_norm=tcn_norm, dconv_norm=dconv_norm))
+                    if self.tcn_layer.lower() == 'normal':
+                        _tcn.append(tcn_cls(input_dim, tcn_dim, kernel=tcn_kernel, dilation=tcn_dilated_basic**i, emb_dim=embed_dim,
+                                            causal=causal, tcn_norm=tcn_norm, dconv_norm=dconv_norm))
+                    else:
+                        _tcn.append(tcn_cls(input_dim, tcn_dim, kernel=tcn_kernel, dilation=tcn_dilated_basic**i, emb_dim=embed_dim,
+                                            causal=causal, tcn_norm=tcn_norm))
                 else:
-                    _tcn.append(tcn_cls(input_dim, tcn_dim, kernel=tcn_kernel, dilation=tcn_dilated_basic**i, emb_dim=0,
-                                        causal=causal, tcn_norm=tcn_norm, dconv_norm=dconv_norm))
+                    if self.tcn_layer.lower() == 'normal':
+                        _tcn.append(tcn_cls(input_dim, tcn_dim, kernel=tcn_kernel, dilation=tcn_dilated_basic**i, emb_dim=0,
+                                            causal=causal, tcn_norm=tcn_norm, dconv_norm=dconv_norm))
+                    else:
+                        _tcn.append(tcn_cls(input_dim, tcn_dim, kernel=tcn_kernel, dilation=tcn_dilated_basic**i, emb_dim=0,
+                                            causal=causal, tcn_norm=tcn_norm))
 
             self.tcn_list.append(nn.ModuleList(_tcn))
             

@@ -288,6 +288,7 @@ class UnetTcn(Unet):
         if self.tcn_layer.lower() == 'normal':
             tcn_cls = TCN
         elif self.tcn_layer.lower() == 'gated':
+            print('GatedTCN would ignore dconv_norm configuration.')
             tcn_cls = GatedTCN
         else:
             raise NameError
@@ -299,11 +300,19 @@ class UnetTcn(Unet):
             
             for i in range(per_tcn_stack):
                 if tcn_with_embed[i]:
-                    _tcn.append(tcn_cls(temporal_input_dim, tcn_dim, kernel=tcn_kernel, dilation=tcn_dilated_basic**i, emb_dim=embed_dim,
-                                        causal=causal, tcn_norm=tcn_norm, dconv_norm=dconv_norm))
+                    if self.tcn_layer.lower() == 'normal':
+                        _tcn.append(tcn_cls(input_dim, tcn_dim, kernel=tcn_kernel, dilation=tcn_dilated_basic**i, emb_dim=embed_dim,
+                                            causal=causal, tcn_norm=tcn_norm, dconv_norm=dconv_norm))
+                    else:
+                        _tcn.append(tcn_cls(input_dim, tcn_dim, kernel=tcn_kernel, dilation=tcn_dilated_basic**i, emb_dim=embed_dim,
+                                            causal=causal, tcn_norm=tcn_norm))
                 else:
-                    _tcn.append(tcn_cls(temporal_input_dim, tcn_dim, kernel=tcn_kernel, dilation=tcn_dilated_basic**i, emb_dim=0,
-                                        causal=causal, tcn_norm=tcn_norm, dconv_norm=dconv_norm))
+                    if self.tcn_layer.lower() == 'normal':
+                        _tcn.append(tcn_cls(input_dim, tcn_dim, kernel=tcn_kernel, dilation=tcn_dilated_basic**i, emb_dim=0,
+                                            causal=causal, tcn_norm=tcn_norm, dconv_norm=dconv_norm))
+                    else:
+                        _tcn.append(tcn_cls(input_dim, tcn_dim, kernel=tcn_kernel, dilation=tcn_dilated_basic**i, emb_dim=0,
+                                            causal=causal, tcn_norm=tcn_norm))
 
             self.tcn_list.append(nn.ModuleList(_tcn))
 
