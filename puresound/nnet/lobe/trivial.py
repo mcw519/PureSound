@@ -3,6 +3,7 @@ from typing import Any
 
 import torch
 import torch.nn as nn
+from torch.autograd import Variable
 
 
 class LambdaLayer(nn.Module):
@@ -46,3 +47,103 @@ class Magnitude(nn.Module):
             _im = _im[:, 1:, :]
         
         return torch.sqrt(_re.pow(2) + _im.pow(2) + 1e-8)
+
+
+class FiLM(nn.Module):
+    """
+    Feature-wise Linear Modulation.
+    FiLM = linear(c)*f(x) + linear'(c), where c is speaker or other vectors
+    """
+    def __init__(self, feats_size: int, embed_size: int, input_norm: bool = True):
+        super().__init__()
+        self.cond_scale = nn.Conv1d(feats_size+embed_size, feats_size, kernel_size=1, bias=False)
+        self.cond_bias = nn.Conv1d(feats_size+embed_size, feats_size, kernel_size=1, bias=False)
+
+        self.inp_norm = input_norm
+        if self.inp_norm:
+            self.norm = nn.LayerNorm(feats_size)
+
+    
+    def forward(self, x: torch.Tensor, condition: torch.Tensor):
+        """
+        Args:
+            input tensor x has shape [N, C, T]
+            condition tensor has shape [N, C]
+        
+        Returns:
+            output tensor has shape [N, C, T]
+        """
+        if self.inp_norm:
+            x = self.norm(x.transpose(1, 2)).transpose(1, 2)
+
+        condition = condition.unsqueeze(-1) # [N, C, 1]
+        condition = condition.repeat(1, 1, x.shape[-1])
+        condition = torch.cat([x, condition], dim=1)
+        film_scale = self.cond_scale(condition)
+        film_bias = self.cond_bias(condition)
+        x_out = film_scale * x + film_bias
+        
+        return x_out
+
+
+class SplitMerge(nn.Module):
+    """2S Process: Segmentation and Stitching(merge)."""
+    def __init__(self, seg_size: int, seg_overlap: bool = True):
+        self.seg_size = seg_size
+        self.seg_overlap = seg_overlap
+
+    @staticmethod
+    def split(x: torch.Tensor, seg_size: int):
+        """
+        Args:
+            input tensor x has shape [N, C, T]
+        
+        Returns:
+            output tensor segment has shape [N, S, K, C] and padding size
+        """
+        seg_stride = seg_size // 2
+
+        # padding
+        batch, feat_size, seq_len = x.shape # [N, C, T]
+        
+        rest = seg_size - (seg_stride + seq_len % seg_size) % seg_size
+        if rest > 0:
+            pad = Variable(torch.zeros(batch, feat_size, rest)).type(x.type())
+            x = torch.cat([x, pad], dim=-1)
+        
+        pad_aux = Variable(torch.zeros(batch, feat_size, seg_stride)).type(x.type())
+        x = torch.cat([pad_aux, x, pad_aux], dim=-1)
+
+        # splitting
+        batch, feat_size, seq_len = x.shape
+
+        seg_1 = x[:, :, :-seg_stride].contiguous().view(batch, feat_size, -1, seg_size)
+        seg_2 = x[:, :, seg_stride:].contiguous().view(batch, feat_size, -1, seg_size)
+
+        segments = torch.cat([seg_1, seg_2], dim=-1).view(batch, feat_size, -1, seg_size) # [N, C, S, K]
+        segments = segments.permute(0, 2, 3, 1) # [N, S, K, C]
+        
+        return segments, rest
+    
+    @staticmethod
+    def merge(x: torch.Tensor, rest: int):
+        """
+        Args:
+            input tensor x has shape [N, S, K, C]
+        
+        Outputs:
+            output tensor has shape [N, C, T]
+        """
+        batch, total_seg, seg_size, feat_size = x.shape
+        seg_stride = seg_size // 2
+        x = x.permute(0, 3, 1, 2).contiguous()
+        x = x.view(batch, feat_size, -1, seg_size*2)
+
+        x1 = x[:, :, :, :seg_size].contiguous().view(batch, feat_size, -1)[:, :, seg_stride:]
+        x2 = x[:, :, :, seg_size:].contiguous().view(batch, feat_size, -1)[:, :, :-seg_stride]
+
+        output = x1 + x2
+        if rest > 0:
+            output = output[..., :-rest]
+        
+        return output.contiguous()
