@@ -31,8 +31,8 @@ class TCN(nn.Module):
         
         self.in_conv = nn.Sequential(
             nn.Conv1d(in_channels+emb_dim, hid_channels, kernel_size=1, bias=False, groups=1),
-            nn.PReLU(),
-            tcn_norm(hid_channels))
+            tcn_norm(hid_channels),
+            nn.PReLU(),)
         
         self.dconv = nn.Sequential(
             DepthwiseSeparableConv1d(
@@ -44,8 +44,6 @@ class TCN(nn.Module):
                 skip=False,
                 causal=causal,
                 norm_cls=dconv_norm),
-            nn.PReLU(),
-            tcn_norm(hid_channels),
             nn.Dropout(p=dropout))
         
         self.out_conv = nn.Conv1d(hid_channels, in_channels, kernel_size=1, stride=1)
@@ -89,12 +87,13 @@ class GatedTCN(nn.Module):
         tcn_norm: the type of normalization layer
     """
     def __init__(self, in_channels: int, hid_channels: int, kernel: int, dilation: int, dropout: float = 0.,
-            emb_dim: int = 0, causal: bool = False, tcn_norm: str = 'gLN'):
+            emb_dim: int = 0, causal: bool = False, tcn_norm: str = 'gLN', use_film: bool = False):
         super().__init__()
         self.causal = causal
         self.padd = (kernel - 1) * dilation // 2 if not causal else (kernel - 1) * dilation
         self.tcn_norm = tcn_norm
         norm_cls = get_norm(tcn_norm)
+        self.use_film = use_film
         
         self.in_conv = nn.Conv1d(in_channels, hid_channels, kernel_size=1, bias=False, groups=1)
         
@@ -105,7 +104,14 @@ class GatedTCN(nn.Module):
             nn.Dropout(p=dropout)
         )
 
-        right_in_dim = hid_channels + emb_dim
+        if not self.use_film:
+            right_in_dim = hid_channels + emb_dim
+        
+        else:
+            self.cond_scale = nn.Conv1d(emb_dim, hid_channels, kernel_size=1, bias=False)
+            self.cond_bias = nn.Conv1d(emb_dim, hid_channels, kernel_size=1, bias=False)
+            right_in_dim = hid_channels
+
         self.right_conv = nn.Sequential(
             nn.Conv1d(right_in_dim, hid_channels, kernel_size=kernel, dilation=dilation, bias=False, padding=self.padd, groups=1),
             norm_cls(hid_channels),
@@ -129,9 +135,15 @@ class GatedTCN(nn.Module):
         x = self.in_conv(x)
         
         if embed is not None:
-            embed = embed.unsqueeze(2) # [N, C, 1]
-            embed = embed.repeat(1, 1, x.size(2)) # [N, C, T]
-            x_r = torch.cat([x, embed], dim=1)
+            if not self.use_film:
+                embed = embed.unsqueeze(-1) # [N, C, 1]
+                embed = embed.repeat(1, 1, x.size(2)) # [N, C, T]
+                x_r = torch.cat([x, embed], dim=1)
+            else:
+                condi = embed.unsqueeze(-1) # [N, C, 1]
+                film_scale = self.cond_scale(condi)
+                film_bias = self.cond_bias(condi)
+                x_r = film_scale * x + film_bias
         
         else:
             x_r = x
