@@ -46,6 +46,7 @@ TRAIN:
   contrastive_learning: False
   p_spks: 6
   p_utts: 4
+  repeat: 1
   batch_size: 24
   multi_gpu: True
   num_workers: 10

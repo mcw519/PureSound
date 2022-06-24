@@ -235,6 +235,7 @@ class SoTaskWrapModule(EncDecMaskerBaseModel):
         self.mask_constraint = mask_constraint
         self.drop_first_bin = drop_first_bin
         self.task = self.check_task()
+        print(f"Current task label: {self.task}")
         if verbose: self._verbose()
     
     def check_task(self):
@@ -275,8 +276,13 @@ class SoTaskWrapModule(EncDecMaskerBaseModel):
                         print(f"Multi-task training has three loss function.")
             
             else:
-                task_label = 1
-                print(f"Multi-task training has only one loss function.")
+                if self.loss_func_wav is None and self.loss_func_spk is None:
+                    task_label = None
+                    print(f"Inference mode.")
+                
+                else:
+                    task_label = 1
+                    print(f"Multi-task training has only one loss function.")
 
         return task_label
     
@@ -608,7 +614,6 @@ class SoTaskWrapModule(EncDecMaskerBaseModel):
     @torch.no_grad()
     def inference_tse_embedding(self, enroll: Optional[torch.Tensor] = None) -> torch.Tensor:
         """Forward SpeakerNet to get speaker embedding in TSE-task setting."""
-        assert self.task == 1
         # Enable shared encoder structure like SpEx+
         _, enroll = self._get_feature(None, enroll)
         dvec = enroll

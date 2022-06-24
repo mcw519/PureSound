@@ -5,11 +5,11 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.autograd import Variable
 
-from .lobe.trivial import FiLM
+from .lobe.trivial import FiLM, Gate
 
 
 class MemLSTM(nn.Module):
-    def __init__(self, hidden_size: int, causal: bool = True):
+    def __init__(self, hidden_size: int, causal: bool = True, dropout: float = 0.):
         super().__init__()
         self.hidden_size = hidden_size
         self.causal = causal
@@ -18,9 +18,13 @@ class MemLSTM(nn.Module):
         self.causal = causal
 
         self.h_net = nn.LSTM(self.input_size, self.hidden_size, num_layers=1, bidirectional=self.bi_direct, batch_first=True)
-        self.h_norm = nn.LayerNorm(hidden_size)
+        self.h_dropout = nn.Dropout(p=dropout)
+        self.h_proj = nn.Linear(self.hidden_size * (int(self.bi_direct)+1), self.input_size)
+        self.h_norm = nn.LayerNorm(self.input_size)
         self.c_net = nn.LSTM(self.input_size, self.hidden_size, num_layers=1, bidirectional=self.bi_direct, batch_first=True)
-        self.c_norm = nn.LayerNorm(hidden_size)
+        self.c_dropout = nn.Dropout(p=dropout)
+        self.c_proj = nn.Linear(self.hidden_size * (int(self.bi_direct)+1), self.input_size)
+        self.c_norm = nn.LayerNorm(self.input_size)
 
     def forward(self, h: torch.Tensor, c: torch.Tensor):
         """
@@ -34,16 +38,20 @@ class MemLSTM(nn.Module):
             cell states to next SegLSTM has shape [D, NS, C]
         """
         batch, total_seg, direct, feat_len = h.shape
-        h = h.view(batch, total_seg, -1) # [N, S, DC]
-        c = c.view(batch, total_seg, -1) # [N, S, DC]
+        h = h.reshape(batch, total_seg, -1) # [N, S, DC]
+        c = c.reshape(batch, total_seg, -1) # [N, S, DC]
 
         h_, _ = self.h_net(h)
+        h_ = self.h_dropout(h_)
+        h_ = self.h_proj(h_.reshape(batch*total_seg, -1)).reshape(batch, total_seg, -1)
         h = h + self.h_norm(h_)
         c_, _ = self.h_net(c)
+        c_ = self.c_dropout(c_)
+        c_ = self.c_proj(c_.reshape(batch*total_seg, -1)).reshape(batch, total_seg, -1)
         c = c + self.c_norm(c_)
 
-        h = h.view(batch*total_seg, direct, feat_len).transpose(1, 0).contiguous() # [D, NS, C]
-        c = c.view(batch*total_seg, direct, feat_len).transpose(1, 0).contiguous() # [D, NS, C]
+        h = h.reshape(batch*total_seg, direct, feat_len).transpose(1, 0).contiguous() # [D, NS, C]
+        c = c.reshape(batch*total_seg, direct, feat_len).transpose(1, 0).contiguous() # [D, NS, C]
 
         if self.causal:
             h_ = torch.zeros_like(h)
@@ -57,7 +65,7 @@ class MemLSTM(nn.Module):
 
 
 class SegLSTM(nn.Module):
-    def __init__(self, input_size: int, hidden_size: int, causal: bool = True):
+    def __init__(self, input_size: int, hidden_size: int, causal: bool = True, dropout: float = 0.):
         super().__init__()
         self.input_size = input_size
         self.hidden_size = hidden_size
@@ -65,6 +73,7 @@ class SegLSTM(nn.Module):
         self.causal = causal
 
         self.lstm = nn.LSTM(input_size, hidden_size, num_layers=1, bidirectional=self.bi_direct, batch_first=True)
+        self.drop = nn.Dropout(p=dropout)
         self.proj = nn.Linear(hidden_size*(int(self.bi_direct)+1), input_size)
         self.norm = nn.LayerNorm(input_size)
     
@@ -92,6 +101,7 @@ class SegLSTM(nn.Module):
             c = torch.zeros(d, batch, self.hidden_size).to(x.device)
         
         x_out, (h, c) = self.lstm(x, (h, c))
+        x_out = self.drop(x_out)
         x_out = self.proj(x_out.contiguous().view(-1, x_out.shape[2])).view(batch, seg_size, feat_len)
         x_out = x + self.norm(x_out)
 
@@ -128,7 +138,9 @@ class SkiM(nn.Module):
                 causal: bool = True,
                 embed_dim: int = 0,
                 embed_norm: bool = False,
-                block_with_embed: Optional[List] = None
+                embed_fusion: Optional[str] = None,
+                block_with_embed: Optional[List] = None,
+                dropout: float = 0.,
                 ):
         super().__init__()
 
@@ -146,20 +158,27 @@ class SkiM(nn.Module):
         self.seg_lstm = nn.ModuleList()
         if embed_dim == 0:
             for i in range(n_blocks):
-                self.seg_lstm.append(SegLSTM(input_size, hidden_size, causal=causal))
+                self.seg_lstm.append(SegLSTM(input_size, hidden_size, causal=causal, dropout=dropout))
         else:
-            self.seg_input_film = nn.ModuleList()
+            self.seg_input_fusion = nn.ModuleList()
             for i in range(n_blocks):
-                self.seg_lstm.append(SegLSTM(input_size, hidden_size, causal=causal))
+                self.seg_lstm.append(SegLSTM(input_size, hidden_size, causal=causal, dropout=dropout))
                 if block_with_embed[i]:
-                    self.seg_input_film.append(FiLM(input_size, embed_dim, input_norm=True))
+                    if embed_fusion.lower() == 'film':
+                        self.seg_input_fusion.append(FiLM(input_size, embed_dim, input_norm=True))
+                    
+                    elif embed_fusion.lower() == 'gate':
+                        self.seg_input_fusion.append(Gate(input_size, hidden_size=128, embed_size=embed_dim))
+
+                    else:
+                        raise NameError
                 
                 else:
-                    self.seg_input_film.append(None)
+                    self.seg_input_fusion.append(None)
             
         self.mem_lstm = nn.ModuleList()
         for i in range(n_blocks - 1):
-            self.mem_lstm.append(MemLSTM(hidden_size, causal=causal))
+            self.mem_lstm.append(MemLSTM(hidden_size, causal=causal, dropout=dropout))
 
         self.output_fc = nn.Sequential(
             nn.PReLU(),
@@ -211,7 +230,7 @@ class SkiM(nn.Module):
         x1 = x[:, :, :, :seg_size].contiguous().view(batch, feat_size, -1)[:, :, seg_stride:]
         x2 = x[:, :, :, seg_size:].contiguous().view(batch, feat_size, -1)[:, :, :-seg_stride]
 
-        output = x1 + x2
+        output = (x1 + x2) / 2
         if rest > 0:
             output = output[..., :-rest]
         
@@ -254,7 +273,7 @@ class SkiM(nn.Module):
 
         for i in range(self.n_blocks):
             if embed is not None and self.block_with_embed[i]:
-                output = self.seg_input_film[i](output.transpose(1, 2), embed)
+                output = self.seg_input_fusion[i](output.transpose(1, 2), embed)
                 output = output.transpose(1, 2)
 
             output, h, c = self.seg_lstm[i](output, h, c) # x=[NS, K, C], hc=[D, NS, C]

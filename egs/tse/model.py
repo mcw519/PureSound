@@ -10,6 +10,7 @@ from puresound.nnet.lobe.trivial import Magnitude
 from puresound.nnet.loss.aamsoftmax import AAMsoftmax
 from puresound.nnet.loss.metrics import GE2ELoss
 from puresound.nnet.loss.sdr import SDRLoss
+from puresound.nnet.skim import SkiM
 from puresound.nnet.unet import UnetTcn
 
 
@@ -45,6 +46,11 @@ def init_loss(hparam):
 # Models
 def init_model(name: str, sig_loss: Optional[nn.Module] = None, cls_loss: Optional[nn.Module] = None, **kwargs):
     if name == 'td_tse_conv_tasnet_v0':
+        """
+        Total params: 10,156,311
+        Lookahead(samples): infinite
+        Receptive Fields(samples): infinite
+        """
         model = SoTaskWrapModule(
             encoder=FreeEncDec(win_length=32, hop_length=16, laten_length=512),
             masker=ConvTasNet(512, 192, True, tcn_kernel=3, tcn_dim=256, repeat_tcn=3, tcn_dilated_basic=2, per_tcn_stack=8,
@@ -72,7 +78,30 @@ def init_model(name: str, sig_loss: Optional[nn.Module] = None, cls_loss: Option
 
     elif name == 'tse_unet_tcn_v0':
         """
-        Total params: 13372725
+        Total params: 13,372,725
+        Lookahead(samples): infinite
+        Receptive Fields(samples): infinite
+        """
+        model = SoTaskWrapModule(
+            encoder=ConvEncDec(fft_length=512, win_type='hann', win_length=512, hop_length=128, trainable=True, output_format='Complex'),
+            masker=UnetTcn(embed_dim=192, embed_norm=True, input_type='RI', input_dim=512, activation_type='PReLU', norm_type='gLN',
+                            channels=(1, 32, 64, 128, 128, 128, 128), transpose_t_size=2, transpose_delay=True, skip_conv=False, kernel_t=(2, 2, 2, 2, 2, 2), kernel_f=(5, 5, 5, 5, 5, 5),
+                            stride_t=(1, 1, 1, 1, 1, 1), stride_f=(2, 2, 2, 2, 2, 2), dilation_t=(1, 1, 1, 1, 1, 1), dilation_f=(1, 1, 1, 1, 1, 1), delay=(0, 0, 0, 0, 0, 0),
+                            tcn_layer='gated', tcn_kernel=3, tcn_dim=256, tcn_dilated_basic=2, per_tcn_stack=5, repeat_tcn=3, tcn_with_embed=[1, 0, 0, 0, 0],
+                            tcn_norm='gLN', dconv_norm='gGN', causal=False),
+            speaker_net=nn.ModuleList(
+                [Magnitude(drop_first=False)] + \
+                [GatedTCN(256, 128, 3, dilation=2**i, causal=False, tcn_norm='gLN') for i in range(5)] + \
+                [AttentiveStatisticsPooling(256, 128), nn.Conv1d(256*2, 192, 1, bias=False)]),
+            loss_func_wav=sig_loss,
+            loss_func_spk=cls_loss,
+            mask_constraint='linear',
+            drop_first_bin=True,
+            **kwargs)
+    
+    elif name == 'tse_unet_tcn_v0_causal':
+        """
+        Total params: 13,372,725
         Lookahead(samples): 1152
         Receptive Fields(samples): 24960
         """
@@ -92,7 +121,48 @@ def init_model(name: str, sig_loss: Optional[nn.Module] = None, cls_loss: Option
             mask_constraint='linear',
             drop_first_bin=True,
             **kwargs)
-
+    
+    elif name == 'tse_unet_tcn_v1':
+        """
+        Total params: 14,404,917
+        Lookahead(samples): infinite
+        Receptive Fields(samples): infinite
+        """
+        model = SoTaskWrapModule(
+            encoder=ConvEncDec(fft_length=512, win_type='hann', win_length=512, hop_length=128, trainable=True, output_format='Complex'),
+            masker=UnetTcn(embed_dim=192, embed_norm=True, input_type='RI', input_dim=512, activation_type='PReLU', norm_type='gLN',
+                            channels=(1, 32, 64, 128, 128, 128, 128), transpose_t_size=2, transpose_delay=True, skip_conv=False, kernel_t=(2, 2, 2, 2, 2, 2), kernel_f=(5, 5, 5, 5, 5, 5),
+                            stride_t=(1, 1, 1, 1, 1, 1), stride_f=(2, 2, 2, 2, 2, 2), dilation_t=(1, 1, 1, 1, 1, 1), dilation_f=(1, 1, 1, 1, 1, 1), delay=(0, 0, 0, 0, 0, 0),
+                            tcn_layer='gated', tcn_kernel=3, tcn_dim=256, tcn_dilated_basic=2, per_tcn_stack=5, repeat_tcn=3, tcn_with_embed=[1, 0, 0, 0, 0],
+                            tcn_norm='gLN', dconv_norm='gGN', causal=False, tcn_use_film=True),
+            speaker_net=nn.ModuleList(
+                [Magnitude(drop_first=False)] + \
+                [GatedTCN(256, 128, 3, dilation=2**i, causal=False, tcn_norm='gLN') for i in range(5)] + \
+                [AttentiveStatisticsPooling(256, 128), nn.Conv1d(256*2, 192, 1, bias=False)]),
+            loss_func_wav=sig_loss,
+            loss_func_spk=cls_loss,
+            mask_constraint='linear',
+            drop_first_bin=True,
+            **kwargs)
+    
+    elif name == 'tse_skim_v0_causal':
+        """
+        Total params: 6,423,632
+        Lookahead(samples): 800
+        Receptive Fields(samples): infinite
+        """
+        model = SoTaskWrapModule(
+            encoder=FreeEncDec(win_length=32, hop_length=16, laten_length=128, output_active=True),
+            masker=SkiM(input_size=128, hidden_size=256, output_size=128, n_blocks=4, seg_size=150, seg_overlap=True, causal=True,
+                embed_dim=192, embed_norm=True, block_with_embed=[1, 1, 1, 1], embed_fusion='FiLM'),
+            speaker_net=nn.ModuleList(
+                [TCN(128, 256, 3, dilation=2**i, causal=False, tcn_norm='gLN', dconv_norm='gGN') for i in range(5)] + \
+                [AttentiveStatisticsPooling(128, 128), nn.Conv1d(128*2, 192, 1, bias=False)]),
+        loss_func_wav=sig_loss,
+        loss_func_spk=cls_loss,
+        mask_constraint='ReLU',
+        **kwargs)
+    
     else:
         raise NameError
 

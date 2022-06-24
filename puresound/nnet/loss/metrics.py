@@ -12,7 +12,7 @@ class GE2ELoss(nn.Module):
     References:
         https://github.com/cvqluu/GE2E-Loss/blob/master/ge2e.py
     """
-    def __init__(self, nspks: int, putts: int, init_w=10.0, init_b=-5.0, loss_method='softmax'):
+    def __init__(self, nspks: int, putts: int, init_w: float = 10.0, init_b: float = -5.0, loss_method: str = 'softmax', add_norm: bool = True):
         '''
         Implementation of the Generalized End-to-End loss defined in https://arxiv.org/abs/1710.10467 [1]
         Accepts an input of size (N, M, D)
@@ -25,10 +25,12 @@ class GE2ELoss(nn.Module):
             - putts: Number of utterances per speaker (PureSound added)
             - init_w (float): defines the initial value of w in Equation (5) of [1]
             - init_b (float): definies the initial value of b in Equation (5) of [1]
+            - add_norm (bool): add 2-norm on input dvec
         '''
         super(GE2ELoss, self).__init__()
         self.nspks = nspks
         self.putts = putts
+        self.add_norm = add_norm
 
         self.w = nn.Parameter(torch.tensor(init_w))
         self.b = nn.Parameter(torch.tensor(init_b))
@@ -108,6 +110,9 @@ class GE2ELoss(nn.Module):
             Input dvecs has shape [N, D], where N = nspks * putts
             #TODO: add label to compute accuracy like voxceleb_trainer
         '''
+        if self.add_norm:
+            dvecs = F.normalize(dvecs, p=2, dim=1) # 22/06/07 add 2-norm
+
         dvecs = dvecs.reshape(self.nspks, self.putts, -1) # [N, D] -> [nspks, putts, D]
 
         #Calculate centroids
@@ -119,3 +124,51 @@ class GE2ELoss(nn.Module):
         cos_sim_matrix = cos_sim_matrix * self.w + self.b
         L = self.embed_loss(dvecs, cos_sim_matrix)
         return L.sum()
+
+
+class TripletLoss(nn.Module):
+    def __init__(self, margin: float = 0., add_norm: bool = True, distance: str = 'Euclidean'):
+        super().__init__()
+        self.margin = margin
+        self.add_norm = add_norm
+        self.distance = distance
+    
+    def cosine_similarity(self, s1: torch.Tensor, s2: torch.Tensor) -> torch.Tensor:
+        return (s1*s2).sum(dim=-1) / torch.sqrt((s1*s1).sum(dim=-1)*(s2*s2).sum(dim=-1))
+    
+    def euclidean_distance(self, s1: torch.Tensor, s2: torch.Tensor) -> torch.Tensor:
+        return torch.sqrt((s1 - s2).pow(2).sum(dim=-1) + 1e-8)
+    
+    def forward(self, x: torch.Tensor, reduction: bool = True) -> torch.Tensor:
+        """
+        Args:
+            input x tensor has shape [N, 3, C] of meaning [Anchor, Postive, Negative] sample separately.
+        
+        Returns:
+            loss tensor
+        """
+        assert x.shape[1] == 3
+
+        if self.add_norm:
+            x = F.normalize(x, p=2, dim=-1)
+
+        x_anchor = x[:, 0, :]
+        x_pos = x[:, 1, :]
+        x_neg = x[:, 2, :]
+
+        if self.distance.lower() == 'euclidean':
+            dist_pos = self.euclidean_distance(x_anchor, x_pos)
+            dist_neg = self.euclidean_distance(x_anchor, x_neg)
+        
+        elif self.distance.lower() == 'consine':
+            dist_pos = self.cosine_similarity(x_anchor, x_pos)
+            dist_neg = self.cosine_similarity(x_anchor, x_neg)
+        
+        else:
+            raise NameError
+        
+        if reduction:
+            return torch.mean(torch.max(torch.zeros(x_anchor.shape[0]).to(dist_pos.device), dist_pos - dist_neg + self.margin))
+
+        else:
+            return torch.max(torch.zeros(x_anchor.shape[0]), dist_pos - dist_neg + self.margin)

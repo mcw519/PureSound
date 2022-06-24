@@ -5,6 +5,8 @@ import torch
 import torch.nn as nn
 from torch.autograd import Variable
 
+from .norm import ChanLN
+
 
 class LambdaLayer(nn.Module):
     def __init__(self, lambda_func: LambdaType):
@@ -21,11 +23,13 @@ class Magnitude(nn.Module):
 
     Args:
         if drop_first will remove the first bin value
+        if log1p, return log1p(x)
     """
 
-    def __init__(self, drop_first: bool = True) -> None:
+    def __init__(self, drop_first: bool = True, log1p: bool = False) -> None:
         super().__init__()
         self.drop_first = drop_first
+        self.log1p = log1p
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
@@ -46,7 +50,57 @@ class Magnitude(nn.Module):
             _re = _re[:, 1:, :]
             _im = _im[:, 1:, :]
         
-        return torch.sqrt(_re.pow(2) + _im.pow(2) + 1e-8)
+        mag = torch.sqrt(_re.pow(2) + _im.pow(2) + 1e-8)
+        if self.log1p:
+            mag = torch.log1p(mag)
+        
+        return mag
+
+
+class Gate(nn.Module):
+    def __init__(self, input_size: int, hidden_size: int, embed_size: int, dropout: float = 0.):
+        super().__init__()
+        self.in_conv = nn.Conv1d(input_size, hidden_size, kernel_size=1, bias=False, groups=1)
+        
+        self.left_conv = nn.Sequential(
+            nn.Conv1d(hidden_size, hidden_size, kernel_size=1, dilation=1, bias=False, padding=0, groups=1),
+            ChanLN(hidden_size),
+            nn.PReLU(),
+            nn.Dropout(p=dropout)
+        )
+
+        right_in_dim = hidden_size + embed_size
+        self.right_conv = nn.Sequential(
+            nn.Conv1d(right_in_dim, hidden_size, kernel_size=1, dilation=1, bias=False, padding=0, groups=1),
+            ChanLN(hidden_size),
+            nn.PReLU(),
+            nn.Dropout(p=dropout),
+            nn.Sigmoid()
+        )
+
+        self.out_conv = nn.Conv1d(hidden_size, input_size, kernel_size=1, bias=False, groups=1)
+    
+    def forward(self, x: torch.Tensor, condition: torch.Tensor):
+        """
+        Args:
+            input tensor x has shape [N, C, T]
+            condition tensor has shape [N, C]
+        
+        Returns:
+            output tensor has shape [N, C, T]
+        """
+        res = x.clone()
+        x = self.in_conv(x)
+
+        condition = condition.unsqueeze(-1) # [N, C, 1]
+        condition = condition.repeat(1, 1, x.size(2)) # [N, C, T]
+        x_r = torch.cat([x, condition], dim=1)
+        
+        x = self.left_conv(x) * self.right_conv(x_r)
+        x = self.out_conv(x)
+        x = x + res
+        
+        return x
 
 
 class FiLM(nn.Module):
@@ -142,7 +196,7 @@ class SplitMerge(nn.Module):
         x1 = x[:, :, :, :seg_size].contiguous().view(batch, feat_size, -1)[:, :, seg_stride:]
         x2 = x[:, :, :, seg_size:].contiguous().view(batch, feat_size, -1)[:, :, :-seg_stride]
 
-        output = x1 + x2
+        output = (x1 + x2) / 2
         if rest > 0:
             output = output[..., :-rest]
         

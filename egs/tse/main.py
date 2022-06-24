@@ -56,9 +56,9 @@ def init_dataloader(hparam: Any) -> Tuple:
         enroll_rule=hparam['DATASET']['enroll_rule'],)
 
     if hparam['TRAIN']['contrastive_learning']:
-        train_len = len(train_dataset) // (hparam['TRAIN']['p_spks'] * hparam['TRAIN']['p_utts'])
+        train_len =  hparam['TRAIN']['repeat'] * len(train_dataset) // (hparam['TRAIN']['p_spks'] * hparam['TRAIN']['p_utts'])
         train_meta = train_dataset.sampler_meta()
-        dev_len = len(dev_dataset) // (hparam['TRAIN']['p_spks'] * hparam['TRAIN']['p_utts'])
+        dev_len = hparam['TRAIN']['repeat'] * len(dev_dataset) // (hparam['TRAIN']['p_spks'] * hparam['TRAIN']['p_utts'])
         dev_meta = dev_dataset.sampler_meta()
         train_sampler = SpeakerSampler(train_meta, train_len, n_spks=hparam['TRAIN']['p_spks'], n_per=hparam['TRAIN']['p_utts'])
         dev_sampler = SpeakerSampler(dev_meta, dev_len, n_spks=hparam['TRAIN']['p_spks'], n_per=hparam['TRAIN']['p_utts'])

@@ -15,14 +15,16 @@ class FreeEncDec(nn.Module):
         win_len: samples in time axis
         latten_len: feature dimension
         hop_len: stride step in time axis
+        output_active: if true, add ReLU activation after encoder's output
 
     Flows:
         waveform -> laten-feats -> waveform
     """
-    def __init__(self, win_length: int = 512, laten_length: int = 512, hop_length: int = 128):
+    def __init__(self, win_length: int = 512, laten_length: int = 512, hop_length: int = 128, output_active: bool = False):
         super().__init__()
         self.win_length = win_length
         self.hop_length = hop_length
+        self.output_active = output_active
         self.encoder = self.get_encoder(output_length=laten_length, win_length=win_length, hop_length=hop_length)
         self.decoder = self.get_decoder(input_dim=laten_length, win_length=win_length, hop_length=hop_length)
     
@@ -43,7 +45,9 @@ class FreeEncDec(nn.Module):
             output tensor shape is [N, C, T]
         """
         x = x.unsqueeze(1) # [N, 1, L]
-        return self.encoder(x)
+        x = self.encoder(x)
+        if self.output_active: x = F.relu(x)
+        return x
     
     def inverse(self, x: torch.Tensor) -> torch.Tensor:
         """
