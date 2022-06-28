@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 import torch
 import torch.nn as nn
@@ -26,26 +26,46 @@ class MemLSTM(nn.Module):
         self.c_proj = nn.Linear(self.hidden_size * (int(self.bi_direct)+1), self.input_size)
         self.c_norm = nn.LayerNorm(self.input_size)
 
-    def forward(self, h: torch.Tensor, c: torch.Tensor):
+    def forward(self,
+                h: torch.Tensor,
+                c: torch.Tensor,
+                h_states: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
+                c_states: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
+                return_all: bool = False,
+                streaming: bool = False):
         """
         Args:
-            hidden states h from SegLSTM has shape [N, S, D, C]
-            cell states c from SegLSTM has shape [N, S, D, C]
-            where N=batch_size, S=total_seg, D=direction_size and C=feats_size
+            hidden states h from SegLSTM has shape [N, S, D, C], where N=batch_size, S=total_seg, D=direction_size and C=feats_size
+            cell states c from SegLSTM has shape [N, S, D, C], where N=batch_size, S=total_seg, D=direction_size and C=feats_size
+            h_states/c_states are the hidden/cell status in LSTM layer, we need this op for streaming inference
+            if return_all is true, return all information.
+            if streaming is true, let off-line inference result equal to streaming result.
         
         Returns:
             hidden states to next SegLSTM has shape [D, NS, C]
             cell states to next SegLSTM has shape [D, NS, C]
+            Mem-LSTM's hidden/cell status, ((hidden status), (cell status))
         """
+        self.h_net.flatten_parameters()
+        self.c_net.flatten_parameters()
         batch, total_seg, direct, feat_len = h.shape
         h = h.reshape(batch, total_seg, -1) # [N, S, DC]
         c = c.reshape(batch, total_seg, -1) # [N, S, DC]
 
-        h_, _ = self.h_net(h)
+        if h_states is not None:
+            h_, (h_h, h_c) = self.h_net(h, h_states)
+        else:
+            h_, (h_h, h_c) = self.h_net(h)
+        
         h_ = self.h_dropout(h_)
         h_ = self.h_proj(h_.reshape(batch*total_seg, -1)).reshape(batch, total_seg, -1)
         h = h + self.h_norm(h_)
-        c_, _ = self.h_net(c)
+        
+        if c_states is not None:
+            c_, (c_h, c_c) = self.c_net(c, c_states) # c_h, c_c [D, NS, C]
+        else:
+            c_, (c_h, c_c) = self.c_net(c)
+
         c_ = self.c_dropout(c_)
         c_ = self.c_proj(c_.reshape(batch*total_seg, -1)).reshape(batch, total_seg, -1)
         c = c + self.c_norm(c_)
@@ -53,13 +73,61 @@ class MemLSTM(nn.Module):
         h = h.reshape(batch*total_seg, direct, feat_len).transpose(1, 0).contiguous() # [D, NS, C]
         c = c.reshape(batch*total_seg, direct, feat_len).transpose(1, 0).contiguous() # [D, NS, C]
 
-        if self.causal:
+        if self.causal and not streaming:
+            # In the causal setting, each layer's states for first segment start from zeros
             h_ = torch.zeros_like(h)
             h_[:, 1:, :] = h[:, :-1, :]
             c_ = torch.zeros_like(c)
             c_[:, 1:, :] = c[:, :-1, :]
-            return h_, c_
+            h = h_
+            c = c_
         
+        if return_all:
+            return h, c, (h_h, h_c), (c_h, c_c)
+        else:
+            return h, c
+
+    def streaming_forward(self,
+                            h: torch.Tensor,
+                            c: torch.Tensor,
+                            h_states: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
+                            c_states: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
+                            return_all: bool = False):
+        """Woking as streaming inference."""
+        self.h_net.flatten_parameters()
+        self.c_net.flatten_parameters()
+        batch, total_seg, direct, feat_len = h.shape
+        h = h.reshape(batch, total_seg, -1) # [N, S, DC]
+        c = c.reshape(batch, total_seg, -1) # [N, S, DC]
+
+        h_out = []
+        c_out = []
+        for idx in range(h.shape[1]):
+            cur_h_inp = h[:, idx, :].view(1, 1, -1)
+            cur_c_inp = c[:, idx, :].view(1, 1, -1)
+            if h_states is None:
+                h_, h_states = self.h_net(cur_h_inp)
+            else:
+                h_, h_states = self.h_net(cur_h_inp, h_states)
+
+            if c_states is None:
+                c_, c_states = self.c_net(cur_c_inp)
+            else:
+                c_, c_states = self.c_net(cur_c_inp, c_states)
+            
+            h_ = self.h_proj(h_.reshape(1, -1)).reshape(1, 1, -1)
+            out_h = cur_h_inp + self.h_norm(h_)
+            h_out.append(out_h)
+
+            c_ = self.c_proj(c_.reshape(1, -1)).reshape(1, 1, -1)
+            out_c = cur_c_inp + self.c_norm(c_)
+            c_out.append(out_c)
+                
+        h = torch.cat(h_out, dim=1).reshape(batch*total_seg, direct, feat_len).transpose(1, 0).contiguous()
+        c = torch.cat(c_out, dim=1).reshape(batch*total_seg, direct, feat_len).transpose(1, 0).contiguous()
+
+        if return_all:
+            return h, c, h_states, c_states
         else:
             return h, c
 
@@ -90,6 +158,7 @@ class SegLSTM(nn.Module):
             hidden states to next memLSTM has shape [D, NS, C]
             cell states to next memLSTM has shape [D, NS, C]
         """
+        self.lstm.flatten_parameters()
         batch, seg_size, feat_len = x.shape
 
         if h is None:
@@ -105,6 +174,31 @@ class SegLSTM(nn.Module):
         x_out = self.proj(x_out.contiguous().view(-1, x_out.shape[2])).view(batch, seg_size, feat_len)
         x_out = x + self.norm(x_out)
 
+        return x_out, h, c
+    
+    def streaming_forward(self, x: torch.Tensor, h: torch.Tensor, c: torch.Tensor):
+        self.lstm.flatten_parameters()
+        batch, seg_size, feat_len = x.shape
+
+        if h is None:
+            d = int(self.bi_direct) + 1
+            h = torch.zeros(d, batch, self.hidden_size).to(x.device)
+        
+        if c is None:
+            d = int(self.bi_direct) + 1
+            c = torch.zeros(d, batch, self.hidden_size).to(x.device)
+        
+        x_out = []
+        for idx in range(x.shape[1]):
+            x_inp = x[:, idx, :].view(batch, 1, feat_len)
+            _out, (h, c) = self.lstm(x_inp, (h, c))
+            _out = self.drop(_out)
+            _out = self.proj(_out.contiguous().view(-1, _out.shape[2])).view(batch, 1, feat_len)
+            _out = x_inp + self.norm(_out)
+            x_out.append(_out)
+        
+        x_out = torch.cat(x_out, dim=1)
+        
         return x_out, h, c
 
 
