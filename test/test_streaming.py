@@ -1,8 +1,8 @@
 import sys
 
 import torch
-from puresound.streaming.skim_inference import StreamingSkiM
 from puresound.nnet.skim import MemLSTM, SegLSTM
+from puresound.streaming.skim_inference import StreamingSkiM
 
 sys.path.insert(0, './')
 
@@ -50,7 +50,7 @@ def test_seg_lstm():
 def test_streaming_skim_no_overlap():
     model = StreamingSkiM(5, 20, 5, seg_size=10, seg_overlap=False, causal=True, n_blocks=4, embed_dim=10, embed_norm=True, embed_fusion='FiLM', block_with_embed=[1, 1, 1, 1])
     model.eval()
-    x = torch.rand(1, 5, 100).float().detach()
+    x = torch.rand(1, 5, 1000).float().detach()
     d = torch.rand(1, 10).float().detach()
     with torch.no_grad():
         y1 = model(x, d)
@@ -69,4 +69,16 @@ def test_streaming_skim_no_overlap():
     y2 = torch.cat(y2, dim=-1)
     print(y1[:, 0, :])
     print(y2[:, 0, :])
-    assert torch.mean((y1 - y2).abs()) < 1e-6, f"mean abs error: {torch.mean((y1 - y2).abs())}, max_error: {(y1 - y2).abs().max()}"
+    assert torch.mean((y1 - y2).abs()) < 1e-7, f"mean abs error: {torch.mean((y1 - y2).abs())}, max_error: {(y1 - y2).abs().max()}"
+
+    model.init_status()
+    y3 = []
+    for fid in range(x.shape[-1]):
+        x_inp = x[..., fid].view(1, -1, 1).float().detach()
+        y3.append(model.step_frame(x_inp, d))
+        
+    y3 = torch.cat(y3, dim=-1)
+    print(y1[:, 0, :])
+    print(y3[:, 0, :])
+    assert torch.mean((y1 - y3).abs()) < 1e-7, f"mean abs error: {torch.mean((y1 - y3).abs())}, max_error: {(y1 - y3).abs().max()}"
+    assert torch.mean((y2 - y3).abs()) < 1e-7, f"mean abs error: {torch.mean((y2 - y3).abs())}, max_error: {(y2 - y3).abs().max()}"
