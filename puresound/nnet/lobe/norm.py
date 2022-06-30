@@ -1,14 +1,13 @@
 import torch
 import torch.nn as nn
 
-EPS = 1e-8
-
 
 class _LayerNorm(nn.Module):
     """Layer Normalization base class."""
 
     def __init__(self, channel_size):
         super(_LayerNorm, self).__init__()
+        self.eps = 1e-8
         self.channel_size = channel_size
         self.gamma = nn.Parameter(torch.ones(channel_size), requires_grad=True)
         self.beta = nn.Parameter(torch.zeros(channel_size), requires_grad=True)
@@ -32,7 +31,7 @@ class GlobLN(_LayerNorm):
         dims = list(range(1, len(x.shape)))
         mean = x.mean(dim=dims, keepdim=True)
         var = torch.pow(x - mean, 2).mean(dim=dims, keepdim=True)
-        return self.apply_gain_and_bias((x - mean) / (var + EPS).sqrt())
+        return self.apply_gain_and_bias((x - mean) / (var + self.eps).sqrt())
 
 
 class ChanLN(_LayerNorm):
@@ -48,7 +47,7 @@ class ChanLN(_LayerNorm):
         """
         mean = torch.mean(x, dim=1, keepdim=True)
         var = torch.var(x, dim=1, keepdim=True, unbiased=False)
-        return self.apply_gain_and_bias((x - mean) / (var + EPS).sqrt())
+        return self.apply_gain_and_bias((x - mean) / (var + self.eps).sqrt())
 
 
 class InstantLN(_LayerNorm):
@@ -64,7 +63,7 @@ class InstantLN(_LayerNorm):
         x = x.reshape(N, CH*C, T)
         mean = torch.mean(x, dim=1, keepdim=True)
         var = torch.var(x, dim=1, keepdim=True, unbiased=False)
-        return self.apply_gain_and_bias((x - mean) / (var + EPS).sqrt()).reshape(N, CH, C, T)
+        return self.apply_gain_and_bias((x - mean) / (var + self.eps).sqrt()).reshape(N, CH, C, T)
 
 
 # Aliases.

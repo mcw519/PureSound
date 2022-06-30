@@ -2,6 +2,7 @@ import sys
 
 import torch
 from puresound.nnet.skim import MemLSTM, SegLSTM
+from puresound.src.audio import AudioIO
 from puresound.streaming.skim_inference import StreamingSkiM
 
 sys.path.insert(0, './')
@@ -82,3 +83,18 @@ def test_streaming_skim_no_overlap():
     print(y3[:, 0, :])
     assert torch.mean((y1 - y3).abs()) < 1e-7, f"mean abs error: {torch.mean((y1 - y3).abs())}, max_error: {(y1 - y3).abs().max()}"
     assert torch.mean((y2 - y3).abs()) < 1e-7, f"mean abs error: {torch.mean((y2 - y3).abs())}, max_error: {(y2 - y3).abs().max()}"
+
+
+def test_script_model():
+    enroll_wav, sr = AudioIO.open('test_case/1272-141231-0008.flac', target_lvl=-28, verbose=True)
+    noisy_wav, sr = AudioIO.open('test_case/1272-128104-0000_2035-147961-0014.wav', verbose=True)
+    encoder = torch.jit.load('pretrained/tse/libri2mix_max_2spk_clean_16k_1c_EncoderNet.pt', map_location='cpu')
+    decoder = torch.jit.load('pretrained/tse/libri2mix_max_2spk_clean_16k_1c_DecoderNet.pt', map_location='cpu')
+    masker = torch.jit.load('pretrained/tse/libri2mix_max_2spk_clean_16k_1c_MaskNet.pt', map_location='cpu')
+    speaker_net = torch.jit.load('pretrained/tse/libri2mix_max_2spk_clean_16k_1c_SpeakerNet.pt', map_location='cpu')
+    dvec = speaker_net(enroll_wav).squeeze(-1)
+    feats = encoder(noisy_wav)
+    mask = masker(feats, dvec)
+    enh_feats = feats * mask
+    enh_wav = decoder(enh_feats)
+    AudioIO.save(enh_wav.squeeze(1).detach(), 'test_case/output.wav', sr)

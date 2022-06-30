@@ -239,6 +239,35 @@ def main(config):
                 enh_wav = enh_wav.detach().cpu()
                 if enh_wav.dim() == 3: enh_wav = enh_wav.squeeze(0)
                 AudioIO.save(enh_wav, f"{hparam['TRAIN']['model_save_dir']}/eval_audio/{uttid}.wav", sr)
+    
+    elif config.action == 'export_model':
+        ckpt = torch.load(f"{hparam['TRAIN']['model_save_dir']}/{config.ckpt}", map_location='cpu')
+        model = init_model(hparam['MODEL']['type'], verbose=False)
+        model.load_state_dict(ckpt['state_dict'], strict=False)
+        model.eval()
+
+        dummy_wav = torch.rand(1, 16000*5)
+        
+        if model.encoder_spk is not None:
+            spk_net = [model.encoder_spk] + [*(model.speaker_net)]
+        else:
+            spk_net = [model.encoder] + [*(model.speaker_net)]
+                
+        spk_net = torch.nn.Sequential(*spk_net)
+        script_spk_net = torch.jit.trace(spk_net, dummy_wav)
+        script_spk_net.save(f"{hparam['TRAIN']['model_save_dir']}/{config.ckpt}.SpeakerNet.pt")
+
+        script_encoder_net = torch.jit.trace(model.encoder, dummy_wav)
+        script_encoder_net.save(f"{hparam['TRAIN']['model_save_dir']}/{config.ckpt}.EncoderNet.pt")
+
+        dummy_x = script_encoder_net(dummy_wav)
+        dummy_dvec = script_spk_net(dummy_wav)
+
+        script_decoder_net = torch.jit.trace(model.encoder.decoder, dummy_x)
+        script_decoder_net.save(f"{hparam['TRAIN']['model_save_dir']}/{config.ckpt}.decoderNet.pt")
+
+        script_mask_net = torch.jit.trace(model.masker, (dummy_x, dummy_dvec))
+        script_mask_net.save(f"{hparam['TRAIN']['model_save_dir']}/{config.ckpt}.MaskNet.pt")
 
     else:
         raise NameError('Unrecognize action.')
@@ -247,7 +276,7 @@ def main(config):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("config_path", type=str)
-    parser.add_argument("--action", type=str, default='train', choices=['train', 'dev', 'eval', 'tSNE'])
+    parser.add_argument("--action", type=str, default='train', choices=['train', 'dev', 'eval', 'tSNE', 'export_model'])
     parser.add_argument("--backend", type=str, default='cpu', choices=['cpu', 'cuda', 'mps'])
     parser.add_argument("--metrics", type=str, default='simple', choices=['simple', 'detail'])
     parser.add_argument("--ckpt", type=str, default=None)

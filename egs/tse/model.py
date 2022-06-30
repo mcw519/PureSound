@@ -145,15 +145,33 @@ def init_model(name: str, sig_loss: Optional[nn.Module] = None, cls_loss: Option
             drop_first_bin=True,
             **kwargs)
     
-    elif name == 'tse_skim_v0_causal':
+    elif name == 'tse_skim_v0':
         """
-        Total params: 6,423,632
-        Lookahead(samples): 800
+        Total params: 15,575,570
+        Lookahead(samples): infinite
         Receptive Fields(samples): infinite
         """
         model = SoTaskWrapModule(
             encoder=FreeEncDec(win_length=32, hop_length=16, laten_length=128, output_active=True),
-            masker=SkiM(input_size=128, hidden_size=256, output_size=128, n_blocks=4, seg_size=150, seg_overlap=True, causal=True,
+            masker=SkiM(input_size=128, hidden_size=256, output_size=128, n_blocks=4, seg_size=150, seg_overlap=False, causal=False,
+                embed_dim=192, embed_norm=True, block_with_embed=[1, 1, 1, 1], embed_fusion='FiLM'),
+            speaker_net=nn.ModuleList(
+                [TCN(128, 256, 3, dilation=2**i, causal=False, tcn_norm='gLN', dconv_norm='gGN') for i in range(5)] + \
+                [AttentiveStatisticsPooling(128, 128), nn.Conv1d(128*2, 192, 1, bias=False)]),
+        loss_func_wav=sig_loss,
+        loss_func_spk=cls_loss,
+        mask_constraint='ReLU',
+        **kwargs)
+    
+    elif name == 'tse_skim_v0_causal':
+        """
+        Total params: 6,375,442
+        Lookahead(samples): 16
+        Receptive Fields(samples): infinite
+        """
+        model = SoTaskWrapModule(
+            encoder=FreeEncDec(win_length=32, hop_length=16, laten_length=128, output_active=True),
+            masker=SkiM(input_size=128, hidden_size=256, output_size=128, n_blocks=4, seg_size=150, seg_overlap=False, causal=True,
                 embed_dim=192, embed_norm=True, block_with_embed=[1, 1, 1, 1], embed_fusion='FiLM'),
             speaker_net=nn.ModuleList(
                 [TCN(128, 256, 3, dilation=2**i, causal=False, tcn_norm='gLN', dconv_norm='gGN') for i in range(5)] + \
