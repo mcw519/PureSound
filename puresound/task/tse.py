@@ -348,7 +348,7 @@ class TseTask(BaseTrainer):
             self.optimizer.zero_grad()
             
             # Model forward
-            loss, loss_detail = self.model(noisy=noisy_wav, enroll=enroll_wav, ref_clean=clean_wav, spk_class=target_spk_class,
+            loss, loss_detail = self.model(noisy=noisy_wav, enroll=enroll_wav, ref_clean=clean_wav, spk_class=target_spk_class, inactive_labels=inactive_utts,
                                     alpha=self.hparam['LOSS']['alpha'], return_loss_detail=True)
             loss = torch.mean(loss, dim=0) # aggregate loss from each device
             signal_loss = torch.mean(loss_detail[0], dim=0)
@@ -386,9 +386,11 @@ class TseTask(BaseTrainer):
             
             with torch.no_grad():
                 if self.hparam['TRAIN']['contrastive_learning']:
-                    loss = self.model(noisy=noisy_wav, enroll=enroll_wav, ref_clean=clean_wav, spk_class=target_spk_class, alpha=self.hparam['LOSS']['alpha'], return_loss_detail=False)
+                    loss = self.model(noisy=noisy_wav, enroll=enroll_wav, ref_clean=clean_wav, spk_class=target_spk_class, alpha=self.hparam['LOSS']['alpha'],
+                                    inactive_labels=inactive_utts, return_loss_detail=False)
                 else:
-                    loss = self.model(noisy=noisy_wav, enroll=enroll_wav, ref_clean=clean_wav, spk_class=None, alpha=self.hparam['LOSS']['alpha'], return_loss_detail=False)
+                    loss = self.model(noisy=noisy_wav, enroll=enroll_wav, ref_clean=clean_wav, spk_class=None, alpha=self.hparam['LOSS']['alpha'],
+                                    inactive_labels=inactive_utts, return_loss_detail=False)
                 loss = torch.mean(loss, dim=0) # aggregate loss from each device
                 dev_total_loss += loss.item()
 

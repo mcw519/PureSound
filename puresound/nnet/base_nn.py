@@ -369,7 +369,7 @@ class SoTaskWrapModule(EncDecMaskerBaseModel):
                 enh_wav = enh_wav[..., :ref_wav_l]
         return enh_wav, ref_wav
 
-    def _forward(self, noisy: torch.Tensor, enroll: torch.Tensor, ref_clean: torch.Tensor) -> torch.Tensor:
+    def _forward(self, noisy: torch.Tensor, enroll: torch.Tensor, ref_clean: torch.Tensor, inactive_labels: Optional[torch.Tensor] = None) -> torch.Tensor:
         """
         Getting input noisy(n-mixed speech) and enrollment speech(target enroll) to calculate the training loss. 
         This way can usage DP benifit for balance GPU'e memory to avoid single machine OOM problem.
@@ -378,7 +378,8 @@ class SoTaskWrapModule(EncDecMaskerBaseModel):
             noisy: Input noisy mixture tensor, [N, T]
             enroll: Enrolment waveform tensor, [N, T] or None
             ref_clean: Target speech, [N, T]
-            
+            inactive_labels: Inactive speaker labels, [N]
+
         Return:
             Loss: loss_sdr
         """
@@ -406,12 +407,12 @@ class SoTaskWrapModule(EncDecMaskerBaseModel):
         enh_wav = self._get_waveform(enh_feats)
         enh_wav = torch.clamp_(enh_wav, min=-1, max=1)
         enh_wav, ref_clean = self._align_waveform(enh_wav, ref_clean)
-        loss_wav = self.loss_func_wav(enh_wav, ref_clean)
+        loss_wav = self.loss_func_wav(enh_wav, ref_clean, inactive_labels)
         
         return loss_wav
     
     def _forward_join(self, noisy: torch.Tensor, enroll: torch.Tensor, ref_clean: torch.Tensor, spk_class: torch.Tensor, alpha: float = 10,
-        return_loss_detail: bool = True) -> torch.Tensor:
+        return_loss_detail: bool = True, inactive_labels: Optional[torch.Tensor] = None) -> torch.Tensor:
         """
         Getting input noisy(n-mixed speech) and enrollment speech(target enroll) to calculate the SDR based loss.
         And also calculate the speaker classification loss.
@@ -423,6 +424,7 @@ class SoTaskWrapModule(EncDecMaskerBaseModel):
             ref_clean: Target speech in the noisy
             spk_class: Speaker label
             alpha: Weight for loss combining
+            inactive_labels: Inactive speaker labels, [N]
     
         Return:
             Joint loss: loss_sdr + alpha * loss_class
@@ -443,7 +445,7 @@ class SoTaskWrapModule(EncDecMaskerBaseModel):
         enh_wav = self._get_waveform(enh_feats)
         enh_wav = torch.clamp_(enh_wav, min=-1, max=1)
         enh_wav, ref_clean = self._align_waveform(enh_wav, ref_clean)
-        loss_wav = self.loss_func_wav(enh_wav, ref_clean)
+        loss_wav = self.loss_func_wav(enh_wav, ref_clean, inactive_labels)
 
         if self.loss_func_spk is not None and spk_class is not None:
             loss_spk = self.loss_func_spk(dvec, spk_class)

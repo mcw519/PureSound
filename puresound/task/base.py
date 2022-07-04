@@ -309,6 +309,11 @@ class BaseTrainer():
     def gen_logging(self, epoch: Optional[int] = None, prefix: str = ""):
         raise NotImplementedError
     
+    def early_stopping(self, current_epoch: int, stop_criterion: int = 20):
+        """Early stopping when without any loss improvement."""
+        if current_epoch >= self.best_epoch + stop_criterion:
+            raise RuntimeError('Early stopping')
+    
     def train(self):
         """function to start train a model."""
         self.num_epochs = self.hparam['TRAIN']['num_epochs']
@@ -346,3 +351,4 @@ class BaseTrainer():
                     self.scheduler.step()
 
             self.gen_logging(epoch=epoch, prefix="")
+            self.early_stopping(current_epoch=epoch, stop_criterion=25)

@@ -71,19 +71,32 @@ class SDRLoss(nn.Module):
         return cls(scaled=scaled, scale_dependent=scale_dependent, zero_mean=True, source_aggregated=source_aggregated,
                     sdr_max=sdr_max, eps=1e-8, reduction=reduction, threshold=threshold)
     
-    def forward(self, s1: torch.Tensor, s2: torch.Tensor) -> torch.Tensor:
+    def forward(self, s1: torch.Tensor, s2: torch.Tensor, inactive_labels: Optional[torch.Tensor] = None) -> torch.Tensor:
         """
         Compute SDR loss.
         
         Args:
             s1: enhanced signal tensor
             s2: reference signal tensor
+            inactive_labels: for inactive loss training
         
         Returns:
             loss
         """
         self.check_input_shape(s1)
         self.check_input_shape(s2)
+
+        if inactive_labels is not None and torch.where(inactive_labels == True)[0].nelement() > 0:
+            active_idx = torch.where(inactive_labels == False)[0]
+            inactive_idx = torch.where(inactive_labels == True)[0]
+            inactive_s1 = s1[inactive_idx]
+            inactive_s2 = s2[inactive_idx]
+            s1 = s1[active_idx]
+            s2 = s2[active_idx]
+            inactive_loss = inactive_sdr_loss(inactive_s1, inactive_s2, reduction=False)
+        
+        else:
+            inactive_loss = None
 
         if self.zero_mean:
             s1 = self.apply_zero_mean(s1)
@@ -121,6 +134,9 @@ class SDRLoss(nn.Module):
             snr_to_keep = snr[snr > self.threshold]
             if snr_to_keep.nelement() > 0:
                 snr = snr_to_keep.view(-1, 1)
+
+        if inactive_loss is not None:
+            snr = torch.cat([snr, inactive_loss.view(-1, 1)], dim=0)
 
         if self.reduction:
             return torch.mean(snr)
