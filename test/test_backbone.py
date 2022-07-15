@@ -3,6 +3,7 @@ import sys
 import pytest
 import torch
 from puresound.nnet.conv_tasnet import ConvTasNet
+from puresound.nnet.dpcrn import DPCRN
 from puresound.nnet.dprnn import DPRNN
 from puresound.nnet.skim import SkiM
 from puresound.nnet.unet import UnetTcn
@@ -84,4 +85,15 @@ def test_dprnn_backbone():
     input_x = torch.rand(1, 512, 1000)
     input_d = torch.rand(1, 192)
     y = model(input_x, input_d)
+    assert input_x.shape == y.shape
+
+
+@pytest.mark.backbone
+def test_dpcrn_backbone():
+    model = DPCRN(input_type='RI', input_dim=512, activation_type='PReLU', norm_type='bN2d',
+        channels=(1, 32, 32, 32, 64, 128), transpose_t_size=2, transpose_delay=False, skip_conv=False, kernel_t=(2, 2, 2, 2, 2), kernel_f=(5, 3, 3, 3, 3),
+        stride_t=(1, 1, 1, 1, 1), stride_f=(2, 2, 1, 1, 1), dilation_t=(1, 1, 1, 1, 1), dilation_f=(1, 1, 1, 1, 1), delay=(0, 0, 0, 0, 0), rnn_hidden=128)
+    
+    input_x = torch.rand(1, 512, 1000)
+    y = model(input_x)
     assert input_x.shape == y.shape

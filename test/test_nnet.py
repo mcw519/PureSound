@@ -13,6 +13,7 @@ from puresound.nnet.loss.metrics import GE2ELoss, TripletLoss
 from puresound.nnet.loss.sdr import SDRLoss
 from puresound.nnet.skim import SkiM
 from puresound.nnet.unet import UnetTcn
+from puresound.nnet.dpcrn import DPCRN
 
 sys.path.insert(0, './')
 
@@ -209,12 +210,12 @@ def test_tse_unet_tcn_v0():
 @pytest.mark.nnet
 def test_tse_skim_v0():
     model = SoTaskWrapModule(
-            encoder=FreeEncDec(win_length=32, hop_length=16, laten_length=128, output_active=True),
-            masker=SkiM(input_size=128, hidden_size=256, output_size=128, n_blocks=4, seg_size=150, seg_overlap=True, causal=True,
-                embed_dim=192, embed_norm=True, block_with_embed=[1, 1, 1, 1], embed_fusion='FiLM'),
-            speaker_net=nn.ModuleList(
-                [TCN(128, 256, 3, dilation=2**i, causal=False, tcn_norm='gLN', dconv_norm='gGN') for i in range(5)] + \
-                [AttentiveStatisticsPooling(128, 128), nn.Conv1d(128*2, 192, 1, bias=False)]),
+        encoder=FreeEncDec(win_length=32, hop_length=16, laten_length=128, output_active=True),
+        masker=SkiM(input_size=128, hidden_size=256, output_size=128, n_blocks=4, seg_size=150, seg_overlap=True, causal=True,
+            embed_dim=192, embed_norm=True, block_with_embed=[1, 1, 1, 1], embed_fusion='FiLM'),
+        speaker_net=nn.ModuleList(
+            [TCN(128, 256, 3, dilation=2**i, causal=False, tcn_norm='gLN', dconv_norm='gGN') for i in range(5)] + \
+            [AttentiveStatisticsPooling(128, 128), nn.Conv1d(128*2, 192, 1, bias=False)]),
         loss_func_wav=None,
         loss_func_spk=None,
         mask_constraint='ReLU',)
@@ -225,3 +226,20 @@ def test_tse_skim_v0():
     dvec = model.inference_tse_embedding(input_enroll)
     assert input_x.shape == y.shape
     assert dvec.shape[1] == 192
+
+
+@pytest.mark.nnet
+def test_ns_dpcrn_v0_causal():
+    model = SoTaskWrapModule(
+        encoder=ConvEncDec(fft_length=512, win_type='hann', win_length=512, hop_length=128, trainable=True, output_format='Complex'),
+        masker=DPCRN(input_type='RI', input_dim=512, activation_type='PReLU', norm_type='bN2d',
+            channels=(1, 32, 32, 32, 64, 128), transpose_t_size=2, transpose_delay=False, skip_conv=False, kernel_t=(2, 2, 2, 2, 2), kernel_f=(5, 3, 3, 3, 3),
+            stride_t=(1, 1, 1, 1, 1), stride_f=(2, 2, 1, 1, 1), dilation_t=(1, 1, 1, 1, 1), dilation_f=(1, 1, 1, 1, 1), delay=(0, 0, 0, 0, 0), rnn_hidden=128),
+        loss_func_wav=None,
+        loss_func_spk=None,
+        drop_first_bin=True,
+        mask_constraint='linear',)
+
+    input_x = torch.rand(1, 16000*10)
+    y = model.inference(input_x)
+    assert input_x.shape == y.shape

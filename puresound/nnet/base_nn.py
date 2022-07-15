@@ -632,12 +632,15 @@ class SoTaskWrapModule(EncDecMaskerBaseModel):
         self.eval()
         print(f"Current training mode is: {self.training}")
         print(f"Total params: {self.overall_parameters}")
-                
+
         # compute lookahead
         x = torch.rand(1, 10*16000)
         x[..., 5*16000:] = np.inf
         x_spk = torch.rand(1, 10*16000)
-        y = self.inference(x, x_spk).detach()
+        try:
+            y = self.inference(x, x_spk).detach()
+        except:
+            y = self.inference(x).detach()
         lookahead = np.where(np.isnan(y) == True)[-1][0]
         if lookahead == 0:
             print('Lookahead(samples): infinite')
@@ -648,7 +651,10 @@ class SoTaskWrapModule(EncDecMaskerBaseModel):
         # compute receptive field
         x = torch.rand(1, 10*16000)
         x[..., :-5*16000] = np.inf
-        y = self.inference(x, x_spk).detach()
+        try:
+            y = self.inference(x, x_spk).detach()
+        except:
+            y = self.inference(x).detach()
         receptive = np.where(np.isnan(y) == True)[-1][-1]
         if receptive - (80000 - 1) == 80000:
             print(f'Receptive Fields(samples): infinite')

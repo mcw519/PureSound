@@ -150,6 +150,13 @@ class TseDataset(TaskDataset):
                     if clean_wav[:, offset : offset + target_len].sum() != 0: break
                 wav = wav[:, offset : offset + target_len]
                 clean_wav = clean_wav[:, offset : offset + target_len]
+            
+            else:
+                pad_zero = torch.zeros(1, target_len - wav.shape[-1])
+                wav = torch.cat([wav, pad_zero], dim=-1)
+                pad_zero = torch.zeros(1, target_len - clean_wav.shape[-1])
+                clean_wav = torch.cat([clean_wav, pad_zero], dim=-1)
+
         else:
             target_len = wav.shape[1] # wav is a tensor with shape [channel, N_sample]
 
@@ -271,7 +278,7 @@ class TseDataset(TaskDataset):
         return enroll_wav[:, :max_length]
         
     def create_augmentor(self) -> None:
-        self.augmentor = AudioAugmentor(convolve_mode='fft')
+        self.augmentor = AudioAugmentor(sample_rate=self.resample_to, convolve_mode='fft')
         if self.noise_folder:
             self.augmentor.load_bg_noise_from_folder(self.noise_folder)
             print(f"Finished load {len(self.augmentor.bg_noise.keys())} noises")
