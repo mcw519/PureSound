@@ -1,8 +1,11 @@
-from typing import Optional, Tuple, Dict
+from typing import Dict, Optional, Tuple
+
 import torch
 import torch.nn as nn
-from .unet import Unet
+
 from .lobe.rnn import SingleRNN
+from .lobe.trivial import spectral_compression
+from .unet import Unet
 
 
 class DPRNNblock2D(nn.Module):
@@ -86,15 +89,18 @@ class DPCRN(Unet):
                 dilation_f: Tuple = (1, 1, 1, 1, 1),
                 delay: Tuple = (0, 0, 0, 0, 0),
                 rnn_hidden: int = 128,
+                spectral_compress: bool = False,
                 ):
         super().__init__(input_type, input_dim, activation_type, norm_type, dropout, channels, transpose_t_size, skip_conv,
             kernel_t, stride_t, dilation_t, kernel_f, stride_f, dilation_f, delay)
         
         self.transpose_delay = transpose_delay
         self.rnn_hidden = rnn_hidden
+        self.spectral_compress = spectral_compress
 
         # DPRNN block
-        self.dprnn_block = DPRNNblock2D(input_size=channels[-1], hidden_size=rnn_hidden, dropout=dropout)
+        self.dprnn_block1 = DPRNNblock2D(input_size=channels[-1], hidden_size=rnn_hidden, dropout=dropout)
+        self.dprnn_block2 = DPRNNblock2D(input_size=channels[-1], hidden_size=rnn_hidden, dropout=dropout)
     
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
@@ -104,6 +110,9 @@ class DPCRN(Unet):
         Returns:
             output tensor has shape [N, C, T]
         """
+        if self.spectral_compress:
+            x = spectral_compression(x, alpha=0.3, dim=1)
+
         if self.input_type.lower() == 'ri':
             _re, _im = torch.chunk(x, 2, dim=-2)
             x = torch.stack([_re, _im], dim=1) # [N, C, T] -> [N, 2, C, T]
@@ -119,7 +128,8 @@ class DPCRN(Unet):
             skip.append(x)
 
         # forward dprnn
-        x = self.dprnn_block(x) # [N, ch, C, T]
+        x = self.dprnn_block1(x) # [N, ch, C, T]
+        x = self.dprnn_block2(x) # [N, ch, C, T]
 
         # forward CNN-up layers
         for i, cnn_layer in enumerate(self.cnn_up):

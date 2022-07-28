@@ -13,8 +13,8 @@ class LambdaLayer(nn.Module):
         super().__init__()
         self.lambd = lambda_func
     
-    def forward(self, x: torch.Tensor) -> Any:
-        return self.lambd(x)
+    def forward(self, x: torch.Tensor, *kwargs) -> Any:
+        return self.lambd(x, kwargs)
 
 
 class Magnitude(nn.Module):
@@ -201,3 +201,13 @@ class SplitMerge(nn.Module):
             output = output[..., :-rest]
         
         return output.contiguous()
+
+
+def spectral_compression(x: torch.Tensor, alpha: float = 0.3, dim: int = 1):
+    _re, _im = torch.chunk(x, 2, dim=dim)
+    mag = _re.pow(2) + _im.pow(2)
+    mag = (mag + 1e-8).sqrt()
+    mag = mag.pow(alpha)
+    phase = torch.atan2(_im+0., _re)
+    
+    return mag * torch.exp(1j * torch.angle(phase))
