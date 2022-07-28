@@ -1,10 +1,14 @@
 from typing import Optional
 
 import torch.nn as nn
+import torch.nn.functional as F
 from puresound.nnet.base_nn import SoTaskWrapModule
 from puresound.nnet.dpcrn import DPCRN
-from puresound.nnet.lobe.encoder import ConvEncDec
+from puresound.nnet.lobe.encoder import ConvEncDec, FreeEncDec
 from puresound.nnet.loss.sdr import SDRLoss
+from puresound.nnet.loss.stft_loss import (MultiResolutionSTFTLoss,
+                                           over_suppression_loss)
+from puresound.nnet.skim import SkiM
 
 
 # Loss
@@ -15,6 +19,27 @@ def init_loss(hparam):
     # Init SDR-based loss function
     if sig_loss.lower() in ['sisnr', 'sdsdr', 'sdr', 'tsdr']:
         sig_loss = SDRLoss.init_mode(sig_loss.lower(), threshold=sig_threshold)
+    
+    elif sig_loss.lower() == 'l1':
+        sig_loss = lambda enh, ref, dummy: F.l1_loss(enh, ref)
+    
+    elif sig_loss.lower() == 'stft':
+        loss = MultiResolutionSTFTLoss()
+        sig_loss = lambda enh, ref, dummy: loss.forward(enh, ref)
+    
+    elif sig_loss.lower() == 'sdr_stft':
+        sig_loss = SDRLoss.init_mode('sdr', threshold=sig_threshold)
+        loss = MultiResolutionSTFTLoss()
+        sig_loss = lambda enh, ref, dummy: loss.forward(enh, ref) + sig_loss(enh, ref, dummy)
+    
+    elif sig_loss.lower() == 'l1_stft':
+        loss = MultiResolutionSTFTLoss()
+        sig_loss = lambda enh, ref, dummy: loss.forward(enh, ref) + F.l1_loss(enh, ref)
+
+    elif sig_loss.lower() == 'stft_ov':
+        loss = MultiResolutionSTFTLoss()
+        sig_loss = lambda enh, ref, dummy: loss.forward(enh, ref) + over_suppression_loss(enh, ref)
+
     else:
         sig_loss = None
     
@@ -25,13 +50,13 @@ def init_loss(hparam):
 def init_model(name: str, sig_loss: Optional[nn.Module] = None, **kwargs):
     if name == 'ns_dpcrn_v0_causal':
         """
-        Total params: 933835
+        Total params: 933835 # 1380043
         Lookahead(samples): 384
         Receptive Fields(samples): infinite
         """
         model = SoTaskWrapModule(
             encoder=ConvEncDec(fft_length=512, win_type='hann', win_length=512, hop_length=128, trainable=True, output_format='Complex'),
-            masker=DPCRN(input_type='RI', input_dim=512, activation_type='PReLU', norm_type='bN2d',
+            masker=DPCRN(input_type='RI', input_dim=512, activation_type='PReLU', norm_type='bN2d', dropout=0.1,
                 channels=(1, 32, 32, 32, 64, 128), transpose_t_size=2, transpose_delay=False, skip_conv=False, kernel_t=(2, 2, 2, 2, 2), kernel_f=(5, 3, 3, 3, 3),
                 stride_t=(1, 1, 1, 1, 1), stride_f=(2, 2, 1, 1, 1), dilation_t=(1, 1, 1, 1, 1), dilation_f=(1, 1, 1, 1, 1), delay=(0, 0, 0, 0, 0), rnn_hidden=128),
             speaker_net=None,
@@ -39,7 +64,24 @@ def init_model(name: str, sig_loss: Optional[nn.Module] = None, **kwargs):
             loss_func_spk=None,
             drop_first_bin=True,
             mask_constraint='linear',
+            f_type='Complex',
+            mask_type='Complex',
             **kwargs)
+
+    elif name == 'ns_skim_v0_causal':
+        """
+        Total params: 5294209
+        Lookahead(samples): 16
+        Receptive Fields(samples): infinite
+        """
+        model = SoTaskWrapModule(
+            encoder=FreeEncDec(win_length=32, hop_length=16, laten_length=128, output_active=True),
+            masker=SkiM(input_size=128, hidden_size=256, output_size=128, n_blocks=4, seg_size=150, seg_overlap=False, causal=True),
+            speaker_net=None,
+        loss_func_wav=sig_loss,
+        loss_func_spk=None,
+        mask_constraint='ReLU',
+        **kwargs)
 
     else:
         raise NameError
