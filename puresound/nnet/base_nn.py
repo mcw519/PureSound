@@ -53,7 +53,7 @@ class EncDecMaskerBaseModel(BaseModel):
             re, im = torch.chunk(tf_rep, 2, dim=1)
             tf_rep = torch.stack([re, im], dim=-1) # [N, C, T, 2]
             mask_re, mask_im = torch.chunk(est_masks, 2, dim=1)
-            est_masks = torch.stack([mask_re, mask_im], dim=1) # [N, C, T, 2]
+            est_masks = torch.stack([mask_re, mask_im], dim=-1) # [N, C, T, 2]
             return self._apply_complex_mask_on_reim(tf_rep, est_masks)
         
         elif mask_type.lower() == 'real' and f_type.lower() == 'complex':
