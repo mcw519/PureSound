@@ -32,7 +32,7 @@ class DemoAPP():
 
     def init_app(self):
         self.task_model = init_model('tse_skim_v0_causal')
-        ckpt = torch.load('../pretrained/tse/libri2mix_max_2spk_clean_16k_1c.ckpt', map_location='cpu')
+        ckpt = torch.load('skim_causal_460.ckpt', map_location='cpu')
         self.task_model.load_state_dict(ckpt['state_dict'], strict=False)
         self.task_model.eval()
 
