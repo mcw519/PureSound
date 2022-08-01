@@ -1,7 +1,7 @@
-import sys
 import threading
 import time
 import tkinter as tk
+from tkinter import messagebox
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -13,8 +13,7 @@ from PIL import Image, ImageTk
 from playsound import playsound
 from torchaudio.io import StreamReader
 
-sys.path.insert(0, '..')
-from model import init_model
+from utils import DemoSpeakerNet, DemoTseNet, overlap_add
 
 
 class DemoAPP():
@@ -31,14 +30,21 @@ class DemoAPP():
         self.window.mainloop()
 
     def init_app(self):
-        self.task_model = init_model('tse_skim_v0_causal')
         ckpt = torch.load('skim_causal_460.ckpt', map_location='cpu')
-        self.task_model.load_state_dict(ckpt['state_dict'], strict=False)
-        self.task_model.eval()
+        
+        self.speaker_net = DemoSpeakerNet()
+        self.speaker_net.load_state_dict(ckpt['state_dict'], strict=False)
+        self.speaker_net.eval()
+
+        self.tse_net = DemoTseNet()
+        self.tse_net.load_state_dict(ckpt['state_dict'], strict=False)
+        self.tse_net.eval()
 
         self.continue_recording = False
         self.speaker_embedding = None
         self.enroll_wav = None
+        self.noisy_wav = None
+        self.enh_wav = None
         self.top_screen()
         self.enroll_block()
 
@@ -78,12 +84,12 @@ class DemoAPP():
 
                 # extract speaker embedding
                 time.sleep(0.5)
-                with torch.no_grad():
-                    self.speaker_embedding = self.task_model.inference_tse_embedding(self.enroll_wav).squeeze(-1)
+                self.speaker_embedding = self.speaker_net.get_speaker_embedding(self.enroll_wav)
+                print("Process done of speaker embedding generation.")
 
                 np.savetxt('./speaker.txt', self.speaker_embedding.numpy())
 
-                record_button['text'] = 'Record'
+                record_button['text'] = 'Enroll'
                 record_button['fg'] = 'black'
 
                 # Update enroll pic
@@ -97,43 +103,28 @@ class DemoAPP():
                 label_sucess_img['image'] = sucess_img
 
         def _clear_button_func():
-            del self.enroll_wav
-            del self.speaker_embedding
-            
+            self.enroll_wav = None
+            self.speaker_embedding = None
             enroll_done_img = Image.open('fail.png')
             global sucess_img
             sucess_img = ImageTk.PhotoImage(enroll_done_img.resize((65, 65)))
             label_sucess_img['image'] = sucess_img
         
         def _show_button_func():
-            plt.specgram(self.enroll_wav.squeeze(), NFFT=512, Fs=16000, cmap='jet')
-            plt.title('Spectrogram of enrollment speech')
-            plt.xlabel('time (seconds)')
-            plt.ylabel('frequency (Hz)')
-            threading._start_new_thread(playsound, ('./enroll.wav',))
-            plt.show()
-        
-        def _onoff_button_func():
-            global onoff_img
-
-            if not self.continue_recording:
-                """Click to record enroll speech."""
-                self.continue_recording = True
-                threading._start_new_thread(self._record, ('./noisy.wav',)) # open a thread to record
-                time.sleep(0.5)
-                onoff_button['text'] = 'On!' # change button icon
-                onoff_button['fg'] = 'green'
-
-            else:
-                """Click to stop record."""
-                self.continue_recording = False
-
-                # extract speaker embedding
-                time.sleep(0.5)
-                with torch.no_grad():
-                    self.enh_wav = self.task_model.inference(self.noisy_wav, self.enroll_wav)
-                    torchaudio.save('./enh.wav', self.enh_wav.view(1, -1), 16000)
-                
+            if self.enroll_wav is None and self.noisy_wav is None:
+                messagebox.showwarning("Recording warnning", "You must record your enrollment speech first.")
+            
+            elif self.enroll_wav is not None and self.noisy_wav is None:
+                # Show enrollment speech
+                plt.specgram(self.enroll_wav.squeeze(), NFFT=512, Fs=16000, cmap='jet')
+                plt.title('Spectrogram of enrollment speech')
+                plt.xlabel('time (seconds)')
+                plt.ylabel('frequency (Hz)')
+                threading._start_new_thread(playsound, ('./enroll.wav',))
+                plt.show()
+            
+            elif self.enroll_wav is not None and self.noisy_wav is not None:
+                # Show noisy and enhanced speech
                 plt.subplot(2,1,1)
                 plt.specgram(self.noisy_wav.squeeze(), NFFT=512, Fs=16000, cmap='jet')
                 plt.title('Spectrogram of noisy speech')
@@ -145,11 +136,33 @@ class DemoAPP():
                 plt.xlabel('time (seconds)')
                 plt.ylabel('frequency (Hz)')
                 threading._start_new_thread(playsound, ('./enh.wav',))
+                plt.tight_layout()
                 plt.show()
+            
+            else:
+                raise RuntimeError
+        
+        def _onoff_button_func():
+            global onoff_img
+
+            if not self.continue_recording:
+                """Click to record speech and clear some variables."""
+                self.continue_recording = True
+                self.noisy_wav = None
+                self.enh_wav = None
+                threading._start_new_thread(self._record, ('.',)) # open a thread to record
+                time.sleep(0.5)
+                onoff_button['text'] = 'On!' # change button icon
+                onoff_button['fg'] = 'green'
+
+            else:
+                """Click to stop record."""
+                self.continue_recording = False
+                time.sleep(0.5) 
                 onoff_button['text'] = 'Off'
                 onoff_button['fg'] = 'red'
 
-        record_button = tk.Button(title_txt_frame, width='6', text='Record', font=("Arial", 16, 'bold'), command=_record_button_func)
+        record_button = tk.Button(title_txt_frame, width='6', text='Enroll', font=("Arial", 16, 'bold'), command=_record_button_func)
         record_button.grid(row=1, column=1, pady=5, ipadx=10)
         
         clear_button = tk.Button(title_txt_frame, width='6', text='Clear', font=("Arial", 16, 'bold'), command=_clear_button_func)
@@ -166,51 +179,44 @@ class DemoAPP():
         context_txt = tk.Label(title_txt_frame, text=enroll_text, justify='left', anchor="nw",  wraplength=450, font=("Arial", 18))
         context_txt.grid(row=0, column=1, columnspan=4, ipadx=10)
     
-    def _record_enroll(self, save_path, format='avfoundation', src=':1', segment_length=512, sample_rate=16000):
+    def _record_enroll(self, save_root, format='avfoundation', src=':1', segment_length=512, sample_rate=16000):
         wav = []
-
         print("Building StreamReader...")
         streamer = StreamReader(src, format=format)
         streamer.add_basic_audio_stream(frames_per_chunk=segment_length, sample_rate=sample_rate)
-
         print("Streaming...")
-        print()
-
         stream_iterator = streamer.stream(timeout=-1, backoff=1.0)
+        
         while self.continue_recording:
             (chunk,) = next(stream_iterator)
             wav.append(chunk)
         
-        wav = torch.cat(wav).view(1, -1)
-        torchaudio.save(save_path, wav, sample_rate)
+        self.enroll_wav = torch.cat(wav).view(1, -1)
+        torchaudio.save(f"{save_root}/enroll.wav", self.enroll_wav, sample_rate)
         print('Streaming closed')
-
-        self.enroll_wav = wav
         
-    def _record(self, save_path, format='avfoundation', src=':1', segment_length=512, sample_rate=16000):
+    def _record(self, save_root, format='avfoundation', src=':1', segment_length=16, sample_rate=16000):
+        """Matching TSE model hop length."""
         global stream_wav
         stream_wav = []
-
         print("Building StreamReader...")
         streamer = StreamReader(src, format=format)
         streamer.add_basic_audio_stream(frames_per_chunk=segment_length, sample_rate=sample_rate)
-
-        # print(streamer.get_src_stream_info(0))
-        # print(streamer.get_out_stream_info(0))
-
         print("Streaming...")
-        print()
-
         stream_iterator = streamer.stream(timeout=-1, backoff=1.0)
+        
         while self.continue_recording:
             (chunk,) = next(stream_iterator)
             stream_wav.append(chunk)
+            gen_wav = self.tse_model.straming_inference(torch.Tensor(chunk).view(1, -1), self.speaker_embedding)
+            if gen_wav is not None:
+                self.enh_wav = overlap_add(self.enh_wav, gen_wav.squeeze(), segment_length)
 
-        wav = torch.cat(stream_wav).view(1, -1)
-        torchaudio.save(save_path, wav, sample_rate)
         print('Streaming closed')
+        self.noisy_wav = torch.cat(stream_wav).view(1, -1)
+        torchaudio.save(f"{save_root}/inp_noisy.wav", self.noisy_wav, sample_rate)
+        torchaudio.save(f"{save_root}/out_enh.wav", self.enh_wav, sample_rate)
 
-        self.noisy_wav = wav
 
 if __name__ == '__main__':
     DemoAPP()
