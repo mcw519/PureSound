@@ -65,7 +65,7 @@ class DemoAPP():
         else:
             enroll_done_img = Image.open('success.png')
 
-        sucess_img = ImageTk.PhotoImage(enroll_done_img.resize((65, 65)))
+        sucess_img = ImageTk.PhotoImage(enroll_done_img.resize((70, 70)))
         label_sucess_img = tk.Label(title_txt_frame, image=sucess_img)
         label_sucess_img.grid(row=0, column=0, rowspan=2, ipadx=10)
 
@@ -73,7 +73,7 @@ class DemoAPP():
             if not self.continue_recording:
                 """Click to record enroll speech."""
                 self.continue_recording = True
-                threading._start_new_thread(self._record_enroll, ('./enroll.wav',)) # open a thread to record
+                threading._start_new_thread(self._record_enroll, ('.',)) # open a thread to record
                 time.sleep(0.5)
                 record_button['text'] = 'Stop!' # change button icon
                 record_button['fg'] = 'red'
@@ -99,15 +99,17 @@ class DemoAPP():
                     enroll_done_img = Image.open('success.png')
                 
                 global sucess_img
-                sucess_img = ImageTk.PhotoImage(enroll_done_img.resize((65, 65)))
+                sucess_img = ImageTk.PhotoImage(enroll_done_img.resize((70, 70)))
                 label_sucess_img['image'] = sucess_img
 
         def _clear_button_func():
             self.enroll_wav = None
             self.speaker_embedding = None
+            self.enh_wav = None
+            self.noisy_wav = None
             enroll_done_img = Image.open('fail.png')
             global sucess_img
-            sucess_img = ImageTk.PhotoImage(enroll_done_img.resize((65, 65)))
+            sucess_img = ImageTk.PhotoImage(enroll_done_img.resize((70, 70)))
             label_sucess_img['image'] = sucess_img
         
         def _show_button_func():
@@ -145,22 +147,27 @@ class DemoAPP():
         def _onoff_button_func():
             global onoff_img
 
-            if not self.continue_recording:
-                """Click to record speech and clear some variables."""
-                self.continue_recording = True
-                self.noisy_wav = None
-                self.enh_wav = None
-                threading._start_new_thread(self._record, ('.',)) # open a thread to record
-                time.sleep(0.5)
-                onoff_button['text'] = 'On!' # change button icon
-                onoff_button['fg'] = 'green'
+            if self.speaker_embedding is None:
+                messagebox.showwarning("Recording warnning", "You must record your enrollment speech first.")
 
             else:
-                """Click to stop record."""
-                self.continue_recording = False
-                time.sleep(0.5) 
-                onoff_button['text'] = 'Off'
-                onoff_button['fg'] = 'red'
+                if not self.continue_recording:
+                    """Click to record speech and clear some variables."""
+                    self.continue_recording = True
+                    self.noisy_wav = None
+                    self.enh_wav = None
+                    self.tse_net.masker.init_status()
+                    threading._start_new_thread(self._record, ('.',)) # open a thread to record
+                    time.sleep(0.5)
+                    onoff_button['text'] = 'On!' # change button icon
+                    onoff_button['fg'] = 'green'
+
+                else:
+                    """Click to stop record."""
+                    self.continue_recording = False
+                    time.sleep(0.5) 
+                    onoff_button['text'] = 'Off'
+                    onoff_button['fg'] = 'red'
 
         record_button = tk.Button(title_txt_frame, width='6', text='Enroll', font=("Arial", 16, 'bold'), command=_record_button_func)
         record_button.grid(row=1, column=1, pady=5, ipadx=10)
@@ -195,7 +202,7 @@ class DemoAPP():
         torchaudio.save(f"{save_root}/enroll.wav", self.enroll_wav, sample_rate)
         print('Streaming closed')
         
-    def _record(self, save_root, format='avfoundation', src=':1', segment_length=16, sample_rate=16000):
+    def _record(self, save_root, format='avfoundation', src=':1', segment_length=320, sample_rate=16000):
         """Matching TSE model hop length."""
         global stream_wav
         stream_wav = []
@@ -208,14 +215,12 @@ class DemoAPP():
         while self.continue_recording:
             (chunk,) = next(stream_iterator)
             stream_wav.append(chunk)
-            gen_wav = self.tse_model.straming_inference(torch.Tensor(chunk).view(1, -1), self.speaker_embedding)
-            if gen_wav is not None:
-                self.enh_wav = overlap_add(self.enh_wav, gen_wav.squeeze(), segment_length)
+            self.enh_wav = self.tse_net.streaming_inference_chunk(torch.Tensor(chunk).view(1, -1), self.speaker_embedding, self.enh_wav)
 
         print('Streaming closed')
         self.noisy_wav = torch.cat(stream_wav).view(1, -1)
         torchaudio.save(f"{save_root}/inp_noisy.wav", self.noisy_wav, sample_rate)
-        torchaudio.save(f"{save_root}/out_enh.wav", self.enh_wav, sample_rate)
+        torchaudio.save(f"{save_root}/out_enh.wav", self.enh_wav.view(1, -1), sample_rate)
 
 
 if __name__ == '__main__':
