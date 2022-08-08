@@ -47,16 +47,37 @@ class TseCollateFunc:
 
 class TseDataset(TaskDataset):
     """
-    Target speech extraction dataset.
+    Target speech extraction or target speech activity dataset.
     Online dataset should implement wave_process() to generate parallel data for training.
 
     Args:
         resample_to: open waveform then resample it.
         max_length: cut each waveform until max_length(seconds).
+        enroll_rule: longest, shortest, fixed_length of full.
+        enroll_augment: same data augmentation methods using between both separation and speaker embedding training.
+        rir_folder: path of rir corpus.
+        rir_mode: method of anechoic, image, direct or early reverberation
+        vol_perturbed: volume data augmentation
+        speed_perturbed: speed up or slow down augmentation
+        single_spk_pb: probability of how much single speech cases in the on-the-fly dataset.
+        inactive_training: probability of how much inactive speech cases in the on-the-fly dataset.
+        is_vad_dataset: if true, replace the target as VAD labels.
     """
-    def __init__(self, folder, resample_to: int, max_length: Optional[int] = None, enroll_rule: Optional[str] = None, enroll_augment: bool = False,
-            noise_folder: Optional[str] = None, rir_folder: Optional[str] = None, rir_mode: str = 'image',
-            vol_perturbed: Optional[tuple] = None, speed_perturbed: bool = False, single_spk_pb: float = 0., inactive_training: float = 0.):
+    def __init__(self,
+                folder: str,
+                resample_to: int,
+                max_length: Optional[int] = None,
+                enroll_rule: Optional[str] = None,
+                enroll_augment: bool = False,
+                noise_folder: Optional[str] = None,
+                rir_folder: Optional[str] = None,
+                rir_mode: str = 'image',
+                vol_perturbed: Optional[tuple] = None,
+                speed_perturbed: bool = False,
+                single_spk_pb: float = 0.,
+                inactive_training: float = 0.,
+                is_vad_dataset: bool = False
+                ):
         self.max_length = max_length
         self.noise_folder = noise_folder
         self.rir_folder = rir_folder
@@ -67,6 +88,7 @@ class TseDataset(TaskDataset):
         self.inactive_training = inactive_training
         self.enroll_rule = enroll_rule
         self.enroll_augment = enroll_augment
+        self.is_vad_dataset = is_vad_dataset
         super().__init__(folder, resample_to=resample_to)
 
         if self.noise_folder is not None or self.rir_folder is not None or self.speed_perturbed or self.vol_perturbed is not None:
@@ -85,6 +107,9 @@ class TseDataset(TaskDataset):
             'ref2spk': 'ref2spk.txt', # target speaker id
             'wav2spk': 'wav2spk.txt', # speakers in mixture
             }
+        
+        if self.is_vad_dataset:
+            _content.update({'ref2vad': 'ref2vad.txt'})
         
         return _content
 
@@ -107,15 +132,24 @@ class TseDataset(TaskDataset):
 
         if wav.shape[0] != 1: wav = wav[0].view(1, -1) # ignore multi-channel
 
-        clean_wav, sr = AudioIO.open(f_path=self.df[key]['wav2ref'])
+        clean_wav, sr = AudioIO.open(f_path=self.df[key]['wav2ref']) if not self.is_vad_dataset else AudioIO.open(f_path=self.df[key]['ref2vad'])
         if sr != self.resample_to:
             clean_wav = torchaudio.transforms.Resample(orig_freq=sr, new_freq=self.resample_to)(clean_wav)
         
         if clean_wav.shape[0] != 1: clean_wav = clean_wav[0].view(1, -1) # ignore multi-channel
 
-        if torch.rand(1) < self.single_spk_pb: wav = clean_wav.clone()
+        # Single target speaker speech cases
+        if torch.rand(1) < self.single_spk_pb:
+            if not self.is_vad_dataset:
+                # TSE
+                wav = clean_wav.clone()
+            else:
+                # PVAD
+                wav, sr = AudioIO.open(f_path=self.df[key]['wav2ref']) # replaced input waveform by single target cases
+                if sr != self.resample_to:
+                    wav = torchaudio.transforms.Resample(orig_freq=sr, new_freq=self.resample_to)(wav)
 
-        # Random pick another speaker to replace the enroll_wav and also replace reference speech by mixture
+        # Random pick another speaker to replace the mixed speech, and also replace reference speech by mixture
         # Format of wav2spk: "corpus_uttid_source s1-s2-s3"
         if torch.rand(1) < self.inactive_training:
             current_spks = self.df[key]['wav2spk'].split('-')
@@ -129,8 +163,19 @@ class TseDataset(TaskDataset):
                 if pick_spk not in current_spks:
                     break
             
-            enroll_wav = self.load_enroll(pick_key, mode=self.enroll_rule)
-            clean_wav = wav.clone()
+            # replace noisy mixture, keeping speaker embedding for training speaker net
+            enroll_wav = self.load_enroll(key, mode=self.enroll_rule)
+            wav, sr = AudioIO.open(f_path=self.df[pick_key]['wav2scp'])
+            if sr != self.resample_to:
+                wav = torchaudio.transforms.Resample(orig_freq=sr, new_freq=self.resample_to)(wav)
+
+            if wav.shape[0] != 1: wav = wav[0].view(1, -1) # ignore multi-channel
+
+            if not self.is_vad_dataset:
+                clean_wav = wav.clone()
+            else:
+                clean_wav = torch.zeros_like(wav)
+
             inactive = True
             
         else:
@@ -145,7 +190,7 @@ class TseDataset(TaskDataset):
             if wav.shape[-1] > target_len:
                 offset = random.randint(0, int(wav.shape[-1]) - target_len)
                 # Avoid choice the zero tensor as target
-                while clean_wav[:, offset : offset + target_len].sum() == 0:
+                while clean_wav[:, offset : offset + target_len].sum() == 0 and not self.is_vad_dataset:
                     offset = random.randint(0, int(wav.shape[-1]) - target_len)
                     if clean_wav[:, offset : offset + target_len].sum() != 0: break
                 wav = wav[:, offset : offset + target_len]
@@ -167,14 +212,14 @@ class TseDataset(TaskDataset):
             process_wav, speed, rir_id, rir_ch = wav, None, None, None
         
         # warp clean_wav with same speed perturbed
-        if speed is not None:
+        if speed is not None and not self.is_vad_dataset:
             clean_wav, _ = self.augmentor.sox_speed_perturbed(clean_wav, speed)
         
         # warp clean_wav with same rir reverb type, but different reverb mode
         # 1. target image: warp same rir channel impaulse
         # 2. target direct: warp same rir channel impaulse with 6ms center from peak
         # 3. target early: warp same rir channel impaulse with 50ms center from peak
-        if rir_id is not None and self.rir_mode != 'anechoic':
+        if rir_id is not None and self.rir_mode != 'anechoic' and not self.is_vad_dataset:
             clean_wav = self.augmentor.apply_rir_by_key(clean_wav, rir_id, choose_ch=rir_ch, rir_mode=self.rir_mode)
         
         # random adjust volumn on both clean and process wav
@@ -185,16 +230,18 @@ class TseDataset(TaskDataset):
             else:
                 min_ratio, max_ratio = self.vol_perturbed
             perturbed_ratio = torch.FloatTensor(1).uniform_(min_ratio, max_ratio).item()
-            clean_wav = self.augmentor.sox_volumn_perturbed(clean_wav, perturbed_ratio)
-            clean_wav = torch.clamp(clean_wav, min=-1, max=1)
+            if not self.is_vad_dataset:
+                clean_wav = self.augmentor.sox_volumn_perturbed(clean_wav, perturbed_ratio)
+                clean_wav = torch.clamp(clean_wav, min=-1, max=1)
             process_wav = self.augmentor.sox_volumn_perturbed(process_wav, perturbed_ratio)
             process_wav = torch.clamp(process_wav, min=-1, max=1)
             enroll_wav = self.augmentor.sox_volumn_perturbed(enroll_wav, perturbed_ratio)
             enroll_wav = torch.clamp(enroll_wav, min=-1, max=1)
         
         if inactive:
-            clean_wav = process_wav.clone() # clean_wav in IS case is input mixture
-            spk_label = self.ref2spk[self.df[pick_key]['ref2spk']]
+            # clean_wav in IS case is input mixture
+            clean_wav = process_wav.clone() if not self.is_vad_dataset else torch.zeros_like(process_wav)
+            # spk_label = self.ref2spk[self.df[pick_key]['ref2spk']]
         
         return {'clean_wav': clean_wav, 'process_wav': process_wav, 'enroll_wav': enroll_wav, 'spk_label': spk_label, 'inactive': inactive}
     

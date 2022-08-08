@@ -27,6 +27,8 @@ class TseTrainer(TseTask):
 
 
 def init_dataloader(hparam: Any) -> Tuple:
+    is_vad_dataset = True if hparam['DATASET']['type'].lower() == 'pvad' else False  
+
     train_dataset = TseDataset(
         folder=hparam['DATASET']['train'],
         resample_to=hparam['DATASET']['sample_rate'],
@@ -39,7 +41,8 @@ def init_dataloader(hparam: Any) -> Tuple:
         single_spk_pb=hparam['DATASET']['single_spk_prob'],
         inactive_training=hparam['DATASET']['inactive_training'],
         enroll_augment=hparam['DATASET']['enroll_augment'],
-        enroll_rule=hparam['DATASET']['enroll_rule'],)
+        enroll_rule=hparam['DATASET']['enroll_rule'],
+        is_vad_dataset=is_vad_dataset)
     
     dev_dataset = TseDataset(
         folder=hparam['DATASET']['dev'],
@@ -53,7 +56,8 @@ def init_dataloader(hparam: Any) -> Tuple:
         single_spk_pb=0.,
         inactive_training=0.,
         enroll_augment=hparam['DATASET']['enroll_augment'],
-        enroll_rule=hparam['DATASET']['enroll_rule'],)
+        enroll_rule=hparam['DATASET']['enroll_rule'],
+        is_vad_dataset=is_vad_dataset)
 
     if hparam['TRAIN']['contrastive_learning']:
         train_len =  hparam['TRAIN']['repeat'] * len(train_dataset) // (hparam['TRAIN']['p_spks'] * hparam['TRAIN']['p_utts'])

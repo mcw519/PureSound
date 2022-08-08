@@ -219,6 +219,7 @@ class SoTaskWrapModule(EncDecMaskerBaseModel):
                 f_type: str = 'real',
                 mask_type: str = 'real',
                 mask_constraint: str = 'linear',
+                output_constraint: str = 'linear',
                 drop_first_bin: bool = False,
                 verbose: bool = True,
                 ) -> None:
@@ -233,6 +234,7 @@ class SoTaskWrapModule(EncDecMaskerBaseModel):
         self.loss_func_spk = loss_func_spk
         self.loss_func_others = loss_func_others
         self.mask_constraint = mask_constraint
+        self.output_constraint = output_constraint
         self.drop_first_bin = drop_first_bin
         self.task = self.check_task()
         print(f"Current task label: {self.task}")
@@ -368,6 +370,18 @@ class SoTaskWrapModule(EncDecMaskerBaseModel):
                 # align from begin
                 enh_wav = enh_wav[..., :ref_wav_l]
         return enh_wav, ref_wav
+    
+    def _wav_output_constrain(self, wav: torch.Tensor, mode: str):
+        if mode.lower() == 'linear':
+            wav = torch.clamp_(wav, min=-1, max=1)
+        
+        elif mode.lower() == 'sigmoid':
+            wav = torch.sigmoid(wav)
+        
+        else:
+            raise NameError('Non support type.')
+        
+        return wav
 
     def _forward(self, noisy: torch.Tensor, enroll: torch.Tensor, ref_clean: torch.Tensor, inactive_labels: Optional[torch.Tensor] = None) -> torch.Tensor:
         """
@@ -405,7 +419,8 @@ class SoTaskWrapModule(EncDecMaskerBaseModel):
         mask = self.get_mask(mask, self.mask_constraint)
         enh_feats = self.apply_tf_masks(noisy, mask, f_type=self.f_type, mask_type=self.mask_type) # [N, C, T]
         enh_wav = self._get_waveform(enh_feats)
-        enh_wav = torch.clamp_(enh_wav, min=-1, max=1)
+        enh_wav = self._wav_output_constrain(enh_wav, mode=self.output_constraint)
+        # enh_wav = torch.clamp_(enh_wav, min=-1, max=1)
         enh_wav, ref_clean = self._align_waveform(enh_wav, ref_clean)
         loss_wav = self.loss_func_wav(enh_wav, ref_clean, inactive_labels)
         
@@ -443,7 +458,8 @@ class SoTaskWrapModule(EncDecMaskerBaseModel):
         mask = self.get_mask(mask, self.mask_constraint)
         enh_feats = self.apply_tf_masks(noisy, mask, f_type=self.f_type, mask_type=self.mask_type) # [N, C, T]
         enh_wav = self._get_waveform(enh_feats)
-        enh_wav = torch.clamp_(enh_wav, min=-1, max=1)
+        enh_wav = self._wav_output_constrain(enh_wav, mode=self.output_constraint)
+        # enh_wav = torch.clamp_(enh_wav, min=-1, max=1)
         enh_wav, ref_clean = self._align_waveform(enh_wav, ref_clean)
         loss_wav = self.loss_func_wav(enh_wav, ref_clean, inactive_labels)
 
@@ -486,7 +502,8 @@ class SoTaskWrapModule(EncDecMaskerBaseModel):
         mask = self.get_mask(mask, self.mask_constraint)
         enh_feats = self.apply_tf_masks(noisy, mask, f_type=self.f_type, mask_type=self.mask_type) # [N, C, T]
         enh_wav = self._get_waveform(enh_feats)
-        enh_wav = torch.clamp_(enh_wav, min=-1, max=1)
+        enh_wav = self._wav_output_constrain(enh_wav, mode=self.output_constraint)
+        # enh_wav = torch.clamp_(enh_wav, min=-1, max=1)
 
         enh_feats, _ = self._get_feature(enh_wav, None)
         enh_dvec = enh_feats
@@ -536,7 +553,8 @@ class SoTaskWrapModule(EncDecMaskerBaseModel):
         mask = self.get_mask(mask, self.mask_constraint)
         enh_feats = self.apply_tf_masks(noisy, mask, f_type=self.f_type, mask_type=self.mask_type) # [N, C, T]
         enh_wav = self._get_waveform(enh_feats)
-        enh_wav = torch.clamp_(enh_wav, min=-1, max=1)
+        enh_wav = self._wav_output_constrain(enh_wav, mode=self.output_constraint)
+        # enh_wav = torch.clamp_(enh_wav, min=-1, max=1)
         pred_noise = noisy_wav - enh_wav
         _, enh_dvec = self._get_feature(None, enh_wav)
         _, noise_dvec = self._get_feature(None, pred_noise)
@@ -610,7 +628,8 @@ class SoTaskWrapModule(EncDecMaskerBaseModel):
         mask = self.get_mask(mask, self.mask_constraint)
         enh_feats = self.apply_tf_masks(noisy, mask, f_type=self.f_type, mask_type=self.mask_type) # [N, C, T]
         enh_wav = self._get_waveform(enh_feats)
-        enh_wav = torch.clamp_(enh_wav, min=-1, max=1)
+        enh_wav = self._wav_output_constrain(enh_wav, mode=self.output_constraint)
+        # enh_wav = torch.clamp_(enh_wav, min=-1, max=1)
         return enh_wav
 
     @torch.no_grad()

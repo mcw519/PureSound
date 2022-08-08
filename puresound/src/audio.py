@@ -58,7 +58,7 @@ class AudioIO():
         return wav, sr
     
     @staticmethod
-    def save(wav: torch.Tensor, f_path: str, sr: int):
+    def save(wav: torch.Tensor, f_path: str, sr: int, **kwargs):
         """
         Save a waveform in disk.
 
@@ -68,7 +68,7 @@ class AudioIO():
             sr: sampling rate
         """
         if len(wav.shape) == 1: wav = wav.unsqueeze(0)
-        torchaudio.save(f"{f_path}", wav, sr, format='wav')
+        torchaudio.save(f"{f_path}", wav, sr, format='wav', **kwargs)
     
     @staticmethod
     def audio_cut(wav: torch.Tensor, sr: int, length_s: float):
@@ -262,7 +262,9 @@ class AudioAugmentor():
         wav_length = wav.shape[-1]
         noise_length = noise.shape[-1]
         if wav_length <= noise_length:
-            noise = noise[:, :wav_length]
+            s = int(torch.randint(0, noise_length - wav_length, (1,)))
+            noise = noise[:, s:s+wav_length]
+            # noise = noise[:, :wav_length]
         else:
             noise = noise.repeat(1, round(wav_length/noise_length)+1)
             noise = noise[:, :wav_length]

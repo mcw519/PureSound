@@ -43,3 +43,11 @@ Describes
 - One SpeakerNet based one TCN structure.
 - Multi-task loss is used here, one for signal-based loss the other is classification loss.
 - Mask values is constrained by a ReLU activation.
+
+
+### Implemented a sig_loss function for SoTaskWrapModule
+Signal or waveform loss function must have three inputs named enh_wav, ref_wav and inactive_label.  
+In general, this is a SDR-based loss function. But you can using lambda function to warp others like L1 or L2 etc.
+        
+    import torch.nn.functional as F
+    sig_loss = lambda enh, ref, dummy: F.l1_loss(enh, ref)

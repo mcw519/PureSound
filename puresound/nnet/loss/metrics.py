@@ -3,6 +3,7 @@ from typing import Optional
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torch.nn.modules.loss import _Loss
 
 
 class GE2ELoss(nn.Module):
@@ -172,3 +173,26 @@ class TripletLoss(nn.Module):
 
         else:
             return torch.max(torch.zeros(x_anchor.shape[0]), dist_pos - dist_neg + self.margin)
+
+class F1_loss(_Loss):
+    """
+    Calculate F1 score
+    
+    References:
+        https://github.com/asteroid-team/asteroid/blob/fc0967a2eaf42f9446b17f7d039598deffd46f91/asteroid/losses/soft_f1.py
+    """
+
+    def __init__(self, eps=1e-10):
+        super().__init__()
+        self.eps = eps
+
+    def forward(self, estimates, targets):
+        tp = (targets * estimates).sum()
+        fp = ((1 - targets) * estimates).sum()
+        fn = (targets * (1 - estimates)).sum()
+
+        precision = tp / (tp + fp + self.eps)
+        recall = tp / (tp + fn + self.eps)
+
+        f1 = 2 * (precision * recall) / (precision + recall + self.eps)
+        return 1 - f1.mean()
