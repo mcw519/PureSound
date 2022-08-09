@@ -56,3 +56,35 @@ For example, this case uttid's (1272-128104-0000_2035-147961-0014_1) enrollment 
         | Metric | Mode | Dev | Test |
         |:---:|:---:|:---:|:---:|
         | Si-SNRi | max | 9.954 | 10.043 |
+
+
+## Demo App
+
+There is a simple demo app in the [./demo](./demo) which based on streaming recording and real-time decoding.
+
+### Install extra dependencies
+
+we need at least 1.12.x torch and 0.12.x torchaudio version.
+
+    pip install sv-ttk
+    pip install playsound
+    pip install "torch>=1.12.0"
+    pip install "torchaudio>=0.12.0"
+
+and then,
+
+    cd demo && python demo_app.py
+
+### Usage:
+
+Enroll:     
+Click the `Enroll` button to start the enrollment stage, and click angain to finish the recording. During recording, you have to say some enrollment sentence for geneating speaker embedding.
+
+Clear:  
+Click the `Clear` button will delete all status include enrolled speaker embedding.
+
+On/Off switch:  
+Click the `On/Off` switch button for starting or stopping your target speaker speech separation function.
+
+Show:  
+You can `Show` the record and processed spectrogram and also playback the processed result.

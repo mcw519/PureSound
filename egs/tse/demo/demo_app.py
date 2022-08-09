@@ -30,7 +30,7 @@ class DemoAPP():
         self.window.mainloop()
 
     def init_app(self):
-        ckpt = torch.load('skim_causal_460.ckpt', map_location='cpu')
+        ckpt = torch.load('skim_causal_460_wNoise.ckpt', map_location='cpu')
         
         self.speaker_net = DemoSpeakerNet()
         self.speaker_net.load_state_dict(ckpt['state_dict'], strict=False)
@@ -41,6 +41,7 @@ class DemoAPP():
         self.tse_net.eval()
 
         self.continue_recording = False
+        self.inference_finished = False
         self.speaker_embedding = None
         self.enroll_wav = None
         self.noisy_wav = None
@@ -137,7 +138,7 @@ class DemoAPP():
                 plt.title('Spectrogram of target speech')
                 plt.xlabel('time (seconds)')
                 plt.ylabel('frequency (Hz)')
-                threading._start_new_thread(playsound, ('./enh.wav',))
+                threading._start_new_thread(playsound, ('./out_enh.wav',))
                 plt.tight_layout()
                 plt.show()
             
@@ -157,10 +158,33 @@ class DemoAPP():
                     self.noisy_wav = None
                     self.enh_wav = None
                     self.tse_net.masker.init_status()
-                    threading._start_new_thread(self._record, ('.',)) # open a thread to record
+                    threading._start_new_thread(self._record, ('.',)) # open a thread for recording
+                    threading._start_new_thread(self._model_inference, ('.',)) # open a thread for decoding
                     time.sleep(0.5)
                     onoff_button['text'] = 'On!' # change button icon
                     onoff_button['fg'] = 'green'
+                    # open real-time figure
+                    plt.close()
+                    plt.ion()
+                    figure, ax = plt.subplots(figsize=(8, 6))
+                    plt.title('Spectrogram of target speech')
+                    plt.xlabel('time (seconds)')
+                    plt.ylabel('frequency (Hz)')
+                    
+                    while True:
+                        if self.enh_wav is not None:
+                            ax.specgram(self.enh_wav.squeeze(), NFFT=512, Fs=16000, cmap='jet')
+                            ax.set_title('Spectrogram of target speech')
+                            figure.canvas.draw()
+                            figure.canvas.flush_events()
+                            plt.tight_layout()
+                            plt.show()
+                            time.sleep(0.1)
+                            if not self.continue_recording and self.inference_finished:
+                                break
+                        
+                        else:
+                            pass
 
                 else:
                     """Click to stop record."""
@@ -203,24 +227,41 @@ class DemoAPP():
         print('Streaming closed')
         
     def _record(self, save_root, format='avfoundation', src=':1', segment_length=320, sample_rate=16000):
-        """Matching TSE model hop length."""
-        global stream_wav
-        stream_wav = []
+        self.stream_wav = []
         print("Building StreamReader...")
         streamer = StreamReader(src, format=format)
         streamer.add_basic_audio_stream(frames_per_chunk=segment_length, sample_rate=sample_rate)
-        print("Streaming...")
+        print(f"Streaming start, {time.time()}")
         stream_iterator = streamer.stream(timeout=-1, backoff=1.0)
         
         while self.continue_recording:
             (chunk,) = next(stream_iterator)
-            stream_wav.append(chunk)
-            self.enh_wav = self.tse_net.streaming_inference_chunk(torch.Tensor(chunk).view(1, -1), self.speaker_embedding, self.enh_wav)
+            self.stream_wav.append(chunk)
 
-        print('Streaming closed')
-        self.noisy_wav = torch.cat(stream_wav).view(1, -1)
+        self.stream_wav.append(None)
+
+        print(f"Streaming closed, {time.time()}")
+        self.noisy_wav = torch.cat(self.stream_wav[:-1]).view(1, -1)
         torchaudio.save(f"{save_root}/inp_noisy.wav", self.noisy_wav, sample_rate)
-        torchaudio.save(f"{save_root}/out_enh.wav", self.enh_wav.view(1, -1), sample_rate)
+    
+    def _model_inference(self, save_root, sample_rate=16000):
+        self.inference_finished = False
+        time.sleep(0.3) # add a little delay, waiting for streamer loading
+        idx = 0
+        while True:
+            if idx == 0:
+                cur_chunk = self.stream_wav[0]
+            else:
+                if self.stream_wav[idx] is not None:
+                    cur_chunk = torch.Tensor(self.stream_wav[idx]).view(1, -1)
+                else:
+                    print(f"Inference done, {time.time()}")
+                    self.inference_finished = True
+                    torchaudio.save(f"{save_root}/out_enh.wav", self.enh_wav.view(1, -1), sample_rate)
+                    break
+
+            self.enh_wav = self.tse_net.streaming_inference_chunk(cur_chunk, self.speaker_embedding, self.enh_wav)
+            idx += 1
 
 
 if __name__ == '__main__':
