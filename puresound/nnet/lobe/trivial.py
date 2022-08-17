@@ -1,3 +1,4 @@
+from turtle import forward
 from types import LambdaType
 from typing import Any
 
@@ -201,6 +202,52 @@ class SplitMerge(nn.Module):
             output = output[..., :-rest]
         
         return output.contiguous()
+
+
+class MovingAverage1D(nn.Module):
+    """
+    Simple moving average layer.
+
+    Args:
+        kerenl_size: moving window length
+        stride: shift of window step
+        add_padding: if true, add padding zeros
+        causal: if true, padding only in past side, otherwise in both side
+    """
+    def __init__(self, kernel_size: int, stride: int, add_padding: bool = False, causal: bool = True):
+        super().__init__()
+        self.add_padding = add_padding
+        self.causal = causal
+        self.kernel_size = kernel_size
+        self.stride = stride
+        self.sma = nn.AvgPool1d(kernel_size=kernel_size, stride=stride)
+    
+    def forward(self, x: torch.Tensor):
+        """
+        Args:
+            input tensor x has shape [N, T]
+        
+        Returns:
+            output tensor out has shape [N, T']
+        """
+        batch, _ = x.shape
+        if self.add_padding:
+            if self.causal:
+                padd = torch.zeros(batch, self.kernel_size - 1).to(x.device)
+                x_pad = torch.cat([padd, x], dim=-1)
+            
+            else:
+                pre_padd = torch.zeros(batch, self.kernel_size//2).to(x.device)
+                post_padd = torch.zeros(batch, self.kernel_size//2).to(x.device)
+                x_pad = torch.cat([pre_padd, x, post_padd], dim=-1)
+        
+        else:
+            x_pad = x
+
+        x_pad = x_pad
+        out = self.sma(x_pad)
+
+        return out
 
 
 def spectral_compression(x: torch.Tensor, alpha: float = 0.3, dim: int = 1):

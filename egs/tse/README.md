@@ -1,5 +1,5 @@
 # TSE
-Target Speech Extraction.
+This sample show how to train the Target Speech Extraction(`TSE`) or Personalized VAD(`PVAD`) models.
 
 ## Data structure definition
 Majorly we followed the Kaldi's data format.
@@ -31,7 +31,13 @@ For example, this case uttid's (1272-128104-0000_2035-147961-0014_1) enrollment 
     cd local
     sh create_metadata.sh storage_dir output_dir librispeech_dir
 
-## Records
+## Generate PVAD labels
+We extract PVAD label from the reference signal by using the pretrained VAD model which trained by [Silero VAD](https://github.com/snakers4/silero-vad).
+
+    python local/create_vad_label.py wav2ref.txt storage_dir
+    cp storage_dir/ref2vad.txt output_dir(metadata folder from above)
+
+## Records of Libri2Mix-TSE
 
 1. Libri2Mix-clean-16k-max TD-ConvTasNet(gLN, non causal)
     - conf: libri2mix_max_2spk_clean_16k_1a.yaml
@@ -57,8 +63,19 @@ For example, this case uttid's (1272-128104-0000_2035-147961-0014_1) enrollment 
         |:---:|:---:|:---:|:---:|
         | Si-SNRi | max | 9.954 | 10.043 |
 
+## Records of Libri2Mix-PVAD
+Scoring tool borrow from the [Asteroid's](https://github.com/asteroid-team/asteroid) codes.
 
-## Demo App
+1. Libri2Mix-clean-16k-max TD-DP-SkiM(causal)
+    - conf: libri2mix-pvad_max_2spk_clean_16k_1a.yaml
+    - training data: train-100, max, clean, 6 seconds with inactive prob 0.2
+
+        |Post process| Accuracy | Precision | Recall | F1-score |
+        |:----------:|:--------:|:---------:|:------:|:--------:|
+        | MVG (200ms)| 0.846    | 0.872     | 0.911  | 0.875    |
+        | Asteroid   | 0.861    | 0.886     | 0.920  | 0.886    |
+
+## TSE's Demo App
 
 There is a simple demo app in the [./demo](./demo) which based on streaming recording and real-time decoding.
 

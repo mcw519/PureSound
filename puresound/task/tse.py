@@ -165,7 +165,14 @@ class TseDataset(TaskDataset):
             
             # replace noisy mixture, keeping speaker embedding for training speaker net
             enroll_wav = self.load_enroll(key, mode=self.enroll_rule)
-            wav, sr = AudioIO.open(f_path=self.df[pick_key]['wav2scp'])
+
+            if torch.rand(1) > 0.5:
+                # double talk interference
+                wav, sr = AudioIO.open(f_path=self.df[pick_key]['wav2scp'])
+            else:
+                # single talk interference
+                wav, sr = AudioIO.open(f_path=self.df[pick_key]['wav2ref'])
+
             if sr != self.resample_to:
                 wav = torchaudio.transforms.Resample(orig_freq=sr, new_freq=self.resample_to)(wav)
 

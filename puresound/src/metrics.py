@@ -76,3 +76,24 @@ class Metrics():
         improvement = si_snr(enhanced.reshape(1, -1), clean.reshape(1, -1)).reshape(-1) - si_snr(noisy.reshape(1, -1), clean.reshape(1, -1)).reshape(-1)
         
         return improvement.item()
+
+    @staticmethod
+    def f1_score(y_true: torch.Tensor, y_pred: torch.Tensor):
+        y_true, y_pred = Metrics.check_shape(y_true, y_pred, retun_as_tensor=True)
+        tp = torch.sum(torch.logical_and(y_pred, y_true))
+        tn = torch.sum(torch.logical_and(torch.logical_not(y_pred), torch.logical_not(y_true)))
+        fp = torch.sum(torch.logical_and(torch.logical_xor(y_pred, y_true), y_pred))
+        fn = torch.sum(torch.logical_and(torch.logical_xor(y_pred, y_true), y_true))
+        accuracy = (tp + tn) / (tp + tn + fp + fn)
+        precision = tp / (tp + fp + 1e-7)
+        recall = tp / (tp + fn + 1e-7)
+
+        f1 = 2 * (precision * recall) / (precision + recall + 1e-7)
+        f1 = f1.clamp(min=1e-7, max=1 - 1e-7)
+
+        return {
+            "accuracy": float(accuracy),
+            "precision": float(precision),
+            "recall": float(recall),
+            "f1_score": float(f1),
+        }

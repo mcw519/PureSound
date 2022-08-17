@@ -13,6 +13,7 @@ from sklearn import manifold
 from sklearn.metrics import silhouette_score
 from tqdm import tqdm
 
+from local.binarize import Binarize
 from model import init_loss, init_model
 
 
@@ -95,6 +96,8 @@ def main(config):
         trainer.train()
     
     elif config.action == 'dev':
+        is_vad_dataset = True if hparam['DATASET']['type'].lower() == 'pvad' else False  
+
         dev_dataset = TseDataset(
             folder=hparam['DATASET']['dev'],
             resample_to=hparam['DATASET']['sample_rate'],
@@ -107,60 +110,91 @@ def main(config):
             single_spk_pb=0.,
             inactive_training=0.,
             enroll_augment=None,
-            enroll_rule=hparam['DATASET']['enroll_rule'],)
+            enroll_rule=hparam['DATASET']['enroll_rule'],
+            is_vad_dataset=is_vad_dataset)
 
         dev_dataloader = torch.utils.data.DataLoader(dataset=dev_dataset, batch_size=1, shuffle=False, num_workers=0, collate_fn=TseCollateFunc())
-        scorePESQ, scoreSTOI, scoreSDR, scoreSISNR, scoreSISNRi, scoreNSR, scoreNSR_neg = [], [], [], [], [], [], []
         model = init_model(hparam['MODEL']['type'], verbose=False)
         ckpt = torch.load(f"{hparam['TRAIN']['model_save_dir']}/{config.ckpt}", map_location='cpu')
         model.load_state_dict(ckpt['state_dict'], strict=False) # ignore loss's weight
         model = model.to(config.backend)
         model.eval()
-        print("uttid, PESQ, STOI, SDR, SISNR, SISNRi, NSR")
 
-        for _, batch in enumerate(tqdm(dev_dataloader)):
-            uttid = batch['uttid']
-            clean_wav = batch['clean_wav'] # [1, L]
-            noisy_wav = batch['process_wav'].to(config.backend) # [1, L]
-            enroll_wav = batch['enroll_wav'].to(config.backend) # [1, L]
-            enh_wav = model.inference(noisy_wav, enroll_wav) # [1, L]
-            enh_wav = enh_wav.detach().cpu()
-            noisy_wav = noisy_wav.detach().cpu()
-
-            _sisnr = Metrics.sisnr(clean_wav, enh_wav)
-            _sisnri = Metrics.sisnr_imp(clean_wav, enh_wav, noisy_wav)
-            # define NSR is the count of negative SiSNRi and SiSNR lower than 30
-            if _sisnri < 0 and _sisnr < 30:
-                _nsr = 1
-                _nsr_neg = 1 if _sisnr < 0 else 0
-            else:
-                _nsr = 0
-                _nsr_neg = 0
+        if is_vad_dataset:
+            accuracy, precision, recall, f1_score = [], [], [], []
+            binarizer = Binarize(threshold=0.5, stability=0.05, sample_rate=hparam['DATASET']['sample_rate'], mode='moving_average')
+            print("accuracy, precision, recall, f1_score")
+            for _, batch in enumerate(tqdm(dev_dataloader)):
+                uttid = batch['uttid']
+                clean_wav = batch['clean_wav'] # [1, L]
+                noisy_wav = batch['process_wav'].to(config.backend) # [1, L]
+                enroll_wav = batch['enroll_wav'].to(config.backend) # [1, L]
+                enh_wav = model.inference(noisy_wav, enroll_wav) # [1, L]
+                enh_wav = enh_wav.detach().cpu()
+                binarized = binarizer(enh_wav)
+                try:
+                    score = Metrics.f1_score(clean_wav, binarized)
+                except:
+                    print(uttid[0], binarized.shape, clean_wav.shape)
+                    continue
+                accuracy.append(score['accuracy'])
+                precision.append(score['precision'])
+                recall.append(score['recall'])
+                f1_score.append(score['f1_score'])
+                print(f"{uttid[0]}, {accuracy[-1]}, {precision[-1]}, {recall[-1]}, {f1_score[-1]}")
             
-            scoreSISNR.append(_sisnr)
-            scoreSISNRi.append(_sisnri)
-            scoreNSR.append(_nsr)
-            scoreNSR_neg.append(_nsr_neg)
+            print(f"accuracy: {torch.Tensor(accuracy).mean()}")
+            print(f"precision: {torch.Tensor(precision).mean()}")
+            print(f"recall: {torch.Tensor(recall).mean()}")
+            print(f"f1_score: {torch.Tensor(f1_score).mean()}")
 
-            if config.metrics == 'detail':
-                scorePESQ.append(Metrics.pesq_wb(clean_wav, enh_wav))
-                scoreSTOI.append(Metrics.stoi(clean_wav, enh_wav))
-                scoreSDR.append(Metrics.bss_sdr(clean_wav, enh_wav))
+        else:
+            scorePESQ, scoreSTOI, scoreSDR, scoreSISNR, scoreSISNRi, scoreNSR, scoreNSR_neg = [], [], [], [], [], [], []
+            print("uttid, PESQ, STOI, SDR, SISNR, SISNRi, NSR")
 
-            else:
-                scorePESQ.append(0)
-                scoreSTOI.append(0)
-                scoreSDR.append(0)
+            for _, batch in enumerate(tqdm(dev_dataloader)):
+                uttid = batch['uttid']
+                clean_wav = batch['clean_wav'] # [1, L]
+                noisy_wav = batch['process_wav'].to(config.backend) # [1, L]
+                enroll_wav = batch['enroll_wav'].to(config.backend) # [1, L]
+                enh_wav = model.inference(noisy_wav, enroll_wav) # [1, L]
+                enh_wav = enh_wav.detach().cpu()
+                noisy_wav = noisy_wav.detach().cpu()
+
+                _sisnr = Metrics.sisnr(clean_wav, enh_wav)
+                _sisnri = Metrics.sisnr_imp(clean_wav, enh_wav, noisy_wav)
+                # define NSR is the count of negative SiSNRi and SiSNR lower than 30
+                if _sisnri < 0 and _sisnr < 30:
+                    _nsr = 1
+                    _nsr_neg = 1 if _sisnr < 0 else 0
+                else:
+                    _nsr = 0
+                    _nsr_neg = 0
+                
+                scoreSISNR.append(_sisnr)
+                scoreSISNRi.append(_sisnri)
+                scoreNSR.append(_nsr)
+                scoreNSR_neg.append(_nsr_neg)
+
+                if config.metrics == 'detail':
+                    scorePESQ.append(Metrics.pesq_wb(clean_wav, enh_wav))
+                    scoreSTOI.append(Metrics.stoi(clean_wav, enh_wav))
+                    scoreSDR.append(Metrics.bss_sdr(clean_wav, enh_wav))
+
+                else:
+                    scorePESQ.append(0)
+                    scoreSTOI.append(0)
+                    scoreSDR.append(0)
+                
+                print(f"{uttid[0]}, {scorePESQ[-1]}, {scoreSTOI[-1]}, {scoreSDR[-1]}, {scoreSISNR[-1]}, {scoreSISNRi[-1]}, {scoreNSR[-1]}")
             
-            print(f"{uttid[0]}, {scorePESQ[-1]}, {scoreSTOI[-1]}, {scoreSDR[-1]}, {scoreSISNR[-1]}, {scoreSISNRi[-1]}, {scoreNSR[-1]}")
-        
-        print(f"PESQ: {torch.Tensor(scorePESQ).mean()}")
-        print(f"STOI: {torch.Tensor(scoreSTOI).mean()}")
-        print(f"SDR: {torch.Tensor(scoreSDR).mean()}")
-        print(f"SiSNR: {torch.Tensor(scoreSISNR).mean()}")
-        print(f"SiSNRi: {torch.Tensor(scoreSISNRi).mean()}")
-        print(f"NSR: {torch.Tensor(scoreNSR).mean()}")
-        print(f"NSR-negative: {torch.Tensor(scoreNSR_neg).mean()}")
+            print(f"PESQ: {torch.Tensor(scorePESQ).mean()}")
+            print(f"STOI: {torch.Tensor(scoreSTOI).mean()}")
+            print(f"SDR: {torch.Tensor(scoreSDR).mean()}")
+            print(f"SiSNR: {torch.Tensor(scoreSISNR).mean()}")
+            print(f"SiSNRi: {torch.Tensor(scoreSISNRi).mean()}")
+            print(f"NSR: {torch.Tensor(scoreNSR).mean()}")
+            print(f"NSR-negative: {torch.Tensor(scoreNSR_neg).mean()}")
 
     elif config.action == 'tSNE':
         dev_dataset = TseDataset(
@@ -225,6 +259,9 @@ def main(config):
         enroll_dct = load_text_as_dict(f"{hparam['DATASET']['eval']}/ref2list.txt")
         sr = hparam['DATASET']['sample_rate']
 
+        if hparam['DATASET']['type'].lower() == 'pvad':
+            post_process = Binarize(threshold=0.5, stability=0.05, sample_rate=hparam['DATASET']['sample_rate'], mode='moving_average')
+
         with torch.no_grad():
             for _, key in enumerate(test_audio_dct.keys()):
                 uttid = key
@@ -242,7 +279,10 @@ def main(config):
                 enh_wav = model.inference(noisy_wav, enroll_wav) # [1, L]
                 enh_wav = enh_wav.detach().cpu()
                 if enh_wav.dim() == 3: enh_wav = enh_wav.squeeze(0)
-                AudioIO.save(enh_wav, f"{hparam['TRAIN']['model_save_dir']}/eval_audio/{uttid}.wav", sr)
+                if hparam['DATASET']['type'].lower() == 'pvad':
+                    enh_wav = post_process(enh_wav).float()
+
+                AudioIO.save(enh_wav.view(1, -1), f"{hparam['TRAIN']['model_save_dir']}/eval_audio/{uttid}.wav", sr)
     
     elif config.action == 'export_model':
         ckpt = torch.load(f"{hparam['TRAIN']['model_save_dir']}/{config.ckpt}", map_location='cpu')
