@@ -23,8 +23,12 @@ class TseTrainer(TseTask):
         super().__init__(hparam, device_backend, train_dataloader, dev_dataloader)
     
     def build_model(self):
-        sig_loss, cls_loss = init_loss(self.hparam)
-        self.model = init_model(self.hparam['MODEL']['type'], sig_loss, cls_loss, verbose=True)
+        if self.hparam['LOSS']['cls_loss_other'] is None:
+            sig_loss, cls_loss = init_loss(self.hparam)
+            self.model = init_model(self.hparam['MODEL']['type'], sig_loss, cls_loss, verbose=True)
+        else:
+            sig_loss, cls_loss, cls_loss_other = init_loss(self.hparam)
+            self.model = init_model(self.hparam['MODEL']['type'], sig_loss, cls_loss, loss_func_others=cls_loss_other, verbose=True)
 
 
 def init_dataloader(hparam: Any) -> Tuple:

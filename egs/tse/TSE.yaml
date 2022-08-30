@@ -23,6 +23,7 @@ LOSS:
   sig_threshold: #-30
   alpha: 1
   cls_loss: aamsoftmax
+  cls_loss_other:
   embed_dim: 192 # for aamsoftmax
   n_class: 251 # for aamsoftmax
   margin: 0.2 # for aamsoftmax

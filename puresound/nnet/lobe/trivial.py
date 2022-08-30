@@ -1,4 +1,3 @@
-from turtle import forward
 from types import LambdaType
 from typing import Any
 
@@ -118,7 +117,6 @@ class FiLM(nn.Module):
         if self.inp_norm:
             self.norm = nn.LayerNorm(feats_size)
 
-    
     def forward(self, x: torch.Tensor, condition: torch.Tensor):
         """
         Args:

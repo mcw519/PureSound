@@ -9,9 +9,10 @@ from puresound.nnet.lobe.pooling import AttentiveStatisticsPooling
 from puresound.nnet.lobe.rnn import SingleRNN
 from puresound.nnet.lobe.trivial import Magnitude
 from puresound.nnet.loss.aamsoftmax import AAMsoftmax
-from puresound.nnet.loss.metrics import F1_loss, GE2ELoss
+from puresound.nnet.loss.metrics import F1_loss, GE2ELoss, TripletLoss
 from puresound.nnet.loss.sdr import SDRLoss
-from puresound.nnet.loss.stft_loss import MultiResolutionSTFTLoss
+from puresound.nnet.loss.stft_loss import (MultiResolutionSTFTLoss,
+                                           over_suppression_loss)
 from puresound.nnet.skim import SkiM
 from puresound.nnet.unet import UnetTcn
 
@@ -30,6 +31,10 @@ def init_loss(hparam):
         sdr_loss = SDRLoss.init_mode('sisnr', threshold=sig_threshold)
         stft_loss = MultiResolutionSTFTLoss()
         sig_loss = lambda enh, ref, others: stft_loss(enh, ref) + sdr_loss(enh, ref, others)
+    
+    elif sig_loss.lower() == 'sisnr_ov':
+        sdr_loss = SDRLoss.init_mode('sisnr', threshold=sig_threshold)
+        sig_loss = lambda enh, ref, others: sdr_loss(enh, ref, others) + over_suppression_loss(enh, ref)
 
     elif sig_loss.lower() == 'f1':
         f1_loss = F1_loss()
@@ -52,7 +57,17 @@ def init_loss(hparam):
     else:
         cls_loss = None
 
-    return sig_loss, cls_loss
+    if hparam['LOSS']['cls_loss_other'] is None:
+        return sig_loss, cls_loss
+
+    else:
+        if hparam['LOSS']['cls_loss_other'].lower() == 'triplet':
+            cls_loss_other = TripletLoss(margin=0.3, add_norm=True, distance='consine')
+        
+        else:
+            raise NotImplementedError
+        
+        return sig_loss, cls_loss, cls_loss_other
 
 
 # Models
