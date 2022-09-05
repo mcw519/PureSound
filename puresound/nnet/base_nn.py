@@ -5,7 +5,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from .lobe.encoder import ConvEncDec
+from .lobe.encoder import ConvEncDec, FbankEnc
 
 
 class BaseModel(nn.Module):
@@ -337,6 +337,10 @@ class SoTaskWrapModule(EncDecMaskerBaseModel):
                         _im = _im[:, 1:, :]
                     
                     enroll = torch.cat([_re, _im], dim=1)
+                
+                elif isinstance(self.encoder_spk, FbankEnc):
+                    # MelSpectrogram: FbankEnc returns shape [N, C, T]
+                    pass
 
         return noisy, enroll
     

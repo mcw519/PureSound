@@ -174,7 +174,7 @@ class NsDataset(TaskDataset):
 
         # noise inject
         if self.noise_folder is not None and torch.rand(1) < 0.8:
-            snr = float(torch.FloatTensor(1).uniform_(-5, 5))
+            snr = float(torch.FloatTensor(1).uniform_(-5, 15))
             x = self.augmentor.add_bg_noise(x, [snr])[0]
         
         # error handling
