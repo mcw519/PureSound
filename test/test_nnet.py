@@ -5,6 +5,8 @@ import torch
 import torch.nn as nn
 from puresound.nnet.base_nn import SoTaskWrapModule
 from puresound.nnet.conv_tasnet import TCN, ConvTasNet, GatedTCN
+from puresound.nnet.dparn import DPARN
+from puresound.nnet.dpcrn import DPCRN
 from puresound.nnet.lobe.encoder import ConvEncDec, FreeEncDec
 from puresound.nnet.lobe.pooling import AttentiveStatisticsPooling
 from puresound.nnet.lobe.trivial import Magnitude
@@ -13,7 +15,6 @@ from puresound.nnet.loss.metrics import GE2ELoss, TripletLoss
 from puresound.nnet.loss.sdr import SDRLoss
 from puresound.nnet.skim import SkiM
 from puresound.nnet.unet import UnetTcn
-from puresound.nnet.dpcrn import DPCRN
 
 sys.path.insert(0, './')
 
@@ -233,6 +234,23 @@ def test_ns_dpcrn_v0_causal():
     model = SoTaskWrapModule(
         encoder=ConvEncDec(fft_length=512, win_type='hann', win_length=512, hop_length=128, trainable=True, output_format='Complex'),
         masker=DPCRN(input_type='RI', input_dim=512, activation_type='PReLU', norm_type='bN2d',
+            channels=(1, 32, 32, 32, 64, 128), transpose_t_size=2, transpose_delay=False, skip_conv=False, kernel_t=(2, 2, 2, 2, 2), kernel_f=(5, 3, 3, 3, 3),
+            stride_t=(1, 1, 1, 1, 1), stride_f=(2, 2, 1, 1, 1), dilation_t=(1, 1, 1, 1, 1), dilation_f=(1, 1, 1, 1, 1), delay=(0, 0, 0, 0, 0), rnn_hidden=128),
+        loss_func_wav=None,
+        loss_func_spk=None,
+        drop_first_bin=True,
+        mask_constraint='linear',)
+
+    input_x = torch.rand(1, 16000*10)
+    y = model.inference(input_x)
+    assert input_x.shape == y.shape
+
+
+@pytest.mark.nnet
+def test_ns_dparn_v0_causal():
+    model = SoTaskWrapModule(
+        encoder=ConvEncDec(fft_length=512, win_type='hann', win_length=512, hop_length=128, trainable=True, output_format='Complex'),
+        masker=DPARN(input_type='RI', input_dim=512, activation_type='PReLU', norm_type='bN2d',
             channels=(1, 32, 32, 32, 64, 128), transpose_t_size=2, transpose_delay=False, skip_conv=False, kernel_t=(2, 2, 2, 2, 2), kernel_f=(5, 3, 3, 3, 3),
             stride_t=(1, 1, 1, 1, 1), stride_f=(2, 2, 1, 1, 1), dilation_t=(1, 1, 1, 1, 1), dilation_f=(1, 1, 1, 1, 1), delay=(0, 0, 0, 0, 0), rnn_hidden=128),
         loss_func_wav=None,
