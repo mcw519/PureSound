@@ -30,7 +30,7 @@ class DemoAPP():
         self.window.mainloop()
 
     def init_app(self):
-        ckpt = torch.load('skim_causal_460_wNoise.ckpt', map_location='cpu')
+        ckpt = torch.load('skim_causal_460_wNoise_IS_tsdr.ckpt', map_location='cpu')
         
         self.speaker_net = DemoSpeakerNet()
         self.speaker_net.load_state_dict(ckpt['state_dict'], strict=False)
@@ -160,7 +160,7 @@ class DemoAPP():
                     self.tse_net.masker.init_status()
                     threading._start_new_thread(self._record, ('.',)) # open a thread for recording
                     threading._start_new_thread(self._model_inference, ('.',)) # open a thread for decoding
-                    time.sleep(0.5)
+                    time.sleep(0.3)
                     onoff_button['text'] = 'On!' # change button icon
                     onoff_button['fg'] = 'green'
                     # open real-time figure
@@ -179,7 +179,6 @@ class DemoAPP():
                             figure.canvas.flush_events()
                             plt.tight_layout()
                             plt.show()
-                            time.sleep(0.1)
                             if not self.continue_recording and self.inference_finished:
                                 break
                         
