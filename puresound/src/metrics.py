@@ -97,3 +97,9 @@ class Metrics():
             "recall": float(recall),
             "f1_score": float(f1),
         }
+
+    @staticmethod
+    def noise_reduction(noisy: torch.Tensor, enhanced: torch.Tensor):
+        noisy, enhanced = Metrics.check_shape(noisy, enhanced, retun_as_tensor=True)
+        
+        return 10 * torch.log10(torch.sum(enhanced**2, -1, keepdim=True) / torch.sum(noisy**2, -1, keepdim=True))

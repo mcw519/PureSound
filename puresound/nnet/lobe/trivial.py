@@ -13,8 +13,8 @@ class LambdaLayer(nn.Module):
         super().__init__()
         self.lambd = lambda_func
     
-    def forward(self, x: torch.Tensor, *kwargs) -> Any:
-        return self.lambd(x, kwargs)
+    def forward(self, x: torch.Tensor, **kwargs) -> Any:
+        return self.lambd(x, **kwargs)
 
 
 class Magnitude(nn.Module):

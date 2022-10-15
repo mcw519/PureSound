@@ -16,4 +16,4 @@ train100_clean_meta=${LIBRIMIX}/storage/Libri2Mix/wav16k/max/metadata/mixture_tr
 python parser.py $train100_clean_meta ${OUTPUT_FOLDER}/train-100-clean librispeech_metadata/train-clean-100 $LIBRISPEECH
 
 train360_clean_meta=${LIBRIMIX}/storage/Libri2Mix/wav16k/max/metadata/mixture_train-360_mix_clean.csv
-python parser.py $train360_clean_meta ${OUTPUT_FOLDER}/train-100-clean librispeech_metadata/train-clean-360 $LIBRISPEECH
+python parser.py $train360_clean_meta ${OUTPUT_FOLDER}/train-360-clean librispeech_metadata/train-clean-360 $LIBRISPEECH
