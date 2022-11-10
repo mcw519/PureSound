@@ -1,6 +1,6 @@
 import os
 from typing import Any, Dict, Optional, Tuple
-
+import numpy as np
 import matplotlib.pyplot as plt
 import torch
 import torch.optim as optim
@@ -236,8 +236,14 @@ class BaseTrainer():
         """init model."""
         raise NotImplementedError
 
-    def build_optim(self) -> None:
-        """init optimizer."""
+    def build_optim(self, custom_params_group: Optional[List] = None) -> None:
+        """
+        init optimizer.
+
+        Args:
+            custom_params_group: customized params group can let different layer has different learning rate,
+                format is list(tuple(params, lr_factor))
+        """
         lr = self.hparam['OPTIMIZER']['lr']
         if self.hparam['TRAIN']['resume_epoch']:
             print(f"***** Start from {self.hparam['TRAIN']['resume_epoch']} epoch")
@@ -247,7 +253,19 @@ class BaseTrainer():
         beta1 = self.hparam['OPTIMIZER']['beta1']
         beta2 = self.hparam['OPTIMIZER']['beta2']
         weight_decay = self.hparam['OPTIMIZER']['weight_decay']
-        self.optimizer = torch.optim.Adam(self.model.parameters(), lr, [beta1, beta2], weight_decay=weight_decay)
+        if custom_params_group is None:
+            self.optimizer = torch.optim.Adam(self.model.parameters(), lr, [beta1, beta2], weight_decay=weight_decay)
+        
+        else:
+            total_params_group = []
+            for params, lr_factor in custom_params_group:
+                if lr_factor is not None:
+                    total_params_group.append({'params': params, 'lr': lr * lr_factor})
+                else:
+                    total_params_group.append({'params': params})
+            
+            self.optimizer = torch.optim.Adam(total_params_group, lr, [beta1, beta2], weight_decay=weight_decay)
+
         self.scheduler = LearningRateScheduler(self.hparam['OPTIMIZER']['lr_scheduler'], self.optimizer, gamma=self.hparam['OPTIMIZER']['gamma'], patience=self.hparam['OPTIMIZER']['patience'], mode=self.hparam['OPTIMIZER']['mode'])
     
     def save_ckpt(self, filename: str, model: Any, epoch: int, learning_rate: Any, loss: Any) -> None:
@@ -320,8 +338,11 @@ class BaseTrainer():
         start_epoch = 0 if self.hparam['TRAIN']['resume_epoch'] == None else self.hparam['TRAIN']['resume_epoch']
 
         for epoch in range(start_epoch, self.num_epochs):
+            lr_list = []
             for param_group in self.optimizer.param_groups:
-                learning_rate = param_group['lr']
+                lr_list.append(param_group['lr'])
+            
+            learning_rate = np.max(lr_list)
             
             self.model.train()
             loss = self.train_one_epoch(current_epoch=epoch)
