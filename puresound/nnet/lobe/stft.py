@@ -5,7 +5,15 @@ import torch
 from torch.nn.functional import fold
 
 
-def create_fourier_kernels(n_fft, win_length=None, freq_bins=None, fmin=50,fmax=6000, sr=44100, freq_scale='linear'):
+def create_fourier_kernels(
+    n_fft,
+    win_length=None,
+    freq_bins=None,
+    fmin=50,
+    fmax=6000,
+    sr=44100,
+    freq_scale="linear",
+):
     """
     This code comes from nnAudio
     n_fft : int
@@ -38,44 +46,54 @@ def create_fourier_kernels(n_fft, win_length=None, freq_bins=None, fmin=50,fmax=
         This ``k`` is in the Discrete Fourier Transform equation $$
 
     """
-                           
-    if freq_bins==None: freq_bins = n_fft//2+1
-    if win_length==None: win_length = n_fft
 
-    s = np.arange(0, n_fft, 1.)
-    wsin = np.empty((freq_bins,1,n_fft))
-    wcos = np.empty((freq_bins,1,n_fft))
+    if freq_bins == None:
+        freq_bins = n_fft // 2 + 1
+    if win_length == None:
+        win_length = n_fft
+
+    s = np.arange(0, n_fft, 1.0)
+    wsin = np.empty((freq_bins, 1, n_fft))
+    wcos = np.empty((freq_bins, 1, n_fft))
     start_freq = fmin
     end_freq = fmax
     bins2freq = []
     binslist = []
 
-    if freq_scale == 'linear':
-        start_bin = start_freq*n_fft/sr
-        scaling_ind = (end_freq-start_freq)*(n_fft/sr)/freq_bins
+    if freq_scale == "linear":
+        start_bin = start_freq * n_fft / sr
+        scaling_ind = (end_freq - start_freq) * (n_fft / sr) / freq_bins
 
-        for k in range(freq_bins): # Only half of the bins contain useful info
-            bins2freq.append((k*scaling_ind+start_bin)*sr/n_fft)
-            binslist.append((k*scaling_ind+start_bin))
-            wsin[k,0,:] = np.sin(2*np.pi*(k*scaling_ind+start_bin)*s/n_fft)
-            wcos[k,0,:] = np.cos(2*np.pi*(k*scaling_ind+start_bin)*s/n_fft)
+        for k in range(freq_bins):  # Only half of the bins contain useful info
+            bins2freq.append((k * scaling_ind + start_bin) * sr / n_fft)
+            binslist.append((k * scaling_ind + start_bin))
+            wsin[k, 0, :] = np.sin(
+                2 * np.pi * (k * scaling_ind + start_bin) * s / n_fft
+            )
+            wcos[k, 0, :] = np.cos(
+                2 * np.pi * (k * scaling_ind + start_bin) * s / n_fft
+            )
 
-    elif freq_scale == 'log':
-        start_bin = start_freq*n_fft/sr
-        scaling_ind = np.log(end_freq/start_freq)/freq_bins
+    elif freq_scale == "log":
+        start_bin = start_freq * n_fft / sr
+        scaling_ind = np.log(end_freq / start_freq) / freq_bins
 
-        for k in range(freq_bins): # Only half of the bins contain useful info
-            bins2freq.append(np.exp(k*scaling_ind)*start_bin*sr/n_fft)
-            binslist.append((np.exp(k*scaling_ind)*start_bin))
-            wsin[k,0,:] = np.sin(2*np.pi*(np.exp(k*scaling_ind)*start_bin)*s/n_fft)
-            wcos[k,0,:] = np.cos(2*np.pi*(np.exp(k*scaling_ind)*start_bin)*s/n_fft)
+        for k in range(freq_bins):  # Only half of the bins contain useful info
+            bins2freq.append(np.exp(k * scaling_ind) * start_bin * sr / n_fft)
+            binslist.append((np.exp(k * scaling_ind) * start_bin))
+            wsin[k, 0, :] = np.sin(
+                2 * np.pi * (np.exp(k * scaling_ind) * start_bin) * s / n_fft
+            )
+            wcos[k, 0, :] = np.cos(
+                2 * np.pi * (np.exp(k * scaling_ind) * start_bin) * s / n_fft
+            )
 
-    elif freq_scale == 'no':
-        for k in range(freq_bins): # Only half of the bins contain useful info
-            bins2freq.append(k*sr/n_fft)
+    elif freq_scale == "no":
+        for k in range(freq_bins):  # Only half of the bins contain useful info
+            bins2freq.append(k * sr / n_fft)
             binslist.append(k)
-            wsin[k,0,:] = np.sin(2*np.pi*k*s/n_fft)
-            wcos[k,0,:] = np.cos(2*np.pi*k*s/n_fft)
+            wsin[k, 0, :] = np.sin(2 * np.pi * k * s / n_fft)
+            wcos[k, 0, :] = np.cos(2 * np.pi * k * s / n_fft)
     else:
         print("Please select the correct frequency scale, 'linear' or 'log'")
 
@@ -84,22 +102,26 @@ def create_fourier_kernels(n_fft, win_length=None, freq_bins=None, fmin=50,fmax=
 
 def overlap_add(X, stride):
     n_fft = X.shape[1]
-    output_len = n_fft + stride*(X.shape[2]-1)
-    return fold(X, (1,output_len), kernel_size=(1,n_fft), stride=stride).flatten(1)
+    output_len = n_fft + stride * (X.shape[2] - 1)
+    return fold(X, (1, output_len), kernel_size=(1, n_fft), stride=stride).flatten(1)
 
 
 def torch_window_sumsquare(w, n_frames, stride, n_fft, power=2):
-    w_stacks = w.unsqueeze(-1).repeat((1,n_frames)).unsqueeze(0)
+    w_stacks = w.unsqueeze(-1).repeat((1, n_frames)).unsqueeze(0)
     # Window length + stride*(frames-1)
-    output_len = w_stacks.shape[1] + stride*(w_stacks.shape[2]-1) 
-    return fold(w_stacks**power, (1,output_len), kernel_size=(1,n_fft), stride=stride)
+    output_len = w_stacks.shape[1] + stride * (w_stacks.shape[2] - 1)
+    return fold(
+        w_stacks ** power, (1, output_len), kernel_size=(1, n_fft), stride=stride
+    )
 
 
 def extend_fbins(X):
     """Extending the number of frequency bins from `n_fft//2+1` back to `n_fft` by
        reversing all bins except DC and Nyquist and append it on top of existing spectrogram"""
-    X_upper = X[:,1:-1].flip(1)
-    X_upper[:,:,:,1] = -X_upper[:,:,:,1] # For the imaganinry part, it is an odd function
+    X_upper = X[:, 1:-1].flip(1)
+    X_upper[:, :, :, 1] = -X_upper[
+        :, :, :, 1
+    ]  # For the imaganinry part, it is an odd function
     return torch.cat((X[:, :, :], X_upper), 1)
 
 
@@ -122,14 +144,14 @@ def hz2mel(frequencies):
     mels = (frequencies - f_min) / f_sp
 
     # Fill in the log-scale part
-    min_log_hz = 1000.0                         # beginning of log region (Hz)
-    min_log_mel = (min_log_hz - f_min) / f_sp   # same (Mels)
-    logstep = np.log(6.4) / 27.0                # step size for log region
+    min_log_hz = 1000.0  # beginning of log region (Hz)
+    min_log_mel = (min_log_hz - f_min) / f_sp  # same (Mels)
+    logstep = np.log(6.4) / 27.0  # step size for log region
 
     if frequencies.ndim:
         # If we have array data, vectorize
-        log_t = (frequencies >= min_log_hz)
-        mels[log_t] = min_log_mel + np.log(frequencies[log_t]/min_log_hz) / logstep
+        log_t = frequencies >= min_log_hz
+        mels[log_t] = min_log_mel + np.log(frequencies[log_t] / min_log_hz) / logstep
     elif frequencies >= min_log_hz:
         # If we have scalar data, heck directly
         mels = min_log_mel + np.log(frequencies / min_log_hz) / logstep
@@ -154,13 +176,13 @@ def mel2hz(mels):
     freqs = f_min + f_sp * mels
 
     # And now the nonlinear scale
-    min_log_hz = 1000.0                         # beginning of log region (Hz)
-    min_log_mel = (min_log_hz - f_min) / f_sp   # same (Mels)
-    logstep = np.log(6.4) / 27.0                # step size for log region
+    min_log_hz = 1000.0  # beginning of log region (Hz)
+    min_log_mel = (min_log_hz - f_min) / f_sp  # same (Mels)
+    logstep = np.log(6.4) / 27.0  # step size for log region
 
     if mels.ndim:
         # If we have vector data, vectorize
-        log_t = (mels >= min_log_mel)
+        log_t = mels >= min_log_mel
         freqs[log_t] = min_log_hz * np.exp(logstep * (mels[log_t] - min_log_mel))
     elif mels >= min_log_mel:
         # If we have scalar data, check directly
@@ -186,7 +208,7 @@ def fft_frequencies(sr: int = 16000, n_fft: int = 512) -> np.ndarray:
     Returns:
         each bin's center frequency, length is (n_fft//2)+1
     """
-    return np.linspace(0, float(sr) / 2, int(1 + n_fft//2), endpoint=True)
+    return np.linspace(0, float(sr) / 2, int(1 + n_fft // 2), endpoint=True)
 
 
 def mel_frequencies(n_mels: int = 128, fmin: float = 0.0, fmax: float = 8000):
@@ -208,11 +230,18 @@ def mel_frequencies(n_mels: int = 128, fmin: float = 0.0, fmax: float = 8000):
     min_mel = hz2mel(fmin)
     max_mel = hz2mel(fmax)
     mels = np.linspace(min_mel, max_mel, n_mels)
-    
+
     return mel2hz(mels)
 
 
-def mel_filterbank(sr: int, n_fft: int, n_banks: int = 128, fmin: float = 0., fmax: Optional[float] = None, norm: int = 1) -> torch.Tensor:
+def mel_filterbank(
+    sr: int,
+    n_fft: int,
+    n_banks: int = 128,
+    fmin: float = 0.0,
+    fmax: Optional[float] = None,
+    norm: int = 1,
+) -> torch.Tensor:
     """
     Create Mel-Filterbank weights.
 
@@ -226,10 +255,10 @@ def mel_filterbank(sr: int, n_fft: int, n_banks: int = 128, fmin: float = 0., fm
         return mel-filter banks, shape is [n_fft, n_mels]
     """
     if fmax is None:
-        fmax = float(sr/2)
-    
-    weights = np.zeros((n_banks, int(1 + n_fft//2)), dtype=np.float32)
-    
+        fmax = float(sr / 2)
+
+    weights = np.zeros((n_banks, int(1 + n_fft // 2)), dtype=np.float32)
+
     # Center freqs of each FFT bin
     fftfreqs = fft_frequencies(sr=sr, n_fft=n_fft)
 
@@ -242,21 +271,23 @@ def mel_filterbank(sr: int, n_fft: int, n_banks: int = 128, fmin: float = 0., fm
     for i in range(n_banks):
         # lower and upper slopes for all bins
         lower = -ramps[i] / fdiff[i]
-        upper = ramps[i+2] / fdiff[i+1]
+        upper = ramps[i + 2] / fdiff[i + 1]
 
         # .. then intersect them with each other and zero
         weights[i] = np.maximum(0, np.minimum(lower, upper))
-    
+
     if norm == 1:
         # Slaney-style mel is scaled to be approx constant energy per channel
-        enorm = 2.0 / (mel_f[2:n_banks+2] - mel_f[:n_banks])
+        enorm = 2.0 / (mel_f[2 : n_banks + 2] - mel_f[:n_banks])
         weights *= enorm[:, np.newaxis]
 
     # Only check weights if f_mel[0] is positive
     if not np.all((mel_f[:-2] == 0) | (weights.max(axis=1) > 0)):
         # This means we have an empty channel somewhere
-        raise ValueError('Empty filters detected in mel frequency basis. \
+        raise ValueError(
+            "Empty filters detected in mel frequency basis. \
                       Some channels will produce empty responses. \
-                      Try increasing your sampling rate (and fmax) or reducing n_banks.')
-    
+                      Try increasing your sampling rate (and fmax) or reducing n_banks."
+        )
+
     return torch.from_numpy(weights)

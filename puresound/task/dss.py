@@ -11,7 +11,7 @@ from tqdm import tqdm
 from .base import BaseTrainer, TaskDataset
 
 
-class NsCollateFunc:
+class DssCollateFunc:
     """Collate functino used in Dataloader."""
 
     def __init__(self):
@@ -19,31 +19,44 @@ class NsCollateFunc:
 
     def __call__(self, batch: Any) -> Dict:
         col_key = []
-        col_clean = []
+        col_near = []
+        col_far = []
         col_process = []
+        col_inactive_nearend = []
+        col_inactive_farfield = []
 
         for b in batch:
             """
-            one batch -- (dict) -- {'uttid': key, 'process_wav': process_wav, 'clean_wav': clean_wav}
+            one batch -- (dict) -- {'near_wav': near_wav, 'far_wav': far_wav, 'process_wav': process_wav, \
+                'inactive_nearend': inactive_nearend, 'inactive_farfield': inactive_farfield}
             wav file each with shape [1, L]
             """
             col_key.append(b["uttid"])
-            col_clean.append(b["clean_wav"].squeeze())
+            col_near.append(b["near_wav"].squeeze())
+            col_far.append(b["far_wav"].squeeze())
             col_process.append(b["process_wav"].squeeze())
+            col_inactive_nearend.append(b["inactive_nearend"])
+            col_inactive_farfield.append(b["inactive_farfield"])
 
-        padded_clean = pad_sequence(col_clean, batch_first=True)  # [N, L]
+        padded_near = pad_sequence(col_near, batch_first=True)  # [N, L]
+        padded_far = pad_sequence(col_far, batch_first=True)  # [N, L]
         padded_process = pad_sequence(col_process, batch_first=True)  # [N, L]
+        col_inactive_nearend = torch.Tensor(col_inactive_nearend)
+        col_inactive_farfield = torch.Tensor(col_inactive_farfield)
 
         return {
             "uttid": col_key,
-            "clean_wav": padded_clean,
+            "near_wav": padded_near,
+            "far_wav": padded_far,
             "process_wav": padded_process,
+            "inactive_nearend": col_inactive_nearend,
+            "inactive_farfield": col_inactive_farfield,
         }
 
 
-class NsDataset(TaskDataset):
+class DssDataset(TaskDataset):
     """
-    Noise suppression dataset.
+    Distance-based target speech separation.
     Online dataset should implement wave_process() to generate parallel data for training.
 
     Args:
@@ -57,28 +70,20 @@ class NsDataset(TaskDataset):
         resample_to: int,
         max_length: Optional[int] = None,
         noise_folder: Optional[str] = None,
-        rir_folder: Optional[str] = None,
-        rir_mode: str = "image",
         vol_perturbed: Optional[tuple] = None,
         speed_perturbed: bool = False,
-        perturb_frequency_response: bool = False,
     ):
 
         self.max_length = max_length
         self.noise_folder = noise_folder
-        self.rir_folder = rir_folder
-        self.rir_mode = rir_mode
         self.speed_perturbed = speed_perturbed
         self.vol_perturbed = vol_perturbed
-        self.perturb_frequency_response = perturb_frequency_response
         super().__init__(folder, resample_to=resample_to)
 
         if (
             self.noise_folder is not None
-            or self.rir_folder is not None
             or self.speed_perturbed
             or self.vol_perturbed is not None
-            or self.perturb_frequency_response
         ):
             self.create_augmentor()
         else:
@@ -88,7 +93,8 @@ class NsDataset(TaskDataset):
     def folder_content(self):
         _content = {
             "wav2scp": "wav2scp.txt",  # clean wav path
-            "wav2ref": "wav2ref.txt",  # clean wav path
+            "ref2near": "ref2near.txt",  # near-end wav path
+            "ref2far": "ref2far.txt",  # far-field wav path
         }
 
         return _content
@@ -97,11 +103,21 @@ class NsDataset(TaskDataset):
         key = self.idx_df[index]
         feats = self.get_feature(key)
         process_wav = feats["process_wav"].view(1, -1)
-        clean_wav = feats["clean_wav"].view(1, -1)
-        return {"uttid": key, "process_wav": process_wav, "clean_wav": clean_wav}
+        near_wav = feats["near_wav"].view(1, -1)
+        far_wav = feats["far_wav"].view(1, -1)
+        inactive_nearend = feats["inactive_nearend"]
+        inactive_farfield = feats["inactive_farfield"]
+        return {
+            "uttid": key,
+            "process_wav": process_wav,
+            "near_wav": near_wav,
+            "far_wav": far_wav,
+            "inactive_nearend": inactive_nearend,
+            "inactive_farfield": inactive_farfield,
+        }
 
     def get_feature(self, key: str) -> Dict:
-        """noisy_wav(2 speaker mixed) -> speed perturbed -> rir reverb -> noise inject"""
+        """noisy_wav(2 speaker mixed) -> speed perturbed -> noise inject"""
         wav, sr = AudioIO.open(f_path=self.df[key]["wav2scp"])
         if sr != self.resample_to:
             wav = torchaudio.transforms.Resample(
@@ -111,69 +127,52 @@ class NsDataset(TaskDataset):
         if wav.shape[0] != 1:
             wav = wav[0].view(1, -1)  # ignore multi-channel
 
-        clean_wav, sr = AudioIO.open(f_path=self.df[key]["wav2ref"])
+        near_wav, sr = AudioIO.open(f_path=self.df[key]["ref2near"])
         if sr != self.resample_to:
-            clean_wav = torchaudio.transforms.Resample(
+            near_wav = torchaudio.transforms.Resample(
                 orig_freq=sr, new_freq=self.resample_to
-            )(clean_wav)
+            )(near_wav)
 
-        if clean_wav.shape[0] != 1:
-            clean_wav = clean_wav[0].view(1, -1)  # ignore multi-channel
+        if near_wav.shape[0] != 1:
+            near_wav = near_wav[0].view(1, -1)  # ignore multi-channel
+
+        far_wav, sr = AudioIO.open(f_path=self.df[key]["ref2far"])
+        if sr != self.resample_to:
+            far_wav = torchaudio.transforms.Resample(
+                orig_freq=sr, new_freq=self.resample_to
+            )(far_wav)
+
+        if far_wav.shape[0] != 1:
+            far_wav = far_wav[0].view(1, -1)  # ignore multi-channel
 
         if self.max_length is not None:
             # only using segmented audio
             target_len = sr * self.max_length
             if wav.shape[-1] > target_len:
                 offset = random.randint(0, int(wav.shape[-1]) - target_len)
-                # Avoid choice the zero tensor as target
-                while clean_wav[:, offset : offset + target_len].sum() == 0:
-                    offset = random.randint(0, int(wav.shape[-1]) - target_len)
-                    if clean_wav[:, offset : offset + target_len].sum() != 0:
-                        break
                 wav = wav[:, offset : offset + target_len]
-                clean_wav = clean_wav[:, offset : offset + target_len]
+                near_wav = near_wav[:, offset : offset + target_len]
+                far_wav = far_wav[:, offset : offset + target_len]
             else:
                 pad_zero = torch.zeros(1, target_len - wav.shape[-1])
                 wav = torch.cat([wav, pad_zero], dim=-1)
-                pad_zero = torch.zeros(1, target_len - clean_wav.shape[-1])
-                clean_wav = torch.cat([clean_wav, pad_zero], dim=-1)
+                pad_zero = torch.zeros(1, target_len - near_wav.shape[-1])
+                near_wav = torch.cat([near_wav, pad_zero], dim=-1)
+                pad_zero = torch.zeros(1, target_len - far_wav.shape[-1])
+                far_wav = torch.cat([far_wav, pad_zero], dim=-1)
         else:
             target_len = wav.shape[1]  # wav is a tensor with shape [channel, N_sample]
 
         # Start audio augmentation
         if self.augmentor:
-            (
-                process_wav,
-                (speed, _, rir_id, rir_ch, a_coeffs, b_coeffs),
-            ) = self.wave_process(wav)
+            process_wav, (speed, _) = self.wave_process(wav)
         else:
-            process_wav, speed, rir_id, rir_ch, a_coeffs, b_coeffs = (
-                wav,
-                None,
-                None,
-                None,
-                None,
-                None,
-            )
+            process_wav, speed = wav, None
 
         # warp clean_wav with same speed perturbed
         if speed is not None:
-            clean_wav, _ = self.augmentor.sox_speed_perturbed(clean_wav, speed)
-
-        # warp clean_wav with same rir reverb type, but different reverb mode
-        # 1. target image: warp same rir channel impaulse
-        # 2. target direct: warp same rir channel impaulse with 6ms center from peak
-        # 3. target early: warp same rir channel impaulse with 50ms center from peak
-        if rir_id is not None and self.rir_mode != "anechoic":
-            clean_wav = self.augmentor.apply_rir_by_key(
-                clean_wav, rir_id, choose_ch=rir_ch, rir_mode=self.rir_mode
-            )
-
-        # warp clean_wav with same frequency response variation
-        if a_coeffs is not None and b_coeffs is not None:
-            clean_wav, _, _ = self.augmentor.add_variaion_response(
-                clean_wav, a_coeffs, b_coeffs
-            )
+            near_wav, _ = self.augmentor.sox_speed_perturbed(near_wav, speed)
+            far_wav, _ = self.augmentor.sox_speed_perturbed(far_wav, speed)
 
         # random adjust volumn on both clean and process wav
         if self.vol_perturbed is not None:
@@ -182,39 +181,43 @@ class NsDataset(TaskDataset):
                 max_ratio = float(self.vol_perturbed.strip().split(",")[1])
             else:
                 min_ratio, max_ratio = self.vol_perturbed
+
             perturbed_ratio = torch.FloatTensor(1).uniform_(min_ratio, max_ratio).item()
-            clean_wav = self.augmentor.sox_volumn_perturbed(clean_wav, perturbed_ratio)
-            clean_wav = torch.clamp(clean_wav, min=-1, max=1)
+            near_wav = self.augmentor.sox_volumn_perturbed(near_wav, perturbed_ratio)
+            near_wav = torch.clamp(near_wav, min=-1, max=1)
+            far_wav = self.augmentor.sox_volumn_perturbed(far_wav, perturbed_ratio)
+            far_wav = torch.clamp(far_wav, min=-1, max=1)
             process_wav = self.augmentor.sox_volumn_perturbed(
                 process_wav, perturbed_ratio
             )
             process_wav = torch.clamp(process_wav, min=-1, max=1)
 
-        return {"clean_wav": clean_wav, "process_wav": process_wav}
+        inactive_nearend = True if near_wav.sum() == 0 else False
+        if inactive_nearend:
+            near_wav = process_wav.clone()
+
+        inactive_farfield = True if far_wav.sum() == 0 else False
+        if inactive_farfield:
+            far_wav = process_wav.clone()
+
+        return {
+            "near_wav": near_wav,
+            "far_wav": far_wav,
+            "process_wav": process_wav,
+            "inactive_nearend": inactive_nearend,
+            "inactive_farfield": inactive_farfield,
+        }
 
     def create_augmentor(self) -> None:
         self.augmentor = AudioAugmentor(
             sample_rate=self.resample_to, convolve_mode="fft"
         )
-        print(f"Created audio augmentor")
-
         if self.noise_folder:
             self.augmentor.load_bg_noise_from_folder(self.noise_folder)
             print(f"Finished load {len(self.augmentor.bg_noise.keys())} noises")
 
-        if self.rir_folder:
-            self.augmentor.load_rir_from_folder(self.rir_folder)
-            print(f"Finished load {len(self.augmentor.rir.keys())} rirs")
-
     def wave_process(self, x: torch.Tensor) -> Tuple:
-        speed, snr, rir_id, rir_ch, a_coeffs, b_coeffs = (
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-        )
+        speed, snr = None, None
         backup = x.clone()
 
         # speed perturbed
@@ -222,30 +225,20 @@ class NsDataset(TaskDataset):
             speed = float(torch.FloatTensor(1).uniform_(0.9, 1.1))
             x, _ = self.augmentor.sox_speed_perturbed(x, speed)
 
-        # rir inject
-        if self.rir_folder is not None and torch.rand(1) < 0.8:
-            x, rir_id, rir_ch = self.augmentor.apply_rir(x)
-
         # noise inject
         if self.noise_folder is not None and torch.rand(1) < 0.8:
             snr = float(torch.FloatTensor(1).uniform_(-5, 15))
             x = self.augmentor.add_bg_noise(x, [snr])[0]
 
-        # frequency variations
-        if self.perturb_frequency_response and torch.rand(1) < 0.8:
-            x, a_coeffs, b_coeffs = self.augmentor.add_variaion_response(x)
-
         # error handling
         if torch.isnan(x).any():
-            print(
-                f"warning this augment has nan, snr={snr}, speed={speed}, rir_id={rir_id}"
-            )
-            x, speed, rir_id, a_coeffs, b_coeffs = backup, None, None, None, None
+            print(f"warning this augment has nan, snr={snr}, speed={speed}")
+            x, speed = backup, None
 
-        return x, (speed, snr, rir_id, rir_ch, a_coeffs, b_coeffs)
+        return x, (speed, snr)
 
 
-class NsTask(BaseTrainer):
+class DssTask(BaseTrainer):
     def __init__(self, hparam, device_backend, train_dataloader, dev_dataloader):
         super().__init__(hparam, device_backend)
         self.overall_step = 0
@@ -259,13 +252,20 @@ class NsTask(BaseTrainer):
         for batch_idx, batch in enumerate(tqdm(self.train_dataloader)):
             self.overall_step += 1
             step += 1
-            clean_wav = batch["clean_wav"].to(self.device)  # [N, L]
+            near_wav = batch["near_wav"].to(self.device)  # [N, L]
+            far_wav = batch["far_wav"].to(self.device)  # [N, L]
             noisy_wav = batch["process_wav"].to(self.device)  # [N, L]
+            inactive_nearend = batch["inactive_nearend"]  # [N]
+            inactive_farfield = batch["inactive_farfield"]  # [N]
 
-            self.optimizer.zero_grad(set_to_none=True)
+            self.optimizer.zero_grad()
 
             # Model forward
-            loss = self.model(noisy=noisy_wav, enroll=None, ref_clean=clean_wav)
+            inactive_inp = torch.stack([inactive_nearend, inactive_farfield], dim=1)
+            clean_wav = torch.stack([near_wav, far_wav], dim=1)
+            loss = self.model(
+                noisy=noisy_wav, ref_clean=clean_wav, inactive_labels=inactive_inp
+            )
             loss = torch.mean(loss, dim=0)  # aggregate loss from each device
             print(f"epoch: {current_epoch}, iter: {batch_idx+1}, batch_loss: {loss}")
             total_loss += loss.item()
@@ -290,11 +290,18 @@ class NsTask(BaseTrainer):
 
         for _, batch in enumerate(tqdm(self.dev_dataloader)):
             step += 1
-            clean_wav = batch["clean_wav"].to(self.device)  # [N, L]
+            near_wav = batch["near_wav"].to(self.device)  # [N, L]
+            far_wav = batch["far_wav"].to(self.device)  # [N, L]
             noisy_wav = batch["process_wav"].to(self.device)  # [N, L]
+            inactive_nearend = batch["inactive_nearend"]  # [N]
+            inactive_farfield = batch["inactive_farfield"]  # [N]
 
             with torch.no_grad():
-                loss = self.model(noisy=noisy_wav, enroll=None, ref_clean=clean_wav)
+                inactive_inp = torch.stack([inactive_nearend, inactive_farfield], dim=1)
+                clean_wav = torch.stack([near_wav, far_wav], dim=1)
+                loss = self.model(
+                    noisy=noisy_wav, ref_clean=clean_wav, inactive_labels=inactive_inp
+                )
                 loss = torch.mean(loss, dim=0)  # aggregate loss from each device
                 dev_total_loss += loss.item()
 
@@ -322,11 +329,14 @@ class NsTask(BaseTrainer):
             wav = wav.to(self.device)
 
             if isinstance(self.model, torch.nn.DataParallel):
-                enh_wav = self.model.module.inference(noisy=wav, enroll=None)
+                enh_wav = self.model.module.inference(noisy=wav)
             else:
-                enh_wav = self.model.inference(noisy=wav, enroll=None)
+                enh_wav = self.model.inference(noisy=wav)
 
             if self.tf_writer:
                 self.tf_writer.add_ep_audio(
-                    f"{prefix}{uttid}.wav", enh_wav, epoch, resample_to
+                    f"{prefix}{uttid}_near.wav", enh_wav[:, 0, :], epoch, resample_to
+                )
+                self.tf_writer.add_ep_audio(
+                    f"{prefix}{uttid}_far.wav", enh_wav[:, 1, :], epoch, resample_to
                 )

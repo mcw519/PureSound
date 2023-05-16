@@ -10,6 +10,7 @@ DATASET:
   rir_mode: # image/direct/early
   vol_perturbed: # Tuple
   speed_perturbed: False
+  perturb_frequency_response: False
   single_spk_prob: 0.
   inactive_training: 0.
   enroll_rule: fixed_length
@@ -40,6 +41,7 @@ OPTIMIZER:
   beta1: 0.9
   beta2: 0.999
   weight_decay: 0.
+  multi_rate: False
 
 TRAIN:
   num_epochs: 200

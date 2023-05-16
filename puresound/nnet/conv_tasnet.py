@@ -23,17 +23,31 @@ class TCN(nn.Module):
         tcn_norm: the type of normalization layer for TCN layer
         dconv_norm: the type of normalization layer for inside DepthwiseSeparableConv1d layer
     """
-    def __init__(self, in_channels: int, hid_channels: int, kernel: int, dilation: int, dropout: float = 0.,
-            emb_dim: int = 0, causal: bool = False, tcn_norm: str = 'gLN', dconv_norm: str = 'gGN') -> None:
+
+    def __init__(
+        self,
+        in_channels: int,
+        hid_channels: int,
+        kernel: int,
+        dilation: int,
+        dropout: float = 0.0,
+        emb_dim: int = 0,
+        causal: bool = False,
+        tcn_norm: str = "gLN",
+        dconv_norm: str = "gGN",
+    ) -> None:
         super().__init__()
 
         tcn_norm = get_norm(tcn_norm)
-        
+
         self.in_conv = nn.Sequential(
-            nn.Conv1d(in_channels+emb_dim, hid_channels, kernel_size=1, bias=False, groups=1),
+            nn.Conv1d(
+                in_channels + emb_dim, hid_channels, kernel_size=1, bias=False, groups=1
+            ),
             tcn_norm(hid_channels),
-            nn.PReLU(),)
-        
+            nn.PReLU(),
+        )
+
         self.dconv = nn.Sequential(
             DepthwiseSeparableConv1d(
                 in_channels=hid_channels,
@@ -43,12 +57,16 @@ class TCN(nn.Module):
                 dilation=dilation,
                 skip=False,
                 causal=causal,
-                norm_cls=dconv_norm),
-            nn.Dropout(p=dropout))
-        
+                norm_cls=dconv_norm,
+            ),
+            nn.Dropout(p=dropout),
+        )
+
         self.out_conv = nn.Conv1d(hid_channels, in_channels, kernel_size=1, stride=1)
 
-    def forward(self, x: torch.Tensor, embed: Optional[torch.Tensor] = None) -> torch.Tensor:
+    def forward(
+        self, x: torch.Tensor, embed: Optional[torch.Tensor] = None
+    ) -> torch.Tensor:
         """
         Args:
             x: input tensor shape [N, C, T]
@@ -58,17 +76,17 @@ class TCN(nn.Module):
             output tensor has shape [N, C, T]
         """
         res = x.clone()
-        
+
         if embed is not None:
-            embed = embed.unsqueeze(2) # [N, C, 1]
-            embed = embed.repeat(1, 1, x.size(2)) # [N, C, T]
+            embed = embed.unsqueeze(2)  # [N, C, 1]
+            embed = embed.repeat(1, 1, x.size(2))  # [N, C, T]
             x = torch.cat([x, embed], dim=1)
-        
+
         x = self.in_conv(x)
         x = self.dconv(x)
         x = self.out_conv(x)
         x = x + res
-        
+
         return x
 
 
@@ -86,43 +104,80 @@ class GatedTCN(nn.Module):
         causal (bool): padding by causal scenario, others padding to same length between input and output
         tcn_norm: the type of normalization layer
     """
-    def __init__(self, in_channels: int, hid_channels: int, kernel: int, dilation: int, dropout: float = 0.,
-            emb_dim: int = 0, causal: bool = False, tcn_norm: str = 'gLN', use_film: bool = False):
+
+    def __init__(
+        self,
+        in_channels: int,
+        hid_channels: int,
+        kernel: int,
+        dilation: int,
+        dropout: float = 0.0,
+        emb_dim: int = 0,
+        causal: bool = False,
+        tcn_norm: str = "gLN",
+        use_film: bool = False,
+    ):
         super().__init__()
         self.causal = causal
-        self.padd = (kernel - 1) * dilation // 2 if not causal else (kernel - 1) * dilation
+        self.padd = (
+            (kernel - 1) * dilation // 2 if not causal else (kernel - 1) * dilation
+        )
         self.tcn_norm = tcn_norm
         norm_cls = get_norm(tcn_norm)
         self.use_film = use_film
-        
-        self.in_conv = nn.Conv1d(in_channels, hid_channels, kernel_size=1, bias=False, groups=1)
-        
+
+        self.in_conv = nn.Conv1d(
+            in_channels, hid_channels, kernel_size=1, bias=False, groups=1
+        )
+
         self.left_conv = nn.Sequential(
-            nn.Conv1d(hid_channels, hid_channels, kernel_size=kernel, dilation=dilation, bias=False, padding=self.padd, groups=1),
+            nn.Conv1d(
+                hid_channels,
+                hid_channels,
+                kernel_size=kernel,
+                dilation=dilation,
+                bias=False,
+                padding=self.padd,
+                groups=1,
+            ),
             norm_cls(hid_channels),
             nn.PReLU(),
-            nn.Dropout(p=dropout)
+            nn.Dropout(p=dropout),
         )
 
         if not self.use_film:
             right_in_dim = hid_channels + emb_dim
-        
+
         else:
-            self.cond_scale = nn.Conv1d(emb_dim, hid_channels, kernel_size=1, bias=False)
+            self.cond_scale = nn.Conv1d(
+                emb_dim, hid_channels, kernel_size=1, bias=False
+            )
             self.cond_bias = nn.Conv1d(emb_dim, hid_channels, kernel_size=1, bias=False)
             right_in_dim = hid_channels
 
         self.right_conv = nn.Sequential(
-            nn.Conv1d(right_in_dim, hid_channels, kernel_size=kernel, dilation=dilation, bias=False, padding=self.padd, groups=1),
+            nn.Conv1d(
+                right_in_dim,
+                hid_channels,
+                kernel_size=kernel,
+                dilation=dilation,
+                bias=False,
+                padding=self.padd,
+                groups=1,
+            ),
             norm_cls(hid_channels),
             nn.PReLU(),
             nn.Dropout(p=dropout),
-            nn.Sigmoid()
+            nn.Sigmoid(),
         )
 
-        self.out_conv = nn.Conv1d(hid_channels, in_channels, kernel_size=1, bias=False, groups=1)
-    
-    def forward(self, x: torch.Tensor, embed: Optional[torch.Tensor] = None) -> torch.Tensor:
+        self.out_conv = nn.Conv1d(
+            hid_channels, in_channels, kernel_size=1, bias=False, groups=1
+        )
+
+    def forward(
+        self, x: torch.Tensor, embed: Optional[torch.Tensor] = None
+    ) -> torch.Tensor:
         """
         Args:
             x: input tensor shape [N, C, T]
@@ -133,30 +188,30 @@ class GatedTCN(nn.Module):
         """
         res = x.clone()
         x = self.in_conv(x)
-        
+
         if embed is not None:
             if not self.use_film:
-                embed = embed.unsqueeze(-1) # [N, C, 1]
-                embed = embed.repeat(1, 1, x.size(2)) # [N, C, T]
+                embed = embed.unsqueeze(-1)  # [N, C, 1]
+                embed = embed.repeat(1, 1, x.size(2))  # [N, C, T]
                 x_r = torch.cat([x, embed], dim=1)
             else:
-                condi = embed.unsqueeze(-1) # [N, C, 1]
+                condi = embed.unsqueeze(-1)  # [N, C, 1]
                 film_scale = self.cond_scale(condi)
                 film_bias = self.cond_bias(condi)
                 x_r = film_scale * x + film_bias
-        
+
         else:
             x_r = x
-        
+
         x = self.left_conv(x) * self.right_conv(x_r)
         x = self.out_conv(x)
-        
+
         if self.causal:
-            x = x[..., :-self.padd] + res
-        
+            x = x[..., : -self.padd] + res
+
         else:
             x = x + res
-        
+
         return x
 
 
@@ -180,20 +235,23 @@ class ConvTasNet(nn.Module):
     Note:
         We ignore the encoder/decoder here for easy optimizing different front-end encoder/decoder.
     """
-    def __init__(self,
-                input_dim: int = 512,
-                embed_dim: int = 256,
-                embed_norm: bool = False,
-                tcn_layer: str = 'normal',
-                tcn_kernel: int = 3,
-                tcn_dim: int = 256,
-                tcn_dilated_basic: int = 2,
-                per_tcn_stack: int = 5,
-                repeat_tcn: int = 4,
-                tcn_with_embed: List = [1, 0, 0, 0, 0],
-                tcn_norm: str = 'gLN',
-                dconv_norm: str = 'gGN',
-                causal: bool = False):
+
+    def __init__(
+        self,
+        input_dim: int = 512,
+        embed_dim: int = 256,
+        embed_norm: bool = False,
+        tcn_layer: str = "normal",
+        tcn_kernel: int = 3,
+        tcn_dim: int = 256,
+        tcn_dilated_basic: int = 2,
+        per_tcn_stack: int = 5,
+        repeat_tcn: int = 4,
+        tcn_with_embed: List = [1, 0, 0, 0, 0],
+        tcn_norm: str = "gLN",
+        dconv_norm: str = "gGN",
+        causal: bool = False,
+    ):
         super().__init__()
         self.input_dim = input_dim
         self.embed_dim = embed_dim
@@ -209,9 +267,9 @@ class ConvTasNet(nn.Module):
         self.dconv_norm = dconv_norm
         self.causal = causal
 
-        if self.tcn_layer.lower() == 'normal':
+        if self.tcn_layer.lower() == "normal":
             tcn_cls = TCN
-        elif self.tcn_layer.lower() == 'gated':
+        elif self.tcn_layer.lower() == "gated":
             tcn_cls = GatedTCN
         else:
             raise NameError
@@ -220,25 +278,63 @@ class ConvTasNet(nn.Module):
         self.tcn_list = nn.ModuleList()
         for _ in range(repeat_tcn):
             _tcn = []
-            
+
             for i in range(per_tcn_stack):
                 if tcn_with_embed[i]:
-                    if self.tcn_layer.lower() == 'normal':
-                        _tcn.append(tcn_cls(input_dim, tcn_dim, kernel=tcn_kernel, dilation=tcn_dilated_basic**i, emb_dim=embed_dim,
-                                            causal=causal, tcn_norm=tcn_norm, dconv_norm=dconv_norm))
+                    if self.tcn_layer.lower() == "normal":
+                        _tcn.append(
+                            tcn_cls(
+                                input_dim,
+                                tcn_dim,
+                                kernel=tcn_kernel,
+                                dilation=tcn_dilated_basic ** i,
+                                emb_dim=embed_dim,
+                                causal=causal,
+                                tcn_norm=tcn_norm,
+                                dconv_norm=dconv_norm,
+                            )
+                        )
                     else:
-                        _tcn.append(tcn_cls(input_dim, tcn_dim, kernel=tcn_kernel, dilation=tcn_dilated_basic**i, emb_dim=embed_dim,
-                                            causal=causal, tcn_norm=tcn_norm))
+                        _tcn.append(
+                            tcn_cls(
+                                input_dim,
+                                tcn_dim,
+                                kernel=tcn_kernel,
+                                dilation=tcn_dilated_basic ** i,
+                                emb_dim=embed_dim,
+                                causal=causal,
+                                tcn_norm=tcn_norm,
+                            )
+                        )
                 else:
-                    if self.tcn_layer.lower() == 'normal':
-                        _tcn.append(tcn_cls(input_dim, tcn_dim, kernel=tcn_kernel, dilation=tcn_dilated_basic**i, emb_dim=0,
-                                            causal=causal, tcn_norm=tcn_norm, dconv_norm=dconv_norm))
+                    if self.tcn_layer.lower() == "normal":
+                        _tcn.append(
+                            tcn_cls(
+                                input_dim,
+                                tcn_dim,
+                                kernel=tcn_kernel,
+                                dilation=tcn_dilated_basic ** i,
+                                emb_dim=0,
+                                causal=causal,
+                                tcn_norm=tcn_norm,
+                                dconv_norm=dconv_norm,
+                            )
+                        )
                     else:
-                        _tcn.append(tcn_cls(input_dim, tcn_dim, kernel=tcn_kernel, dilation=tcn_dilated_basic**i, emb_dim=0,
-                                            causal=causal, tcn_norm=tcn_norm))
+                        _tcn.append(
+                            tcn_cls(
+                                input_dim,
+                                tcn_dim,
+                                kernel=tcn_kernel,
+                                dilation=tcn_dilated_basic ** i,
+                                emb_dim=0,
+                                causal=causal,
+                                tcn_norm=tcn_norm,
+                            )
+                        )
 
             self.tcn_list.append(nn.ModuleList(_tcn))
-            
+
     def forward(self, x: torch.Tensor, dvec: Optional[torch.Tensor] = None):
         """
         Args:
@@ -259,23 +355,23 @@ class ConvTasNet(nn.Module):
                     x = self.tcn_list[r][i](x, dvec)
                 else:
                     x = self.tcn_list[r][i](x)
-        
+
         return x
-    
+
     @property
     def get_args(self) -> Dict:
         return {
-            'input_dim': self.input_dim,
-            'embed_dim': self.embed_dim,
-            'embed_norm': self.embed_norm,
-            'tcn_norm': self.tcn_norm,
-            'dconv_norm': self.dconv_norm,
-            'tcn_layer': self.tcn_layer,
-            'tcn_dim': self.tcn_dim,
-            'tcn_kernel': self.tcn_kernel,
-            'tcn_dilated_basic': self.tcn_dilated_basic,
-            'repeat_tcn': self.repeat_tcn,
-            'per_tcn_stack': self.per_tcn_stack,
-            'tcn_with_embed': self.tcn_with_embed,
-            'causal': self.causal,
-            }
+            "input_dim": self.input_dim,
+            "embed_dim": self.embed_dim,
+            "embed_norm": self.embed_norm,
+            "tcn_norm": self.tcn_norm,
+            "dconv_norm": self.dconv_norm,
+            "tcn_layer": self.tcn_layer,
+            "tcn_dim": self.tcn_dim,
+            "tcn_kernel": self.tcn_kernel,
+            "tcn_dilated_basic": self.tcn_dilated_basic,
+            "repeat_tcn": self.repeat_tcn,
+            "per_tcn_stack": self.per_tcn_stack,
+            "tcn_with_embed": self.tcn_with_embed,
+            "causal": self.causal,
+        }

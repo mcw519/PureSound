@@ -63,7 +63,9 @@ class LogSTFTMagnitudeLoss(torch.nn.Module):
 class STFTLoss(torch.nn.Module):
     """STFT loss module."""
 
-    def __init__(self, fft_size=1024, shift_size=120, win_length=600, window="hann_window"):
+    def __init__(
+        self, fft_size=1024, shift_size=120, win_length=600, window="hann_window"
+    ):
         """Initialize STFT loss module."""
         super(STFTLoss, self).__init__()
         self.fft_size = fft_size
@@ -93,11 +95,15 @@ class STFTLoss(torch.nn.Module):
 class MultiResolutionSTFTLoss(torch.nn.Module):
     """Multi resolution STFT loss module."""
 
-    def __init__(self,
-                 fft_sizes=[1024, 2048, 512],
-                 hop_sizes=[120, 240, 50],
-                 win_lengths=[600, 1200, 240],
-                 window="hann_window", factor_sc=0.1, factor_mag=0.1):
+    def __init__(
+        self,
+        fft_sizes=[1024, 2048, 512],
+        hop_sizes=[120, 240, 50],
+        win_lengths=[600, 1200, 240],
+        window="hann_window",
+        factor_sc=0.1,
+        factor_mag=0.1,
+    ):
         """Initialize Multi resolution STFT loss module.
         Args:
             fft_sizes (list): List of FFT sizes.
@@ -132,7 +138,7 @@ class MultiResolutionSTFTLoss(torch.nn.Module):
         sc_loss /= len(self.stft_losses)
         mag_loss /= len(self.stft_losses)
 
-        return self.factor_sc*sc_loss + self.factor_mag*mag_loss
+        return self.factor_sc * sc_loss + self.factor_mag * mag_loss
 
 
 def over_suppression_loss(enh, ref, p=0.5, fft_size=512, hop_size=128, win_length=512):

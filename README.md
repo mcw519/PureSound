@@ -8,11 +8,14 @@ We hope this repo can help you to listen pure clean voice/sound.
 ## Repo struct & Recipes
 
     PureSound
-        |-- puresound
-            | -- src: Audio I/O and others processing.
-            | -- nnet: DNN realted models and loss function.
-            | -- streaming: DNN models streaming structure.
-            | -- task: PyTorch trainer and Dataset.
-        | -- egs
-            | -- tse: Sample of target speech extraction or target speaker VAD task.
-            | -- ns: Smaple of noise supression task.
+    ├─puresound
+    │  ├─nnet: DNN realted models and loss function.
+    │  │  ├─lobe
+    │  │  └─loss
+    │  ├─src: Audio I/O and others processing.
+    │  ├─streaming: DNN models streaming structure.
+    │  └─task: PyTorch trainer and Dataset.
+    ├─egs
+    │  ├─ns: Example of Noise Supression
+    │  └─tse: Example of Target Speech Extraction
+    │      ├─demo: Simple demo App for real-time recording and extract your voice

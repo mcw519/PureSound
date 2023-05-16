@@ -7,7 +7,7 @@ import yaml
 
 def str2bool(v: str):
     """convert string to boolean"""
-    return v.lower() in ('true', 'yes')
+    return v.lower() in ("true", "yes")
 
 
 def str2list(s: str) -> List:
@@ -15,7 +15,9 @@ def str2list(s: str) -> List:
     return s.strip().split()
 
 
-def load_text_as_dict(file_path: str, separator: str = ' ', coding: str = 'utf8') -> Dict:
+def load_text_as_dict(
+    file_path: str, separator: str = " ", coding: str = "utf8"
+) -> Dict:
     """
     Load a text file to dict format. The first column would be the Dict's key for each line.
     Most usage this in read a *.scp file.
@@ -35,13 +37,13 @@ def load_text_as_dict(file_path: str, separator: str = ' ', coding: str = 'utf8'
         return a dict which used first column as keys.
     """
     dct = {}
-    with io.open(file_path, 'r', encoding=coding) as f:
+    with io.open(file_path, "r", encoding=coding) as f:
         for line in f.readlines():
             key = line.strip().split(separator)[0]
             content = line.strip().split(separator)[1:]
             assert isinstance(content, list)
             dct[key] = content
-    
+
     return dct
 
 
@@ -61,7 +63,7 @@ def recursive_read_folder(folder: str, file_type: str, output: Optional[List]) -
         cur_path = os.path.join(folder, file)
         if os.path.isdir(cur_path):
             recursive_read_folder(cur_path, file_type, output)
-        
+
         else:
             if file_type in file:
                 output.append(f"{file} {cur_path}")
@@ -77,7 +79,7 @@ def load_hparam(filename: str) -> Dict:
     Returns:
         hparam in dict form
     """
-    stream = open(filename, 'r')
+    stream = open(filename, "r")
     docs = yaml.load_all(stream, Loader=yaml.FullLoader)
     hparam_dict = dict()
     for doc in docs:
@@ -98,7 +100,8 @@ def create_folder(folder_name: str) -> None:
         FileExistsError: if folder not exist
     """
     try:
-        if not os.path.isdir(folder_name): os.makedirs(folder_name, exist_ok=True)
+        if not os.path.isdir(folder_name):
+            os.makedirs(folder_name, exist_ok=True)
     except FileExistsError:
         print(f"File exists passing it: {folder_name}")
 
@@ -107,13 +110,15 @@ def convolve(x: torch.Tensor, filter: torch.Tensor) -> torch.Tensor:
     """Doing convolution on x with filter"""
     # padding = 1 * (filter.shape[-1] -1) / 2
     weight = filter.float().repeat(1, 1, 1)
-    x = torch.nn.functional.pad(x, (filter.shape[-1]-1, 0))
+    x = torch.nn.functional.pad(x, (filter.shape[-1] - 1, 0))
     x = torch.nn.functional.conv1d(x[None, ...], weight)
 
     return x.view(1, -1)
 
 
 _NEXT_FAST_LEN = {}
+
+
 def next_fast_len(size):
     """
     Returns the next largest number ``n >= size`` whose prime factors are all
@@ -144,7 +149,7 @@ def next_fast_len(size):
         next_size += 1
 
 
-def fftconvolve(x: torch.Tensor, kernel: torch.Tensor, mode: str = 'full'):
+def fftconvolve(x: torch.Tensor, kernel: torch.Tensor, mode: str = "full"):
     """
     Asteroid implemented FFT convolution.
 
@@ -174,6 +179,6 @@ def fftconvolve(x: torch.Tensor, kernel: torch.Tensor, mode: str = 'full'):
     f_kernel = torch.fft.rfft(kernel, n=fast_fft_size)
     f_result = f_signal * f_kernel
     result = torch.fft.irfft(f_result, n=fast_fft_size)
-    
+
     start_idx = (padded_size - truncate) // 2
     return result[..., start_idx : start_idx + truncate]

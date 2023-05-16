@@ -9,8 +9,8 @@ tanh = nn.Tanh
 
 
 def get_activation(name: str) -> nn.Module:
-    if name not in ['relu', 'mish', 'prelu', 'sigmoid', 'tanh']:
-        raise NameError('Could not interpret activation identifier')
+    if name not in ["relu", "mish", "prelu", "sigmoid", "tanh"]:
+        raise NameError("Could not interpret activation identifier")
 
     if isinstance(name, str):
         cls = globals().get(name)

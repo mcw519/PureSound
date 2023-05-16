@@ -60,10 +60,12 @@ class InstantLN(_LayerNorm):
             x: Shape [N, Ch, C, T]
         """
         N, CH, C, T = x.shape
-        x = x.reshape(N, CH*C, T)
+        x = x.reshape(N, CH * C, T)
         mean = torch.mean(x, dim=1, keepdim=True)
         var = torch.var(x, dim=1, keepdim=True, unbiased=False)
-        return self.apply_gain_and_bias((x - mean) / (var + self.eps).sqrt()).reshape(N, CH, C, T)
+        return self.apply_gain_and_bias((x - mean) / (var + self.eps).sqrt()).reshape(
+            N, CH, C, T
+        )
 
 
 # Aliases.
@@ -74,14 +76,17 @@ bN1d = nn.BatchNorm1d
 bN2d = nn.BatchNorm2d
 gGN = lambda x: nn.GroupNorm(1, x, 1e-8)
 
+
 def get_norm(name: str):
-    if name not in ['gLN', 'cLN', 'iLN', 'bN1d', 'gGN', 'bN2d']:
-        raise NameError('Could not interpret normalization identifier')
+    if name not in ["gLN", "cLN", "iLN", "bN1d", "gGN", "bN2d"]:
+        raise NameError("Could not interpret normalization identifier")
 
     if isinstance(name, str):
         cls = globals().get(name)
         if cls is None:
-            raise ValueError("Could not interpret normalization identifier: " + str(name))
+            raise ValueError(
+                "Could not interpret normalization identifier: " + str(name)
+            )
         return cls
     else:
         raise ValueError("Could not interpret normalization identifier: " + str(name))

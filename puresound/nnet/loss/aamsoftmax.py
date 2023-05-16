@@ -13,18 +13,23 @@ class AAMsoftmax(nn.Module):
         margin: loss margin in AAM softmax
         scale: loss scale in AAM softmax
     """
-    def __init__(self, input_dim: int, n_class: int, margin: float = 0.2, scale: int = 30) -> None:
+
+    def __init__(
+        self, input_dim: int, n_class: int, margin: float = 0.2, scale: int = 30
+    ) -> None:
         super().__init__()
         self.m = margin
         self.s = scale
-        self.weight = torch.nn.Parameter(torch.FloatTensor(n_class, input_dim), requires_grad=True)
+        self.weight = torch.nn.Parameter(
+            torch.FloatTensor(n_class, input_dim), requires_grad=True
+        )
         self.ce = nn.CrossEntropyLoss()
         nn.init.xavier_normal_(self.weight, gain=1)
         self.cos_m = torch.cos(torch.tensor(self.m))
         self.sin_m = torch.sin(torch.tensor(self.m))
         self.th = torch.cos(TORCH_PI - torch.tensor(self.m))
         self.mm = torch.sin(TORCH_PI - torch.tensor(self.m)) * self.m
-    
+
     def forward(self, x: torch.Tensor, label=None):
         cosine = F.linear(F.normalize(x), F.normalize(self.weight))
         sine = torch.sqrt((1.0 - torch.mul(cosine, cosine)).clamp(0, 1))
@@ -35,5 +40,5 @@ class AAMsoftmax(nn.Module):
         output = (one_hot * phi) + ((1.0 - one_hot) * cosine)
         output = output * self.s
         loss = self.ce(output, label)
-        
+
         return loss

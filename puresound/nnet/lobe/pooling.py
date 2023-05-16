@@ -5,8 +5,13 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 
-#https://github.com/speechbrain/speechbrain/blob/d3d267e86c3b5494cd970319a63d5dae8c0662d7/speechbrain/dataio/dataio.py#L661
-def length_to_mask(length: torch.Tensor, max_len: Optional[int] = None, dtype: torch.dtype = None, device: torch.device = None):
+# https://github.com/speechbrain/speechbrain/blob/d3d267e86c3b5494cd970319a63d5dae8c0662d7/speechbrain/dataio/dataio.py#L661
+def length_to_mask(
+    length: torch.Tensor,
+    max_len: Optional[int] = None,
+    dtype: torch.dtype = None,
+    device: torch.device = None,
+):
     """Creates a binary mask for each sequence.
     Reference: https://discuss.pytorch.org/t/how-to-generate-variable-length-mask/23397/3
     Arguments
@@ -36,9 +41,9 @@ def length_to_mask(length: torch.Tensor, max_len: Optional[int] = None, dtype: t
 
     if max_len is None:
         max_len = length.max().long().item()  # using arange to generate mask
-    mask = torch.arange(
-        max_len, device=length.device, dtype=length.dtype
-    ).expand(len(length), max_len) < length.unsqueeze(1)
+    mask = torch.arange(max_len, device=length.device, dtype=length.dtype).expand(
+        len(length), max_len
+    ) < length.unsqueeze(1)
 
     if dtype is None:
         dtype = length.dtype
@@ -58,20 +63,33 @@ class AttentiveStatisticsPooling(nn.Module):
         channels: equal to 2*output_size
         attention_channels: hidden layer dimension
     """
+
     def __init__(self, channels, attention_channels=128):
         super().__init__()
 
         self.eps = 1e-12
         self.tdnn = nn.Sequential(
-            nn.Conv1d(in_channels=channels, out_channels=attention_channels, kernel_size=1, dilation=1),
+            nn.Conv1d(
+                in_channels=channels,
+                out_channels=attention_channels,
+                kernel_size=1,
+                dilation=1,
+            ),
             nn.ReLU(),
-            nn.BatchNorm1d(attention_channels)
-            )
-        
-        self.tanh = nn.Tanh()
-        self.conv = nn.Conv1d(in_channels=attention_channels, out_channels=channels, kernel_size=1)
+            nn.BatchNorm1d(attention_channels),
+        )
 
-    def forward(self, x: torch.Tensor, lengths: Optional[torch.Tensor] = None, return_weight: bool = False):
+        self.tanh = nn.Tanh()
+        self.conv = nn.Conv1d(
+            in_channels=attention_channels, out_channels=channels, kernel_size=1
+        )
+
+    def forward(
+        self,
+        x: torch.Tensor,
+        lengths: Optional[torch.Tensor] = None,
+        return_weight: bool = False,
+    ):
         """
         Args:
             x : torch.Tensor of shape [N, C, L].
@@ -91,14 +109,15 @@ class AttentiveStatisticsPooling(nn.Module):
         # Filter out zero-paddings
         attn = attn.masked_fill(mask == 0, float("-inf"))
         attn = F.softmax(attn, dim=2)
-        if return_weight: return attn
+        if return_weight:
+            return attn
         mean, std = self._compute_statistics(x, attn)
         # Append mean and std of the batch
         pooled_stats = torch.cat((mean, std), dim=1)
         pooled_stats = pooled_stats.unsqueeze(2)
 
         return pooled_stats
-    
+
     def _compute_statistics(self, x: torch.Tensor, m: torch.Tensor, dim=2):
         mean = (m * x).sum(dim)
         std = torch.sqrt(

@@ -20,7 +20,13 @@ class Binarize(torch.nn.Module):
         tensor([[[0., 0., 0., 0., 0., 0., 0., 1., 1., 1., 1., 1., 1., 1.]]])
     """
 
-    def __init__(self, threshold: float = 0.5, stability: float = 0.1, sample_rate: int = 8000, mode: str = 'asteroid'):
+    def __init__(
+        self,
+        threshold: float = 0.5,
+        stability: float = 0.1,
+        sample_rate: int = 8000,
+        mode: str = "asteroid",
+    ):
         """
         Args:
             threshold (float): if x > threshold 0 else 1
@@ -33,25 +39,32 @@ class Binarize(torch.nn.Module):
         self.stability = stability
         self.sample_rate = sample_rate
         self.mode = mode.lower()
-        if self.mode == 'moving_average':
+        if self.mode == "moving_average":
             # Simple moving average method.
             # Smoothing the ouput results with a 200 ms average window.
-            self.mvg = MovingAverage1D(kernel_size=int(0.2*sample_rate), stride=1, add_padding=True, causal=True)
+            self.mvg = MovingAverage1D(
+                kernel_size=int(0.2 * sample_rate),
+                stride=1,
+                add_padding=True,
+                causal=True,
+            )
 
     def forward(self, x: torch.Tensor):
-        if self.mode == 'asteroid':
+        if self.mode == "asteroid":
             active = x > self.threshold
             active = active.squeeze(1).tolist()
             pairs = count_same_pair(active)
-            active = transform_to_binary_sequence(pairs, self.stability, self.sample_rate)
-        
-        elif self.mode == 'moving_average':
+            active = transform_to_binary_sequence(
+                pairs, self.stability, self.sample_rate
+            )
+
+        elif self.mode == "moving_average":
             active = self.mvg(x)
             active = active > self.threshold
-        
+
         else:
             raise NotImplementedError
-        
+
         return active
 
 
@@ -70,7 +83,7 @@ def count_same_pair(nums: List):
     result = []
     for num in nums:
         result.append([[i, sum(1 for _ in group)] for i, group in groupby(num)])
-    
+
     return result
 
 
@@ -116,7 +129,7 @@ def transform_to_binary_sequence(pairs: List, stability: float, sample_rate: int
         # Stack sequence to return a batch shaped tensor
         batch_active.append(torch.hstack(active))
     batch_active = torch.vstack(batch_active).unsqueeze(1)
-    
+
     return batch_active
 
 
@@ -134,11 +147,19 @@ def check_silence_or_voice(active: List, pair: List):
             active = torch.ones(num_consecutive_occurrences)
         else:
             active = torch.zeros(num_consecutive_occurrences)
-    
+
     return active, check
 
 
-def resolve_instability(i: int, pair: List, stability: float, sample_rate: int, actived: int, not_actived: int, active: List):
+def resolve_instability(
+    i: int,
+    pair: List,
+    stability: float,
+    sample_rate: int,
+    actived: int,
+    not_actived: int,
+    active: List,
+):
     """Resolve stability issue in input list of value and num_consecutive_occ
     Args:
         i (int): The index of the considered pair of value and num_consecutive_occ.

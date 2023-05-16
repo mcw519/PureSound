@@ -1,7 +1,7 @@
 import random
 
 
-class SpeakerSampler():
+class SpeakerSampler:
     def __init__(self, data, total_batch, n_spks, n_per):
         """
         Sample batch data for specific speaker number and per-speaker's utterance.
@@ -17,17 +17,17 @@ class SpeakerSampler():
         self.n_per = n_per
         self.data = data
         self.spk_pool = list(data.keys())
-    
+
     def __len__(self):
         return self.n_batch
-    
+
     def __iter__(self):
         for _ in range(self.n_batch):
             batch = []
-            classes = random.sample(self.spk_pool, self.n_spks) # [choosed spks, ....]
+            classes = random.sample(self.spk_pool, self.n_spks)  # [choosed spks, ....]
             for c in classes:
                 utt_pool = self.data[c]
                 utts = random.sample(utt_pool, self.n_per)
                 batch += utts
-        
+
             yield batch
