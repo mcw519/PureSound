@@ -401,7 +401,7 @@ class SoTaskWrapModule(EncDecMaskerBaseModel):
                 ref_wav = F.pad(ref_wav, (pad_num, 0))
             else:
                 # align from begin
-                enh_wav = enh_wav[..., :ref_wav_l]
+                ref_wav = ref_wav[..., :enh_wav_l]
         return enh_wav, ref_wav
 
     def _wav_output_constrain(self, wav: torch.Tensor, mode: str):
