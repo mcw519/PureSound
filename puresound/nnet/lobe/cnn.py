@@ -2,24 +2,21 @@ from typing import Optional, Tuple
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 
 from .norm import get_norm
 
 
 class DepthwiseSeparableConv1d(nn.Module):
     """
-    Separable Conv1d with embed input.
-
     Args:
-        in_channels: Input channel dimension
-        out_channels: Output channel dimension
-        hid_channels: If not zero, applies a dimension transform from in_channels to hid_channels
-        kernel: Kernel size of Conv1d
-        stride: Stride step of Conv1d
-        dilation: Dilation of Conv1d
-        skip: Skip-connection between input to output
-        causal: If true, all of operating would be causal
+        in_channels (int) : Input channel dimension
+        out_channels (int) : Output channel dimension
+        hid_channels (int) : If not zero, applies a dimension transform from in_channels to hid_channels
+        kernel (int) : Kernel size of Conv1d
+        stride (int) : Stride step of Conv1d
+        dilation (int) : Dilation of Conv1d
+        skip (bool) : Skip-connection between input to output
+        causal (bool) : If true, all of operating would be causal
     """
 
     def __init__(
@@ -87,10 +84,10 @@ class DepthwiseSeparableConv1d(nn.Module):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
         Args:
-            x: input tensor shape [N, C, T]
+            x (tensor) : input has shape [N, C, T]
         
         Returns:
-            output tensor shape [N, C, T]
+            output result has shape [N, C, T]
         """
         if self.transform:
             res = self.in_conv(x)
@@ -111,14 +108,15 @@ class DepthwiseSeparableConv1d(nn.Module):
 
 class SpectralTransform(nn.Module):
     """
-    This is a part of FFC module.
+    This is a part of FFC module. Which do the real-FFT along frequency axis in each frame to achive the global information.
+    Same concept is cepstrum space transformation.
 
     Args:
-        in_channels: input channel dimension
-        out_channels: output channel dimension
-        kernel_size: (kernel_f, kernel_t)
-        stride: (stride_f, stride_t)
-        causal: true, for causal operation
+        in_channels (int) : input channel dimension
+        out_channels (int) : output channel dimension
+        kernel_size (tuple) : (kernel_f, kernel_t), for each frequency and time kernel size
+        stride (tuple) : (stride_f, stride_t), for each frequency and time stride step
+        causal (bool) : true, for causal operation
     """
 
     def __init__(
@@ -161,7 +159,10 @@ class SpectralTransform(nn.Module):
     def forward(self, x: torch.Tensor):
         """
         Args:
-            x: input tensor shape is [N, CH, C, T]
+            x (tensor) : input has shape [N, CH, C, T]
+        
+        Returns:
+            output result has shape [N, CH, C, T]
         """
         x = self.in_conv_bn_relu(x)
 
@@ -171,8 +172,7 @@ class SpectralTransform(nn.Module):
         ffted = torch.cat([ffted_re, ffted_im], dim=1)
         ffted = self.fft_conv_bn_relu(ffted)
         ffted_re, ffted_im = torch.chunk(ffted, 2, dim=1)
-        ffted = torch.stack([ffted_re, ffted_im], dim=-1)
-        ffted = torch.view_as_complex(ffted)
+        ffted = torch.complex(ffted_re, ffted_im)
         ffted = torch.fft.irfft(ffted, dim=2)
 
         x = x + ffted
@@ -186,12 +186,12 @@ class FFC(nn.Module):
     Fast Fourier Convolution.
 
     Args:
-        in_channels: input channel dimension
-        out_channels: output channel dimension
-        alpha: the ratioi between global and local channels, `global_channels=in_channels*alpha`
-        kernel_size: (kernel_f, kernel_t)
-        stride: (stride_f, stride_t)
-        causal: true, for causal operation
+        in_channels (int) : input channel dimension
+        out_channels (int) : output channel dimension
+        alpha (float) : the ratioi between global and local channels, `global_channels=in_channels*alpha`
+        kernel_size (tuple) : (kernel_f, kernel_t), for each frequency and time kernel size
+        stride (tuple) : (stride_f, stride_t), for each frequency and time stride step
+        causal (bool) : true, for causal operation
 
     Reference:
         [1] FFC-SE: Fast Fourier Convolution for Speech Enhancement
