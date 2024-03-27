@@ -13,7 +13,7 @@ class _LayerNorm(nn.Module):
         self.beta = nn.Parameter(torch.zeros(channel_size), requires_grad=True)
 
     def apply_gain_and_bias(self, normed_x):
-        """ Assumes input of size `[batch, chanel, *]`. """
+        """Assumes input of size `[batch, chanel, *]`."""
         return (self.gamma * normed_x.transpose(1, -1) + self.beta).transpose(1, -1)
 
 
@@ -68,6 +68,25 @@ class InstantLN(_LayerNorm):
         )
 
 
+class LayerNorm2D(nn.Module):
+    """Channel-wise and frequency-wise Layer Normalization (LN2D)."""
+
+    def __init__(self, ch: int, f: int):
+        super().__init__()
+        self.w = nn.Parameter(torch.ones(1, ch, f, 1))
+        self.b = nn.Parameter(torch.rand(1, ch, f, 1) * 1e-4)
+
+    def forward(self, x: torch.Tensor):
+        """
+        Args:
+            x: Shape [N, ch, C, T]
+        """
+        mean = x.mean([1, 2], keepdim=True)
+        std = x.std([1, 2], keepdim=True)
+        x = ((x - mean) / (std + 1e-8)) * self.w + self.b
+        return x
+
+
 # Aliases.
 gLN = GlobLN
 cLN = ChanLN
@@ -75,6 +94,7 @@ iLN = InstantLN
 bN1d = nn.BatchNorm1d
 bN2d = nn.BatchNorm2d
 gGN = lambda x: nn.GroupNorm(1, x, 1e-8)
+LN2D = LayerNorm2D
 
 
 def get_norm(name: str):
