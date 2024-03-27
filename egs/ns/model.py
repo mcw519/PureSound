@@ -1,6 +1,7 @@
 from typing import Optional
 
 import torch.nn as nn
+
 from puresound.nnet.base_nn import SoTaskWrapModule
 from puresound.nnet.dparn import DPARN
 from puresound.nnet.dpcrn import DPCRN

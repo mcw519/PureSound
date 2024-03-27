@@ -28,7 +28,7 @@ class BaseModel(nn.Module):
         return sum(p.numel() for p in self.parameters() if p.requires_grad)
 
     def get_state_dict(self):
-        """ In case the state dict needs to be modified before sharing the model."""
+        """In case the state dict needs to be modified before sharing the model."""
         return self.state_dict()
 
 
@@ -49,7 +49,7 @@ class EncDecMaskerBaseModel(BaseModel):
             est_masks: tf-mask shape [N, C, T], or [N, C*2, T]
             mask_type: mask type in (`complex`, `real`, `polar`)
             f_type: feature type in (`complex`, `real`, `polar`)
-        
+
         Returns:
             Masked time-frequency representations.
         """
@@ -97,11 +97,11 @@ class EncDecMaskerBaseModel(BaseModel):
     def _mul_c(self, x1: torch.Tensor, x2: torch.Tensor) -> torch.Tensor:
         """
         Entrywise product for complex valued tensors.
-        
+
         Args:
             x1: complex tensor has shape [N, C, T, 2], the last dimension is real/imag
             x2: complex tensor has shape [N, C, T, 2], the last dimension is real/imag
-                    
+
         Returns:
             return complex product output
         """
@@ -137,7 +137,7 @@ class EncDecMaskerBaseModel(BaseModel):
         Args:
             tf_rep: feature has shape [N, C, T, 2]
             est_masks: tf-mask shape [N, C, T, 2]
-        
+
         Returns:
             FloatTensor -- [N, C, T, 2]
         """
@@ -148,11 +148,11 @@ class EncDecMaskerBaseModel(BaseModel):
     ) -> torch.Tensor:
         """
         Applies a real-valued mask to a magnitude representation.
-        
+
         Args:
             tf_rep: feature has shape [N, C, T]
             est_masks: tf-mask shape [N, C, T]
-        
+
         Returns:
             FloatTensor -- [N, C, T]
         """
@@ -167,16 +167,16 @@ class EncDecMaskerBaseModel(BaseModel):
         Args:
             tf_rep: feature has shape [N, C, T, 2]
             est_masks: tf-mask shape [N, C, T, 2]
-        
+
         Returns:
             FloatTensor -- [N, C, T, 2]
         """
         re, im = tf_rep[..., 0], tf_rep[..., 1]
-        tf_mag = torch.sqrt(re ** 2 + im ** 2 + 1e-8)
+        tf_mag = torch.sqrt(re**2 + im**2 + 1e-8)
         tf_phase = torch.atan2(im, re)
 
         mask_re, mask_im = est_mask[..., 0], est_mask[..., 1]
-        mask_mag = torch.sqrt(mask_re ** 2 + mask_im ** 2 + 1e-8)
+        mask_mag = torch.sqrt(mask_re**2 + mask_im**2 + 1e-8)
         mask_re_phase = mask_re / (mask_mag + 1e-8)
         mask_im_phase = mask_im / (mask_mag + 1e-8)
         mask_phase = torch.atan2(mask_im_phase, mask_re_phase)
@@ -198,6 +198,7 @@ class SoTaskWrapModule(EncDecMaskerBaseModel):
     Args:
         encoder: nn.Module, speech encoder convert the speech samples to latent feature
         masker: nn.Module, mask generation backbone model
+        embedding_free_tse: if true, this is a tse task without extract speaker embedding
         encoder_spk: nn.Module, speech encoder (for SpeakerNet) convert the speech samples to latent feature
         speaker_net: nn.Module, speaker embedding generation backbone model
         loss_func_wav: nn.Module, signal-domain loss function
@@ -210,7 +211,7 @@ class SoTaskWrapModule(EncDecMaskerBaseModel):
 
     Main structure has:
         Encoder -> Masker -> Decoder(inside encoder's inverse). // This is `Speech Enhancement` or `Speech Separation` Task
-    
+
     When add a speaker_net:
         Encoder ----------------------------> Masker ------> Decoder.    // Multi-task combined `Target Speech Extraction` and `Speaker classification`
             |                                   ^                        // Both tasks share the same Speech Encoder
@@ -220,13 +221,14 @@ class SoTaskWrapModule(EncDecMaskerBaseModel):
         Encoder ------------------------------> Masker ----> Decoder.    // Multi-task combined `Target Speech Extraction` and `Speaker classification`
                                                   ^                      // Each tasks has its own Speech Encoder
         Encoder-spk-> SpeakerNet --> Embedding ---|--------> Classifier
-    
+
     """
 
     def __init__(
         self,
         encoder: nn.Module,
         masker: nn.Module,
+        embedding_free_tse: bool = False,
         encoder_spk: Optional[nn.Module] = None,
         speaker_net: Optional[nn.Module] = None,
         loss_func_wav: Optional[nn.Module] = None,
@@ -244,6 +246,7 @@ class SoTaskWrapModule(EncDecMaskerBaseModel):
         self.mask_type = mask_type
         self.encoder = encoder
         self.masker = masker
+        self.embedding_free_tse = embedding_free_tse
         self.encoder_spk = encoder_spk
         self.speaker_net = speaker_net
         self.loss_func_wav = loss_func_wav
@@ -262,14 +265,18 @@ class SoTaskWrapModule(EncDecMaskerBaseModel):
         Checking initialized sucess and return task-label.
 
         Return:
-            task_label: 0: SE/BSS ; 1: TSE(wav+speaker) ; 2: TSE(contrastive learning via speaker loss)
+            task_label: 0: SE/BSS ; 1: TSE(wav+speaker) ; 2: TSE(contrastive learning via speaker loss) ; 4: TSE(embedding free)
         """
         if self.speaker_net is None:
-            task_label = 0
-            if self.encoder_spk is not None:
-                print(f"Initialized a SE or BSS model, ignored the Encoder-spk.")
+            if not self.embedding_free_tse:
+                task_label = 0
+                if self.encoder_spk is not None:
+                    print(f"Initialized a SE or BSS model, ignored the Encoder-spk.")
+                else:
+                    print(f"Initialized a SE or BSS model.")
             else:
-                print(f"Initialized a SE or BSS model.")
+                task_label = 4
+                print(f"Initialized a TSE model which dont need speaker net.")
 
         else:
             if self.encoder_spk is not None:
@@ -320,7 +327,7 @@ class SoTaskWrapModule(EncDecMaskerBaseModel):
         Args:
             noisy: Input noisy mixture tensor, [N, T]
             enroll: Enrolment waveform tensor, [N, T], if None, skip it
-        
+
         Returns:
             noisy tensor with shape [N, C, T]
             enroll tensor with shape [N, C, T] or None
@@ -424,7 +431,7 @@ class SoTaskWrapModule(EncDecMaskerBaseModel):
         inactive_labels: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
         """
-        Getting input noisy(n-mixed speech) and enrollment speech(target enroll) to calculate the training loss. 
+        Getting input noisy(n-mixed speech) and enrollment speech(target enroll) to calculate the training loss.
         This way can usage DP benifit for balance GPU'e memory to avoid single machine OOM problem.
 
         Args:
@@ -440,13 +447,16 @@ class SoTaskWrapModule(EncDecMaskerBaseModel):
         dvec = enroll
 
         if dvec is not None:
-            if type(self.speaker_net) == nn.ModuleList:
-                for layer in self.speaker_net:
-                    dvec = layer(dvec)
-            else:
-                dvec = self.speaker_net(dvec)
+            if not self.embedding_free_tse:
+                if type(self.speaker_net) == nn.ModuleList:
+                    for layer in self.speaker_net:
+                        dvec = layer(dvec)
+                else:
+                    dvec = self.speaker_net(dvec)
 
-            dvec = dvec.squeeze(-1)
+                dvec = dvec.squeeze(-1)
+            else:
+                pass
 
         if dvec is not None:
             # TSE task
@@ -488,7 +498,7 @@ class SoTaskWrapModule(EncDecMaskerBaseModel):
             spk_class: Speaker label
             alpha: Weight for loss combining
             inactive_labels: Inactive speaker labels, [N]
-    
+
         Return:
             Joint loss: loss_sdr + alpha * loss_class
         """
@@ -524,7 +534,10 @@ class SoTaskWrapModule(EncDecMaskerBaseModel):
             return loss_wav
 
     def _forward_contrastive(
-        self, noisy: torch.Tensor, enroll: torch.Tensor, spk_class: torch.Tensor,
+        self,
+        noisy: torch.Tensor,
+        enroll: torch.Tensor,
+        spk_class: torch.Tensor,
     ) -> torch.Tensor:
         """
         Getting input noisy(n-mixed speech) and enrollment speech(target enroll) to calculate the SDR based loss.
@@ -535,7 +548,7 @@ class SoTaskWrapModule(EncDecMaskerBaseModel):
             noisy: Input noisy mixture tensor, [N, T]
             enroll: Enrolment waveform tensor, [N, T]
             spk_class: Speaker label
-    
+
         Return:
             Joint loss: loss_class
         """
@@ -595,7 +608,7 @@ class SoTaskWrapModule(EncDecMaskerBaseModel):
             spk_class: Speaker label
             alpha: Weight for loss combining
             inactive_labels: Inactive speaker labels, [N]
-    
+
         Return:
             Joint loss: loss_sdr + alpha * loss_class
         """
@@ -659,7 +672,7 @@ class SoTaskWrapModule(EncDecMaskerBaseModel):
             return loss_wav
 
     def forward(self, **kwargs):
-        if self.task == 0:
+        if self.task == 0 or self.task == 4:
             return self._forward(**kwargs)
 
         elif self.task == 1:
@@ -682,13 +695,16 @@ class SoTaskWrapModule(EncDecMaskerBaseModel):
         dvec = enroll
 
         if dvec is not None:
-            if type(self.speaker_net) == nn.ModuleList:
-                for layer in self.speaker_net:
-                    dvec = layer(dvec)
-            else:
-                dvec = self.speaker_net(dvec)
+            if not self.embedding_free_tse:
+                if type(self.speaker_net) == nn.ModuleList:
+                    for layer in self.speaker_net:
+                        dvec = layer(dvec)
+                else:
+                    dvec = self.speaker_net(dvec)
 
-            dvec = dvec.squeeze(-1)
+                dvec = dvec.squeeze(-1)
+            else:
+                pass
 
         if dvec is not None:
             # TSE task
@@ -811,7 +827,7 @@ class SiMoTaskWrapModule(EncDecMaskerBaseModel):
 
         Args:
             noisy: Input noisy mixture tensor, [N, T]
-        
+
         Returns:
             noisy tensor with shape [N, C, T]
         """
@@ -890,7 +906,7 @@ class SiMoTaskWrapModule(EncDecMaskerBaseModel):
         inactive_labels: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
         """
-        Getting input noisy(n-mixed speech) to calculate the training loss. 
+        Getting input noisy(n-mixed speech) to calculate the training loss.
         This way can usage DP benifit for balance GPU'e memory to avoid single machine OOM problem.
 
         Args:

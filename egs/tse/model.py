@@ -2,19 +2,21 @@ from typing import Optional
 
 import torch
 import torch.nn as nn
+
 from puresound.nnet.base_nn import SoTaskWrapModule
 from puresound.nnet.conv_tasnet import TCN, ConvTasNet, GatedTCN
-from puresound.nnet.lobe.encoder import ConvEncDec, FreeEncDec, FbankEnc
+from puresound.nnet.dprnn import DPRNN
+from puresound.nnet.lobe.attention import MhaSelfAttenLayer
+from puresound.nnet.lobe.encoder import ConvEncDec, FbankEnc, FreeEncDec
 from puresound.nnet.lobe.pooling import AttentiveStatisticsPooling
 from puresound.nnet.lobe.rnn import SingleRNN
-from puresound.nnet.lobe.trivial import Magnitude, LambdaLayer, SpecAugment
+from puresound.nnet.lobe.trivial import LambdaLayer, Magnitude, SpecAugment
 from puresound.nnet.loss.aamsoftmax import AAMsoftmax
 from puresound.nnet.loss.metrics import F1_loss, GE2ELoss, TripletLoss
 from puresound.nnet.loss.sdr import SDRLoss
 from puresound.nnet.loss.stft_loss import MultiResolutionSTFTLoss, over_suppression_loss
 from puresound.nnet.skim import SkiM
 from puresound.nnet.unet import UnetTcn
-from puresound.nnet.lobe.attention import MhaSelfAttenLayer
 
 
 # Loss
@@ -600,6 +602,37 @@ def init_model(
             loss_func_spk=cls_loss,
             mask_constraint="ReLU",
             output_constraint="Sigmoid",
+            **kwargs
+        )
+
+    elif name == "veve_dprnn_v0_causal":
+        """
+        Total params: 723,585
+        Lookahead(samples): 16
+        Receptive Fields(samples): infinite
+        """
+        model = SoTaskWrapModule(
+            encoder=FreeEncDec(
+                win_length=32, hop_length=16, laten_length=128, output_active=True
+            ),
+            masker=DPRNN(
+                input_size=128,
+                hidden_size=64,
+                output_size=128,
+                n_blocks=6,
+                seg_size=20,
+                seg_overlap=False,
+                causal=True,
+                embed_dim=0,
+                embed_norm=False,
+                block_with_embed=(False, False, False, False, False, False),
+                embedding_free_tse=True,
+            ),
+            speaker_net=None,
+            loss_func_wav=sig_loss,
+            loss_func_spk=cls_loss,
+            mask_constraint="ReLU",
+            embedding_free_tse=True,
             **kwargs
         )
 

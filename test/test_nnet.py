@@ -15,6 +15,7 @@ from puresound.nnet.loss.metrics import GE2ELoss, TripletLoss
 from puresound.nnet.loss.sdr import SDRLoss
 from puresound.nnet.skim import SkiM
 from puresound.nnet.unet import UnetTcn
+from puresound.nnet.dprnn import DPRNN
 
 sys.path.insert(0, "./")
 
@@ -585,4 +586,36 @@ def test_ns_dparn_v0_causal():
 
     input_x = torch.rand(1, 16000 * 10)
     y = model.inference(input_x)
+    assert input_x.shape == y.shape
+
+
+@pytest.mark.nnet
+def test_veve_dprrn_v0_causal():
+    model = SoTaskWrapModule(
+        encoder=FreeEncDec(
+            win_length=32, hop_length=16, laten_length=128, output_active=True
+        ),
+        masker=DPRNN(
+            input_size=128,
+            hidden_size=64,
+            output_size=128,
+            n_blocks=6,
+            seg_size=20,
+            seg_overlap=False,
+            causal=True,
+            embed_dim=0,
+            embed_norm=False,
+            block_with_embed=(False, False, False, False, False, False),
+            embedding_free_tse=True,
+        ),
+        speaker_net=None,
+        loss_func_wav=None,
+        loss_func_spk=None,
+        mask_constraint="ReLU",
+        embedding_free_tse=True,
+    )
+
+    input_x = torch.rand(1, 16000 * 10)
+    input_e = torch.rand(1, 16000 * 5)
+    y = model.inference(input_x, input_e)
     assert input_x.shape == y.shape
