@@ -10,6 +10,7 @@ DATASET:
   rir_mode: # image/direct/early
   vol_perturbed: # Tuple
   speed_perturbed: False
+  perturb_frequency_response: False
 
 MODEL:
   type: ns_dparn_v0_causal # model-name
