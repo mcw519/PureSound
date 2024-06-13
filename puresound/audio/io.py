@@ -62,7 +62,7 @@ class AudioIO:
         if verbose:
             print(f"Open file: {f_path}")
             print(f"Avg_amp: {avg_amp_ori.item()}")
-            if target_lvl is not None:
+            if not normalize_waveform and target_lvl is not None:
                 print(f"RMS_rescale: {avg_amp_rescale.item()}")
 
         return wav, sr
