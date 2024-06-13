@@ -5,7 +5,7 @@ import torch
 from .volume import calculate_rms, normalize_waveform
 
 
-def add_bg_noise(wav: torch.Tensor, noise: List[torch.Tensor], snr_list: List) -> List:
+def add_bg_noise(wav: torch.Tensor, noise: List[torch.Tensor], snr_list: List[float]) -> List:
     """
     Injected additive background noises with a SNR list.\n
     Numbers of augmented outputs must same as length of SNR list.
@@ -51,7 +51,7 @@ def add_bg_noise(wav: torch.Tensor, noise: List[torch.Tensor], snr_list: List) -
     return noisy_speech
 
 
-def add_bg_white_noise(wav: torch.Tensor, snr_list: int):
+def add_bg_white_noise(wav: torch.Tensor, snr_list: List[float]):
     """
     Simple Gaussian noise injection
 
