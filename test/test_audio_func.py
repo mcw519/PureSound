@@ -3,6 +3,7 @@ import sys
 import pytest
 import torch
 
+from puresound.audio.augmentaion import AudioEffectAugmentor
 from puresound.audio.dsp import (ParametricEQ, get_biquad_params, wav_apply_biquad_filter,
                                  wav_resampling)
 from puresound.audio.impluse_response import rand_add_2nd_filter_response, wav_apply_rir
@@ -16,8 +17,8 @@ sys.path.insert(0, "./")
 
 
 TEST_AUDIO_PATH = "./test_case/1272-141231-0008.flac"
-TEST_NOISE_PATH = "./test_case/zzpQAtOmMhQ.wav"
-TEST_RIR_PATH = "./test_case/Room042-00093.wav"
+TEST_NOISE_PATH = "./test_case/noise/zzpQAtOmMhQ.wav"
+TEST_RIR_PATH = "./test_case/rir/Room042-00093.wav"
 OUT_TEST_FOLDER = "./test_case"
 SAVE_TEST_AUDIO = True
 
@@ -110,7 +111,7 @@ def test_audio_add_white_noise_func(snr_list):
     wav, sr = AudioIO.open(
         f_path=TEST_AUDIO_PATH, normalized=False, target_lvl=-28, verbose=True
     )
-    noisy_wav = add_bg_white_noise(wav=wav, snr_list=snr_list)
+    noisy_wav, _ = add_bg_white_noise(wav=wav, snr_list=snr_list)
     if SAVE_TEST_AUDIO:
         for n_wav in noisy_wav:
             AudioIO.save(
@@ -129,12 +130,12 @@ def test_audio_add_bg_noise_func(snr_list):
     noise, sr = AudioIO.open(
         f_path=TEST_NOISE_PATH, normalized=False, target_lvl=None, verbose=True
     )
-    noisy_wav = add_bg_noise(wav=wav, noise=[noise], snr_list=snr_list)
+    noisy_wav, _ = add_bg_noise(wav=wav, noise=[noise], snr_list=snr_list)
     if SAVE_TEST_AUDIO:
-        for n_wav in noisy_wav:
+        for idx, n_wav in enumerate(noisy_wav):
             AudioIO.save(
                 wav=align_and_stack(wav1=wav, wav2=n_wav),
-                f_path=f"{OUT_TEST_FOLDER}/add_bg_noise_{snr_list[0]}_dB.wav",
+                f_path=f"{OUT_TEST_FOLDER}/add_bg_noise_{snr_list[idx]}_dB.wav",
                 sr=sr,
             )
 
@@ -282,5 +283,64 @@ def test_biquad_filter_and_eq_func():
         AudioIO.save(
             wav=align_and_stack(wav1=wav, wav2=eq_wav),
             f_path=f"{OUT_TEST_FOLDER}/paramteric_EQ_wav.wav",
+            sr=sr,
+        )
+
+
+@pytest.mark.audio_func
+def test_audio_effect_augmentor():
+    augmentation = AudioEffectAugmentor()
+    augmentation.load_bg_noise_from_folder("./test_case/noise")
+    augmentation.load_rir_from_folder("./test_case/rir")
+
+    wav, sr = AudioIO.open(
+        f_path=TEST_AUDIO_PATH, normalized=False, target_lvl=-28, verbose=True
+    )
+
+    # Gain
+    distroyed_wav, _ = augmentation.apply_gain_distortion(wav=wav, sr=sr)
+
+    # Sox effects
+    speed_wav, _ = augmentation.sox_speed_perturbed(wav=wav, speed=1.2, sr=sr)
+    pitch_wav, _ = augmentation.sox_pitch_perturbed(wav=wav, shift_ratio=-100, sr=sr)
+    volume_wav, _ = augmentation.sox_volume_perturbed(wav=wav, vol_ratio=0.3, sr=sr)
+
+    # Reverb and Inject noise
+    noisy_wav, _ = augmentation.apply_rir(wav=wav, rir_mode="full", sr=sr, rir_id=None)
+    noisy_wav, _ = augmentation.add_bg_noise(wav=noisy_wav, snr_list=[-10], sr=sr, dynamic_type=False, noise_id=None)
+
+    # SRC and Filters
+    filtered_wav, _ = augmentation.apply_src_effect(wav=wav, sr=sr, src_sr=8000, src_backend="sox")
+    filtered_wav, _ = augmentation.apply_2nd_iir_response(wav=filtered_wav, a_coeffs=None, b_coeffs=None)
+
+    if SAVE_TEST_AUDIO:
+        AudioIO.save(
+            wav=align_and_stack(wav1=wav, wav2=distroyed_wav),
+            f_path=f"{OUT_TEST_FOLDER}/aug_distroyed_audio.wav",
+            sr=sr,
+        )
+        AudioIO.save(
+            wav=align_and_stack(wav1=wav, wav2=speed_wav),
+            f_path=f"{OUT_TEST_FOLDER}/aug_speed_change_audio.wav",
+            sr=sr,
+        )
+        AudioIO.save(
+            wav=align_and_stack(wav1=wav, wav2=pitch_wav),
+            f_path=f"{OUT_TEST_FOLDER}/aug_pitch_change_audio.wav",
+            sr=sr,
+        )
+        AudioIO.save(
+            wav=align_and_stack(wav1=wav, wav2=volume_wav),
+            f_path=f"{OUT_TEST_FOLDER}/aug_volume_change_audio.wav",
+            sr=sr,
+        )
+        AudioIO.save(
+            wav=align_and_stack(wav1=wav, wav2=noisy_wav[0]),
+            f_path=f"{OUT_TEST_FOLDER}/aug_reverb_noise_audio.wav",
+            sr=sr,
+        )
+        AudioIO.save(
+            wav=align_and_stack(wav1=wav, wav2=filtered_wav),
+            f_path=f"{OUT_TEST_FOLDER}/aug_filtered_audio.wav",
             sr=sr,
         )

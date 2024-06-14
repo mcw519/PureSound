@@ -43,12 +43,14 @@ def add_bg_noise(wav: torch.Tensor, noise: List[torch.Tensor], snr_list: List[fl
 
     wav_rms = calculate_rms(wav=wav)
     noisy_speech = []
+    noise = []
     for snr_db in snr_list:
         snr = 10 ** (torch.Tensor([snr_db / 20]))
         bg_rms = (wav_rms / snr).unsqueeze(-1)
-        noisy_speech.append((wav + bg_rms * cat_noises))
+        noisy_speech.append(wav + bg_rms * cat_noises)
+        noise.append(bg_rms * cat_noises)
 
-    return noisy_speech
+    return noisy_speech, noise
 
 
 def add_bg_white_noise(wav: torch.Tensor, snr_list: List[float]):
@@ -62,6 +64,7 @@ def add_bg_white_noise(wav: torch.Tensor, snr_list: List[float]):
     Returns:
         List of waveform has been addedd white noise in background
     """
+    white_noise = []
     noisy_speech = []
     for snr_db in snr_list:
         RMS_s = calculate_rms(wav=wav)
@@ -70,8 +73,9 @@ def add_bg_white_noise(wav: torch.Tensor, snr_list: List[float]):
         STD_n = float(RMS_n)
         noise = torch.FloatTensor(wav.shape[-1]).normal_(mean=0, std=STD_n).view(1, -1)
         noisy_speech.append(wav + noise)
+        white_noise.append(noise)
 
-    return noisy_speech
+    return noisy_speech, white_noise
 
 
 # TODO: Color noise type
