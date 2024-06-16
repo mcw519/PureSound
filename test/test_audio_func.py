@@ -12,6 +12,7 @@ from puresound.audio.noise import add_bg_noise, add_bg_white_noise
 from puresound.audio.spectrum import (cpx_stft_as_mag_and_phase, mag_and_phase_as_cpx_stft,
                                       stft_to_wav, wav_to_stft)
 from puresound.audio.volume import calculate_rms, rand_gain_distortion, wav_fade_in, wav_fade_out
+from puresound.src.utils import create_folder
 
 sys.path.insert(0, "./")
 
@@ -19,8 +20,10 @@ sys.path.insert(0, "./")
 TEST_AUDIO_PATH = "./test_case/1272-141231-0008.flac"
 TEST_NOISE_PATH = "./test_case/noise/zzpQAtOmMhQ.wav"
 TEST_RIR_PATH = "./test_case/rir/Room042-00093.wav"
-OUT_TEST_FOLDER = "./test_case"
+OUT_TEST_FOLDER = "./test_case/outputs"
 SAVE_TEST_AUDIO = True
+
+create_folder(OUT_TEST_FOLDER)
 
 
 def align_and_stack(wav1: torch.Tensor, wav2: torch.Tensor):
@@ -307,11 +310,17 @@ def test_audio_effect_augmentor():
 
     # Reverb and Inject noise
     noisy_wav, _ = augmentation.apply_rir(wav=wav, rir_mode="full", sr=sr, rir_id=None)
-    noisy_wav, _ = augmentation.add_bg_noise(wav=noisy_wav, snr_list=[-10], sr=sr, dynamic_type=False, noise_id=None)
+    noisy_wav, _ = augmentation.add_bg_noise(
+        wav=noisy_wav, snr_list=[-10], sr=sr, dynamic_type=False, noise_id=None
+    )
 
     # SRC and Filters
-    filtered_wav, _ = augmentation.apply_src_effect(wav=wav, sr=sr, src_sr=8000, src_backend="sox")
-    filtered_wav, _ = augmentation.apply_2nd_iir_response(wav=filtered_wav, a_coeffs=None, b_coeffs=None)
+    filtered_wav, _ = augmentation.apply_src_effect(
+        wav=wav, sr=sr, src_sr=8000, src_backend="sox"
+    )
+    filtered_wav, _ = augmentation.apply_2nd_iir_response(
+        wav=filtered_wav, a_coeffs=None, b_coeffs=None
+    )
 
     if SAVE_TEST_AUDIO:
         AudioIO.save(
