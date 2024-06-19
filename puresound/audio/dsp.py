@@ -195,6 +195,22 @@ def wav_apply_biquad_filter(
 
 
 class ParametricEQ:
+    """
+    Parametric EQ by series Biquad Filter
+
+    Args:
+        sample_rate: waveform sampling rate
+        eq_band_gain: series of gain at each band
+        eq_band_cutoff: series of cutoff frequency at each band
+        eq_band_q_factor: series of Q factor at each band filter
+        low_shelf_gain_dB: gain of low shelf filter
+        low_shelf_cutoff_freq: cutoff frequency of low shelf filter
+        low_shelf_q_factor: Q factor of low shelf filter
+        high_shelf_gain_dB: gain of high shelf filter
+        high_shelf_cutoff_freq: cutoff frequency of high shelf filter
+        high_shelf_q_factor: Q factor of high shelf filter
+        dtype: default data type in numpy
+    """
     def __init__(
         self,
         sample_rate: float,
@@ -250,6 +266,15 @@ class ParametricEQ:
         self.n_eq = len(self.a_list)
 
     def forward(self, wav: torch.Tensor):
+        """
+        Applies series of Filters
+
+        Args:
+            wav: The waveform used for computing amplitude. Shape should be [..., L]
+        
+        Returns:
+            filtered wav has same shape of input
+        """
         for i in range(self.n_eq):
             wav = wav_apply_biquad_filter(
                 wav=wav, b_coeff=self.b_list[i], a_coeff=self.a_list[i]
@@ -258,6 +283,7 @@ class ParametricEQ:
         return wav
 
     def plot_eq(self, savefig: Optional[str] = None):
+        """Plotting the EQ curves"""
         if self.sr == 16000:
             nfft = 512
         elif self.sr == 32000:
