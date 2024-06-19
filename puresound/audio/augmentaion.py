@@ -8,8 +8,8 @@ from puresound.audio.dsp import wav_resampling
 from puresound.audio.impluse_response import rand_add_2nd_filter_response, wav_apply_rir
 from puresound.audio.io import AudioIO
 from puresound.audio.noise import add_bg_noise, add_bg_white_noise
-from puresound.audio.volume import rand_gain_distortion
-from puresound.src.utils import recursive_read_folder
+from puresound.audio.volume import rand_gain_distortion, wav_clipping
+from puresound.utils import recursive_read_folder
 
 
 class AudioEffectAugmentor:
@@ -24,6 +24,7 @@ class AudioEffectAugmentor:
             Full / Early / Direct
         Volume:
             Gain distortion
+            Clipping distortion
         Sox effects:
             volume up/down
             speech up / slow down
@@ -164,8 +165,10 @@ class AudioEffectAugmentor:
                     wav=bg_noise, origin_sr=noise_sr, target_sr=sr, backend="sox"
                 )
             noise.append(bg_noise)
-            
-        noisy_speech, added_noise = add_bg_noise(wav=wav, noise=noise, snr_list=snr_list)
+
+        noisy_speech, added_noise = add_bg_noise(
+            wav=wav, noise=noise, snr_list=snr_list
+        )
         return noisy_speech, (added_noise, noise_id, snr_list)
 
     def add_bg_white_noise(
@@ -233,7 +236,9 @@ class AudioEffectAugmentor:
         a_coeffs: Optional[torch.Tensor] = None,
         b_coeffs: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
-        wav_aug, a_coeffs, b_coeffs = rand_add_2nd_filter_response(wav=wav, a=a_coeffs, b=b_coeffs)
+        wav_aug, a_coeffs, b_coeffs = rand_add_2nd_filter_response(
+            wav=wav, a=a_coeffs, b=b_coeffs
+        )
         return wav_aug, (a_coeffs, b_coeffs)
 
     def apply_gain_distortion(self, wav: torch.Tensor, sr: int):
@@ -241,6 +246,14 @@ class AudioEffectAugmentor:
             wav=wav, sample_rate=sr, return_info=True
         )
         return destroyed_wav, (gain_distortion_info)
+
+    def apply_clipping_distortion(
+        self, wav: torch.Tensor, min_quantile: float, max_quantile: float
+    ):
+        destored_wav = wav_clipping(
+            wav=wav, min_quantile=min_quantile, max_quantile=max_quantile
+        )
+        return destored_wav, (min_quantile, max_quantile)
 
     def apply_src_effect(
         self, wav: torch.Tensor, sr: int, src_sr: int, src_backend: str

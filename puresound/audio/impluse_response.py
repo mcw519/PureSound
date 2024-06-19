@@ -3,7 +3,7 @@ from typing import Optional
 import torch
 import torchaudio
 
-from puresound.src.utils import fftconvolve
+from puresound.utils import fftconvolve
 
 
 def wav_apply_rir(

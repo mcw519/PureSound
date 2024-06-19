@@ -1,6 +1,7 @@
 import io
 import os
 from typing import Dict, List, Optional
+
 import torch
 import yaml
 
@@ -26,13 +27,13 @@ def load_text_as_dict(
             aaa bbb
             uttid /Path/data/file/abc.wav
         return:
-            {'aaa': 'bbb', 'uttid': '/Path/data/file/abc.wav'}
-    
+            {'aaa': ['bbb'], 'uttid': ['/Path/data/file/abc.wav']}
+
     Args:
         file_path: input file path
         separator: symbol to split in lines
         coding: encoding type for open text file, default as utf8
-    
+
     Returns:
         return a dict which used first column as keys.
     """
@@ -50,14 +51,15 @@ def load_text_as_dict(
 def recursive_read_folder(folder: str, file_type: str, output: Optional[List]) -> None:
     """
     Recursive reading a folder, and list related file path in the output list.
-    Ex:
-        _list = []
-        recursive_read_folder('corpus', '.flac', _list)
-    
+
     Args:
         folder: input folder path
         file_type: suffix for parsing file
         output: storage parser result
+    
+    Ex:
+        _list = []
+        recursive_read_folder('corpus', '.flac', _list)
     """
     for file in os.listdir(folder):
         cur_path = os.path.join(folder, file)
@@ -69,17 +71,17 @@ def recursive_read_folder(folder: str, file_type: str, output: Optional[List]) -
                 output.append(f"{file} {cur_path}")
 
 
-def load_hparam(filename: str) -> Dict:
+def load_hparam(file_path: str):
     """
     Loading configuration file in a dict.
 
     Args:
-        filename: configure file (*.yaml) path
-    
+        file_path: configure file (*.yaml) path
+
     Returns:
         hparam in dict form
     """
-    stream = open(filename, "r")
+    stream = open(file_path, "r")
     docs = yaml.load_all(stream, Loader=yaml.FullLoader)
     hparam_dict = dict()
     for doc in docs:
