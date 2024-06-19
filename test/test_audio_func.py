@@ -11,8 +11,9 @@ from puresound.audio.io import AudioIO
 from puresound.audio.noise import add_bg_noise, add_bg_white_noise
 from puresound.audio.spectrum import (cpx_stft_as_mag_and_phase, mag_and_phase_as_cpx_stft,
                                       stft_to_wav, wav_to_stft)
-from puresound.audio.volume import calculate_rms, rand_gain_distortion, wav_fade_in, wav_fade_out
-from puresound.src.utils import create_folder
+from puresound.audio.volume import (calculate_rms, rand_gain_distortion, wav_clipping, wav_fade_in,
+                                    wav_fade_out)
+from puresound.utils import create_folder
 
 sys.path.insert(0, "./")
 
@@ -104,6 +105,22 @@ def test_audio_fade_func(fade_len, fade_start, fade_type):
         AudioIO.save(
             wav=align_and_stack(wav1=wav, wav2=distored_wav),
             f_path=f"{OUT_TEST_FOLDER}/fadeout_distored_{fade_type}_start_{fade_start}_dur_{fade_len}.wav",
+            sr=sr,
+        )
+
+
+@pytest.mark.audio_func
+@pytest.mark.parametrize("min, max", [[0.05, 0.75], [0.1, 0.9]])
+def test_audio_clipping(min, max):
+    wav, sr = AudioIO.open(
+        f_path=TEST_AUDIO_PATH, normalized=False, target_lvl=-28, verbose=True
+    )
+    distored_wav = wav_clipping(wav=wav, min_quantile=min, max_quantile=max)
+    assert distored_wav.shape == wav.shape
+    if SAVE_TEST_AUDIO:
+        AudioIO.save(
+            wav=align_and_stack(wav1=wav, wav2=distored_wav),
+            f_path=f"{OUT_TEST_FOLDER}/clipping_distroed_min_{min}_max_{max}.wav",
             sr=sr,
         )
 

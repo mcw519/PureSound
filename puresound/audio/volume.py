@@ -127,7 +127,11 @@ def rand_gain_distortion(
 
 
 def wav_fade_in(
-    wav: torch.Tensor, sr: int, fade_len_s: int, fade_begin_s: int = 0, fade_shape: str = "linear"
+    wav: torch.Tensor,
+    sr: int,
+    fade_len_s: int,
+    fade_begin_s: int = 0,
+    fade_shape: str = "linear",
 ) -> torch.Tensor:
     """
     This function simulated the fade in effect.
@@ -221,3 +225,24 @@ def wav_fade_out(
     fade = torch.cat(output).clamp_(0, 1)
     assert fade.shape[-1] == wav_len
     return fade * wav
+
+
+def wav_clipping(
+    wav: torch.Tensor, min_quantile: float = 0.0, max_quantile: float = 0.9
+):
+    """
+    Apply the clipping distortion to the input signal.
+    Referes: https://github.com/urgent-challenge/urgent2024_challenge/blob/main/simulation/simulate_data_from_param.py#L89
+
+    Args:
+        speech_sample: a single speech sample (..., L)
+        min_quantile: lower bound on the quantile of samples to be clipped
+        max_quantile: upper bound on the quantile of samples to be clipped
+
+    Returns:
+        clipped speech sample (..., L)
+    """
+    q = torch.Tensor([min_quantile, max_quantile])
+    min_, max_ = torch.quantile(wav, q, dim=-1)
+    wav = torch.clip(input=wav, min=min_, max=max_)
+    return wav
