@@ -34,7 +34,7 @@ def add_bg_noise(wav: torch.Tensor, noise: List[torch.Tensor], snr_list: List[fl
     wav_length = wav.shape[-1]
     noise_length = cat_noises.shape[-1]
 
-    if wav_length <= noise_length:
+    if wav_length < noise_length:
         s = int(torch.randint(0, noise_length - wav_length, (1,)))
         cat_noises = cat_noises[:, s : s + wav_length]
     else:
