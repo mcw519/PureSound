@@ -20,13 +20,15 @@ class AudioIO:
         """Return audio's information"""
         metadata = torchaudio.info(f_path)
         sample_rate = metadata.sample_rate
+        total_samples = metadata.num_frames
         total_seconds = round(metadata.num_frames / sample_rate, 2)
         num_channels = metadata.num_channels
-        return sample_rate, total_seconds, num_channels
+        return sample_rate, total_samples, total_seconds, num_channels
 
     @staticmethod
     def open(
         f_path: str,
+        resample_to: Optional[int] = None,
         normalized: bool = False,
         target_lvl: Optional[float] = None,
         verbose: bool = False,
@@ -36,6 +38,7 @@ class AudioIO:
 
         Args:
             f_path: Audio file path
+            resample_to: resampling to target sample rate
             normalized: normalized waveform by average amplitude
             target_lvl: Target level in dB
             verbose: show detail
@@ -44,6 +47,14 @@ class AudioIO:
             waveform tensor and its sampling rate
         """
         wav, sr = torchaudio.load(f_path)
+
+        if resample_to is not None:
+            if sr != resample_to:
+                wav = torchaudio.transforms.Resample(
+                    orig_freq=sr, new_freq=resample_to, lowpass_filter_width=128
+                )(wav)
+                sr = resample_to
+
         avg_amp_ori = torch.mean(torch.abs(wav), dim=-1)
 
         if normalized:
