@@ -36,12 +36,12 @@ def wav_apply_rir(
     elif rir_mode == "direct":
         peak_idx = impaulse.argmax().item()
         direct_range = peak_idx + int(sample_rate * 0.006)  # 6ms range
-        impaulse = impaulse[:, : int(direct_range)].view(1, -1)
+        impaulse = impaulse[:, : int(direct_range)]
 
     elif rir_mode == "early":
         peak_idx = impaulse.argmax().item()
         early_range = peak_idx + int(sample_rate * 0.05)  # 50ms range
-        impaulse = impaulse[:, : int(early_range)].view(1, -1)
+        impaulse = impaulse[:, : int(early_range)]
 
     impaulse = impaulse / torch.norm(impaulse, p=2)
     out = []

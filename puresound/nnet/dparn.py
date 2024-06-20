@@ -110,7 +110,6 @@ class DPARNblock2D(nn.Module):
 class DPARN(Unet):
     def __init__(
         self,
-        input_type: str = "RI",
         input_dim: int = 512,
         activation_type: str = "PReLU",
         norm_type: str = "bN2d",
@@ -131,7 +130,6 @@ class DPARN(Unet):
         spectral_compress: bool = False,
     ):
         super().__init__(
-            input_type,
             input_dim,
             activation_type,
             norm_type,
@@ -169,20 +167,16 @@ class DPARN(Unet):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
         Args:
-            x: input tensor shape [N, C, T]
+            x: input tensor shape [N, CH, C, T]
             
         Returns:
-            output tensor has shape [N, C, T]
+            output tensor has shape [N, CH, C, T]
         """
         if self.spectral_compress:
             x = spectral_compression(x, alpha=0.3, dim=1)
 
-        if self.input_type.lower() == "ri":
-            _re, _im = torch.chunk(x, 2, dim=-2)
-            x = torch.stack([_re, _im], dim=1)  # [N, C, T] -> [N, 2, C, T]
-        else:
-            if x.dim() == 3:
-                x = x.unsqueeze(1)  # [N, 1, C, T]
+        if x.dim() == 3:
+            x = x.unsqueeze(1)  # [N, 1, C, T]
 
         skip = [x.clone()]
 
@@ -213,20 +207,11 @@ class DPARN(Unet):
                         ..., : -(self.t_kernel - 1)
                     ]  # transpose-conv with t-kernel size would increase (t-1) length
 
-        if self.input_type.lower() == "ri":
-            _re = x[:, 0, :, :]
-            _im = x[:, 1, :, :]
-            x = torch.cat([_re, _im], dim=1)
-
-        else:
-            x = x.squeeze(1)  # [N, 1, C, T] -> [N, C, T]
-
         return x
 
     @property
     def get_args(self) -> Dict:
         return {
-            "input_type": self.input_type,
             "input_dim": self.input_dim,
             "activation_type": self.activation_type,
             "norm_type": self.norm_type,
@@ -243,159 +228,4 @@ class DPARN(Unet):
             "dilation_f": self.dilation_f,
             "delay": self.delay,
             "rnn_hidden": self.rnn_hidden,
-        }
-
-
-class DPARN_Mout(Unet):
-    def __init__(
-        self,
-        input_type: str = "RI",
-        input_dim: int = 512,
-        activation_type: str = "PReLU",
-        norm_type: str = "bN2d",
-        dropout: float = 0.05,
-        channels: Tuple = (1, 32, 32, 32, 64, 128),
-        transpose_t_size: int = 2,
-        transpose_delay: bool = False,
-        skip_conv: bool = False,
-        kernel_t: Tuple = (2, 2, 2, 2, 2),
-        stride_t: Tuple = (1, 1, 1, 1, 1),
-        dilation_t: Tuple = (1, 1, 1, 1, 1),
-        kernel_f: Tuple = (5, 3, 3, 3, 3),
-        stride_f: Tuple = (2, 2, 1, 1, 1),
-        dilation_f: Tuple = (1, 1, 1, 1, 1),
-        delay: Tuple = (0, 0, 0, 0, 0),
-        multi_output: int = 2,
-        rnn_hidden: int = 128,
-        nhead: int = 1,
-        spectral_compress: bool = False,
-    ):
-        super().__init__(
-            input_type,
-            input_dim,
-            activation_type,
-            norm_type,
-            dropout,
-            channels,
-            transpose_t_size,
-            skip_conv,
-            kernel_t,
-            stride_t,
-            dilation_t,
-            kernel_f,
-            stride_f,
-            dilation_f,
-            delay,
-            multi_output,
-        )
-
-        self.transpose_delay = transpose_delay
-        self.rnn_hidden = rnn_hidden
-        self.spectral_compress = spectral_compress
-
-        # DPRNN block
-        self.dprnn_block1 = DPARNblock2D(
-            input_size=channels[-1],
-            hidden_size=rnn_hidden,
-            nhead=nhead,
-            dropout=dropout,
-        )
-        self.dprnn_block2 = DPARNblock2D(
-            input_size=channels[-1],
-            hidden_size=rnn_hidden,
-            nhead=nhead,
-            dropout=dropout,
-        )
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """
-        Args:
-            x: input tensor shape [N, C, T]
-            
-        Returns:
-            output tensor has shape [N, C, T]
-        """
-        if self.spectral_compress:
-            x = spectral_compression(x, alpha=0.3, dim=1)
-
-        if self.input_type.lower() == "ri":
-            _re, _im = torch.chunk(x, 2, dim=-2)
-            x = torch.stack([_re, _im], dim=1)  # [N, C, T] -> [N, 2, C, T]
-        else:
-            if x.dim() == 3:
-                x = x.unsqueeze(1)  # [N, 1, C, T]
-
-        skip = [x.clone()]
-
-        # forward CNN-down layers
-        for cnn_layer in self.cnn_down:
-            x = cnn_layer(x)  # [N, ch, C, T]
-            skip.append(x)
-
-        # forward dprnn
-        x = self.dprnn_block1(x)  # [N, ch, C, T]
-        x = self.dprnn_block2(x)  # [N, ch, C, T]
-
-        # forward CNN-up layers
-        for i, cnn_layer in enumerate(self.cnn_up):
-            if self.skip_conv:
-                x += self.skip_cnn[i](skip[-i - 1])
-            else:
-                x = torch.cat([x, skip[-i - 1]], dim=1)
-
-            x = cnn_layer(x)
-            if self.t_kernel != 1:
-                if self.transpose_delay:
-                    x = x[
-                        ..., (self.t_kernel - 1) :
-                    ]  # transpose-conv with t-kernel size would increase (t-1) length
-                else:
-                    x = x[
-                        ..., : -(self.t_kernel - 1)
-                    ]  # transpose-conv with t-kernel size would increase (t-1) length
-
-        if self.multi_output != 1:
-            batch, ch, fdim, tdim = x.shape
-            x = x.reshape(batch, self.multi_output, -1, fdim, tdim)
-            if self.input_type.lower() == "ri":
-                _re = x[:, :, 0, :, :]
-                _im = x[:, :, 1, :, :]
-                x = torch.cat([_re, _im], dim=2)
-
-            else:
-                x = x.squeeze(2)  # [N, M, 1, C, T] -> [N, C, T]
-
-        else:
-            if self.input_type.lower() == "ri":
-                _re = x[:, 0, :, :]
-                _im = x[:, 1, :, :]
-                x = torch.cat([_re, _im], dim=1)
-
-            else:
-                x = x.squeeze(1)  # [N, 1, C, T] -> [N, C, T]
-
-        return x
-
-    @property
-    def get_args(self) -> Dict:
-        return {
-            "input_type": self.input_type,
-            "input_dim": self.input_dim,
-            "activation_type": self.activation_type,
-            "norm_type": self.norm_type,
-            "dropout": self.dropout,
-            "channels": self.channels,
-            "transpose_t_size": self.transpose_t_size,
-            "transpose_delay": self.transpose_delay,
-            "skip_conv": self.skip_conv,
-            "kernel_t": self.kernel_t,
-            "stride_t": self.stride_t,
-            "dilation_t": self.dilation_t,
-            "kernel_f": self.kernel_f,
-            "stride_f": self.stride_f,
-            "dilation_f": self.dilation_f,
-            "delay": self.delay,
-            "multi_output": self.multi_output,
-            "rnn_hidden": self.rnn_hidden,
-            "spectral_compress": self.spectral_compress,
         }

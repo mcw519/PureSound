@@ -1,332 +1,450 @@
 import random
-from typing import Any, Dict, Optional, Tuple
+from copy import deepcopy
+from typing import Dict, Optional
 
 import torch
-import torchaudio
-from puresound.src.audio import AudioAugmentor, AudioIO
-from puresound.src.utils import load_text_as_dict
 from torch.nn.utils.rnn import pad_sequence
-from tqdm import tqdm
 
-from .base import BaseTrainer, TaskDataset
+from puresound.audio.dsp import wav_resampling
+from puresound.audio.noise import add_bg_noise
+from puresound.dataset.base import DynamicBaseDataset
 
 
-class NsCollateFunc:
+class NoiseSuppressionDataset(DynamicBaseDataset):
+    def __init__(
+        self,
+        metafile_path: str,
+        min_utt_length_in_seconds: float = 3.0,
+        min_utts_in_each_speaker: int = 5,
+        target_sr: Optional[int] = None,
+        training_sample_length_in_seconds: float = 6.0,
+        audio_gain_nomalized_to: Optional[int] = None,
+        augmentation_speech_args: Optional[int] = None,
+        augmentation_noise_args: Optional[Dict] = None,
+        augmentation_reverb_args: Optional[Dict] = None,
+        augmentation_speed_args: Optional[Dict] = None,
+        augmentation_ir_response_args: Optional[Dict] = None,
+        augmentation_src_args: Optional[Dict] = None,
+        augmentation_hpf_args: Optional[Dict] = None,
+        augmentation_volume_args: Optional[Dict] = None,
+    ):
+        super().__init__(
+            metafile_path=metafile_path,
+            min_utt_length_in_seconds=min_utt_length_in_seconds,
+            min_utts_in_each_speaker=min_utts_in_each_speaker,
+            target_sr=target_sr,
+            training_sample_length_in_seconds=training_sample_length_in_seconds,
+            audio_gain_nomalized_to=audio_gain_nomalized_to,
+            augmentation_speech_args=augmentation_speech_args,
+            augmentation_noise_args=augmentation_noise_args,
+            augmentation_reverb_args=augmentation_reverb_args,
+            augmentation_speed_args=augmentation_speed_args,
+            augmentation_ir_response_args=augmentation_ir_response_args,
+            augmentation_src_args=augmentation_src_args,
+            augmentation_hpf_args=augmentation_hpf_args,
+            augmentation_volume_args=augmentation_volume_args,
+        )
+
+    def __getitem__(self, target_speaker: str):
+        target_speech, _, (_, _) = self.choose_an_utterance_by_speaker_name(
+            target_speaker_name=target_speaker, select_channel=0
+        )
+        # Snipts first
+        target_speech = self.align_audio_list(
+            wav_list=[target_speech], length=self.training_sample_length
+        )[0]
+        noisy_speech = target_speech.clone()
+
+        # Add interference speech from other speakers
+        interfered_speech = []
+        if (
+            self.augmentation_speech_args["used"]
+            and torch.rand(1) < self.augmentation_speech_args["prob"]
+        ):
+            spk_pool = deepcopy(self.total_spks)
+            spk_pool = set(spk_pool)
+            spk_pool.remove(target_speaker)
+            interference_spk_list = random.sample(
+                spk_pool, k=self.augmentation_speech_args["add_n_cases"]
+            )
+            for spk in interference_spk_list:
+                _speech, _, _ = self.choose_an_utterance_by_speaker_name(
+                    target_speaker_name=spk,
+                    select_channel=0,
+                )
+                interfered_speech.append(_speech)
+
+            # Aligned and Mixing
+            clips_wav = [target_speech] + interfered_speech
+            clips_wav = self.align_audio_list(
+                wav_list=clips_wav,
+                length=self.training_sample_length,
+                padding_type="zero",
+            )
+            # Here, we assume all clips has same shape equal to [1, L]
+            # For multi channel simulation should consider next time. TODO
+            target_speech = clips_wav[0]
+            interfered_speech = clips_wav[1:]
+            interfered_speech = (
+                torch.cat(interfered_speech, dim=0).sum(dim=0).reshape(1, -1)
+            )
+            sir = (
+                torch.FloatTensor(1)
+                .uniform_(
+                    self.augmentation_speech_args["snr_range"][0],
+                    self.augmentation_speech_args["snr_range"][1],
+                )
+                .item()
+            )
+
+            # Mixing with SIR
+            noisy_speech, interfered_speech = add_bg_noise(
+                wav=target_speech, noise=[interfered_speech], snr_list=[sir]
+            )
+            noisy_speech = noisy_speech[0]
+
+            # Treating all speech clips as target speech
+            if self.augmentation_speech_args["is_target"]:
+                target_speech = noisy_speech.clone()
+
+        # Avoiding clipping issue
+        [noisy_speech, target_speech] = self.avoid_audio_clipping(
+            wav_list=[noisy_speech, target_speech]
+        )
+
+        # Speech Perturbation
+        if (
+            self.augmentation_speed_args["used"]
+            and torch.rand(1) < self.augmentation_speed_args["prob"]
+        ):
+            speed = torch.arange(
+                self.augmentation_speed_args["speed_range"][0],
+                self.augmentation_speed_args["speed_range"][1],
+                0.05,
+            )
+            speed = random.choice(speed)
+            noisy_speech, (speed) = self.augmentor.sox_speed_perturbed(
+                wav=noisy_speech, speed=speed.item(), sr=self.target_sr
+            )
+            target_speech, _ = self.augmentor.sox_speed_perturbed(
+                wav=target_speech, speed=speed, sr=self.target_sr
+            )
+
+        # Reverb
+        if (
+            self.augmentation_reverb_args["used"]
+            and torch.rand(1) < self.augmentation_reverb_args["prob"]
+        ):
+            # RIR's target for noisy is full
+            noisy_speech, (rir_id, _) = self.augmentor.apply_rir(
+                wav=noisy_speech,
+                rir_mode="full",
+                sr=self.target_sr,
+            )
+            # Warping target speech for same RIR but different rir mode
+            if self.augmentation_reverb_args["target_rir_type"] != "anechoic":
+                target_speech, _ = self.augmentor.apply_rir(
+                    wav=target_speech,
+                    rir_id=rir_id,
+                    rir_mode=self.augmentation_reverb_args["target_rir_type"],
+                    sr=self.target_sr,
+                )
+            
+            if noisy_speech.shape[0] != 1:
+                noisy_speech = noisy_speech[0].view(1, -1)
+                target_speech = target_speech[0].view(1, -1)
+
+        # Noise
+        # We collect added noises for if we need to use high SNR noisy speech as ground truth
+        added_noise = None
+        if (
+            self.augmentation_noise_args["used"]
+            and torch.rand(1) < self.augmentation_noise_args["prob"]
+        ):
+            dynamic_type = False
+            snr = (
+                torch.FloatTensor(1)
+                .uniform_(
+                    self.augmentation_noise_args["snr_range"][0],
+                    self.augmentation_noise_args["snr_range"][1],
+                )
+                .item()
+            )
+
+            # 1 / 4 cases add dynamic noise type
+            if torch.rand(1) < self.augmentation_noise_args["prob"] / 4:
+                dynamic_type = True
+
+            noisy_speech, (added_noise, _, _) = self.augmentor.add_bg_noise(
+                wav=noisy_speech,
+                snr_list=[snr],
+                dynamic_type=dynamic_type,
+                sr=self.target_sr,
+            )
+            added_noise = added_noise[0]
+
+            # unwrap list
+            noisy_speech = noisy_speech[0]
+
+            # if dynamic is False, 1 / 4 add white noise
+            if (
+                dynamic_type == False
+                and torch.rand(1) < self.augmentation_noise_args["prob_white_noise"]
+            ):
+                snr = (
+                    torch.FloatTensor(1)
+                    .uniform_(
+                        self.augmentation_noise_args["white_noise_snr_range"][0],
+                        self.augmentation_noise_args["white_noise_snr_range"][1],
+                    )
+                    .item()
+                )
+                noisy_speech, (added_white_noise, _) = (
+                    self.augmentor.add_bg_white_noise(wav=noisy_speech, snr_list=[snr])
+                )
+
+                # Mixing noise for later using
+                added_noise += added_white_noise[0]
+
+        if isinstance(noisy_speech, list):
+            noisy_speech = noisy_speech[0]
+
+        # SRC
+        flag_src = False
+        if (
+            self.augmentation_src_args["used"]
+            and torch.rand(1) < self.augmentation_src_args["prob"]
+        ):
+            flag_src = True
+            src_target = random.choices(
+                self.augmentation_src_args["src_range"],
+                weights=self.augmentation_src_args["prob_each"],
+            )[0]
+
+            if torch.rand(1) < 0.5:
+                src_backend = "sox"
+            else:
+                src_backend = "torchaudio"
+
+            noisy_speech, src_info = self.augmentor.apply_src_effect(
+                wav=noisy_speech,
+                sr=self.target_sr,
+                src_sr=src_target,
+                src_backend=src_backend,
+            )
+
+            # Wrap target speech to same SRC effect
+            if src_backend == "sox":
+                target_speech, _ = wav_resampling(
+                    wav=target_speech,
+                    origin_sr=self.target_sr,
+                    target_sr=src_target,
+                    backend="sox",
+                )
+                target_speech, _ = wav_resampling(
+                    wav=target_speech,
+                    origin_sr=src_target,
+                    target_sr=self.target_sr,
+                    backend="sox",
+                )
+            else:
+                target_speech, *src_info = wav_resampling(
+                    wav=target_speech,
+                    origin_sr=self.target_sr,
+                    target_sr=src_target,
+                    backend="torchaudio",
+                    torch_backend_params=src_info[-1],
+                )
+                target_speech, *src_info = wav_resampling(
+                    wav=target_speech,
+                    origin_sr=src_target,
+                    target_sr=self.target_sr,
+                    backend="torchaudio",
+                    torch_backend_params=src_info[-1],
+                )
+
+        # 2nd-IIR response
+        flag_iir = False
+        if (
+            self.augmentation_ir_response_args["used"]
+            and torch.rand(1) < self.augmentation_ir_response_args["prob"]
+        ):
+            flag_iir = True
+            noisy_speech, (a_coeffs, b_coeffs) = self.augmentor.apply_2nd_iir_response(
+                wav=noisy_speech
+            )
+            target_speech, _ = self.augmentor.apply_2nd_iir_response(
+                wav=target_speech, a_coeffs=a_coeffs, b_coeffs=b_coeffs
+            )
+
+        # HPF effects
+        flag_hpf = False
+        if (
+            self.augmentation_hpf_args["used"]
+            and torch.rand(1) < self.augmentation_hpf_args["prob"]
+        ):
+            flag_hpf = True
+            hpf_cutoff = random.choices(
+                self.augmentation_hpf_args["cutoff"],
+                weights=self.augmentation_hpf_args["prob_each"],
+            )[0]
+            q_factor = torch.FloatTensor(1).normal_(mean=0.707, std=0.1).clip(0.3, 1.3)
+            noisy_speech, _ = self.augmentor.apply_hpf(
+                wav=noisy_speech,
+                sr=self.target_sr,
+                cutoff_freq=hpf_cutoff,
+                q_factor=q_factor,
+            )
+            target_speech, _ = self.augmentor.apply_hpf(
+                wav=target_speech,
+                sr=self.target_sr,
+                cutoff_freq=hpf_cutoff,
+                q_factor=q_factor,
+            )
+
+        # Volume perturbed
+        flag_volume = False
+        if (
+            self.augmentation_volume_args["used"]
+            and torch.rand(1) < self.augmentation_volume_args["prob"]
+        ):
+            flag_volume = True
+            vol_ratio = None
+            min_quantile = None
+            max_quantile = None
+            if torch.rand(1) < self.augmentation_volume_args["clipping_prob"]:
+                min = torch.FloatTensor(1).uniform_(
+                    self.augmentation_volume_args["clipping_range"]["min"][0],
+                    self.augmentation_volume_args["clipping_range"]["min"][1],
+                )
+                max = torch.FloatTensor(1).uniform_(
+                    self.augmentation_volume_args["clipping_range"]["max"][0],
+                    self.augmentation_volume_args["clipping_range"]["max"][1],
+                )
+                noisy_speech, (min_quantile, max_quantile) = (
+                    self.augmentor.apply_clipping_distortion(
+                        wav=noisy_speech, min_quantile=min, max_quantile=max
+                    )
+                )
+                target_speech, (_, _) = self.augmentor.apply_clipping_distortion(
+                    wav=target_speech,
+                    min_quantile=min_quantile,
+                    max_quantile=max_quantile,
+                )
+
+            else:
+                gain = (
+                    torch.FloatTensor(1)
+                    .uniform_(
+                        self.augmentation_volume_args["perturbed_range"][0],
+                        self.augmentation_volume_args["perturbed_range"][1],
+                    )
+                    .item()
+                )
+                noisy_speech, (vol_ratio) = self.augmentor.sox_volume_perturbed(
+                    wav=noisy_speech, vol_ratio=gain, sr=self.target_sr
+                )
+                target_speech, (vol_ratio) = self.augmentor.sox_volume_perturbed(
+                    wav=target_speech, vol_ratio=vol_ratio, sr=self.target_sr
+                )
+
+        # Snipts to training target sample length
+        noisy_speech = noisy_speech[..., : self.training_sample_length]
+        target_speech = target_speech[..., : self.training_sample_length]
+
+        # Wrap added_noise
+        if added_noise is not None:
+            if flag_src:
+                if src_backend == "sox":
+                    added_noise, _ = wav_resampling(
+                        wav=added_noise,
+                        origin_sr=self.target_sr,
+                        target_sr=src_target,
+                        backend="sox",
+                    )
+                    added_noise, _ = wav_resampling(
+                        wav=added_noise,
+                        origin_sr=src_target,
+                        target_sr=self.target_sr,
+                        backend="sox",
+                    )
+                else:
+                    added_noise, *src_info = wav_resampling(
+                        wav=added_noise,
+                        origin_sr=self.target_sr,
+                        target_sr=src_target,
+                        backend="torchaudio",
+                        torch_backend_params=src_info[-1],
+                    )
+                    added_noise, *src_info = wav_resampling(
+                        wav=added_noise,
+                        origin_sr=src_target,
+                        target_sr=self.target_sr,
+                        backend="torchaudio",
+                        torch_backend_params=src_info[-1],
+                    )
+
+            if flag_iir:
+                added_noise, _ = self.augmentor.apply_2nd_iir_response(
+                    wav=added_noise, a_coeffs=a_coeffs, b_coeffs=b_coeffs
+                )
+
+            if flag_hpf:
+                added_noise, _ = self.augmentor.apply_hpf(
+                    wav=added_noise,
+                    sr=self.target_sr,
+                    cutoff_freq=hpf_cutoff,
+                    q_factor=q_factor,
+                )
+
+            if flag_volume:
+                if vol_ratio is not None:
+                    added_noise, _ = self.augmentor.sox_volume_perturbed(
+                        wav=added_noise, vol_ratio=vol_ratio, sr=self.target_sr
+                    )
+                else:
+                    added_noise, (_, _) = self.augmentor.apply_clipping_distortion(
+                        wav=added_noise,
+                        min_quantile=min_quantile,
+                        max_quantile=max_quantile,
+                    )
+
+            added_noise = added_noise[..., : self.training_sample_length]
+
+        return {
+            "noisy_speech": noisy_speech,
+            "clean_speech": target_speech,
+            "added_noise": added_noise,
+            "consistency_noise": noisy_speech - target_speech,
+        }
+
+
+class NoiseSuppressionCollateFunc:
     """Collate functino used in Dataloader."""
 
     def __init__(self):
         pass
 
-    def __call__(self, batch: Any) -> Dict:
-        col_key = []
+    def __call__(self, batch: Dict):
+        col_noisy = []
         col_clean = []
-        col_process = []
+        col_consistency = []
 
         for b in batch:
             """
-            one batch -- (dict) -- {'uttid': key, 'process_wav': process_wav, 'clean_wav': clean_wav}
+            one batch -- (dict) -- {'noisy_speech', 'clean_speech', 'added_noise', "consistency_noise"}
             wav file each with shape [1, L]
             """
-            col_key.append(b["uttid"])
-            col_clean.append(b["clean_wav"].squeeze())
-            col_process.append(b["process_wav"].squeeze())
+            col_clean.append(b["clean_speech"].squeeze())
+            col_noisy.append(b["noisy_speech"].squeeze())
+            col_consistency.append(b["consistency_noise"].squeeze())
 
         padded_clean = pad_sequence(col_clean, batch_first=True)  # [N, L]
-        padded_process = pad_sequence(col_process, batch_first=True)  # [N, L]
+        padded_noisy = pad_sequence(col_noisy, batch_first=True)  # [N, L]
+        padded_consistency = pad_sequence(col_consistency, batch_first=True)  # [N, L]
 
         return {
-            "uttid": col_key,
-            "clean_wav": padded_clean,
-            "process_wav": padded_process,
+            "clean_speech": padded_clean,
+            "noisy_speech": padded_noisy,
+            "consistency_noise": padded_consistency,
         }
-
-
-class NsDataset(TaskDataset):
-    """
-    Noise suppression dataset.
-    Online dataset should implement wave_process() to generate parallel data for training.
-
-    Args:
-        resample_to: open waveform then resample it.
-        max_length: cut each waveform until max_length(seconds).
-    """
-
-    def __init__(
-        self,
-        folder: str,
-        resample_to: int,
-        max_length: Optional[int] = None,
-        noise_folder: Optional[str] = None,
-        rir_folder: Optional[str] = None,
-        rir_mode: str = "image",
-        vol_perturbed: Optional[tuple] = None,
-        speed_perturbed: bool = False,
-        perturb_frequency_response: bool = False,
-    ):
-
-        self.max_length = max_length
-        self.noise_folder = noise_folder
-        self.rir_folder = rir_folder
-        self.rir_mode = rir_mode
-        self.speed_perturbed = speed_perturbed
-        self.vol_perturbed = vol_perturbed
-        self.perturb_frequency_response = perturb_frequency_response
-        super().__init__(folder, resample_to=resample_to)
-
-        if (
-            self.noise_folder is not None
-            or self.rir_folder is not None
-            or self.speed_perturbed
-            or self.vol_perturbed is not None
-            or self.perturb_frequency_response
-        ):
-            self.create_augmentor()
-        else:
-            self.augmentor = None
-
-    @property
-    def folder_content(self):
-        _content = {
-            "wav2scp": "wav2scp.txt",  # clean wav path
-            "wav2ref": "wav2ref.txt",  # clean wav path
-        }
-
-        return _content
-
-    def __getitem__(self, index: int) -> Dict:
-        key = self.idx_df[index]
-        feats = self.get_feature(key)
-        process_wav = feats["process_wav"].view(1, -1)
-        clean_wav = feats["clean_wav"].view(1, -1)
-        return {"uttid": key, "process_wav": process_wav, "clean_wav": clean_wav}
-
-    def get_feature(self, key: str) -> Dict:
-        """noisy_wav(2 speaker mixed) -> speed perturbed -> rir reverb -> noise inject"""
-        wav, sr = AudioIO.open(f_path=self.df[key]["wav2scp"])
-        if sr != self.resample_to:
-            wav = torchaudio.transforms.Resample(
-                orig_freq=sr, new_freq=self.resample_to
-            )(wav)
-
-        if wav.shape[0] != 1:
-            wav = wav[0].view(1, -1)  # ignore multi-channel
-
-        clean_wav, sr = AudioIO.open(f_path=self.df[key]["wav2ref"])
-        if sr != self.resample_to:
-            clean_wav = torchaudio.transforms.Resample(
-                orig_freq=sr, new_freq=self.resample_to
-            )(clean_wav)
-
-        if clean_wav.shape[0] != 1:
-            clean_wav = clean_wav[0].view(1, -1)  # ignore multi-channel
-
-        if self.max_length is not None:
-            # only using segmented audio
-            target_len = sr * self.max_length
-            if wav.shape[-1] > target_len:
-                offset = random.randint(0, int(wav.shape[-1]) - target_len)
-                # Avoid choice the zero tensor as target
-                while clean_wav[:, offset : offset + target_len].sum() == 0:
-                    offset = random.randint(0, int(wav.shape[-1]) - target_len)
-                    if clean_wav[:, offset : offset + target_len].sum() != 0:
-                        break
-                wav = wav[:, offset : offset + target_len]
-                clean_wav = clean_wav[:, offset : offset + target_len]
-            else:
-                pad_zero = torch.zeros(1, target_len - wav.shape[-1])
-                wav = torch.cat([wav, pad_zero], dim=-1)
-                pad_zero = torch.zeros(1, target_len - clean_wav.shape[-1])
-                clean_wav = torch.cat([clean_wav, pad_zero], dim=-1)
-        else:
-            target_len = wav.shape[1]  # wav is a tensor with shape [channel, N_sample]
-
-        # Start audio augmentation
-        if self.augmentor:
-            (
-                process_wav,
-                (speed, _, rir_id, rir_ch, a_coeffs, b_coeffs),
-            ) = self.wave_process(wav)
-        else:
-            process_wav, speed, rir_id, rir_ch, a_coeffs, b_coeffs = (
-                wav,
-                None,
-                None,
-                None,
-                None,
-                None,
-            )
-
-        # warp clean_wav with same speed perturbed
-        if speed is not None:
-            clean_wav, _ = self.augmentor.sox_speed_perturbed(clean_wav, speed)
-
-        # warp clean_wav with same rir reverb type, but different reverb mode
-        # 1. target image: warp same rir channel impaulse
-        # 2. target direct: warp same rir channel impaulse with 6ms center from peak
-        # 3. target early: warp same rir channel impaulse with 50ms center from peak
-        if rir_id is not None and self.rir_mode != "anechoic":
-            clean_wav = self.augmentor.apply_rir_by_key(
-                clean_wav, rir_id, choose_ch=rir_ch, rir_mode=self.rir_mode
-            )
-
-        # warp clean_wav with same frequency response variation
-        if a_coeffs is not None and b_coeffs is not None:
-            clean_wav, _, _ = self.augmentor.add_variaion_response(
-                clean_wav, a_coeffs, b_coeffs
-            )
-
-        # random adjust volumn on both clean and process wav
-        if self.vol_perturbed is not None:
-            if not isinstance(self.vol_perturbed, tuple):
-                min_ratio = float(self.vol_perturbed.strip().split(",")[0])
-                max_ratio = float(self.vol_perturbed.strip().split(",")[1])
-            else:
-                min_ratio, max_ratio = self.vol_perturbed
-            perturbed_ratio = torch.FloatTensor(1).uniform_(min_ratio, max_ratio).item()
-            clean_wav = self.augmentor.sox_volumn_perturbed(clean_wav, perturbed_ratio)
-            clean_wav = torch.clamp(clean_wav, min=-1, max=1)
-            process_wav = self.augmentor.sox_volumn_perturbed(
-                process_wav, perturbed_ratio
-            )
-            process_wav = torch.clamp(process_wav, min=-1, max=1)
-
-        return {"clean_wav": clean_wav, "process_wav": process_wav}
-
-    def create_augmentor(self) -> None:
-        self.augmentor = AudioAugmentor(
-            sample_rate=self.resample_to, convolve_mode="fft"
-        )
-        print(f"Created audio augmentor")
-
-        if self.noise_folder:
-            self.augmentor.load_bg_noise_from_folder(self.noise_folder)
-            print(f"Finished load {len(self.augmentor.bg_noise.keys())} noises")
-
-        if self.rir_folder:
-            self.augmentor.load_rir_from_folder(self.rir_folder)
-            print(f"Finished load {len(self.augmentor.rir.keys())} rirs")
-
-    def wave_process(self, x: torch.Tensor) -> Tuple:
-        speed, snr, rir_id, rir_ch, a_coeffs, b_coeffs = (
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-        )
-        backup = x.clone()
-
-        # speed perturbed
-        if self.speed_perturbed and torch.rand(1) < 0.5:
-            speed = float(torch.FloatTensor(1).uniform_(0.9, 1.1))
-            x, _ = self.augmentor.sox_speed_perturbed(x, speed)
-
-        # rir inject
-        if self.rir_folder is not None and torch.rand(1) < 0.8:
-            x, rir_id, rir_ch = self.augmentor.apply_rir(x)
-
-        # noise inject
-        if self.noise_folder is not None and torch.rand(1) < 0.8:
-            snr = float(torch.FloatTensor(1).uniform_(-5, 15))
-            x = self.augmentor.add_bg_noise(x, [snr])[0]
-
-        # frequency variations
-        if self.perturb_frequency_response and torch.rand(1) < 0.8:
-            x, a_coeffs, b_coeffs = self.augmentor.add_variaion_response(x)
-
-        # error handling
-        if torch.isnan(x).any():
-            print(
-                f"warning this augment has nan, snr={snr}, speed={speed}, rir_id={rir_id}"
-            )
-            x, speed, rir_id, a_coeffs, b_coeffs = backup, None, None, None, None
-
-        return x, (speed, snr, rir_id, rir_ch, a_coeffs, b_coeffs)
-
-
-class NsTask(BaseTrainer):
-    def __init__(self, hparam, device_backend, train_dataloader, dev_dataloader):
-        super().__init__(hparam, device_backend)
-        self.overall_step = 0
-        self.train_dataloader = train_dataloader
-        self.dev_dataloader = dev_dataloader
-
-    def train_one_epoch(self, current_epoch):
-        step = 0
-        total_loss = 0.0
-
-        for batch_idx, batch in enumerate(tqdm(self.train_dataloader)):
-            self.overall_step += 1
-            step += 1
-            clean_wav = batch["clean_wav"].to(self.device)  # [N, L]
-            noisy_wav = batch["process_wav"].to(self.device)  # [N, L]
-
-            self.optimizer.zero_grad(set_to_none=True)
-
-            # Model forward
-            loss = self.model(noisy=noisy_wav, enroll=None, ref_clean=clean_wav)
-            loss = torch.mean(loss, dim=0)  # aggregate loss from each device
-            print(f"epoch: {current_epoch}, iter: {batch_idx+1}, batch_loss: {loss}")
-            total_loss += loss.item()
-            loss.backward()
-
-            if self.hparam["OPTIMIZER"]["gradiend_clip"] is not None:
-                torch.nn.utils.clip_grad_norm_(
-                    self.model.parameters(), self.hparam["OPTIMIZER"]["gradiend_clip"]
-                )
-
-            self.optimizer.step()
-
-            if self.tf_writer:
-                _log_name = "train/batch_loss"
-                self.tf_writer.update_step_loss(_log_name, loss, self.overall_step)
-
-        return {"total_loss": total_loss / step}
-
-    def compute_dev_loss(self, current_epoch):
-        step = 0
-        dev_total_loss = 0.0
-
-        for _, batch in enumerate(tqdm(self.dev_dataloader)):
-            step += 1
-            clean_wav = batch["clean_wav"].to(self.device)  # [N, L]
-            noisy_wav = batch["process_wav"].to(self.device)  # [N, L]
-
-            with torch.no_grad():
-                loss = self.model(noisy=noisy_wav, enroll=None, ref_clean=clean_wav)
-                loss = torch.mean(loss, dim=0)  # aggregate loss from each device
-                dev_total_loss += loss.item()
-
-        print(f"dev average loss: {dev_total_loss / step}")
-        return {"total_loss": dev_total_loss / step}
-
-    def gen_logging(self, epoch: int, prefix: str):
-        """
-        Generate samples on tensorboard for loggin
-        """
-        test_audio_dct = load_text_as_dict(
-            f"{self.hparam['DATASET']['eval']}/wav2scp.txt"
-        )
-        resample_to = self.hparam["DATASET"]["sample_rate"]
-
-        for _, key in enumerate(test_audio_dct.keys()):
-            uttid = key
-            print(f"Running inference: {uttid}")
-            wav, sr = AudioIO.open(f_path=test_audio_dct[key][0])
-            if sr != resample_to:
-                wav = torchaudio.transforms.Resample(
-                    orig_freq=sr, new_freq=resample_to
-                )(wav)
-
-            wav = wav.to(self.device)
-
-            if isinstance(self.model, torch.nn.DataParallel):
-                enh_wav = self.model.module.inference(noisy=wav, enroll=None)
-            else:
-                enh_wav = self.model.inference(noisy=wav, enroll=None)
-
-            if self.tf_writer:
-                self.tf_writer.add_ep_audio(
-                    f"{prefix}{uttid}.wav", enh_wav, epoch, resample_to
-                )

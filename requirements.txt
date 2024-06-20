@@ -17,3 +17,4 @@ rir-generator
 plotly
 pandas
 kaleido
+lightning

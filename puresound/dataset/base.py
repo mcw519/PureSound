@@ -1,9 +1,13 @@
-from typing import Optional
+import random
+from copy import deepcopy
+from typing import Dict, List, Optional
 
+import numpy as np
 import torch
 
 from puresound.audio.augmentaion import AudioEffectAugmentor
-from puresound.audio.spectrum import wav_to_stft
+from puresound.audio.io import AudioIO
+from puresound.audio.noise import add_bg_white_noise
 from puresound.dataset.parser import MetafileParser
 
 
@@ -11,19 +15,66 @@ class DynamicBaseDataset(torch.utils.data.Dataset):
     def __init__(
         self,
         metafile_path: str,
-        noise_folder: Optional[str] = None,
-        rir_folder: Optional[str] = None,
+        min_utt_length_in_seconds: float = 3.0,
+        min_utts_in_each_speaker: int = 5,
+        target_sr: Optional[int] = None,
+        training_sample_length_in_seconds: float = 6.0,
+        audio_gain_nomalized_to: Optional[int] = None,
+        augmentation_speech_args: Optional[Dict] = None,
+        augmentation_noise_args: Optional[Dict] = None,
+        augmentation_reverb_args: Optional[Dict] = None,
+        augmentation_speed_args: Optional[Dict] = None,
+        augmentation_ir_response_args: Optional[Dict] = None,
+        augmentation_src_args: Optional[Dict] = None,
+        augmentation_hpf_args: Optional[Dict] = None,
+        augmentation_volume_args: Optional[Dict] = None,
     ):
-        self.noise_folder = noise_folder
-        self.rir_folder = rir_folder
+        super().__init__()
+        # Matafile related
+        self.metafile_path = metafile_path
+        self.min_utt_length_in_seconds = min_utt_length_in_seconds
+        self.min_utts_in_each_speaker = min_utts_in_each_speaker
+
+        # Audio related
+        self.target_sr = target_sr
+        self.audio_gain_nomalized_to = audio_gain_nomalized_to
+        self.training_sample_length_in_seconds = training_sample_length_in_seconds
+        self.training_sample_length = int(
+            self.target_sr * self.training_sample_length_in_seconds
+        )
+
+        # Augmentation related
+        self.augmentation_speech_args = augmentation_speech_args
+        self.augmentation_noise_args = augmentation_noise_args
+        self.augmentation_reverb_args = augmentation_reverb_args
+        self.augmentation_speed_args = augmentation_speed_args
+        self.augmentation_ir_response_args = augmentation_ir_response_args
+        self.augmentation_src_args = augmentation_src_args
+        self.augmentation_hpf_args = augmentation_hpf_args
+        self.augmentation_volume_args = augmentation_volume_args
 
         self.init_necessary()
-    
+
     def init_necessary(self):
-        raise NotImplementedError
+        self.meta, self.gender_meta, self.gender_spks = self.gen_meta(
+            metafile_path=self.metafile_path,
+            min_utt_length=self.min_utt_length_in_seconds,
+            min_utts_in_spk=self.min_utts_in_each_speaker,
+        )
+
+        self.total_spks = sorted(list(self.meta.keys()))
+        # add speaker index
+        self.spk2idx = {}
+        for idx, spkid in enumerate(self.total_spks):
+            self.spk2idx[spkid] = idx
+
+        self.init_augmentor()
 
     def __len__(self):
         pass
+
+    def __getitem__(self):
+        raise NotImplementedError
 
     def gen_meta(
         self, metafile_path: str, min_utts_in_spk: int = 10, min_utt_length: float = 3.0
@@ -141,15 +192,133 @@ class DynamicBaseDataset(torch.utils.data.Dataset):
 
     def init_augmentor(self):
         self.augmentor = AudioEffectAugmentor()
-        if self.noise_folder:
-            self.augmentor.load_bg_noise_from_folder(self.noise_folder)
+        if self.augmentation_noise_args is not None:
+            self.augmentor.load_bg_noise_from_folder(
+                self.augmentation_noise_args["noise_folder"]
+            )
             print(
                 f"Augmentor finished load {len(self.augmentor.bg_noise.keys())} noises"
             )
 
-        if self.rir_folder:
-            self.augmentor.load_rir_from_folder(self.rir_folder)
+        if self.augmentation_reverb_args is not None:
+            self.augmentor.load_rir_from_folder(
+                self.augmentation_reverb_args["rir_folder"]
+            )
             print(f"Augmentor finished load {len(self.augmentor.rir.keys())} rirs")
-        
+
         print("----" * 30)
-    
+
+    def choose_an_utterance_by_speaker_name(
+        self,
+        target_speaker_name: str,
+        ignoring_utt_list: Optional[List[str]] = None,
+        select_channel: Optional[int] = None,
+    ):
+        """
+        Random select an utterance in dataset by given a target speaker name
+
+        Args:
+            target_speaker_name: the key (name) of target speaker
+            ignoring_utt_list: a list of utterance name for those we don't want to pick it
+            select_channel: if given, only used the selected channel, it would make sure is single channel
+
+        Returns:
+            target speech tensor and its manifest information
+        """
+        timeout = 0
+        target_speech_pool = deepcopy(self.meta[target_speaker_name]["utts"])
+        check_key_list = list(target_speech_pool.keys())
+
+        if ignoring_utt_list is not None:
+            for ignored_key in ignoring_utt_list:
+                if ignored_key in check_key_list:
+                    del target_speech_pool[ignored_key]
+
+        target_speech_pool = list(target_speech_pool.keys())
+        # Chooce only one utterance
+        tgt_key = random.sample(target_speech_pool, k=1)[0]
+
+        target_speech, sr = AudioIO.open(
+            f_path=self.meta[target_speaker_name]["utts"][tgt_key]["path"],
+            target_lvl=self.audio_gain_nomalized_to,
+            resample_to=self.target_sr,
+        )
+
+        # Check the waveform is not empty
+        while target_speech.abs().mean() == 0:
+            if timeout < 5:
+                timeout += 1
+                print(
+                    f"Open an empty segment: {self.meta[target_speaker_name]['utts'][tgt_key]['path']}."
+                )
+                print(f"Retry {timeout} times.")
+                target_speech, sr, (target_speaker_name, tgt_key) = (
+                    self.choose_an_utterance_by_speaker_name(
+                        target_speaker_name=target_speaker_name,
+                        ignoring_utt_list=ignoring_utt_list,
+                    )
+                )
+            else:
+                raise RuntimeError(f"Timeout, can't find a useful utterance.")
+
+        if select_channel is not None:
+            if target_speech.shape[0] > select_channel:
+                target_speech = target_speech[select_channel].reshape(1, -1)
+
+        return target_speech, sr, (target_speaker_name, tgt_key)
+
+    def apply_audio_augmentation(self):
+        raise NotImplementedError
+
+    def align_audio_list(
+        self, wav_list: List[torch.Tensor], length: int, padding_type: str = "zero"
+    ):
+        """Randome shift, padding or truncate to match target length."""
+        padding_type = padding_type.lower()
+        assert padding_type in ["zero", "normal"]
+        out_list = []
+
+        for wav in wav_list:
+            if wav.shape[-1] >= length:
+                offset = random.randint(0, int(wav.shape[-1]) - length)
+                # Avoid choice the zero tensor
+                while wav[:, offset : offset + length].abs().mean() == 0:
+                    # print(
+                    #     f"This segment {wav[..., offset : offset + length]} from {offset} to {offset + length} is a empty tensor. RETRY."
+                    # )
+                    offset = random.randint(0, int(wav.shape[-1]) - length)
+                    if wav[:, offset : offset + length].abs().mean() != 0:
+                        break
+                clips_wav = wav[:, offset : offset + length]
+                assert clips_wav.shape[-1] == length
+
+            else:
+                ch, l = wav.shape
+                offset = random.randint(0, length - int(wav.shape[-1]))
+                pre_padd = torch.zeros(ch, offset, device=wav.device, dtype=wav.dtype)
+                suf_padd = torch.zeros(
+                    ch, length - l - offset, device=wav.device, dtype=wav.dtype
+                )
+                clips_wav = torch.cat([pre_padd, wav, suf_padd], dim=-1)
+                assert clips_wav.shape[-1] == length
+
+            if padding_type == "zero":
+                pass
+
+            elif padding_type == "normal":
+                snr = [40]
+                clips_wav = add_bg_white_noise(wav=clips_wav, snr_list=snr)[0]
+
+            out_list.append(clips_wav)
+        return out_list
+
+    def avoid_audio_clipping(self, wav_list: List[torch.Tensor]):
+        max_sample = np.max([x.abs().max().item() for x in wav_list])
+        if max_sample > 1:
+            out_list = []
+            for wav in wav_list:
+                out_list.append(wav / max_sample)
+
+            return out_list
+        else:
+            return wav_list

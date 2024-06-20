@@ -13,7 +13,6 @@ from .lobe.rnn import FSMN, ConditionFSMN
 class Unet(nn.Module):
     """
     Generic_Args:
-        input_type: Real or RI(real+image)
         input_dim: input feature dimension
         activation_type: activation function
         norm_type: normalization function
@@ -34,7 +33,6 @@ class Unet(nn.Module):
 
     def __init__(
         self,
-        input_type: str = "RI",
         input_dim: int = 512,
         activation_type: str = "PReLU",
         norm_type: str = "bN2d",
@@ -60,7 +58,6 @@ class Unet(nn.Module):
             == len(dilation_t)
             == len(dilation_f)
         )
-        self.input_type = input_type
         self.input_dim = input_dim
         self.multi_output = multi_output
         self.activation_type = activation_type
@@ -89,27 +86,17 @@ class Unet(nn.Module):
         self.dilation = list(zip(dilation_f, dilation_t))
         self.stride = list(zip(stride_f, stride_t))
         self.t_kernel = transpose_t_size
-
-        # Check relationship between feature-type and input-channel
-        if input_type.lower() == "ri":
-            self.num_freq = input_dim // 2
-            self.channels[0] = self.channels[0] * 2  # will expand RI channel
-
-        elif input_type.lower() == "real":
-            self.num_freq = input_dim
-
-        else:
-            raise TypeError("Input feature type should be RI-concate, RI-stack or Real")
+        self.num_freq = input_dim
 
         # CNN-down, downsample in frequency axis
         self.cnn_down = nn.ModuleList()
         for i in range(self.n_cnn):
             encode = []
             freq_pad = (
-                self.kernel[i][0] // 2,
-                self.kernel[i][0] // 2,
+                self.kernel[i][0] // 2 * dilation_f[i],
+                self.kernel[i][0] // 2 * dilation_f[i],
             )  # center padding in frequency axis
-            time_pad = (self.kernel[i][1] - self.delay[i] - 1, self.delay[i])
+            time_pad = ((self.kernel[i][1] - 1) * dilation_t[i] - self.delay[i], self.delay[i])
             encode += [
                 nn.ZeroPad2d(time_pad + freq_pad),  # (left, right, top, down)
                 nn.Conv2d(
@@ -144,7 +131,7 @@ class Unet(nn.Module):
                         self.channels[i],
                         kernel_size=(k, self.t_kernel),
                         stride=self.stride[i],
-                        dilation=self.dilation[i],
+                        dilation=1, #self.dilation[i],
                         padding=(p, 0),
                         output_padding=(op, 0),
                     ),
@@ -160,7 +147,7 @@ class Unet(nn.Module):
                         self.channels[i] * self.multi_output,
                         kernel_size=(k, self.t_kernel),
                         stride=self.stride[i],
-                        dilation=self.dilation[i],
+                        dilation=1, #self.dilation[i],
                         padding=(p, 0),
                         output_padding=(op, 0),
                     )
@@ -219,17 +206,13 @@ class Unet(nn.Module):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
         Args:
-            x: input tensor shape [N, C, T]
+            x: input tensor shape [N, CH, C, T]
 
         Returns:
-            output tensor has shape [N, C, T]
+            output tensor has shape [N, CH, C, T]
         """
-        if self.input_type.lower() == "ri":
-            _re, _im = torch.chunk(x, 2, dim=-2)
-            x = torch.stack([_re, _im], dim=1)  # [N, C, T] -> [N, 2, C, T]
-        else:
-            if x.dim() == 3:
-                x = x.unsqueeze(1)  # [N, 1, C, T]
+        if x.dim() == 3:
+            x = x.unsqueeze(1)  # [N, 1, C, T]
 
         skip = [x.clone()]
 
@@ -251,32 +234,11 @@ class Unet(nn.Module):
                     ..., : -(self.t_kernel - 1)
                 ]  # transpose-conv with t-kernel size would increase (t-1) length
 
-        if self.multi_output != 1:
-            batch, ch, fdim, tdim = x.shape
-            x = x.reshape(batch, self.multi_output, -1, fdim, tdim)
-            if self.input_type.lower() == "ri":
-                _re = x[:, :, 0, :, :]
-                _im = x[:, :, 1, :, :]
-                x = torch.cat([_re, _im], dim=2)
-
-            else:
-                x = x.squeeze(2)  # [N, M, 1, C, T] -> [N, C, T]
-
-        else:
-            if self.input_type.lower() == "ri":
-                _re = x[:, 0, :, :]
-                _im = x[:, 1, :, :]
-                x = torch.cat([_re, _im], dim=1)
-
-            else:
-                x = x.squeeze(1)  # [N, 1, C, T] -> [N, C, T]
-
         return x
 
     @property
     def get_args(self) -> Dict:
         return {
-            "input_type": self.input_type,
             "input_dim": self.input_dim,
             "activation_type": self.activation_type,
             "norm_type": self.norm_type,
@@ -337,7 +299,6 @@ class UnetTcn(Unet):
         causal: bool = False,
     ):
         super().__init__(
-            input_type,
             input_dim,
             activation_type,
             norm_type,
@@ -456,22 +417,18 @@ class UnetTcn(Unet):
     ) -> torch.Tensor:
         """
         Args:
-            x: input tensor shape [N, C, T]
+            x: input tensor shape [N, CH, C, T]
             dvec: conditional tensor shape [N, C]
 
         Returns:
-            output tensor has shape [N, C, T]
+            output tensor has shape [N, CH, C, T]
         """
         # normalize
         if self.embed_norm and dvec is not None:
             dvec = F.normalize(dvec, p=2, dim=1)
 
-        if self.input_type.lower() == "ri":
-            _re, _im = torch.chunk(x, 2, dim=-2)
-            x = torch.stack([_re, _im], dim=1)  # [N, C, T] -> [N, 2, C, T]
-        else:
-            if x.dim() == 3:
-                x = x.unsqueeze(1)  # [N, 1, C, T]
+        if x.dim() == 3:
+            x = x.unsqueeze(1)  # [N, 1, C, T]
 
         skip = [x.clone()]
 
@@ -511,20 +468,11 @@ class UnetTcn(Unet):
                         ..., : -(self.t_kernel - 1)
                     ]  # transpose-conv with t-kernel size would increase (t-1) length
 
-        if self.input_type.lower() == "ri":
-            _re = x[:, 0, :, :]
-            _im = x[:, 1, :, :]
-            x = torch.cat([_re, _im], dim=1)
-
-        else:
-            x = x.squeeze(1)  # [N, 1, C, T] -> [N, C, T]
-
         return x
 
     @property
     def get_args(self) -> Dict:
         return {
-            "input_type": self.input_type,
             "input_dim": self.input_dim,
             "activation_type": self.activation_type,
             "norm_type": self.norm_type,
@@ -569,7 +517,6 @@ class UnetFsmn(Unet):
         self,
         embed_dim: int = 0,
         embed_norm: bool = False,
-        input_type: str = "RI",
         input_dim: int = 512,
         activation_type: str = "PReLU",
         norm_type: str = "bN2d",
@@ -594,7 +541,6 @@ class UnetFsmn(Unet):
         use_film: bool = True,
     ):
         super().__init__(
-            input_type,
             input_dim,
             activation_type,
             norm_type,
@@ -668,22 +614,18 @@ class UnetFsmn(Unet):
     ) -> torch.Tensor:
         """
         Args:
-            x: input tensor shape [N, C, T]
+            x: input tensor shape [N, CH, C, T]
             dvec: conditional tensor shape [N, C]
 
         Returns:
-            output tensor has shape [N, C, T]
+            output tensor has shape [N, CH, C, T]
         """
         # normalize
         if self.embed_norm and dvec is not None:
             dvec = F.normalize(dvec, p=2, dim=1)
 
-        if self.input_type.lower() == "ri":
-            _re, _im = torch.chunk(x, 2, dim=-2)
-            x = torch.stack([_re, _im], dim=1)  # [N, C, T] -> [N, 2, C, T]
-        else:
-            if x.dim() == 3:
-                x = x.unsqueeze(1)  # [N, 1, C, T]
+        if x.dim() == 3:
+            x = x.unsqueeze(1)  # [N, 1, C, T]
 
         skip = [x.clone()]
 
@@ -722,20 +664,11 @@ class UnetFsmn(Unet):
                         ..., : -(self.t_kernel - 1)
                     ]  # transpose-conv with t-kernel size would increase (t-1) length
 
-        if self.input_type.lower() == "ri":
-            _re = x[:, 0, :, :]
-            _im = x[:, 1, :, :]
-            x = torch.cat([_re, _im], dim=1)
-
-        else:
-            x = x.squeeze(1)  # [N, 1, C, T] -> [N, C, T]
-
         return x
 
     @property
     def get_args(self) -> Dict:
         return {
-            "input_type": self.input_type,
             "input_dim": self.input_dim,
             "activation_type": self.activation_type,
             "norm_type": self.norm_type,

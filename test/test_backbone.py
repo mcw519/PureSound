@@ -2,6 +2,7 @@ import sys
 
 import pytest
 import torch
+
 from puresound.nnet.conv_tasnet import ConvTasNet
 from puresound.nnet.dpcrn import DPCRN
 from puresound.nnet.dprnn import DPRNN
@@ -61,11 +62,10 @@ def test_unet_tcn_backbone():
     model = UnetTcn(
         embed_dim=192,
         embed_norm=True,
-        input_type="RI",
-        input_dim=512,
+        input_dim=256,
         activation_type="PReLU",
         norm_type="gLN",
-        channels=(1, 32, 64, 128, 128, 128, 128),
+        channels=(2, 32, 64, 128, 128, 128, 128),
         transpose_t_size=2,
         transpose_delay=True,
         skip_conv=False,
@@ -87,7 +87,7 @@ def test_unet_tcn_backbone():
         dconv_norm=None,
         causal=False,
     )
-    input_x = torch.rand(1, 512, 100)
+    input_x = torch.rand(1, 2, 256, 100)
     input_dvec = torch.rand(1, 192)
     y = model(input_x, input_dvec)
     assert input_x.shape == y.shape
@@ -162,11 +162,10 @@ def test_dprnn_backbone():
 @pytest.mark.backbone
 def test_dpcrn_backbone():
     model = DPCRN(
-        input_type="RI",
-        input_dim=512,
+        input_dim=256,
         activation_type="PReLU",
         norm_type="bN2d",
-        channels=(1, 32, 32, 32, 64, 128),
+        channels=(2, 32, 32, 32, 64, 128),
         transpose_t_size=2,
         transpose_delay=False,
         skip_conv=False,
@@ -180,6 +179,6 @@ def test_dpcrn_backbone():
         rnn_hidden=128,
     )
 
-    input_x = torch.rand(1, 512, 1000)
+    input_x = torch.rand(1, 2, 256, 1000)
     y = model(input_x)
     assert input_x.shape == y.shape

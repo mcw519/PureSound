@@ -84,7 +84,6 @@ class DPRNNblock2D(nn.Module):
 class DPCRN(Unet):
     def __init__(
         self,
-        input_type: str = "RI",
         input_dim: int = 512,
         activation_type: str = "PReLU",
         norm_type: str = "bN2d",
@@ -104,7 +103,6 @@ class DPCRN(Unet):
         spectral_compress: bool = False,
     ):
         super().__init__(
-            input_type,
             input_dim,
             activation_type,
             norm_type,
@@ -136,20 +134,16 @@ class DPCRN(Unet):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
         Args:
-            x: input tensor shape [N, C, T]
+            x: input tensor shape [N, CH, C, T]
             
         Returns:
-            output tensor has shape [N, C, T]
+            output tensor has shape [N, CH, C, T]
         """
         if self.spectral_compress:
             x = spectral_compression(x, alpha=0.3, dim=1)
 
-        if self.input_type.lower() == "ri":
-            _re, _im = torch.chunk(x, 2, dim=-2)
-            x = torch.stack([_re, _im], dim=1)  # [N, C, T] -> [N, 2, C, T]
-        else:
-            if x.dim() == 3:
-                x = x.unsqueeze(1)  # [N, 1, C, T]
+        if x.dim() == 3:
+            x = x.unsqueeze(1)  # [N, 1, C, T]
 
         skip = [x.clone()]
 
@@ -180,20 +174,11 @@ class DPCRN(Unet):
                         ..., : -(self.t_kernel - 1)
                     ]  # transpose-conv with t-kernel size would increase (t-1) length
 
-        if self.input_type.lower() == "ri":
-            _re = x[:, 0, :, :]
-            _im = x[:, 1, :, :]
-            x = torch.cat([_re, _im], dim=1)
-
-        else:
-            x = x.squeeze(1)  # [N, 1, C, T] -> [N, C, T]
-
         return x
 
     @property
     def get_args(self) -> Dict:
         return {
-            "input_type": self.input_type,
             "input_dim": self.input_dim,
             "activation_type": self.activation_type,
             "norm_type": self.norm_type,

@@ -108,7 +108,7 @@ class Gate(nn.Module):
         Args:
             input tensor x has shape [N, C, T]
             condition tensor has shape [N, C]
-        
+
         Returns:
             output tensor has shape [N, C, T]
         """
@@ -150,7 +150,7 @@ class FiLM(nn.Module):
         Args:
             input tensor x has shape [N, C, T]
             condition tensor has shape [N, C]
-        
+
         Returns:
             output tensor has shape [N, C, T]
         """
@@ -179,7 +179,7 @@ class SplitMerge(nn.Module):
         """
         Args:
             input tensor x has shape [N, C, T]
-        
+
         Returns:
             output tensor segment has shape [N, S, K, C] and padding size
         """
@@ -214,7 +214,7 @@ class SplitMerge(nn.Module):
         """
         Args:
             input tensor x has shape [N, S, K, C]
-        
+
         Outputs:
             output tensor has shape [N, C, T]
         """
@@ -270,7 +270,7 @@ class MovingAverage1D(nn.Module):
         """
         Args:
             input tensor x has shape [N, T]
-        
+
         Returns:
             output tensor out has shape [N, T']
         """
@@ -308,28 +308,50 @@ class SpecAugment(nn.Module):
     """Spectrum augmentation layer, by random mask time/freq mask."""
 
     def __init__(
-        self, freq_mask_length: int, time_mask_length: int, fill_value: float
+        self,
+        freq_mask_length: int,
+        time_mask_length: int,
+        fill_value: float,
+        f_dim: int,
+        t_dim: int,
+        n_freq_mask: int = 1,
+        n_time_mask: int = 1,
+        prob: float = 0.5,
     ) -> None:
         """
         Args:
-            freq_mask_length: the mask length in freq axis (freq bin)
-            time_mask_length: the mask length in time axis (time frame)
+            freq_mask_length: Number of columns to be masked will be uniformly sampled from [0, mask_param] (freq bin)
+            time_mask_length: Number of columns to be masked will be uniformly sampled from [0, mask_param] (time frame)
             fill_value: replaced masked bin/frame by this value
         """
         super().__init__()
         self.freq_mask = freq_mask_length
         self.time_mask = time_mask_length
         self.mask_value = fill_value
+        self.f_dim = f_dim
+        self.t_dim = t_dim
+        self.n_freq_mask = n_freq_mask
+        self.n_time_mask = n_time_mask
+        self.prob = prob
 
     def apply_mask(self, x: torch.Tensor) -> torch.Tensor:
-        if self.freq_mask != 0:
-            x = mask_along_axis(x, self.freq_mask, self.mask_value, axis=1)
-        if self.time_mask != 0:
-            x = mask_along_axis(x, self.time_mask, self.mask_value, axis=2)
+        if torch.rand(1) < self.prob:
+            if self.freq_mask != 0:
+                for _ in range(self.n_freq_mask):
+                    x = mask_along_axis(
+                        x, self.freq_mask, self.mask_value, axis=1
+                    )
+
+        if torch.rand(1) < self.prob:
+            if self.time_mask != 0:
+                for _ in range(self.n_time_mask):
+                    x = mask_along_axis(
+                        x, self.time_mask, self.mask_value, axis=2
+                    )
 
         return x
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        x = self.apply_mask(x)
-
+        if self.training:
+            x = self.apply_mask(x)
         return x

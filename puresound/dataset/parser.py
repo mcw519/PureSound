@@ -1,8 +1,8 @@
 import io
 import os
-from typing import Any, Dict, Optional
+from typing import Optional
 
-from puresound.src.utils import create_folder, str2bool
+from puresound.utils import create_folder
 
 
 class MetafileParser:
@@ -33,7 +33,7 @@ class MetafileParser:
             insert_corpus_root_path: if not None, insert root path before audio path
             with_label_column: if true, use label information
             with_start_time_column: if ture, support start time information
-        
+
         Returns:
             Dict
         """
@@ -185,7 +185,7 @@ class MetafileParser:
             wav2duration.writelines(f"{uttid} {duration}\n")
             if with_label_column:
                 label_path = meta_dct[key]["label_path"]
-                wav2label.writelines(f"{uttid} {label}\n")
+                wav2label.writelines(f"{uttid} {label_path}\n")
 
             if with_start_time_column:
                 s_time = meta_dct[key]["start_time"]
