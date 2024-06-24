@@ -1,4 +1,4 @@
-from typing import Dict
+from typing import Dict, Optional
 
 import torch
 
@@ -18,13 +18,25 @@ class Logging:
             else:
                 self.bag[key].append(item)
 
-    def clear(self):
-        self.bag = {}
+    def clear(self, key: Optional[str] = None):
+        if key is not None:
+            del self.bag[key]
+        else:
+            self.bag = {}
 
-    def average(self):
-        output = {}
-        for key in sorted(self.bag.keys()):
+    def average(self, key: Optional[str] = None):
+        """
+        Args:
+            key: if given, only average and return key's average score
+        """
+        if key is not None:
             scores = torch.Tensor(self.bag[key]).mean()
-            output[key] = scores
+            return scores
 
-        return output
+        else:
+            output = {}
+            for key in sorted(self.bag.keys()):
+                scores = torch.Tensor(self.bag[key]).mean()
+                output[key] = scores
+
+            return output
