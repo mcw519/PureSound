@@ -7,7 +7,7 @@ from torch.nn.utils.rnn import pad_sequence
 
 from puresound.audio.dsp import wav_resampling
 from puresound.audio.noise import add_bg_noise
-from puresound.dataset.base import DynamicBaseDataset
+from puresound.dataset.dynamic_base import DynamicBaseDataset
 
 
 class NoiseSuppressionDataset(DynamicBaseDataset):
@@ -112,7 +112,7 @@ class NoiseSuppressionDataset(DynamicBaseDataset):
             wav_list=[noisy_speech, target_speech]
         )
 
-        # Speech Perturbation
+        # Speed Perturbation
         if (
             self.augmentation_speed_args["used"]
             and torch.rand(1) < self.augmentation_speed_args["prob"]
@@ -149,7 +149,7 @@ class NoiseSuppressionDataset(DynamicBaseDataset):
                     rir_mode=self.augmentation_reverb_args["target_rir_type"],
                     sr=self.target_sr,
                 )
-            
+
             if noisy_speech.shape[0] != 1:
                 noisy_speech = noisy_speech[0].view(1, -1)
                 target_speech = target_speech[0].view(1, -1)
