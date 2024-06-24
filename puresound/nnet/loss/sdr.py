@@ -63,6 +63,7 @@ class SDRLoss(nn.Module):
             "sdsdr",
             "sdr",
             "tsdr",
+            "tsdr50",
             "sasdr",
             "sasisnr",
             "satsdr",
@@ -86,6 +87,8 @@ class SDRLoss(nn.Module):
 
         if loss_func == "tsdr" or loss_func == "satsdr":
             sdr_max = 30
+        elif loss_func == "tsdr50":
+            sdr_max = 50
         else:
             sdr_max = None
 
