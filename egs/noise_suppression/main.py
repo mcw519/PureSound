@@ -1,5 +1,5 @@
 import argparse
-from typing import Dict
+from typing import Dict, List
 
 import lightning as L
 import torch
@@ -7,7 +7,9 @@ from lightning.pytorch.callbacks import LearningRateMonitor, ModelCheckpoint
 
 from puresound import nnet, system
 from puresound.audio.io import AudioIO
-from puresound.nnet.loss.sdr import SDRLoss
+from puresound.dataset.kaldi_base import KaldiFormBaseDataset
+from puresound.metrics import Metrics
+from puresound.nnet import loss as ploss
 from puresound.system.optim import create_optimizer_and_scheduler
 from puresound.task.ns import NoiseSuppressionCollateFunc, NoiseSuppressionDataset
 from puresound.task.sampler import SpeakerSampler
@@ -20,6 +22,7 @@ def load_config(f_path: str):
     trainer_dict = config["trainer"]
     optim_dict = config["optimizer"]
     scheduler_dict = config["scheduler"]
+    loss_dict = config["loss_func"]
     model_dict = config["model"]
 
     aug_speech_dict = None
@@ -53,6 +56,7 @@ def load_config(f_path: str):
         trainer_dict,
         optim_dict,
         scheduler_dict,
+        loss_dict,
         model_dict,
         aug_speech_dict,
         aug_noise_dict,
@@ -162,11 +166,29 @@ def init_model(model_dict):
     return model
 
 
+def init_loss_func(hparam_conf: List):
+    """
+    Returns:
+        loss_list contain [[loss_1, weighted_1], [loss_2, weighted_2], ...]
+    """
+    loss_list = []
+    for item in hparam_conf:
+        loss_func = getattr(ploss, item["type"])(**item["args"])
+        loss_list.append([loss_func, item["weighted"]])
+
+    return loss_list
+
+
 if __name__ == "__main__":
+    torch.set_float32_matmul_precision("high")
+
     parser = argparse.ArgumentParser()
     parser.add_argument("config_path", type=str)
     parser.add_argument("--set_seed", type=int, default=None)
     parser.add_argument("--training", type=str2bool, default=False)
+    parser.add_argument("--scoring", type=str2bool, default=False)
+    parser.add_argument("--inference", type=str2bool, default=False)
+    parser.add_argument("--ckpt_path", type=str, default=None)
     parser.add_argument("--dump_training_samples", type=str2bool, default=False)
     args = parser.parse_args()
 
@@ -179,6 +201,7 @@ if __name__ == "__main__":
         trainer_dict,
         optim_dict,
         scheduler_dict,
+        loss_dict,
         model_dict,
         aug_speech_dict,
         aug_noise_dict,
@@ -190,18 +213,19 @@ if __name__ == "__main__":
         aug_volume_dict,
     ) = load_config(args.config_path)
 
-    train_dataloader, valid_dataloader = init_dataloader(
-        corpus_dict,
-        trainer_dict,
-        aug_speech_dict,
-        aug_noise_dict,
-        aug_reverb_dict,
-        aug_speed_dict,
-        aug_ir_dict,
-        aug_src_dict,
-        aug_hpf_dict,
-        aug_volume_dict,
-    )
+    if args.training or args.dump_training_samples:
+        train_dataloader, valid_dataloader = init_dataloader(
+            corpus_dict,
+            trainer_dict,
+            aug_speech_dict,
+            aug_noise_dict,
+            aug_reverb_dict,
+            aug_speed_dict,
+            aug_ir_dict,
+            aug_src_dict,
+            aug_hpf_dict,
+            aug_volume_dict,
+        )
 
     if args.dump_training_samples:
         create_folder(folder_name="./dummy_samples")
@@ -222,9 +246,10 @@ if __name__ == "__main__":
                 )
 
     if args.training:
-        loss_func = SDRLoss.init_mode("tsdr")
+        # Initialize loss function
+        loss_func_list = init_loss_func(hparam_conf=loss_dict)
         lighting_model = init_model(model_dict)
-        lighting_model.register_loss_func(loss_func)
+        lighting_model.register_loss_func(loss_func_list)
         param_groups = lighting_model.get_total_param_groups()
         optimizer, scheduler = create_optimizer_and_scheduler(
             overall_params_and_lr_factor=param_groups,
@@ -233,6 +258,7 @@ if __name__ == "__main__":
         )
         lighting_model.register_optimizer(optimizer)
         lighting_model.register_scheduler(scheduler)
+        lighting_model.register_warmup_step(scheduler_dict["warmup_step"])
 
         # Callbacks
         lr_monitor = LearningRateMonitor(logging_interval="epoch")
@@ -249,9 +275,64 @@ if __name__ == "__main__":
             use_distributed_sampler=False,
             default_root_dir=trainer_dict["work_folder"],
             callbacks=[lr_monitor, ckpt_monitor],
+            profiler="simple",
         )
-        trainer.fit(
-            lighting_model,
-            train_dataloaders=train_dataloader,
-            val_dataloaders=valid_dataloader,
+
+        if args.ckpt_path is not None:
+            trainer.fit(
+                lighting_model,
+                train_dataloaders=train_dataloader,
+                val_dataloaders=valid_dataloader,
+                ckpt_path=args.ckpt_path,
+            )
+        else:
+            trainer.fit(
+                lighting_model,
+                train_dataloaders=train_dataloader,
+                val_dataloaders=valid_dataloader,
+            )
+
+    if args.scoring:
+        test_dataset = KaldiFormBaseDataset(folder=corpus_dict["test_folder"])
+        test_dataloader = torch.utils.data.DataLoader(
+            dataset=test_dataset,
+            pin_memory=True,
+            num_workers=4,
+            batch_size=1,
+            shuffle=False,
+        )
+        trainer = L.Trainer()
+        lighting_model = init_model(model_dict)
+        # ckpt = torch.load(args.ckpt_path, map_location="cpu")
+        # lighting_model.load_state_dict(ckpt["state_dict"])
+        lighting_model.register_metrics_func(
+            {
+                "pesq_wb": {"func": Metrics.pesq_wb, "sr": 16000},
+                "pesq_nb": {"func": Metrics.pesq_nb, "sr": 8000},
+                "stoi": {"func": Metrics.stoi, "sr": 16000},
+                "sisnr": {"func": Metrics.sisnr, "sr": None},
+                "bss_sdr": {"func": Metrics.bss_sdr, "sr": None},
+            }
+        )
+        trainer.test(
+            lighting_model, dataloaders=test_dataloader, ckpt_path=args.ckpt_path
+        )
+
+    if args.inference:
+        test_dataset = KaldiFormBaseDataset(folder=corpus_dict["test_folder"])
+        test_dataloader = torch.utils.data.DataLoader(
+            dataset=test_dataset,
+            pin_memory=True,
+            num_workers=4,
+            batch_size=1,
+            shuffle=False,
+        )
+        trainer = L.Trainer()
+        lighting_model = init_model(model_dict)
+        # ckpt = torch.load(args.ckpt_path, map_location="cpu")
+        # lighting_model.load_state_dict(ckpt["state_dict"])
+        create_folder(corpus_dict["proc_output_folder"])
+        lighting_model.register_proc_output_folder(corpus_dict["proc_output_folder"])
+        trainer.predict(
+            lighting_model, dataloaders=test_dataloader, ckpt_path=args.ckpt_path
         )

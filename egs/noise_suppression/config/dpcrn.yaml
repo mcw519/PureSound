@@ -1,7 +1,8 @@
 dataset:
   train_metafile: ./data/train
   valid_metafile: ./data/valid
-  test_metafile: ./data/test
+  test_folder: ./data/test
+  proc_output_folder: ./proc
   target_sample_rate: 32000
   gain_nomalized_to: # ex: -28
   training_length_seconds: 6.
@@ -119,13 +120,75 @@ optimizer:
 
 scheduler:
   type: StepLR
+  warmpup_step: 1
   args:
     step_size: 10
     gamma: 0.5
 
 loss_func:
-  type: SDR
+  # The first loss func
+  - type: SDRLoss
+    weighted: 1.
+    args:
+      scaled: False
+      scale_dependent: False
+      zero_mean: True
+      source_aggregated: False
+      sdr_max: 50
+      threshold: -50
   
+  # The second loss func
+  - type: MultiResolutionSTFTLoss
+    weighted: 1.
+    args:
+      fft_sizes:
+        - 1024
+        - 2048
+        - 512
+      hop_sizes:
+        - 120
+        - 240
+        - 50
+      win_lengths:
+        - 600
+        - 1200
+        - 240
+      window: hann_window
+      factor_sc: 0.1
+      factor_mag: 0.1
+
+loss_func:
+  # The first loss func
+  - type: SDRLoss
+    weighted: 1.
+    args:
+      scaled: False
+      scale_dependent: False
+      zero_mean: True
+      source_aggregated: False
+      sdr_max: 50
+      threshold: -50
+  
+  # The second loss func
+  - type: MultiResolutionSTFTLoss
+    weighted: 1.
+    args:
+      fft_sizes:
+        - 1024
+        - 2048
+        - 512
+      hop_sizes:
+        - 120
+        - 240
+        - 50
+      win_lengths:
+        - 600
+        - 1200
+        - 240
+      window: hann_window
+      factor_sc: 0.1
+      factor_mag: 0.1  
+
 model:
   lighting_module:
     type: EncDecMaskBase
@@ -140,7 +203,6 @@ model:
       fft_length: 1024
       win_type: "hann"
       win_length: 1024
-      freq_bins: 1024
       hop_length: 320
       fmin: 0
       fmax: 16000
