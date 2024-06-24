@@ -339,14 +339,14 @@ class SpecAugment(nn.Module):
             if self.freq_mask != 0:
                 for _ in range(self.n_freq_mask):
                     x = mask_along_axis(
-                        x, self.freq_mask, self.mask_value, axis=1
+                        x, self.freq_mask, self.mask_value, axis=2
                     )
 
         if torch.rand(1) < self.prob:
             if self.time_mask != 0:
                 for _ in range(self.n_time_mask):
                     x = mask_along_axis(
-                        x, self.time_mask, self.mask_value, axis=2
+                        x, self.time_mask, self.mask_value, axis=3
                     )
 
         return x
