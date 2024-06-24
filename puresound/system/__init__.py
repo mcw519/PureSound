@@ -1,1 +1,1 @@
-from .base import EncDecMaskBase
+from .siso import EncDecMaskBase
