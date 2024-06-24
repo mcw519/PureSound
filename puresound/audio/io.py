@@ -4,6 +4,7 @@ from typing import Optional, Tuple
 import torch
 import torchaudio
 
+from .dsp import wav_resampling
 from .volume import normalize_waveform, rescale_waveform
 
 
@@ -50,11 +51,8 @@ class AudioIO:
 
         if resample_to is not None:
             if sr != resample_to:
-                wav = torchaudio.transforms.Resample(
-                    orig_freq=sr, new_freq=resample_to, lowpass_filter_width=128
-                )(wav)
-                sr = resample_to
-
+                wav, sr = wav_resampling(wav=wav, origin_sr=sr, target_sr=resample_to, backend="sox")
+                
         avg_amp_ori = torch.mean(torch.abs(wav), dim=-1)
 
         if normalized:
