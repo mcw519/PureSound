@@ -125,6 +125,7 @@ class DPARN(Unet):
         stride_f: Tuple = (2, 2, 1, 1, 1),
         dilation_f: Tuple = (1, 1, 1, 1, 1),
         delay: Tuple = (0, 0, 0, 0, 0),
+        n_dparn_block: int = 2,
         rnn_hidden: int = 128,
         nhead: int = 1,
         spectral_compress: bool = False,
@@ -147,22 +148,21 @@ class DPARN(Unet):
         )
 
         self.transpose_delay = transpose_delay
+        self.n_dparn_block = n_dparn_block
         self.rnn_hidden = rnn_hidden
         self.spectral_compress = spectral_compress
 
         # DPRNN block
-        self.dprnn_block1 = DPARNblock2D(
-            input_size=channels[-1],
-            hidden_size=rnn_hidden,
-            nhead=nhead,
-            dropout=dropout,
-        )
-        self.dprnn_block2 = DPARNblock2D(
-            input_size=channels[-1],
-            hidden_size=rnn_hidden,
-            nhead=nhead,
-            dropout=dropout,
-        )
+        self.dparn_block = nn.ModuleList()
+        for _ in range(self.n_dparn_block):
+            self.dparn_block.append(
+                DPARNblock2D(
+                    input_size=channels[-1],
+                    hidden_size=rnn_hidden,
+                    nhead=nhead,
+                    dropout=dropout,
+                )
+            )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
@@ -178,6 +178,8 @@ class DPARN(Unet):
         if x.dim() == 3:
             x = x.unsqueeze(1)  # [N, 1, C, T]
 
+        x = self.input_norm(x)
+        
         skip = [x.clone()]
 
         # forward CNN-down layers
@@ -186,9 +188,9 @@ class DPARN(Unet):
             skip.append(x)
 
         # forward dprnn
-        x = self.dprnn_block1(x)  # [N, ch, C, T]
-        x = self.dprnn_block2(x)  # [N, ch, C, T]
-
+        for dparn_block in self.dparn_block:
+            x = dparn_block(x)  # [N, ch, C, T]
+        
         # forward CNN-up layers
         for i, cnn_layer in enumerate(self.cnn_up):
             if self.skip_conv:
@@ -227,5 +229,6 @@ class DPARN(Unet):
             "stride_f": self.stride_f,
             "dilation_f": self.dilation_f,
             "delay": self.delay,
+            "n_dparn_block": self.n_dparn_block,
             "rnn_hidden": self.rnn_hidden,
         }

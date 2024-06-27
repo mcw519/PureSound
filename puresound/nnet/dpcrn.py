@@ -145,6 +145,8 @@ class DPCRN(Unet):
         if x.dim() == 3:
             x = x.unsqueeze(1)  # [N, 1, C, T]
 
+        x = self.input_norm(x)
+
         skip = [x.clone()]
 
         # forward CNN-down layers

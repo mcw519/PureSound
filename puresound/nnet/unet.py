@@ -6,7 +6,7 @@ import torch.nn.functional as F
 
 from .conv_tasnet import TCN, GatedTCN
 from .lobe.activation import get_activation
-from .lobe.norm import get_norm
+from .lobe.norm import get_norm, iLN
 from .lobe.rnn import FSMN, ConditionFSMN
 
 
@@ -87,6 +87,9 @@ class Unet(nn.Module):
         self.stride = list(zip(stride_f, stride_t))
         self.t_kernel = transpose_t_size
         self.num_freq = input_dim
+
+        # input normalized
+        self.input_norm = iLN(channels[0] * input_dim)
 
         # CNN-down, downsample in frequency axis
         self.cnn_down = nn.ModuleList()
@@ -213,6 +216,8 @@ class Unet(nn.Module):
         """
         if x.dim() == 3:
             x = x.unsqueeze(1)  # [N, 1, C, T]
+        
+        x = self.input_norm(x)
 
         skip = [x.clone()]
 
