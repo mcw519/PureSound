@@ -1,3 +1,4 @@
+import math
 import random
 from typing import Dict, List, Optional
 
@@ -28,6 +29,13 @@ class SpeakerSampler:
         self.spk_pool = list(data.keys())
         self.fast_sampling = fast_sampling
         del self.data
+
+        if n_spks > len(self.spk_pool):
+            self.n_per = math.ceil((n_spks * n_per) / len(self.spk_pool))
+            self.n_spks = len(self.spk_pool)
+            print(
+                f"Sample larger than population, reset it to n_spk={self.n_spks} and n_per={self.n_per}."
+            )
 
         if fast_sampling:
             # shuffle the speaker pool first
