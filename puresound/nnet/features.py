@@ -3,6 +3,7 @@ from typing import Dict, Optional
 import torch
 import torch.nn as nn
 
+from .lobe.dsp import FrequecyEQLayer
 from .lobe.stft import mel_filterbank
 from .lobe.trivial import LambdaLayer, Magnitude, SpecAugment
 
@@ -81,6 +82,7 @@ class FeatureEncoder(nn.Module):
         drop_stft_first_bin: bool = True,
         include_specaug: bool = False,
         specaug_args: Optional[Dict] = None,
+        peq_module: Optional[FrequecyEQLayer] = None,
         trainable: bool = False,
     ):
         super().__init__()
@@ -88,6 +90,14 @@ class FeatureEncoder(nn.Module):
         self.feats_type = feats_type.lower()
         self.drop_stft_first_bin = drop_stft_first_bin
         self.include_specaug = include_specaug
+        self.apply_peq = False
+        if peq_module is not None:
+            self.apply_peq = True
+            # re initialize for setting trainable or not
+            peq_args = peq_module.get_args
+            peq_args["trainable"] = trainable
+            self.peq = peq_module.__class__(**peq_args)
+
         assert self.feats_type in [
             "free",
             "complex",
@@ -131,7 +141,11 @@ class FeatureEncoder(nn.Module):
             return features should has shape [N, CH, C, T]
         """
         if x.ndim == 3:
-            x = x.unsqueeze(1)
+            x = x.unsqueeze(-1)
+
+        if self.apply_peq:
+            x = self.peq(x.permute(0, 3, 1, 2))
+            x = x.permute(0, 2, 3, 1)
 
         feats_for_enhanced = self.transform(x)
         if self.include_specaug:

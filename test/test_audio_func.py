@@ -280,20 +280,20 @@ def test_biquad_lpf_hpf_func(cutoff, filter_type):
 @pytest.mark.audio_func
 def test_biquad_filter_and_eq_func():
     EQ_param = {
-        "sample_rate": 16000,
-        "eq_band_gain": (0.5, 5.5, -3.25, -2.5, -4, -4, -4.5),
-        "eq_band_cutoff": (500, 1000, 1500, 2500, 3500, 5500, 6000),
-        "eq_band_q_factor": (0.707, 0.707, 0.707, 0.707, 0.707, 0.707, 0.707),
+        "sample_rate": 32000,
+        "eq_band_gain": (2.5, 5.5, 3.25, 2.5, -2, -4, -6, -10),
+        "eq_band_cutoff": (500, 1000, 1500, 2500, 3500, 5500, 8500, 12000),
+        "eq_band_q_factor": (0.707, 0.707, 0.707, 0.707, 0.707, 0.707, 0.707, 0.707),
         "low_shelf_gain_dB": 0.0,
         "low_shelf_cutoff_freq": 80.0,
         "low_shelf_q_factor": 0.707,
-        "high_shelf_gain_dB": 0.0,
-        "high_shelf_cutoff_freq": 7800,
+        "high_shelf_gain_dB": -20.0,
+        "high_shelf_cutoff_freq": 14000,
         "high_shelf_q_factor": 0.707,
     }
     peq = ParametricEQ(**EQ_param)
     wav, sr = AudioIO.open(
-        f_path=TEST_AUDIO_PATH, normalized=False, target_lvl=-28, verbose=True
+        f_path=TEST_AUDIO_PATH, normalized=False, target_lvl=-28, verbose=True, resample_to=32000
     )
     eq_wav = peq.forward(wav=wav)
     if SAVE_TEST_AUDIO:

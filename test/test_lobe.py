@@ -3,6 +3,8 @@ import sys
 import numpy as np
 import pytest
 import torch
+
+from puresound.nnet.lobe.dsp import FrequecyEQLayer
 from puresound.nnet.lobe.rnn import FSMN, ConditionFSMN
 from puresound.nnet.lobe.trivial import SplitMerge
 
@@ -52,3 +54,11 @@ def test_split_and_merge():
     split_x, rest = SplitMerge.split(input_x, 40)
     merge_x = SplitMerge.merge(split_x, rest)
     assert torch.allclose(input_x, merge_x)
+
+
+@pytest.mark.nnet
+def test_freq_peq_layer():
+    Fpeq = FrequecyEQLayer()
+    input_x = torch.rand(1, 2, 257, 100)
+    output_x = Fpeq(input_x)
+    output_x.sum().backward()
