@@ -58,7 +58,8 @@ class NoiseSuppressionDataset(DynamicBaseDataset):
         # Add interference speech from other speakers
         interfered_speech = []
         if (
-            self.augmentation_speech_args["used"]
+            self.augmentation_speech_args
+            and self.augmentation_speech_args["used"]
             and torch.rand(1) < self.augmentation_speech_args["prob"]
         ):
             spk_pool = deepcopy(self.total_spks)
@@ -114,7 +115,8 @@ class NoiseSuppressionDataset(DynamicBaseDataset):
 
         # Speed Perturbation
         if (
-            self.augmentation_speed_args["used"]
+            self.augmentation_speed_args
+            and self.augmentation_speed_args["used"]
             and torch.rand(1) < self.augmentation_speed_args["prob"]
         ):
             speed = torch.arange(
@@ -132,7 +134,8 @@ class NoiseSuppressionDataset(DynamicBaseDataset):
 
         # Reverb
         if (
-            self.augmentation_reverb_args["used"]
+            self.augmentation_reverb_args
+            and self.augmentation_reverb_args["used"]
             and torch.rand(1) < self.augmentation_reverb_args["prob"]
         ):
             # RIR's target for noisy is full
@@ -158,7 +161,8 @@ class NoiseSuppressionDataset(DynamicBaseDataset):
         # We collect added noises for if we need to use high SNR noisy speech as ground truth
         added_noise = None
         if (
-            self.augmentation_noise_args["used"]
+            self.augmentation_noise_args
+            and self.augmentation_noise_args["used"]
             and torch.rand(1) < self.augmentation_noise_args["prob"]
         ):
             dynamic_type = False
@@ -212,7 +216,8 @@ class NoiseSuppressionDataset(DynamicBaseDataset):
         # SRC
         flag_src = False
         if (
-            self.augmentation_src_args["used"]
+            self.augmentation_src_args
+            and self.augmentation_src_args["used"]
             and torch.rand(1) < self.augmentation_src_args["prob"]
         ):
             flag_src = True
@@ -266,7 +271,8 @@ class NoiseSuppressionDataset(DynamicBaseDataset):
         # 2nd-IIR response
         flag_iir = False
         if (
-            self.augmentation_ir_response_args["used"]
+            self.augmentation_ir_response_args
+            and self.augmentation_ir_response_args["used"]
             and torch.rand(1) < self.augmentation_ir_response_args["prob"]
         ):
             flag_iir = True
@@ -280,7 +286,8 @@ class NoiseSuppressionDataset(DynamicBaseDataset):
         # HPF effects
         flag_hpf = False
         if (
-            self.augmentation_hpf_args["used"]
+            self.augmentation_hpf_args
+            and self.augmentation_hpf_args["used"]
             and torch.rand(1) < self.augmentation_hpf_args["prob"]
         ):
             flag_hpf = True
@@ -305,7 +312,8 @@ class NoiseSuppressionDataset(DynamicBaseDataset):
         # Volume perturbed
         flag_volume = False
         if (
-            self.augmentation_volume_args["used"]
+            self.augmentation_volume_args
+            and self.augmentation_volume_args["used"]
             and torch.rand(1) < self.augmentation_volume_args["prob"]
         ):
             flag_volume = True
@@ -416,6 +424,7 @@ class NoiseSuppressionDataset(DynamicBaseDataset):
             "clean_speech": target_speech,
             "added_noise": added_noise,
             "consistency_noise": noisy_speech - target_speech,
+            "speaker_id": self.spk2idx[target_speaker],
         }
 
 
@@ -429,22 +438,26 @@ class NoiseSuppressionCollateFunc:
         col_noisy = []
         col_clean = []
         col_consistency = []
+        col_spkid = []
 
         for b in batch:
             """
-            one batch -- (dict) -- {'noisy_speech', 'clean_speech', 'added_noise', "consistency_noise"}
+            one batch -- (dict) -- {'noisy_speech', 'clean_speech', 'added_noise', "consistency_noise", "speaker_id}
             wav file each with shape [1, L]
             """
             col_clean.append(b["clean_speech"].squeeze())
             col_noisy.append(b["noisy_speech"].squeeze())
             col_consistency.append(b["consistency_noise"].squeeze())
+            col_spkid.append(b["speaker_id"])
 
         padded_clean = pad_sequence(col_clean, batch_first=True)  # [N, L]
         padded_noisy = pad_sequence(col_noisy, batch_first=True)  # [N, L]
         padded_consistency = pad_sequence(col_consistency, batch_first=True)  # [N, L]
+        padded_spkid = torch.Tensor(col_spkid)
 
         return {
             "clean_speech": padded_clean,
             "noisy_speech": padded_noisy,
             "consistency_noise": padded_consistency,
+            "spkid": padded_spkid,
         }
