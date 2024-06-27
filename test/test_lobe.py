@@ -4,11 +4,29 @@ import numpy as np
 import pytest
 import torch
 
+from puresound.audio.io import AudioIO
 from puresound.nnet.lobe.dsp import FrequecyEQLayer
+from puresound.nnet.lobe.encoder import ConvEncDec
 from puresound.nnet.lobe.rnn import FSMN, ConditionFSMN
 from puresound.nnet.lobe.trivial import SplitMerge
+from puresound.utils import create_folder
 
 sys.path.insert(0, "./")
+
+TEST_AUDIO_PATH = "./test_case/1272-141231-0008.flac"
+OUT_TEST_FOLDER = "./test_case/outputs"
+SAVE_TEST_AUDIO = True
+
+create_folder(OUT_TEST_FOLDER)
+
+
+def align_and_stack(wav1: torch.Tensor, wav2: torch.Tensor):
+    if wav1.shape[-1] > wav2.shape[-1]:
+        wav1 = wav1[..., : wav2.shape[-1]]
+    else:
+        wav2 = wav2[..., : wav1.shape[-1]]
+
+    return torch.cat([wav1, wav2], dim=0)
 
 
 @pytest.mark.nnet
@@ -62,3 +80,36 @@ def test_freq_peq_layer():
     input_x = torch.rand(1, 2, 257, 100)
     output_x = Fpeq(input_x)
     output_x.sum().backward()
+
+
+@pytest.mark.nnet
+@pytest.mark.parametrize(
+    "n_fft, hop_length, win_type, trainable",
+    [[512, 128, "hann", False], [1024, 160, "hamming", True]],
+)
+def test_trainable_stft_layer(n_fft, hop_length, win_type, trainable):
+    wav, sr = AudioIO.open(
+        f_path=TEST_AUDIO_PATH,
+        normalized=False,
+        target_lvl=None,
+        verbose=True,
+        resample_to=16000,
+    )
+    encoder = ConvEncDec(
+        fft_length=n_fft,
+        win_type=win_type,
+        win_length=n_fft,
+        sr=sr,
+        fmin=0,
+        fmax=8000,
+        freq_scale="no",
+        trainable=trainable,
+    )
+    stft = encoder(wav)
+    reconstructed_wav = encoder.inverse(stft)
+    if SAVE_TEST_AUDIO:
+        AudioIO.save(
+            wav=align_and_stack(wav1=wav, wav2=reconstructed_wav),
+            f_path=f"{OUT_TEST_FOLDER}/stft_encdec_fft={n_fft}_hop={hop_length}_win={win_type}.wav",
+            sr=sr,
+        )
