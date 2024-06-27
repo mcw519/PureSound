@@ -3,7 +3,7 @@ from typing import Dict, Optional
 
 import torch
 
-from puresound.audio.io import AudioIO
+from puresound.audio.io import AudioIO, wav_resampling
 from puresound.utils import load_text_as_dict
 
 
@@ -38,7 +38,14 @@ class KaldiFormBaseDataset(torch.utils.data.Dataset):
         noisy_speech, sr = AudioIO.open(f_path=self.df[key]["wav2scp"])
         noisy_speech = noisy_speech.squeeze()
         if "wav2ref" in self.df[key]:
-            clean_speech, sr = AudioIO.open(f_path=self.df[key]["wav2ref"])
+            clean_speech, _sr = AudioIO.open(f_path=self.df[key]["wav2ref"])
+            if _sr != sr:
+                print(
+                    f"Reference audio samplerate {_sr} isn't same as Noisy audio {sr}, resampling to {sr} by Sox backend."
+                )
+                clean_speech, _ = wav_resampling(
+                    wav=clean_speech, origin_sr=_sr, target_sr=sr, backend="sox"
+                )
             clean_speech = clean_speech.squeeze()
         else:
             clean_speech = None
