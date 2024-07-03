@@ -23,10 +23,12 @@ class KaldiFormBaseDataset(torch.utils.data.Dataset):
         resample_to: if not None, open waveform will resample to this value
     """
 
-    def __init__(self, folder, resample_to: Optional[int] = None):
+    def __init__(self, folder, resample_to: Optional[int] = None, mode: str = "train"):
         super().__init__()
         self.folder = folder
         self.resample_to = resample_to
+        assert mode.lower() in ["train", "dev", "eval"]
+        self.mode = mode.lower()
         self.df = self._load_df(self.folder)
         self.idx_df = self._idx2key(self.df)
 
@@ -35,10 +37,17 @@ class KaldiFormBaseDataset(torch.utils.data.Dataset):
 
     def __getitem__(self, index: int):
         key = self.idx_df[index]
-        noisy_speech, sr = AudioIO.open(f_path=self.df[key]["wav2scp"])
+        noisy_speech, sr = AudioIO.open(f_path=self.df[key]["wav2scp"], resample_to=self.resample_to)
         noisy_speech = noisy_speech.squeeze()
-        if "wav2ref" in self.df[key]:
-            clean_speech, _sr = AudioIO.open(f_path=self.df[key]["wav2ref"])
+        if self.mode == "eval":
+            return {
+                "noisy_speech": noisy_speech,
+                "sr": sr,
+                "name": key,
+            }
+
+        else:
+            clean_speech, _sr = AudioIO.open(f_path=self.df[key]["wav2ref"], resample_to=self.resample_to)
             if _sr != sr:
                 print(
                     f"Reference audio samplerate {_sr} isn't same as Noisy audio {sr}, resampling to {sr} by Sox backend."
@@ -47,14 +56,12 @@ class KaldiFormBaseDataset(torch.utils.data.Dataset):
                     wav=clean_speech, origin_sr=_sr, target_sr=sr, backend="sox"
                 )
             clean_speech = clean_speech.squeeze()
-        else:
-            clean_speech = None
-        return {
-            "noisy_speech": noisy_speech,
-            "clean_speech": clean_speech,
-            "sr": sr,
-            "name": key,
-        }
+            return {
+                "noisy_speech": noisy_speech,
+                "clean_speech": clean_speech,
+                "sr": sr,
+                "name": key,
+            }
 
     @property
     def folder_content(self):
@@ -86,7 +93,8 @@ class KaldiFormBaseDataset(torch.utils.data.Dataset):
         if load_dct.keys != {}:
             for f in load_dct.keys():
                 if not os.path.isfile(f"{folder}/{load_dct[f]}"):
-                    raise FileNotFoundError(f"{load_dct[f]} is not found")
+                    # raise FileNotFoundError(f"{load_dct[f]} is not found")
+                    print(f"Only incerece mode doesn't need wav2ref file")
                 else:
                     _temp = load_text_as_dict(f"{folder}/{load_dct[f]}")
                     for key in sorted(_temp.keys()):
