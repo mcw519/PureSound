@@ -105,7 +105,6 @@ class MetafileParser:
                     if spkid not in meta_dict.keys():
                         meta_dict[spkid] = {
                             "gender": gender,
-                            "sr": sr,
                             "channels": channels,
                             "utts": {},
                         }
@@ -116,6 +115,7 @@ class MetafileParser:
                                 "path": audio_path,
                                 "length": length,
                                 "channels": channels,
+                                "sr": sr,
                             }
                         }
                     )
