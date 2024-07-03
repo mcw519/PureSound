@@ -74,7 +74,7 @@ class AudioIO:
             if not normalize_waveform and target_lvl is not None:
                 print(f"RMS_rescale: {avg_amp_rescale.item()}")
 
-        return wav, sr
+        return wav, int(sr)
 
     @staticmethod
     def save(wav: torch.Tensor, f_path: str, sr: int, **kwargs):
