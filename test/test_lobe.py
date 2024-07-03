@@ -6,7 +6,7 @@ import torch
 
 from puresound.audio.io import AudioIO
 from puresound.nnet.lobe.dsp import FrequecyEQLayer
-from puresound.nnet.lobe.encoder import ConvEncDec
+from puresound.nnet.lobe.encoder import ConvEncDec, UnifiedConvEncDec
 from puresound.nnet.lobe.rnn import FSMN, ConditionFSMN
 from puresound.nnet.lobe.trivial import SplitMerge
 from puresound.utils import create_folder
@@ -111,5 +111,31 @@ def test_trainable_stft_layer(n_fft, hop_length, win_type, trainable):
         AudioIO.save(
             wav=align_and_stack(wav1=wav, wav2=reconstructed_wav),
             f_path=f"{OUT_TEST_FOLDER}/stft_encdec_fft={n_fft}_hop={hop_length}_win={win_type}.wav",
+            sr=sr,
+        )
+
+
+@pytest.mark.nnet
+@pytest.mark.parametrize(
+    "sr",
+    [8000, 16000, 22050, torch.Tensor([24000]), torch.Tensor([32000]), 44100, 48000],
+)
+def test_unified_stft_encoder(sr):
+    wav, sr = AudioIO.open(
+        f_path=TEST_AUDIO_PATH,
+        normalized=False,
+        target_lvl=None,
+        verbose=True,
+        resample_to=sr if isinstance(sr, int) else int(sr.item()),
+    )
+    encoder = UnifiedConvEncDec(win_type="hann", trainable=False)
+    stft = encoder(wav, sr)
+    reconstructed_wav = encoder.inverse(stft, sr)
+    if SAVE_TEST_AUDIO:
+        if isinstance(sr, torch.Tensor):
+            sr = int(sr.item())
+        AudioIO.save(
+            wav=align_and_stack(wav1=wav, wav2=reconstructed_wav),
+            f_path=f"{OUT_TEST_FOLDER}/unified_stft_encdec_sr={sr}.wav",
             sr=sr,
         )

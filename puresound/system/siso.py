@@ -4,6 +4,7 @@ Single Input Single Ouput (SISO) PL-Module
 Use cases:
     - Mask based speech enhancement
 """
+
 import torch
 import torch.nn as nn
 
@@ -53,6 +54,9 @@ class EncDecMaskBase(BaseLightningModule):
         # Loss
 
     def forward(self, wav: torch.Tensor):
+        if wav.dim() != 2 and wav.shape[0] == 1:
+            wav = wav.squeeze(0)
+
         features = self.encoder(wav)
         features, features_for_enhanced = self.feats(features)
         mask = self.backbone(features)
@@ -91,6 +95,8 @@ class EncDecMaskBase(BaseLightningModule):
                 tf_rep=features_for_enhanced, est_ifc=ifc, est_cov=cov, order=n_order
             )
             enh[:, :, :n_bins, :] = enh_filter[:, :, :n_bins, :]
+        elif self.mask_type == "mapping":
+            enh = mask
         else:
             raise NameError
 
@@ -128,6 +134,7 @@ class EncDecMaskBase(BaseLightningModule):
     def training_step(self, batch, batch_idx):
         noisy_speech = batch["noisy_speech"]
         clean_speech = batch["clean_speech"]
+        audio_sr = batch["sr"]
         enhanced_speech = self.forward(noisy_speech)
         total_loss, losses = self.compute_loss(
             enhanced=enhanced_speech, target=clean_speech
@@ -149,6 +156,7 @@ class EncDecMaskBase(BaseLightningModule):
     def validation_step(self, batch, batch_idx):
         noisy_speech = batch["noisy_speech"]
         clean_speech = batch["clean_speech"]
+        audio_sr = batch["sr"]
         enhanced_speech = self.forward(noisy_speech)
         total_loss, losses = self.compute_loss(
             enhanced=enhanced_speech, target=clean_speech

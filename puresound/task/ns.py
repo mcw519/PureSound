@@ -1,6 +1,6 @@
 import random
 from copy import deepcopy
-from typing import Dict, Optional
+from typing import Dict, Optional, Tuple
 
 import torch
 from torch.nn.utils.rnn import pad_sequence
@@ -8,6 +8,13 @@ from torch.nn.utils.rnn import pad_sequence
 from puresound.audio.dsp import wav_resampling
 from puresound.audio.noise import add_bg_noise
 from puresound.dataset.dynamic_base import DynamicBaseDataset
+
+
+def if_none_else(a, b):
+    if a is not None:
+        return a
+    else:
+        return b
 
 
 class NoiseSuppressionDataset(DynamicBaseDataset):
@@ -45,13 +52,21 @@ class NoiseSuppressionDataset(DynamicBaseDataset):
             augmentation_volume_args=augmentation_volume_args,
         )
 
-    def __getitem__(self, target_speaker: str):
-        target_speech, _, (_, _) = self.choose_an_utterance_by_speaker_name(
-            target_speaker_name=target_speaker, select_channel=0
+    def __getitem__(self, target_speaker: Tuple[str, int | None]):
+        target_speaker, batch_sr = target_speaker
+        batch_sr = int(batch_sr) if batch_sr is not None else batch_sr
+        target_speech, self.ori_audio_sr, (_, _) = (
+            self.choose_an_utterance_by_speaker_name(
+                target_speaker_name=target_speaker, select_channel=0, select_with_sr_as_key=batch_sr
+            )
         )
         # Snipts first
         target_speech = self.align_audio_list(
-            wav_list=[target_speech], length=self.training_sample_length
+            wav_list=[target_speech],
+            length=if_none_else(
+                self.training_sample_length,
+                int(self.ori_audio_sr * self.training_sample_length_in_seconds),
+            ),
         )[0]
         noisy_speech = target_speech.clone()
 
@@ -62,24 +77,41 @@ class NoiseSuppressionDataset(DynamicBaseDataset):
             and self.augmentation_speech_args["used"]
             and torch.rand(1) < self.augmentation_speech_args["prob"]
         ):
-            spk_pool = deepcopy(self.total_spks)
+            # Samples speakers from overall speaker pool
+            if self.target_sr is not None:
+                spk_pool = deepcopy(self.total_spks)
+            # Samples speakers from same SR conditions
+            else:
+                spk_pool = deepcopy(list(self.sr_meta[self.ori_audio_sr].keys()))
+            
             spk_pool = set(spk_pool)
             spk_pool.remove(target_speaker)
             interference_spk_list = random.sample(
                 spk_pool, k=self.augmentation_speech_args["add_n_cases"]
             )
             for spk in interference_spk_list:
-                _speech, _, _ = self.choose_an_utterance_by_speaker_name(
+                _speech, _sr, _ = self.choose_an_utterance_by_speaker_name(
                     target_speaker_name=spk,
                     select_channel=0,
+                    select_with_sr_as_key=self.ori_audio_sr,
                 )
+                # Interfered speech has to be same sample rate of target speech
+                while _sr != self.ori_audio_sr:
+                    _speech, _sr, _ = self.choose_an_utterance_by_speaker_name(
+                        target_speaker_name=spk,
+                        select_channel=0,
+                        select_with_sr_as_key=self.ori_audio_sr,
+                    )
                 interfered_speech.append(_speech)
 
             # Aligned and Mixing
             clips_wav = [target_speech] + interfered_speech
             clips_wav = self.align_audio_list(
                 wav_list=clips_wav,
-                length=self.training_sample_length,
+                length=if_none_else(
+                    self.training_sample_length,
+                    int(self.ori_audio_sr * self.training_sample_length_in_seconds),
+                ),
                 padding_type="zero",
             )
             # Here, we assume all clips has same shape equal to [1, L]
@@ -126,10 +158,14 @@ class NoiseSuppressionDataset(DynamicBaseDataset):
             )
             speed = random.choice(speed)
             noisy_speech, (speed) = self.augmentor.sox_speed_perturbed(
-                wav=noisy_speech, speed=speed.item(), sr=self.target_sr
+                wav=noisy_speech,
+                speed=speed.item(),
+                sr=if_none_else(self.target_sr, self.ori_audio_sr),
             )
             target_speech, _ = self.augmentor.sox_speed_perturbed(
-                wav=target_speech, speed=speed, sr=self.target_sr
+                wav=target_speech,
+                speed=speed,
+                sr=if_none_else(self.target_sr, self.ori_audio_sr),
             )
 
         # Reverb
@@ -142,7 +178,7 @@ class NoiseSuppressionDataset(DynamicBaseDataset):
             noisy_speech, (rir_id, _) = self.augmentor.apply_rir(
                 wav=noisy_speech,
                 rir_mode="full",
-                sr=self.target_sr,
+                sr=if_none_else(self.target_sr, self.ori_audio_sr),
             )
             # Warping target speech for same RIR but different rir mode
             if self.augmentation_reverb_args["target_rir_type"] != "anechoic":
@@ -150,7 +186,7 @@ class NoiseSuppressionDataset(DynamicBaseDataset):
                     wav=target_speech,
                     rir_id=rir_id,
                     rir_mode=self.augmentation_reverb_args["target_rir_type"],
-                    sr=self.target_sr,
+                    sr=if_none_else(self.target_sr, self.ori_audio_sr),
                 )
 
             if noisy_speech.shape[0] != 1:
@@ -183,7 +219,7 @@ class NoiseSuppressionDataset(DynamicBaseDataset):
                 wav=noisy_speech,
                 snr_list=[snr],
                 dynamic_type=dynamic_type,
-                sr=self.target_sr,
+                sr=if_none_else(self.target_sr, self.ori_audio_sr),
             )
             added_noise = added_noise[0]
 
@@ -233,7 +269,7 @@ class NoiseSuppressionDataset(DynamicBaseDataset):
 
             noisy_speech, src_info = self.augmentor.apply_src_effect(
                 wav=noisy_speech,
-                sr=self.target_sr,
+                sr=if_none_else(self.target_sr, self.ori_audio_sr),
                 src_sr=src_target,
                 src_backend=src_backend,
             )
@@ -242,20 +278,20 @@ class NoiseSuppressionDataset(DynamicBaseDataset):
             if src_backend == "sox":
                 target_speech, _ = wav_resampling(
                     wav=target_speech,
-                    origin_sr=self.target_sr,
+                    origin_sr=if_none_else(self.target_sr, self.ori_audio_sr),
                     target_sr=src_target,
                     backend="sox",
                 )
                 target_speech, _ = wav_resampling(
                     wav=target_speech,
                     origin_sr=src_target,
-                    target_sr=self.target_sr,
+                    target_sr=if_none_else(self.target_sr, self.ori_audio_sr),
                     backend="sox",
                 )
             else:
                 target_speech, *src_info = wav_resampling(
                     wav=target_speech,
-                    origin_sr=self.target_sr,
+                    origin_sr=if_none_else(self.target_sr, self.ori_audio_sr),
                     target_sr=src_target,
                     backend="torchaudio",
                     torch_backend_params=src_info[-1],
@@ -263,7 +299,7 @@ class NoiseSuppressionDataset(DynamicBaseDataset):
                 target_speech, *src_info = wav_resampling(
                     wav=target_speech,
                     origin_sr=src_target,
-                    target_sr=self.target_sr,
+                    target_sr=if_none_else(self.target_sr, self.ori_audio_sr),
                     backend="torchaudio",
                     torch_backend_params=src_info[-1],
                 )
@@ -298,13 +334,13 @@ class NoiseSuppressionDataset(DynamicBaseDataset):
             q_factor = torch.FloatTensor(1).normal_(mean=0.707, std=0.1).clip(0.3, 1.3)
             noisy_speech, _ = self.augmentor.apply_hpf(
                 wav=noisy_speech,
-                sr=self.target_sr,
+                sr=if_none_else(self.target_sr, self.ori_audio_sr),
                 cutoff_freq=hpf_cutoff,
                 q_factor=q_factor,
             )
             target_speech, _ = self.augmentor.apply_hpf(
                 wav=target_speech,
-                sr=self.target_sr,
+                sr=if_none_else(self.target_sr, self.ori_audio_sr),
                 cutoff_freq=hpf_cutoff,
                 q_factor=q_factor,
             )
@@ -350,15 +386,31 @@ class NoiseSuppressionDataset(DynamicBaseDataset):
                     .item()
                 )
                 noisy_speech, (vol_ratio) = self.augmentor.sox_volume_perturbed(
-                    wav=noisy_speech, vol_ratio=gain, sr=self.target_sr
+                    wav=noisy_speech,
+                    vol_ratio=gain,
+                    sr=if_none_else(self.target_sr, self.ori_audio_sr),
                 )
                 target_speech, (vol_ratio) = self.augmentor.sox_volume_perturbed(
-                    wav=target_speech, vol_ratio=vol_ratio, sr=self.target_sr
+                    wav=target_speech,
+                    vol_ratio=vol_ratio,
+                    sr=if_none_else(self.target_sr, self.ori_audio_sr),
                 )
 
         # Snipts to training target sample length
-        noisy_speech = noisy_speech[..., : self.training_sample_length]
-        target_speech = target_speech[..., : self.training_sample_length]
+        noisy_speech = noisy_speech[
+            ...,
+            : if_none_else(
+                self.training_sample_length,
+                int(self.ori_audio_sr * self.training_sample_length_in_seconds),
+            ),
+        ]
+        target_speech = target_speech[
+            ...,
+            : if_none_else(
+                self.training_sample_length,
+                int(self.ori_audio_sr * self.training_sample_length_in_seconds),
+            ),
+        ]
 
         # Wrap added_noise
         if added_noise is not None:
@@ -366,20 +418,20 @@ class NoiseSuppressionDataset(DynamicBaseDataset):
                 if src_backend == "sox":
                     added_noise, _ = wav_resampling(
                         wav=added_noise,
-                        origin_sr=self.target_sr,
+                        origin_sr=if_none_else(self.target_sr, self.ori_audio_sr),
                         target_sr=src_target,
                         backend="sox",
                     )
                     added_noise, _ = wav_resampling(
                         wav=added_noise,
                         origin_sr=src_target,
-                        target_sr=self.target_sr,
+                        target_sr=if_none_else(self.target_sr, self.ori_audio_sr),
                         backend="sox",
                     )
                 else:
                     added_noise, *src_info = wav_resampling(
                         wav=added_noise,
-                        origin_sr=self.target_sr,
+                        origin_sr=if_none_else(self.target_sr, self.ori_audio_sr),
                         target_sr=src_target,
                         backend="torchaudio",
                         torch_backend_params=src_info[-1],
@@ -387,7 +439,7 @@ class NoiseSuppressionDataset(DynamicBaseDataset):
                     added_noise, *src_info = wav_resampling(
                         wav=added_noise,
                         origin_sr=src_target,
-                        target_sr=self.target_sr,
+                        target_sr=if_none_else(self.target_sr, self.ori_audio_sr),
                         backend="torchaudio",
                         torch_backend_params=src_info[-1],
                     )
@@ -400,7 +452,7 @@ class NoiseSuppressionDataset(DynamicBaseDataset):
             if flag_hpf:
                 added_noise, _ = self.augmentor.apply_hpf(
                     wav=added_noise,
-                    sr=self.target_sr,
+                    sr=if_none_else(self.target_sr, self.ori_audio_sr),
                     cutoff_freq=hpf_cutoff,
                     q_factor=q_factor,
                 )
@@ -408,7 +460,9 @@ class NoiseSuppressionDataset(DynamicBaseDataset):
             if flag_volume:
                 if vol_ratio is not None:
                     added_noise, _ = self.augmentor.sox_volume_perturbed(
-                        wav=added_noise, vol_ratio=vol_ratio, sr=self.target_sr
+                        wav=added_noise,
+                        vol_ratio=vol_ratio,
+                        sr=if_none_else(self.target_sr, self.ori_audio_sr),
                     )
                 else:
                     added_noise, (_, _) = self.augmentor.apply_clipping_distortion(
@@ -425,6 +479,8 @@ class NoiseSuppressionDataset(DynamicBaseDataset):
             "added_noise": added_noise,
             "consistency_noise": noisy_speech - target_speech,
             "speaker_id": self.spk2idx[target_speaker],
+            "audio_sr": if_none_else(self.target_sr, self.ori_audio_sr),
+            "audio_length": noisy_speech.shape[-1],
         }
 
 
@@ -439,25 +495,37 @@ class NoiseSuppressionCollateFunc:
         col_clean = []
         col_consistency = []
         col_spkid = []
+        col_sr = []
+        col_length = []
 
         for b in batch:
             """
-            one batch -- (dict) -- {'noisy_speech', 'clean_speech', 'added_noise', "consistency_noise", "speaker_id}
+            one batch -- (dict) -- {
+                "noisy_speech",
+                "clean_speech",
+                "added_noise",
+                "consistency_noise",
+                "speaker_id",
+                "audio_sr",
+                "audio_length", }
             wav file each with shape [1, L]
             """
             col_clean.append(b["clean_speech"].squeeze())
             col_noisy.append(b["noisy_speech"].squeeze())
             col_consistency.append(b["consistency_noise"].squeeze())
             col_spkid.append(b["speaker_id"])
+            col_sr.append(b["audio_sr"])
+            col_length.append(b["audio_length"])
 
         padded_clean = pad_sequence(col_clean, batch_first=True)  # [N, L]
         padded_noisy = pad_sequence(col_noisy, batch_first=True)  # [N, L]
         padded_consistency = pad_sequence(col_consistency, batch_first=True)  # [N, L]
-        padded_spkid = torch.Tensor(col_spkid)
 
         return {
             "clean_speech": padded_clean,
             "noisy_speech": padded_noisy,
             "consistency_noise": padded_consistency,
-            "spkid": padded_spkid,
+            "spkid": torch.Tensor(col_spkid),
+            "sr": torch.Tensor(col_sr),
+            "length": torch.Tensor(col_length),
         }

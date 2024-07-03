@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Optional, Union
 
 import torch
 import torch.nn as nn
@@ -94,9 +94,9 @@ class ConvEncDec(nn.Module):
     backbone class: `ConvSTFT` based on convolution layer with STFT kernels
     Flows:
         Forward:
-        raw wave -> emphasis wave -> Complex-STFT
+        raw wave -> Complex-STFT
         Inverse:
-        Complex-STFT -> generate wave -> de-emphasis
+        Complex-STFT -> generate wave
     """
 
     def __init__(
@@ -276,7 +276,7 @@ class ConvSTFT(nn.Module):
         # remove redundant parts
         spec_real = spec_real[:, : self.freq_bins, :]
         spec_imag = spec_imag[:, : self.freq_bins, :]
-        
+
         # Remember the minus sign for imaginary part
         return torch.stack((spec_real, -spec_imag), -1)
 
@@ -309,7 +309,7 @@ class ConvSTFT(nn.Module):
         # n_fft//2+1 -> n_fft
         X = extend_fbins(X)  # extend freq
         X_real, X_imag = X[:, :, :, 0], X[:, :, :, 1]
-        
+
         # broadcast dimensions to support 2D convolution
         X_real_bc = X_real.unsqueeze(1)
         X_imag_bc = X_imag.unsqueeze(1)
@@ -341,3 +341,154 @@ class ConvSTFT(nn.Module):
         )
 
         return real
+
+
+class UnifiedConvEncDec(nn.Module):
+    """
+    Unifed ConvEncDec can handle any input sampling rate audios.
+    All the I/O follows the 25 ms window length and 10 ms hop length
+    backbone class: `ConvSTFT` based on convolution layer with STFT kernels
+    Flows:
+        Forward:
+        raw wave -> Complex-STFT
+        Inverse:
+        Complex-STFT -> generate wave
+    """
+
+    def __init__(
+        self,
+        win_type: str = "hann",
+        trainable: bool = False,
+    ):
+        super().__init__()
+        self.trainable = trainable
+        win_func = self.get_window_type(type=win_type)
+        # Initialized different SR encoder
+        self.encoder_params = self.get_stft_parms()
+        self.encoder = {}
+        for sr in self.encoder_params.keys():
+            params = self.encoder_params[sr]
+            params.update({"window_mask": win_func(params["n_fft"])})
+            self.encoder[sr] = ConvSTFT(iSTFT=True, **params)
+
+    def get_stft_parms(self):
+        params = {
+            8000: {
+                "sr": 8000,
+                "n_fft": 200,
+                "hop_length": 80,
+                "fmin": 0,
+                "fmax": 4000,
+                "freq_scale": "no",
+                "trainable": self.trainable,
+            },
+            16000: {
+                "sr": 16000,
+                "n_fft": 400,
+                "hop_length": 160,
+                "fmin": 0,
+                "fmax": 8000,
+                "freq_scale": "no",
+                "trainable": self.trainable,
+            },
+            22050: {
+                "sr": 22050,
+                "n_fft": 550,
+                "hop_length": 220,
+                "fmin": 0,
+                "fmax": 11025,
+                "freq_scale": "no",
+                "trainable": self.trainable,
+            },  # ?
+            24000: {
+                "sr": 24000,
+                "n_fft": 600,
+                "hop_length": 240,
+                "fmin": 0,
+                "fmax": 12000,
+                "freq_scale": "no",
+                "trainable": self.trainable,
+            },
+            32000: {
+                "sr": 32000,
+                "n_fft": 800,
+                "hop_length": 320,
+                "fmin": 0,
+                "fmax": 16000,
+                "freq_scale": "no",
+                "trainable": self.trainable,
+            },
+            44100: {
+                "sr": 44100,
+                "n_fft": 1100,
+                "hop_length": 441,
+                "fmin": 0,
+                "fmax": 22050,
+                "freq_scale": "no",
+                "trainable": self.trainable,
+            },  # ?
+            48000: {
+                "sr": 48000,
+                "n_fft": 1200,
+                "hop_length": 480,
+                "fmin": 0,
+                "fmax": 24000,
+                "freq_scale": "no",
+                "trainable": self.trainable,
+            },
+        }
+        return params
+
+    def get_window_type(self, type: str) -> torch.Tensor:
+        if type.lower() == "hann":
+            win = torch.hann_window
+        elif type.lower() == "hamming":
+            win = torch.hamming_window
+        elif type.lower() == "blackman":
+            win = torch.blackman_window
+        else:
+            raise NotImplementedError(f"window type not support")
+        return win
+
+    def forward(self, x: torch.Tensor, sr: Union[torch.Tensor, int]):
+        """
+        Args:
+            input tensor shape is [N, L]
+            sr: sample rate shape is tensor [N] or int
+
+        Returns:
+            output tensor shape is [N, C, T, 2]
+        """
+        x = x.unsqueeze(1)  # [N, 1, L]
+
+        out = []
+        if isinstance(sr, int):
+            return self.encoder[sr](x)
+
+        else:
+            for i in range(x.shape[0]):
+                out.append(self.encoder[int(sr[i])](x[i].unsqueeze(0)))
+
+            return torch.cat(out, dim=0)
+
+    def inverse(self, x: torch.Tensor, sr: Union[torch.Tensor, int]) -> torch.Tensor:
+        """
+        Args:
+            input tensor shape is [N, C, T, 2]
+            sr: sample rate shape is tensor [N] or int
+
+        Returns:
+            output tensor shape is [N, L]
+        """
+        out = []
+
+        if isinstance(sr, int):
+            return self.encoder[sr].inverse(x)
+        else:
+            for i in range(x.shape[0]):
+                gen = self.encoder[int(sr[i])].inverse(x[i].unsqueeze(0))
+                if gen.dim() == 3:
+                    gen = gen.squeeze(1)
+                out.append(gen)
+
+            return torch.cat(out, dim=0)

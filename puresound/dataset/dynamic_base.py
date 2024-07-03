@@ -1,4 +1,5 @@
 import random
+from collections import defaultdict
 from copy import deepcopy
 from typing import Dict, List, Optional
 
@@ -39,9 +40,12 @@ class DynamicBaseDataset(torch.utils.data.Dataset):
         self.target_sr = target_sr
         self.audio_gain_nomalized_to = audio_gain_nomalized_to
         self.training_sample_length_in_seconds = training_sample_length_in_seconds
-        self.training_sample_length = int(
-            self.target_sr * self.training_sample_length_in_seconds
-        )
+        if self.target_sr is not None:
+            self.training_sample_length = int(
+                self.target_sr * self.training_sample_length_in_seconds
+            )
+        else:
+            self.training_sample_length = None
 
         # Augmentation related
         self.augmentation_speech_args = augmentation_speech_args
@@ -56,7 +60,7 @@ class DynamicBaseDataset(torch.utils.data.Dataset):
         self.init_necessary()
 
     def init_necessary(self):
-        self.meta, self.gender_meta, self.gender_spks = self.gen_meta(
+        self.meta, self.gender_meta, self.gender_spks, self.sr_meta = self.gen_meta(
             metafile_path=self.metafile_path,
             min_utt_length=self.min_utt_length_in_seconds,
             min_utts_in_spk=self.min_utts_in_each_speaker,
@@ -92,7 +96,9 @@ class DynamicBaseDataset(torch.utils.data.Dataset):
         remove_key_by_length = 0
         for spk in sorted(meta.keys()):
             for utt in list(meta[spk]["utts"].keys()):
-                _s = float(meta[spk]["utts"][utt]["length"]) / float(meta[spk]["sr"])
+                _s = float(meta[spk]["utts"][utt]["length"]) / float(
+                    meta[spk]["utts"][utt]["sr"]
+                )
                 if _s < float(min_utt_length):
                     del meta[spk]["utts"][utt]
                     remove_key_by_length += 1
@@ -121,6 +127,7 @@ class DynamicBaseDataset(torch.utils.data.Dataset):
             meta[spk]["corpus_id"] = corpus_id
             all_corpus_id.add(corpus_id)
 
+        # Generate meta and let gender as key
         gender_meta = {"m": {}, "f": {}, "other": {}}
         gender_spks = {"m": [], "f": [], "other": []}
         for cid in all_corpus_id:
@@ -188,7 +195,31 @@ class DynamicBaseDataset(torch.utils.data.Dataset):
         print(f"Total speakers: {len(meta.keys())}")
         print("----" * 30)
 
-        return meta, gender_meta, gender_spks
+        # Generate meta and let SR as key
+        sr_meta = defaultdict(lambda: defaultdict(list))
+        for spk in sorted(meta.keys()):
+            for utt in list(meta[spk]["utts"].keys()):
+                _sr = int(meta[spk]["utts"][utt]["sr"])
+                sr_meta[_sr][spk].append(utt)
+
+        for _sr in sorted(sr_meta.keys()):
+            delete_spk = []
+            for _spk in sorted(sr_meta[_sr].keys()):
+                if len(sr_meta[_sr][_spk]) < min_utts_in_spk:
+                    delete_spk.append(_spk)
+
+            for _spk in delete_spk:
+                del sr_meta[_sr][_spk]
+
+        for _sr in sorted(sr_meta.keys()):
+            if len(sr_meta[_sr].keys()) == 0:
+                del sr_meta[_sr]
+
+        print(f"Overall have {len(sr_meta.keys())} sample rate in all corpus")
+        for key in sorted(sr_meta.keys()):
+            print(f"{key:>8}: number of speakers = {len(sr_meta[key])}")
+        print("----" * 30)
+        return meta, gender_meta, gender_spks, sr_meta
 
     def init_augmentor(self):
         self.augmentor = AudioEffectAugmentor()
@@ -213,6 +244,7 @@ class DynamicBaseDataset(torch.utils.data.Dataset):
         target_speaker_name: str,
         ignoring_utt_list: Optional[List[str]] = None,
         select_channel: Optional[int] = None,
+        select_with_sr_as_key: Optional[int] = None,
     ):
         """
         Random select an utterance in dataset by given a target speaker name
@@ -226,15 +258,25 @@ class DynamicBaseDataset(torch.utils.data.Dataset):
             target speech tensor and its manifest information
         """
         timeout = 0
-        target_speech_pool = deepcopy(self.meta[target_speaker_name]["utts"])
-        check_key_list = list(target_speech_pool.keys())
+        if select_with_sr_as_key is None:
+            target_speech_pool = deepcopy(self.meta[target_speaker_name]["utts"])
+            check_key_list = list(target_speech_pool.keys())
+            if ignoring_utt_list is not None:
+                for ignored_key in ignoring_utt_list:
+                    if ignored_key in check_key_list:
+                        del target_speech_pool[ignored_key]
+            target_speech_pool = list(target_speech_pool.keys())
+        else:
+            target_speech_pool = deepcopy(
+                self.sr_meta[select_with_sr_as_key][target_speaker_name]
+            )
+            check_key_list = set(target_speech_pool)
+            if ignoring_utt_list is not None:
+                for ignored_key in ignoring_utt_list:
+                    if ignored_key in check_key_list:
+                        check_key_list.remove(ignored_key)
+            target_speech_pool = list(check_key_list)
 
-        if ignoring_utt_list is not None:
-            for ignored_key in ignoring_utt_list:
-                if ignored_key in check_key_list:
-                    del target_speech_pool[ignored_key]
-
-        target_speech_pool = list(target_speech_pool.keys())
         # Chooce only one utterance
         tgt_key = random.sample(target_speech_pool, k=1)[0]
 
@@ -265,6 +307,10 @@ class DynamicBaseDataset(torch.utils.data.Dataset):
             if target_speech.shape[0] > select_channel:
                 target_speech = target_speech[select_channel].reshape(1, -1)
 
+        if select_with_sr_as_key:
+            assert (
+                sr == select_with_sr_as_key
+            ), f"Given {select_with_sr_as_key} as target sr, but get {self.meta[target_speaker_name]['utts'][tgt_key]['path']} has {sr} sr"
         return target_speech, sr, (target_speaker_name, tgt_key)
 
     def apply_audio_augmentation(self):

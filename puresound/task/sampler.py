@@ -1,5 +1,6 @@
 import math
 import random
+from collections import defaultdict
 from typing import Dict, List, Optional
 
 
@@ -11,6 +12,7 @@ class SpeakerSampler:
         n_spks: int,
         n_per: int,
         fast_sampling: bool = False,
+        select_by_sr_first: bool = False,
     ):
         """
         Sample a batch of data for specific speaker number and per-speaker's utterance.
@@ -21,6 +23,7 @@ class SpeakerSampler:
             n_spks: In each batch contain N speakers.
             n_spks: Numbers of utterance per speaker.
             fast_sampling: If True, sample speaker by group first, then sample speaker from group.
+            select_by_sr_first: If True, sample speaker by SR group first, then sample speaker from group.
         """
         self.n_batch = total_batch
         self.n_spks = n_spks
@@ -28,6 +31,14 @@ class SpeakerSampler:
         self.data = data
         self.spk_pool = list(data.keys())
         self.fast_sampling = fast_sampling
+        self.select_by_sr_first = select_by_sr_first
+        if select_by_sr_first:
+            self.sr_meta = defaultdict(lambda: defaultdict(list))
+            for spk in sorted(data.keys()):
+                for utt in list(data[spk]["utts"].keys()):
+                    _sr = data[spk]["utts"][utt]["sr"]
+                    self.sr_meta[_sr][spk].append(utt)
+
         del self.data
 
         if n_spks > len(self.spk_pool):
@@ -55,19 +66,21 @@ class SpeakerSampler:
     def __iter__(self):
         for _ in range(self.n_batch):
             batch = []
+            sr = None
 
             if not self.fast_sampling:
-                classes = random.sample(
-                    self.spk_pool, self.n_spks
-                )  # [choosed spks, ....]
-
+                if self.select_by_sr_first:
+                    sr = random.sample(self.sr_meta.keys(), 1)[0]
+                    classes = random.sample(list(self.sr_meta[sr].keys()), self.n_spks)
+                else:
+                    classes = random.sample(self.spk_pool, self.n_spks)
             else:
                 # sample group first
                 group = random.sample(self.spk_pool_group, 1)[0]
                 classes = random.sample(group, self.n_spks)
 
             for c in classes:
-                batch += [c] * self.n_per
+                batch += [(c, sr)] * self.n_per
 
             # shuffling the sequence
             random.shuffle(batch)
