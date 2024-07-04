@@ -67,6 +67,12 @@ class Metrics:
         return stoi(clean, enhanced, sr)
 
     @staticmethod
+    def estoi(clean: np.array, enhanced: np.array, sr: int = 16000):
+        clean, enhanced = Metrics.check_shape(clean, enhanced)
+
+        return stoi(clean, enhanced, sr, extended=True)
+
+    @staticmethod
     def bss_sdr(clean: np.array, enhanced: np.array):
         clean, enhanced = Metrics.check_shape(clean, enhanced)
 

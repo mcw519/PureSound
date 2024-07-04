@@ -1,1 +1,1 @@
-from .siso import EncDecMaskBase
+from .siso import EncDecMaskBase, EncPredClassBase

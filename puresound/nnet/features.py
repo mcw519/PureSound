@@ -38,7 +38,7 @@ class MelBank(nn.Module):
         Convert a batch of complex spectrum to mel-spectrograms.
 
         Args
-            input tensor x has shape [N, C, T, 2]
+            input tensor x has shape [N, C, T]
         """
         spec_imag = x[..., 0]
         spec_real = x[..., 1]
@@ -148,6 +148,9 @@ class FeatureEncoder(nn.Module):
             x = x.permute(0, 2, 3, 1)
 
         feats_for_enhanced = self.transform(x)
+        if feats_for_enhanced.dim() == 3:
+            feats_for_enhanced = feats_for_enhanced.unsqueeze(1) # [N, 1, C, T]
+        
         if self.include_specaug:
             feats = self.specaug(feats_for_enhanced)
         else:

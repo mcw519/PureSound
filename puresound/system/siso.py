@@ -5,11 +5,13 @@ Use cases:
     - Mask based speech enhancement
 """
 
+import numpy as np
 import torch
 import torch.nn as nn
 
 from puresound.audio.dsp import wav_resampling
 from puresound.audio.io import AudioIO
+from puresound.nnet.loss import AAMsoftmax, SphereFace2
 from puresound.nnet.masker import Masker
 
 from .base import BaseLightningModule
@@ -238,3 +240,149 @@ class EncDecMaskBase(BaseLightningModule):
             "lr_factor": self.backbone_lr_factor,
         }
         return overall_params
+
+
+class EncPredClassBase(BaseLightningModule):
+    """
+    Structure:
+        Wav -> Encoder -> Features -> Backbone -> Predict classes
+
+    Args:
+        encoder: STFT/Conv1D based encode/decode structure
+        backbone: model backbone to predict classes
+    """
+
+    def __init__(
+        self,
+        encoder: nn.Module,
+        feats: nn.Module,
+        backbone: nn.Module,
+        encoder_lr_factor: float = 1.0,
+        feats_lr_factor: float = 1.0,
+        backbone_lr_factor: float = 1.0,
+        verbose: bool = False,
+    ):
+        super().__init__(verbose=verbose)
+        # Model
+        self.encoder = encoder
+        self.feats = feats
+        self.backbone = backbone
+
+        # Parameter
+        self.encoder_lr_factor = encoder_lr_factor
+        self.feats_lr_factor = feats_lr_factor
+        self.backbone_lr_factor = backbone_lr_factor
+
+        # Loss
+
+    def forward(self, wav: torch.Tensor):
+        if wav.dim() != 2 and wav.shape[0] == 1:
+            wav = wav.squeeze(0)
+
+        features = self.encoder(wav)
+        features, _ = self.feats(features)
+        features = features.squeeze(1)
+        pred = self.backbone(features)
+        return pred
+
+    def compute_loss(self, pred: torch.Tensor, target: torch.Tensor):
+        overall_loss = []
+        losses = []
+        for idx, loss_func in enumerate(self.loss_func_list):
+            loss_func, weighted = loss_func
+            weighted_loss = weighted * loss_func(pred, target)
+            losses.append(weighted_loss.item())
+            if idx == 0:
+                overall_loss = weighted_loss
+            else:
+                overall_loss += weighted_loss
+
+        return overall_loss, losses
+
+    def training_step(self, batch, batch_idx):
+        noisy_speech = batch["noisy_speech"]
+        target = batch["target"]
+        pred = self.forward(noisy_speech)
+        total_loss, losses = self.compute_loss(pred=pred, target=target)
+        self.log("train_step_loss", total_loss, prog_bar=True, sync_dist=True)
+        if self.verbose:
+            if len(losses) != 1:
+                for i in range(len(losses)):
+                    self.log(
+                        f"train_step_loss_{i}",
+                        losses[i],
+                        prog_bar=False,
+                        sync_dist=True,
+                        on_step=True,
+                    )
+        self.puresound_logging.update({"epoch_train_loss": total_loss.item()})
+        return {"loss": total_loss}
+
+    def validation_step(self, batch, batch_idx):
+        noisy_speech = batch["noisy_speech"]
+        target = batch["target"]
+        pred = self.forward(noisy_speech)
+        total_loss, losses = self.compute_loss(pred=pred, target=target)
+        if len(losses) != 1:
+            for i in range(len(losses)):
+                self.log(
+                    f"valid_step_loss_{i}",
+                    losses[i],
+                    prog_bar=False,
+                    sync_dist=True,
+                    on_step=True,
+                )
+        self.log(
+            "valid_step_loss", total_loss, prog_bar=True, sync_dist=True, on_step=True
+        )
+        return {"loss": total_loss}
+
+    def test_step(self, batch, batch_idx):
+        """Each metrics has its working sample rate."""
+        noisy_speech = batch["noisy_speech"]
+        target = batch["target"]
+        pred = self.forward(noisy_speech)
+
+        # Move tensor to cpu
+        noisy_speech = noisy_speech.cpu()
+        pred = pred.cpu()
+        input_sr = input_sr.cpu()
+
+        # Compute each score in registered metrics funcs
+        for name in sorted(self._metrics_func.keys()):
+            score = self._metrics_func[name]["func"](pred, target)
+            self.puresound_logging.update({name: score})
+
+    def predict_step(self, batch, batch_idx):
+        noisy_speech = batch["noisy_speech"]
+        pred = self.forward(noisy_speech).squeeze()
+        pred = (pred.cpu().numpy().astype("float32"),)
+        np.savetxt(
+            fname=f"{self.eval_output_folder_path}/{batch['name'][0]}.txt",
+            X=pred,
+            fmt="%5.11f",
+        )
+
+    def get_total_param_groups(self):
+        overall_params = {}
+        overall_params["encoder"] = {
+            "params": self.encoder.parameters(),
+            "lr_factor": self.encoder_lr_factor,
+        }
+        overall_params["feats"] = {
+            "params": self.feats.parameters(),
+            "lr_factor": self.feats_lr_factor,
+        }
+        overall_params["backbone"] = {
+            "params": self.backbone.parameters(),
+            "lr_factor": self.backbone_lr_factor,
+        }
+        for i in range(len(self.loss_func_list)):
+            overall_params[f"loss{i}"] = {
+                "params": self.loss_func_list[i][0].parameters(),
+                "lr_factor": 1.0,
+            }
+        return overall_params
+
+    # TODO: Saving the loss function params
+    # def training_epoch_end(self):

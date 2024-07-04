@@ -1,8 +1,8 @@
 import torch
 import torch.nn as nn
 
-from .aamsoftmax import AAMsoftmax
 from .sdr import SDRLoss
+from .spk import AAMsoftmax, SphereFace2
 from .stft_loss import MultiResolutionSTFTLoss, OverSuppressionLoss, SpectralLoss
 
 

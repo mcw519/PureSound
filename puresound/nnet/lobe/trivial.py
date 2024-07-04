@@ -312,8 +312,6 @@ class SpecAugment(nn.Module):
         freq_mask_length: int,
         time_mask_length: int,
         fill_value: float,
-        f_dim: int,
-        t_dim: int,
         n_freq_mask: int = 1,
         n_time_mask: int = 1,
         prob: float = 0.5,
@@ -328,8 +326,6 @@ class SpecAugment(nn.Module):
         self.freq_mask = freq_mask_length
         self.time_mask = time_mask_length
         self.mask_value = fill_value
-        self.f_dim = f_dim
-        self.t_dim = t_dim
         self.n_freq_mask = n_freq_mask
         self.n_time_mask = n_time_mask
         self.prob = prob
