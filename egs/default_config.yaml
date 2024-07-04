@@ -147,6 +147,44 @@ model:
   encoder:
     type: ConvEncDec
     encoder_args:
+  freq_eq:
+    type: FrequecyEQLayer
+    eq_args:
+      n_fft: 1024
+      sample_rate: 32000
+      eq_band_gain: 
+        - 2.5
+        - 5.5
+        - 3.25
+        - 2.5
+        - -2
+        - -4
+        - -6
+        - -10
+      eq_band_cutoff:
+        - 500
+        - 1000
+        - 1500
+        - 2500
+        - 3500
+        - 5500
+        - 8500
+        - 12000
+      eq_band_q_factor:
+        - 0.707
+        - 0.707
+        - 0.707
+        - 0.707
+        - 0.707
+        - 0.707
+        - 0.707
+        - 0.707
+      low_shelf_gain_dB: 0.
+      low_shelf_cutoff_freq: 80.
+      low_shelf_q_factor: 0.707
+      high_shelf_gain_dB: -20
+      high_shelf_cutoff_freq: 15000
+      high_shelf_q_factor: 0.707
   features:
     feats_type: complex
     drop_stft_first_bin: True

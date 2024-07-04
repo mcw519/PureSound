@@ -35,17 +35,23 @@ def load_config(f_path: str):
     aug_volume_dict = None
 
     if "augmentation_speech" in config:
-        aug_speech_dict = config["augmentation_speech"]
+        if config["augmentation_speech"]["used"]:
+            aug_speech_dict = config["augmentation_speech"]
     if "augmentation_noise" in config:
-        aug_noise_dict = config["augmentation_noise"]
-    if "augmentation_speech" in config:
-        aug_reverb_dict = config["augmentation_reverb"]
-    if "augmentation_speech" in config:
-        aug_speed_dict = config["augmentation_speed"]
-    if "augmentation_speech" in config:
-        aug_ir_dict = config["augmentation_ir_response"]
-    if "augmentation_speech" in config:
-        aug_src_dict = config["augmentation_src"]
+        if config["augmentation_noise"]["used"]:
+            aug_noise_dict = config["augmentation_noise"]
+    if "augmentation_reverb" in config:
+        if config["augmentation_reverb"]["used"]:
+            aug_reverb_dict = config["augmentation_reverb"]
+    if "augmentation_speed" in config:
+        if config["augmentation_speed"]["used"]:
+            aug_speed_dict = config["augmentation_speed"]
+    if "augmentation_ir_response" in config:
+        if config["augmentation_ir_response"]["used"]:
+            aug_ir_dict = config["augmentation_ir_response"]
+    if "augmentation_src" in config:
+        if config["augmentation_src"]["used"]:
+            aug_src_dict = config["augmentation_src"]
     if "augmentation_hpf" in config:
         aug_hpf_dict = config["augmentation_hpf"]
     if "augmentation_volume" in config:
@@ -103,6 +109,7 @@ def init_dataloader(
         total_batch=trainer_dict["train_iter_per_epoch"],
         n_spks=trainer_dict["n_spk_per_batch"],
         n_per=trainer_dict["n_utt_per_speaker"],
+        select_by_sr_first=False if corpus_dict["target_sample_rate"] else True,
     )
 
     train_dataloader = torch.utils.data.DataLoader(
@@ -135,6 +142,7 @@ def init_dataloader(
         total_batch=trainer_dict["valid_iter_per_epoch"],
         n_spks=trainer_dict["n_spk_per_batch"],
         n_per=trainer_dict["n_utt_per_speaker"],
+        select_by_sr_first=False if corpus_dict["target_sample_rate"] else True,
     )
 
     valid_dataloader = torch.utils.data.DataLoader(
@@ -153,6 +161,13 @@ def init_model(model_dict):
     encoder = getattr(nnet, model_dict["encoder"]["type"])(
         **model_dict["encoder"]["encoder_args"]
     )
+    if "freq_eq" in model_dict.keys():
+        peq_module = getattr(nnet, model_dict["freq_eq"]["type"])(
+            **model_dict["freq_eq"]["eq_args"]
+        )
+        # register peq inside the feature module
+        model_dict["features"]["peq_module"] = peq_module
+
     feature_encoder = nnet.FeatureEncoder(**model_dict["features"])
     backbone = getattr(nnet, model_dict["backbone"]["type"])(
         **model_dict["backbone"]["backbone_args"]
@@ -184,12 +199,41 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
     parser.add_argument("config_path", type=str)
-    parser.add_argument("--set_seed", type=int, default=None)
-    parser.add_argument("--training", type=str2bool, default=False)
-    parser.add_argument("--scoring", type=str2bool, default=False)
-    parser.add_argument("--inference", type=str2bool, default=False)
-    parser.add_argument("--ckpt_path", type=str, default=None)
-    parser.add_argument("--dump_training_samples", type=str2bool, default=False)
+    parser.add_argument("--set_seed", type=int, default=None, help="set random seed.")
+    parser.add_argument(
+        "--training", type=str2bool, default=False, help="start training new model."
+    )
+    parser.add_argument(
+        "--scoring", type=str2bool, default=False, help="compute metrics."
+    )
+    parser.add_argument(
+        "--inference", type=str2bool, default=False, help="inference audios."
+    )
+    parser.add_argument(
+        "--ckpt_path",
+        type=str,
+        default=None,
+        help="choose a exist checkpoint for resume trainig, caculte scores or inferencing.",
+    )
+    parser.add_argument(
+        "--pretrained_ckpt_path",
+        type=str,
+        default=None,
+        help="choose a exist checkpoint for training which replacing from scratch, \
+            and with new optimizer, learning rate scheduler and loss etc.",
+    )
+    parser.add_argument(
+        "--dump_training_samples",
+        type=str2bool,
+        default=False,
+        help="generate some training samples.",
+    )
+    parser.add_argument(
+        "--inference_sr",
+        type=int,
+        default=None,
+        help="If given, all processs would work on this sr.",
+    )
     args = parser.parse_args()
 
     if args.set_seed is not None:
@@ -227,6 +271,7 @@ if __name__ == "__main__":
             aug_volume_dict,
         )
 
+    # Stage of dump the training samples
     if args.dump_training_samples:
         create_folder(folder_name="./dummy_samples")
         dataiter = iter(train_dataloader)
@@ -242,12 +287,15 @@ if __name__ == "__main__":
                         [noisy_speech[i], clean_speech[i], noise[i]], dim=0
                     ),
                     f_path=f"{file_name}-{str(i).zfill(2)}.wav",
-                    sr=corpus_dict["target_sample_rate"],
+                    sr=batch["sr"][i],
                 )
 
+    # Stage of training a new model
     if args.training:
         # Initialize loss function
         loss_func_list = init_loss_func(hparam_conf=loss_dict)
+
+        # PL-Model
         lighting_model = init_model(model_dict)
         lighting_model.register_loss_func(loss_func_list)
         param_groups = lighting_model.get_total_param_groups()
@@ -259,6 +307,14 @@ if __name__ == "__main__":
         lighting_model.register_optimizer(optimizer)
         lighting_model.register_scheduler(scheduler)
         lighting_model.register_warmup_step(scheduler_dict["warmup_step"])
+
+        # Loading exists state_dicts
+        if args.pretrained_ckpt_path:
+            print("Loading the pretrained params only.")
+            state_dict = torch.load(args.pretrained_ckpt_path, map_location="cpu")[
+                "state_dict"
+            ]
+            lighting_model.load_state_dict(state_dict)
 
         # Callbacks
         lr_monitor = LearningRateMonitor(logging_interval="epoch")
@@ -276,6 +332,7 @@ if __name__ == "__main__":
             default_root_dir=trainer_dict["work_folder"],
             callbacks=[lr_monitor, ckpt_monitor],
             profiler="simple",
+            sync_batchnorm=True,
         )
 
         if args.ckpt_path is not None:
@@ -292,8 +349,11 @@ if __name__ == "__main__":
                 val_dataloaders=valid_dataloader,
             )
 
+    # Stage of caculating the metric scores
     if args.scoring:
-        test_dataset = KaldiFormBaseDataset(folder=corpus_dict["test_folder"])
+        test_dataset = KaldiFormBaseDataset(
+            folder=corpus_dict["test_folder"], mode="dev", resample_to=args.inference_sr,
+        )
         test_dataloader = torch.utils.data.DataLoader(
             dataset=test_dataset,
             pin_memory=True,
@@ -301,15 +361,14 @@ if __name__ == "__main__":
             batch_size=1,
             shuffle=False,
         )
-        trainer = L.Trainer()
+        trainer = L.Trainer(inference_mode=True)
         lighting_model = init_model(model_dict)
-        # ckpt = torch.load(args.ckpt_path, map_location="cpu")
-        # lighting_model.load_state_dict(ckpt["state_dict"])
         lighting_model.register_metrics_func(
             {
                 "pesq_wb": {"func": Metrics.pesq_wb, "sr": 16000},
                 "pesq_nb": {"func": Metrics.pesq_nb, "sr": 8000},
-                "stoi": {"func": Metrics.stoi, "sr": 16000},
+                "stoi": {"func": Metrics.stoi, "sr": None},
+                "estoi": {"func": Metrics.estoi, "sr": None},
                 "sisnr": {"func": Metrics.sisnr, "sr": None},
                 "bss_sdr": {"func": Metrics.bss_sdr, "sr": None},
             }
@@ -318,8 +377,11 @@ if __name__ == "__main__":
             lighting_model, dataloaders=test_dataloader, ckpt_path=args.ckpt_path
         )
 
+    # Stage of inferencing audio only
     if args.inference:
-        test_dataset = KaldiFormBaseDataset(folder=corpus_dict["test_folder"])
+        test_dataset = KaldiFormBaseDataset(
+            folder=corpus_dict["test_folder"], mode="eval", resample_to=args.inference_sr,
+        )
         test_dataloader = torch.utils.data.DataLoader(
             dataset=test_dataset,
             pin_memory=True,
@@ -327,10 +389,10 @@ if __name__ == "__main__":
             batch_size=1,
             shuffle=False,
         )
-        trainer = L.Trainer()
+        trainer = L.Trainer(
+            inference_mode=True, default_root_dir=corpus_dict["proc_output_folder"]
+        )
         lighting_model = init_model(model_dict)
-        # ckpt = torch.load(args.ckpt_path, map_location="cpu")
-        # lighting_model.load_state_dict(ckpt["state_dict"])
         create_folder(corpus_dict["proc_output_folder"])
         lighting_model.register_proc_output_folder(corpus_dict["proc_output_folder"])
         trainer.predict(
