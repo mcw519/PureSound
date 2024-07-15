@@ -23,12 +23,19 @@ class KaldiFormBaseDataset(torch.utils.data.Dataset):
         resample_to: if not None, open waveform will resample to this value
     """
 
-    def __init__(self, folder, resample_to: Optional[int] = None, mode: str = "train"):
+    def __init__(
+        self,
+        folder,
+        resample_to: Optional[int] = None,
+        mode: str = "train",
+        audio_gain_nomalized_to: Optional[int] = None,
+    ):
         super().__init__()
         self.folder = folder
         self.resample_to = resample_to
         assert mode.lower() in ["train", "dev", "eval"]
         self.mode = mode.lower()
+        self.audio_gain_nomalized_to = audio_gain_nomalized_to
         self.df = self._load_df(self.folder)
         self.idx_df = self._idx2key(self.df)
 
@@ -37,7 +44,11 @@ class KaldiFormBaseDataset(torch.utils.data.Dataset):
 
     def __getitem__(self, index: int):
         key = self.idx_df[index]
-        noisy_speech, sr = AudioIO.open(f_path=self.df[key]["wav2scp"], resample_to=self.resample_to)
+        noisy_speech, sr = AudioIO.open(
+            f_path=self.df[key]["wav2scp"],
+            resample_to=self.resample_to,
+            target_lvl=self.audio_gain_nomalized_to,
+        )
         noisy_speech = noisy_speech.squeeze()
         if self.mode == "eval":
             return {
@@ -47,7 +58,11 @@ class KaldiFormBaseDataset(torch.utils.data.Dataset):
             }
 
         else:
-            clean_speech, _sr = AudioIO.open(f_path=self.df[key]["wav2ref"], resample_to=self.resample_to)
+            clean_speech, _sr = AudioIO.open(
+                f_path=self.df[key]["wav2ref"],
+                resample_to=self.resample_to,
+                target_lvl=self.audio_gain_nomalized_to,
+            )
             if _sr != sr:
                 print(
                     f"Reference audio samplerate {_sr} isn't same as Noisy audio {sr}, resampling to {sr} by Sox backend."

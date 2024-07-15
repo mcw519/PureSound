@@ -184,14 +184,17 @@ def init_model(model_dict):
 def init_loss_func(hparam_conf: List):
     """
     Returns:
-        loss_list contain [[loss_1, weighted_1], [loss_2, weighted_2], ...]
+        loss_list contain ModuleList([loss_1, loss_2, ...])
+        loss_list_w contain [w1, w2, ...]
     """
-    loss_list = []
+    loss_list = torch.nn.ModuleList([])
+    loss_list_w = []
     for item in hparam_conf:
         loss_func = getattr(ploss, item["type"])(**item["args"])
-        loss_list.append([loss_func, item["weighted"]])
+        loss_list.append(loss_func)
+        loss_list_w.append(item["weighted"])
 
-    return loss_list
+    return loss_list, loss_list_w
 
 
 if __name__ == "__main__":
@@ -213,14 +216,14 @@ if __name__ == "__main__":
         "--ckpt_path",
         type=str,
         default=None,
-        help="choose a exist checkpoint for resume trainig, caculte scores or inferencing.",
+        help="choose a exist checkpoint, including params, optimizer, learning rate scheduler and loss functions.",
     )
     parser.add_argument(
         "--pretrained_ckpt_path",
         type=str,
         default=None,
-        help="choose a exist checkpoint for training which replacing from scratch, \
-            and with new optimizer, learning rate scheduler and loss etc.",
+        help="choose a exist checkpoint with its model params only for training, \
+            and continuous training with new optimizer, learning rate scheduler and loss etc.",
     )
     parser.add_argument(
         "--dump_training_samples",
@@ -291,11 +294,11 @@ if __name__ == "__main__":
     # Stage of training a new model
     if args.training:
         # Initialize loss function
-        loss_func_list = init_loss_func(hparam_conf=loss_dict)
+        loss_func_list, loss_func_list_w = init_loss_func(hparam_conf=loss_dict)
 
         # PL-Model
         lighting_model = init_model(model_dict)
-        lighting_model.register_loss_func(loss_func_list)
+        lighting_model.register_loss_func(loss_func_list, loss_func_list_w)
         param_groups = lighting_model.get_total_param_groups()
         optimizer, scheduler = create_optimizer_and_scheduler(
             overall_params_and_lr_factor=param_groups,
@@ -312,7 +315,9 @@ if __name__ == "__main__":
             state_dict = torch.load(args.pretrained_ckpt_path, map_location="cpu")[
                 "state_dict"
             ]
-            lighting_model.load_state_dict(state_dict)
+            lighting_model.reload_checkpoint(
+                loaded_state=state_dict, load_loss_func=False
+            )
 
         # Callbacks
         lr_monitor = LearningRateMonitor(logging_interval="epoch")
@@ -365,7 +370,7 @@ if __name__ == "__main__":
         lighting_model = init_model(model_dict)
         # TODO
         raise NotImplementedError
-       
+
     # Stage of inferencing audio only
     if args.inference:
         test_dataset = KaldiFormBaseDataset(
@@ -383,7 +388,9 @@ if __name__ == "__main__":
         trainer = L.Trainer(
             inference_mode=True, default_root_dir=corpus_dict["proc_output_folder"]
         )
+        loss_func_list, loss_func_list_w = init_loss_func(hparam_conf=loss_dict)
         lighting_model = init_model(model_dict)
+        lighting_model.register_loss_func(loss_func_list, loss_func_list_w)
         create_folder(corpus_dict["proc_output_folder"])
         lighting_model.register_proc_output_folder(corpus_dict["proc_output_folder"])
         trainer.predict(

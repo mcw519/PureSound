@@ -184,14 +184,17 @@ def init_model(model_dict):
 def init_loss_func(hparam_conf: List):
     """
     Returns:
-        loss_list contain [[loss_1, weighted_1], [loss_2, weighted_2], ...]
+        loss_list contain ModuleList([loss_1, loss_2, ...])
+        loss_list_w contain [w1, w2, ...]
     """
-    loss_list = []
+    loss_list = torch.nn.ModuleList([])
+    loss_list_w = []
     for item in hparam_conf:
         loss_func = getattr(ploss, item["type"])(**item["args"])
-        loss_list.append([loss_func, item["weighted"]])
+        loss_list.append(loss_func)
+        loss_list_w.append(item["weighted"])
 
-    return loss_list
+    return loss_list, loss_list_w
 
 
 if __name__ == "__main__":
@@ -293,11 +296,11 @@ if __name__ == "__main__":
     # Stage of training a new model
     if args.training:
         # Initialize loss function
-        loss_func_list = init_loss_func(hparam_conf=loss_dict)
+        loss_func_list, loss_func_list_w = init_loss_func(hparam_conf=loss_dict)
 
         # PL-Model
         lighting_model = init_model(model_dict)
-        lighting_model.register_loss_func(loss_func_list)
+        lighting_model.register_loss_func(loss_func_list, loss_func_list_w)
         param_groups = lighting_model.get_total_param_groups()
         optimizer, scheduler = create_optimizer_and_scheduler(
             overall_params_and_lr_factor=param_groups,
@@ -352,7 +355,9 @@ if __name__ == "__main__":
     # Stage of caculating the metric scores
     if args.scoring:
         test_dataset = KaldiFormBaseDataset(
-            folder=corpus_dict["test_folder"], mode="dev", resample_to=args.inference_sr,
+            folder=corpus_dict["test_folder"],
+            mode="dev",
+            resample_to=args.inference_sr,
         )
         test_dataloader = torch.utils.data.DataLoader(
             dataset=test_dataset,
@@ -380,7 +385,9 @@ if __name__ == "__main__":
     # Stage of inferencing audio only
     if args.inference:
         test_dataset = KaldiFormBaseDataset(
-            folder=corpus_dict["test_folder"], mode="eval", resample_to=args.inference_sr,
+            folder=corpus_dict["test_folder"],
+            mode="eval",
+            resample_to=args.inference_sr,
         )
         test_dataloader = torch.utils.data.DataLoader(
             dataset=test_dataset,

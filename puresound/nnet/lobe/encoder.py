@@ -111,6 +111,7 @@ class ConvEncDec(nn.Module):
         fmin: int = 0,
         fmax: int = 8000,
         sr: int = 16000,
+        preemphasis: Optional[float] = None,
         trainable: bool = True,
     ):
         super().__init__()
@@ -124,6 +125,7 @@ class ConvEncDec(nn.Module):
         self.fmin = fmin
         self.fmax = fmax
         self.sr = sr
+        self.preemphasis = preemphasis
         self.trainable = trainable
 
         self.window = self.get_windows(win_type)
@@ -161,6 +163,10 @@ class ConvEncDec(nn.Module):
         Returns:
             output tensor shape is [N, C, T, 2]
         """
+        if self.preemphasis is not None:
+            padded = torch.nn.functional.pad(x, (1, 0))
+            x = x - self.preemphasis * padded[:, :-1]
+        
         x = x.unsqueeze(1)  # [N, 1, L]
         return self.encoder(x)
 

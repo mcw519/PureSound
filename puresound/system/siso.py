@@ -11,7 +11,6 @@ import torch.nn as nn
 
 from puresound.audio.dsp import wav_resampling
 from puresound.audio.io import AudioIO
-from puresound.nnet.loss import AAMsoftmax, SphereFace2
 from puresound.nnet.masker import Masker
 
 from .base import BaseLightningModule
@@ -123,7 +122,7 @@ class EncDecMaskBase(BaseLightningModule):
         overall_loss = []
         losses = []
         for idx, loss_func in enumerate(self.loss_func_list):
-            loss_func, weighted = loss_func
+            weighted = self.loss_func_list_w[idx]
             weighted_loss = weighted * loss_func(enhanced, target)
             losses.append(weighted_loss.item())
             if idx == 0:
@@ -289,7 +288,7 @@ class EncPredClassBase(BaseLightningModule):
         overall_loss = []
         losses = []
         for idx, loss_func in enumerate(self.loss_func_list):
-            loss_func, weighted = loss_func
+            weighted = self.loss_func_list_w[idx]
             weighted_loss = weighted * loss_func(pred, target)
             losses.append(weighted_loss.item())
             if idx == 0:
@@ -379,10 +378,7 @@ class EncPredClassBase(BaseLightningModule):
         }
         for i in range(len(self.loss_func_list)):
             overall_params[f"loss{i}"] = {
-                "params": self.loss_func_list[i][0].parameters(),
+                "params": self.loss_func_list[i].parameters(),
                 "lr_factor": 1.0,
             }
         return overall_params
-
-    # TODO: Saving the loss function params
-    # def training_epoch_end(self):

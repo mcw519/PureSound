@@ -18,12 +18,14 @@ class MelBank(nn.Module):
         sr: int = 16000,
         n_fft: int = 512,
         n_banks: int = 80,
+        apply_log: bool = False,
         utt_norm: bool = False,
         trainable: bool = False,
     ):
         super().__init__()
         self.uttnorm = utt_norm
         self.trainable = trainable
+        self.apply_log = apply_log
         mel_fb = mel_filterbank(sr, n_fft, n_banks)  # [n_mels, n_fft//2 +1]
         mel_fb = mel_fb.permute(1, 0)  # [n_fft//2 +1, n_mels]
 
@@ -46,6 +48,9 @@ class MelBank(nn.Module):
         mag = torch.sqrt(spec + 1e-8) if self.trainable else torch.sqrt(spec)
         mag = mag.permute(0, 2, 1)  # [N, T, C]
         melspec = torch.matmul(mag, self.filterbank)
+
+        if self.apply_log:
+            melspec = torch.log(melspec + 1e-8)
 
         if self.uttnorm:
             melspec = melspec - melspec.mean(dim=1, keepdim=True)
@@ -83,6 +88,7 @@ class FeatureEncoder(nn.Module):
         include_specaug: bool = False,
         specaug_args: Optional[Dict] = None,
         peq_module: Optional[FrequecyEQLayer] = None,
+        normalized_mode: Optional[str] = None,
         trainable: bool = False,
     ):
         super().__init__()
@@ -90,6 +96,9 @@ class FeatureEncoder(nn.Module):
         self.feats_type = feats_type.lower()
         self.drop_stft_first_bin = drop_stft_first_bin
         self.include_specaug = include_specaug
+        self.normalized_mode = (
+            normalized_mode.lower() if normalized_mode is not None else normalized_mode
+        )
         self.apply_peq = False
         if peq_module is not None:
             self.apply_peq = True
@@ -104,6 +113,7 @@ class FeatureEncoder(nn.Module):
             "magnitude",
             "log1p",
             "fbank80_16k",
+            "logfbank80_16k",
             "fbank128_16k",
         ]
 
@@ -122,6 +132,10 @@ class FeatureEncoder(nn.Module):
             self.transform = MelBank(
                 sr=16000, n_fft=512, n_banks=80, trainable=trainable
             )
+        elif self.feats_type == "logfbank80_16k":
+            self.transform = MelBank(
+                sr=16000, n_fft=512, n_banks=80, trainable=trainable, apply_log=True,
+            )
         elif self.feats_type == "fbank128_16k":
             self.transform = MelBank(
                 sr=16000, n_fft=512, n_banks=128, trainable=trainable
@@ -131,6 +145,21 @@ class FeatureEncoder(nn.Module):
 
         if include_specaug:
             self.specaug = SpecAugment(**specaug_args)
+
+    def _apply_normalization(self, x: torch.Tensor, eps: float = 1e-5):
+        """features should has shape [N, CH, C, T]"""
+        if self.normalized_mode == "per_feature":
+            reduce_dim = (1, 2)
+        elif self.normalized_mode == "per_channel":
+            reduce_dim = 1
+        elif self.normalized_mode == "all_feature":
+            reduce_dim = (1, 2, 3)
+        else:
+            raise NameError
+
+        means = x.mean(dim=reduce_dim, keepdim=True)
+        std = x.std(dim=reduce_dim, keepdim=True)
+        x = (x - means) / (std + eps)
 
     def forward(self, x: torch.Tensor):
         """
@@ -149,8 +178,11 @@ class FeatureEncoder(nn.Module):
 
         feats_for_enhanced = self.transform(x)
         if feats_for_enhanced.dim() == 3:
-            feats_for_enhanced = feats_for_enhanced.unsqueeze(1) # [N, 1, C, T]
-        
+            feats_for_enhanced = feats_for_enhanced.unsqueeze(1)  # [N, 1, C, T]
+
+        if self.normalized_mode is not None:
+            feats = self._apply_normalization(x=feats_for_enhanced)
+
         if self.include_specaug:
             feats = self.specaug(feats_for_enhanced)
         else:

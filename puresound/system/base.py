@@ -1,5 +1,6 @@
 from typing import Any, List
 
+import torch.nn as nn
 from lightning.pytorch import LightningModule
 
 from .logger import Logging
@@ -30,9 +31,11 @@ class BaseLightningModule(LightningModule):
     def predict_step(self, batch, batch_idx, dataloader_idx=None):
         raise NotImplementedError
 
-    def register_loss_func(self, loss_func_list: List):
-        # loss_func_list looks like [[loss_1, weighted_1], [loss_2, weighted_2], ...]
+    def register_loss_func(
+        self, loss_func_list: nn.ModuleList, loss_func_list_weights: List
+    ):
         self.loss_func_list = loss_func_list
+        self.loss_func_list_w = loss_func_list_weights
 
     def register_optimizer(self, optimizer: Any):
         self._optimizer = optimizer
@@ -97,3 +100,25 @@ class BaseLightningModule(LightningModule):
 
         optimizer.step(closure=optimizer_closure)
         optimizer.zero_grad(set_to_none=True)
+
+    def reload_checkpoint(self, loaded_state, load_loss_func: bool = True):
+        self_state = self.state_dict()
+        check_key = list(self_state.keys())
+
+        for name, param in loaded_state.items():
+            if name not in self_state:
+                print(f"{name} is not in the model.")
+                continue
+
+            if "loss_func_list" in name and not load_loss_func:
+                print(f"Not loading {name} because load_loss_func={load_loss_func}")
+                check_key.remove(name)
+                continue
+
+            self_state[name].copy_(param)
+            check_key.remove(name)
+
+        if check_key == []:
+            print("Loaded params is ok.")
+        else:
+            print(f"Needed param name but missing: {check_key}")
