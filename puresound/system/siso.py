@@ -354,7 +354,11 @@ class EncPredClassBase(BaseLightningModule):
 
     def predict_step(self, batch, batch_idx):
         noisy_speech = batch["noisy_speech"]
-        pred = self.forward(noisy_speech).squeeze()
+        pred = self.forward(noisy_speech)
+        pred = nn.functional.normalize(pred, p=2, dim=1)
+        if pred.shape[0] != 1:
+            pred = pred.mean(dim=0, keepdim=True)
+        pred = pred.squeeze()
         pred = (pred.cpu().numpy().astype("float32"),)
         np.savetxt(
             fname=f"{self.eval_output_folder_path}/{batch['name'][0]}.txt",

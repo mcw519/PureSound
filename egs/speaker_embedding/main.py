@@ -2,6 +2,8 @@ import argparse
 from typing import Dict, List
 
 import lightning as L
+import numpy as np
+import onnxruntime
 import torch
 from lightning.pytorch.callbacks import LearningRateMonitor, ModelCheckpoint
 
@@ -237,6 +239,15 @@ if __name__ == "__main__":
         default=None,
         help="If given, all processs would work on this sr.",
     )
+    parser.add_argument(
+        "--split_to_chunks_with_size",
+        type=float,
+        default=None,
+        help="If given, chunking the input audio (seconds).",
+    )
+    parser.add_argument(
+        "--export_onnx", type=str2bool, default=False, help="export model to onnx form"
+    )
     args = parser.parse_args()
 
     if args.set_seed is not None:
@@ -377,6 +388,7 @@ if __name__ == "__main__":
             folder=corpus_dict["test_folder"],
             mode="eval",
             resample_to=args.inference_sr,
+            split_to_chunks_with_size=args.split_to_chunks_with_size,
         )
         test_dataloader = torch.utils.data.DataLoader(
             dataset=test_dataset,
@@ -396,3 +408,61 @@ if __name__ == "__main__":
         trainer.predict(
             lighting_model, dataloaders=test_dataloader, ckpt_path=args.ckpt_path
         )
+
+    # Stage of export model to ONNX
+    if args.export_onnx and args.pretrained_ckpt_path:
+        if args.inference_sr:
+            sample_input = torch.rand(1, args.inference_sr * 5)
+        else:
+            sample_input = torch.rand(1, 16000 * 5)
+
+        save_path = f"{args.pretrained_ckpt_path}.onnx"
+
+        lighting_model = init_model(model_dict)
+        print("Loading the pretrained params only.")
+        state_dict = torch.load(args.pretrained_ckpt_path, map_location="cpu")[
+            "state_dict"
+        ]
+        lighting_model.reload_checkpoint(loaded_state=state_dict, load_loss_func=False)
+        lighting_model.eval()
+
+        torch.onnx.export(
+            lighting_model,
+            (sample_input,),
+            save_path,
+            export_params=True,
+            opset_version=17,
+            do_constant_folding=True,
+            input_names=[
+                "Audio",
+            ],
+            output_names=[
+                "Embedding",
+            ],
+            dynamic_axes={
+                "Audio": {0: "batch_size", 1: "sequence_length"},
+                "Embedding": {0: "batch_size"},
+            },
+            verbose=False,
+        )
+
+        # Test onnx model
+        with torch.no_grad():
+            torch_out = lighting_model(sample_input)
+            torch_out = torch_out.numpy()
+
+        ort_session = onnxruntime.InferenceSession(save_path)
+        input_name = ort_session.get_inputs()[0].name
+        ort_inputs = {input_name: sample_input.numpy()}
+        ort_outs = ort_session.run(None, ort_inputs)
+
+        atol = 1e-4
+        while True:
+            try:
+                assert np.allclose(torch_out, ort_outs[0], rtol=1e-5, atol=atol)
+                print(f">>> ONNX model accuracy pass {atol} spec.")
+                atol /= 10
+            except:
+                print(f">>> Export done")
+                print(f">>> ONNX model accuracy can't pass {atol} spec.")
+                break

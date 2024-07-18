@@ -29,6 +29,7 @@ class KaldiFormBaseDataset(torch.utils.data.Dataset):
         resample_to: Optional[int] = None,
         mode: str = "train",
         audio_gain_nomalized_to: Optional[int] = None,
+        split_to_chunks_with_size: Optional[float] = None,
     ):
         super().__init__()
         self.folder = folder
@@ -36,6 +37,8 @@ class KaldiFormBaseDataset(torch.utils.data.Dataset):
         assert mode.lower() in ["train", "dev", "eval"]
         self.mode = mode.lower()
         self.audio_gain_nomalized_to = audio_gain_nomalized_to
+        self.split_to_chunks_with_size = split_to_chunks_with_size
+
         self.df = self._load_df(self.folder)
         self.idx_df = self._idx2key(self.df)
 
@@ -51,6 +54,17 @@ class KaldiFormBaseDataset(torch.utils.data.Dataset):
         )
         noisy_speech = noisy_speech.squeeze()
         if self.mode == "eval":
+            if self.split_to_chunks_with_size:
+                chunk_length = int(sr * self.split_to_chunks_with_size)
+                if noisy_speech.shape[-1] > chunk_length:
+                    noisy_speech = noisy_speech.view(1, 1, 1, -1)
+                    noisy_speech = torch.nn.functional.unfold(
+                        noisy_speech, kernel_size=(1, chunk_length), stride=(1, chunk_length // 2)
+                    )
+                    noisy_speech = noisy_speech.squeeze(0).permute(1, 0)
+                    if noisy_speech.dim() != 2:
+                        noisy_speech = noisy_speech.view(1, -1)
+
             return {
                 "noisy_speech": noisy_speech,
                 "sr": sr,
