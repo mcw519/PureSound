@@ -20,13 +20,15 @@ class AAMsoftmax(nn.Module):
     """
 
     def __init__(
-        self, embedding_dim: int, n_classes: int, margin: float = 0.2, scale: int = 30
+        self, embedding_dim: int, n_classes: int, margin: float = 0.2, scale: int = 30, sub_center: int = 1,
     ) -> None:
         super().__init__()
         self.m = margin
         self.s = scale
+        self.n_classes = n_classes
+        self.sub_center = sub_center
         self.weight = torch.nn.Parameter(
-            torch.FloatTensor(n_classes, embedding_dim), requires_grad=True
+            torch.FloatTensor(n_classes * sub_center, embedding_dim), requires_grad=True
         )
         self.ce = nn.CrossEntropyLoss()
         nn.init.xavier_normal_(self.weight, gain=1)
@@ -43,11 +45,16 @@ class AAMsoftmax(nn.Module):
     def forward(self, x: torch.Tensor, label: torch.Tensor):
         if label.dim() == 2:
             label = label.squeeze(1)  # [N]
-        
+
         assert x.shape[0] == label.shape[0]
 
         # cos(theta)
-        cosine = F.linear(F.normalize(x), F.normalize(self.weight.to(x.device)))
+        cosine = F.linear(F.normalize(
+            x), F.normalize(self.weight.to(x.device)))
+        if self.sub_center != 1:
+            cosine = torch.reshape(
+                cosine, (-1, self.n_classes, self.sub_center))
+            cosine = torch.max(cosine, 2)[0]
         # cos(theta + m)
         sine = torch.sqrt((1.0 - torch.mul(cosine, cosine)).clamp(0, 1))
         phi = cosine * self.cos_m - sine * self.sin_m
@@ -96,7 +103,8 @@ class SphereFace2(nn.Module):
         self.in_features = in_features
         self.out_features = out_features
         self.scale = scale
-        self.weight = nn.Parameter(torch.FloatTensor(out_features, in_features))
+        self.weight = nn.Parameter(
+            torch.FloatTensor(out_features, in_features))
         nn.init.xavier_uniform_(self.weight)
         self.bias = nn.Parameter(torch.zeros(1, 1))
         self.t = t
@@ -143,27 +151,35 @@ class SphereFace2(nn.Module):
                 + self.bias[0][0]
             )
             cos_m_theta_n = (
-                self.scale * self.fun_g(cos * self.cos_m + sin * self.sin_m, self.t)
+                self.scale *
+                self.fun_g(cos * self.cos_m + sin * self.sin_m, self.t)
                 + self.bias[0][0]
             )
-            cos_p_theta = self.lanbuda * torch.log(1 + torch.exp(-1.0 * cos_m_theta_p))
-            cos_n_theta = (1 - self.lanbuda) * torch.log(1 + torch.exp(cos_m_theta_n))
+            cos_p_theta = self.lanbuda * \
+                torch.log(1 + torch.exp(-1.0 * cos_m_theta_p))
+            cos_n_theta = (1 - self.lanbuda) * \
+                torch.log(1 + torch.exp(cos_m_theta_n))
         else:  # cosface type
             cos_m_theta_p = (
-                self.scale * (self.fun_g(cos, self.t) - self.margin) + self.bias[0][0]
+                self.scale * (self.fun_g(cos, self.t) -
+                              self.margin) + self.bias[0][0]
             )
             cos_m_theta_n = (
-                self.scale * (self.fun_g(cos, self.t) + self.margin) + self.bias[0][0]
+                self.scale * (self.fun_g(cos, self.t) +
+                              self.margin) + self.bias[0][0]
             )
-            cos_p_theta = self.lanbuda * torch.log(1 + torch.exp(-1.0 * cos_m_theta_p))
-            cos_n_theta = (1 - self.lanbuda) * torch.log(1 + torch.exp(cos_m_theta_n))
+            cos_p_theta = self.lanbuda * \
+                torch.log(1 + torch.exp(-1.0 * cos_m_theta_p))
+            cos_n_theta = (1 - self.lanbuda) * \
+                torch.log(1 + torch.exp(cos_m_theta_n))
 
         target_mask = input.new_zeros(cos.size())
         target_mask.scatter_(1, label.view(-1, 1).long(), 1.0)
         nontarget_mask = 1 - target_mask
         # cos1 = (cos - self.margin) * target_mask + cos * nontarget_mask
         # output = self.scale * cos1  # for computing the accuracy
-        loss = (target_mask * cos_p_theta + nontarget_mask * cos_n_theta).sum(1).mean()
+        loss = (target_mask * cos_p_theta +
+                nontarget_mask * cos_n_theta).sum(1).mean()
 
         # return output, loss
         return loss
