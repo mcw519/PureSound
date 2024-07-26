@@ -1,11 +1,10 @@
 import random
 from copy import deepcopy
-from typing import Dict, Optional, Tuple
+from typing import Dict, Optional
 
 import torch
 from torch.nn.utils.rnn import pad_sequence
 
-from puresound.audio.dsp import wav_resampling
 from puresound.audio.noise import add_bg_noise
 from puresound.dataset.dynamic_base import DynamicBaseDataset
 
@@ -146,20 +145,18 @@ class SpeakerEmbeddingDataset(DynamicBaseDataset):
         [noisy_speech] = self.avoid_audio_clipping(wav_list=[noisy_speech])
 
         # Speed Perturbation
+        sp_idx = None
         if (
             self.augmentation_speed_args
             and self.augmentation_speed_args["used"]
             and torch.rand(1) < self.augmentation_speed_args["prob"]
         ):
-            speed = torch.arange(
-                self.augmentation_speed_args["speed_range"][0],
-                self.augmentation_speed_args["speed_range"][1],
-                0.05,
-            )
-            speed = random.choice(speed)
+            speed = torch.arange(len(self.augmentation_speed_args["speed_change"]))
+            sp_idx = random.choice(speed)
+            speed = self.augmentation_speed_args["speed_change"][sp_idx]
             noisy_speech, (speed) = self.augmentor.sox_speed_perturbed(
                 wav=noisy_speech,
-                speed=speed.item(),
+                speed=speed,
                 sr=if_none_else(self.target_sr, self.ori_audio_sr),
             )
 
@@ -323,9 +320,14 @@ class SpeakerEmbeddingDataset(DynamicBaseDataset):
             ),
         ]
 
+        if sp_idx is not None and self.augmentation_speed_args["treat_as_new_speaker"]:
+            spk2idx_shift = (sp_idx + 1) * len(self.spk2idx)
+        else:
+            spk2idx_shift = 0
+
         return {
             "noisy_speech": noisy_speech,
-            "speaker_id": self.spk2idx[target_speaker],
+            "speaker_id": self.spk2idx[target_speaker] + spk2idx_shift,
         }
 
 

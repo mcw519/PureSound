@@ -36,12 +36,22 @@ augmentation_reverb:
   rir_folder:
   target_rir_type: "full" # ["full", "early", "direct", "anechoic"]
 
+# This type is for SV task
 augmentation_speed:
   used: False
   prob: 0.5
-  speed_range:
+  treat_as_new_speaker: False
+  speed_change:
     - 0.9
     - 1.1
+
+# This type is for NS task
+# augmentation_speed:
+#   used: False
+#   prob: 0.5
+#   speed_range:
+#     - 0.9
+#     - 1.1
 
 augmentation_ir_response:
   used: False
