@@ -17,16 +17,36 @@ class AAMsoftmax(nn.Module):
         n_classes: number of classes
         margin: loss margin in AAM softmax
         scale: loss scale in AAM softmax
+        mp: margin penalty of hard samples
+        sub_center: if larger than 1, enable sub-center loss
+        sub_center_topk: if > 0, top-k would be used [3]
+        sub_center_type: choose in "max"[1] and "avg"[2]
+
+    References:
+        [1] https://ibug.doc.ic.ac.uk/media/uploads/documents/eccv_1445.pdf
+        [2] https://arxiv.org/pdf/2407.04291v1
+        [3] https://arxiv.org/pdf/2110.05042
     """
 
     def __init__(
-        self, embedding_dim: int, n_classes: int, margin: float = 0.2, scale: int = 30, sub_center: int = 1,
+        self,
+        embedding_dim: int,
+        n_classes: int,
+        margin: float = 0.2,
+        scale: int = 30,
+        mp: float = 0.,
+        sub_center: int = 1,
+        sub_center_topk: Optional[int] = 0,
+        sub_center_type: str = "max",
     ) -> None:
         super().__init__()
         self.m = margin
         self.s = scale
         self.n_classes = n_classes
         self.sub_center = sub_center
+        self.sub_center_topk = sub_center_topk
+        self.sub_center_type = sub_center_type.lower()
+        assert self.sub_center_type in ["max", "avg"]
         self.weight = torch.nn.Parameter(
             torch.FloatTensor(n_classes * sub_center, embedding_dim), requires_grad=True
         )
@@ -35,6 +55,14 @@ class AAMsoftmax(nn.Module):
 
         self.cos_m = torch.cos(torch.tensor(self.m))
         self.sin_m = torch.sin(torch.tensor(self.m))
+
+        if margin > 0.001:
+            mp = mp * (margin / 0.2)
+        else:
+            mp = 0.
+        
+        self.cos_mp = torch.cos(torch.tensor(mp))
+        self.sin_mp = torch.sin(torch.tensor(mp))
 
         # make the function cos(theta+m) monotonic decreasing while theta in [0°, 180°]
         self.th = torch.cos(TORCH_PI - torch.tensor(self.m))
@@ -49,20 +77,32 @@ class AAMsoftmax(nn.Module):
         assert x.shape[0] == label.shape[0]
 
         # cos(theta)
-        cosine = F.linear(F.normalize(
-            x), F.normalize(self.weight.to(x.device)))
+        cosine = F.linear(F.normalize(x), F.normalize(self.weight.to(x.device)))
         if self.sub_center != 1:
-            cosine = torch.reshape(
-                cosine, (-1, self.n_classes, self.sub_center))
-            cosine = torch.max(cosine, 2)[0]
+            cosine = torch.reshape(cosine, (-1, self.n_classes, self.sub_center))
+            if self.sub_center_type == "max":
+                cosine = torch.max(cosine, 2)[0]
+            elif self.sub_center_type == "avg":
+                cosine = cosine * (torch.softmax(cosine, dim=2))
+                cosine = cosine.sum(dim=-1)
+        
         # cos(theta + m)
         sine = torch.sqrt((1.0 - torch.mul(cosine, cosine)).clamp(0, 1))
         phi = cosine * self.cos_m - sine * self.sin_m
         phi = torch.where((cosine - self.th) > 0, phi, cosine - self.mm)
+        phi_mp = cosine * self.cos_mp + sine * self.sin_mp
 
         one_hot = torch.zeros_like(cosine)
         one_hot.scatter_(1, label.view(-1, 1), 1)
-        output = (one_hot * phi) + ((1.0 - one_hot) * cosine)
+
+        if self.sub_center_topk > 0:
+            topk_idx = torch.topk(cosine - 2 * one_hot, self.sub_center_topk)[1]
+            topk_one_hot = torch.zeros_like(cosine).scatter_(1, topk_idx, 1)
+            output = (one_hot * phi) + (topk_one_hot * phi_mp) + ((1 - one_hot - topk_one_hot) * cosine)
+        
+        else:
+            output = (one_hot * phi) + ((1.0 - one_hot) * cosine)
+        
         output = output * self.s
 
         loss = self.ce(output, label)
@@ -98,13 +138,16 @@ class SphereFace2(nn.Module):
         lanbuda=0.7,
         t=3,
         margin_type="C",
+        sub_center: int = 1,
     ):
         super(SphereFace2, self).__init__()
         self.in_features = in_features
         self.out_features = out_features
         self.scale = scale
+        self.sub_center = sub_center
         self.weight = nn.Parameter(
-            torch.FloatTensor(out_features, in_features))
+            torch.FloatTensor(out_features * sub_center, in_features)
+        )
         nn.init.xavier_uniform_(self.weight)
         self.bias = nn.Parameter(torch.zeros(1, 1))
         self.t = t
@@ -135,6 +178,9 @@ class SphereFace2(nn.Module):
     def forward(self, input: torch.Tensor, label: torch.Tensor):
         # compute similarity
         cos = F.linear(F.normalize(input), F.normalize(self.weight))
+        if self.sub_center != 1:
+            cos = torch.reshape(cos, (-1, self.out_features, self.sub_center))
+            cos = torch.max(cos, 2)[0]
 
         if self.margin_type == "A":  # arcface type
             sin = torch.sqrt(1.0 - torch.pow(cos, 2))
@@ -151,35 +197,27 @@ class SphereFace2(nn.Module):
                 + self.bias[0][0]
             )
             cos_m_theta_n = (
-                self.scale *
-                self.fun_g(cos * self.cos_m + sin * self.sin_m, self.t)
+                self.scale * self.fun_g(cos * self.cos_m + sin * self.sin_m, self.t)
                 + self.bias[0][0]
             )
-            cos_p_theta = self.lanbuda * \
-                torch.log(1 + torch.exp(-1.0 * cos_m_theta_p))
-            cos_n_theta = (1 - self.lanbuda) * \
-                torch.log(1 + torch.exp(cos_m_theta_n))
+            cos_p_theta = self.lanbuda * torch.log(1 + torch.exp(-1.0 * cos_m_theta_p))
+            cos_n_theta = (1 - self.lanbuda) * torch.log(1 + torch.exp(cos_m_theta_n))
         else:  # cosface type
             cos_m_theta_p = (
-                self.scale * (self.fun_g(cos, self.t) -
-                              self.margin) + self.bias[0][0]
+                self.scale * (self.fun_g(cos, self.t) - self.margin) + self.bias[0][0]
             )
             cos_m_theta_n = (
-                self.scale * (self.fun_g(cos, self.t) +
-                              self.margin) + self.bias[0][0]
+                self.scale * (self.fun_g(cos, self.t) + self.margin) + self.bias[0][0]
             )
-            cos_p_theta = self.lanbuda * \
-                torch.log(1 + torch.exp(-1.0 * cos_m_theta_p))
-            cos_n_theta = (1 - self.lanbuda) * \
-                torch.log(1 + torch.exp(cos_m_theta_n))
+            cos_p_theta = self.lanbuda * torch.log(1 + torch.exp(-1.0 * cos_m_theta_p))
+            cos_n_theta = (1 - self.lanbuda) * torch.log(1 + torch.exp(cos_m_theta_n))
 
         target_mask = input.new_zeros(cos.size())
         target_mask.scatter_(1, label.view(-1, 1).long(), 1.0)
         nontarget_mask = 1 - target_mask
         # cos1 = (cos - self.margin) * target_mask + cos * nontarget_mask
         # output = self.scale * cos1  # for computing the accuracy
-        loss = (target_mask * cos_p_theta +
-                nontarget_mask * cos_n_theta).sum(1).mean()
+        loss = (target_mask * cos_p_theta + nontarget_mask * cos_n_theta).sum(1).mean()
 
         # return output, loss
         return loss
