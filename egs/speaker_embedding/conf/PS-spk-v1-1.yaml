@@ -1,0 +1,175 @@
+dataset:
+  train_metafile: ./data/vox12_train
+  valid_metafile: ./data/vox12_train
+  test_folder: ./data/eval_vox1o
+  proc_output_folder: ./proc
+  target_sample_rate: 16000
+  gain_nomalized_to: -22
+  training_length_seconds: 4.
+  filter_min_utterance_length: 4.
+  filter_min_utterance_per_speaker: 10
+
+augmentation_noise:
+  used: True
+  prob: 0.5
+  noise_folder: noise_folder_path
+  snr_range:
+    - 10
+    - 30
+  prob_white_noise: 0.2 # prob. of augmentation replaced by white noise
+  white_noise_snr_range:
+    - 20
+    - 40
+
+augmentation_reverb:
+  used: True
+  prob: 0.5
+  rir_folder: rir_folder_path
+  target_rir_type: "full" # ["full", "early", "direct", "anechoic"]
+
+augmentation_speed:
+  used: True
+  prob: 0.5
+  treat_as_new_speaker: True
+  speed_change:
+    - 0.9
+    - 1.1
+
+augmentation_ir_response:
+  used: False
+  prob: 0.5
+
+augmentation_src:
+  used: False
+  prob: 0.25
+  src_range:
+    - 8000
+    - 16000
+    - 22050
+    - 24000
+    - 32000
+    - 44100
+    - 48000
+  prob_each:
+    - 0.8
+    - 0.2
+    - 0.
+    - 0.
+    - 0.
+    - 0.
+    - 0.
+
+augmentation_hpf:
+  used: False
+  prob: 0.25
+  cutoff:
+    - 100
+    - 200
+    - 300
+    - 600
+    - 800
+  prob_each:
+    - 0.2
+    - 0.3
+    - 0.3
+    - 0.1
+    - 0.1
+
+augmentation_volume:
+  used: True
+  prob: 0.75
+  perturbed_range:
+    - 0.2
+    - 1.2
+  clipping_prob: 0.
+  clipping_range:
+    min:
+      - 0.
+      - 0.1
+    max:
+      - 0.9
+      - 1.0
+
+trainer:
+  lighting_trainer_args:
+    max_epochs: 200
+    gradient_clip_val: 1.
+    accumulate_grad_batches: 1
+  train_iter_per_epoch: 4000
+  valid_iter_per_epoch: 400
+  n_spk_per_batch: 64
+  n_utt_per_speaker: 2
+  num_workers: 40
+  num_gpus: 1
+  work_folder: exp_save_path
+
+optimizer:
+  type: AdamW
+  learning_rate: 0.0001
+  args:
+    weight_decay: 0.00001
+    betas:
+     - 0.9
+     - 0.999
+
+scheduler:
+  type: CosineAnnealingWarmRestarts
+  warmup_step: -1
+  args:
+    T_0: 40
+    T_mult: 1
+    eta_min: 0.00001
+
+loss_func:
+  - type: AAMsoftmax
+    weighted: 1
+    args:
+      embedding_dim: 192
+      n_classes: 21615 # equal to 7205 * 3(speed up / slow down)
+      margin: 0.3
+      scale: 30
+      sub_center: 3
+      sub_center_type: max
+      sub_center_topk: 5
+      mp: 0.06
+
+model:
+  lighting_module:
+    type: EncPredClassBase
+    module_args:
+      encoder_lr_factor: 1.
+      feats_lr_factor: 1.
+      backbone_lr_factor: 1.
+  encoder:
+    type: ConvEncDec
+    encoder_args:
+      fft_length: 512
+      win_type: "hann"
+      win_length: 512
+      hop_length: 160
+      fmin: 0
+      fmax: 8000
+      sr: 16000
+      preemphasis: 0.97
+      trainable: False
+  features:
+    feats_type: fbank80_16k
+    drop_stft_first_bin: True
+    trainable: False
+    normalized_mode: all_feature
+    include_specaug: True
+    specaug_args:
+      freq_mask_length: 4
+      time_mask_length: 3
+      fill_value: 0.
+      n_freq_mask: 3
+      n_time_mask: 5
+      prob: 0.5
+  backbone:
+    type: EcapaTdnnExtracotr
+    backbone_args:
+      input_size: 80
+      embedding_size: 192
+      model_scale: 8
+      ndim: 1024
+      att_size: 1536

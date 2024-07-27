@@ -20,10 +20,16 @@
 
 ## Pretrained models
 
-| MODEL | Feature | Backbone | Loss func | Vox-O EER |
-|:---:|:---:|:---:|:---:|:---:|
-| [PS-spk-v1](pretrained/PS-spk-v1.onnx) | Fbank80 | ECAPA-TDNN | AAMSoftmax (m=0.3) | 1.48 |
-| [PS-spk-v2](pretrained/PS-spk-v2.onnx) | Fbank80 | ECAPA-TDNN | SphereFace2 (m=0.2) | 1.44 |
+| MODEL | Files | Feature | Backbone | Loss func | Vox-O EER |
+|:---:|:---:|:---:|:---:|:---:|:---:|
+| PS-spk-v1 | [onnx](pretrained/PS-spk-v1.onnx)<br>[pytorch](pretrained/PS-spk-v1.ckpt)<br>[config](conf/PS-spk-v1.yaml) | Fbank80 | ECAPA-TDNN | AAMSoftmax<br>(m=0.3) | 1.10 |
+| PS-spk-v1-1 | [onnx](pretrained/PS-spk-v1-1.onnx)<br>[pytorch](pretrained/PS-spk-v1-1.ckpt)<br>[config](conf/PS-spk-v1-1.yaml) | Fbank80 | ECAPA-TDNN | AAMSoftmax<br>(m=0.3) | 0.99 |
+
+| PARAMETER | DESCRIPTION |
+|:---:|:---:|
+| m | margin |
+| c | sub-center |
+| k | top-K class |
 
 ## Export the model to ONNX format
 
