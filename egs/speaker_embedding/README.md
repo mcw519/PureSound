@@ -23,7 +23,7 @@
 | MODEL | Files | Feature | Backbone | Loss func | Vox-O EER |
 |:---:|:---:|:---:|:---:|:---:|:---:|
 | PS-spk-v1 | [onnx](pretrained/PS-spk-v1.onnx)<br>[pytorch](pretrained/PS-spk-v1.ckpt)<br>[config](conf/PS-spk-v1.yaml) | Fbank80 | ECAPA-TDNN | AAMSoftmax<br>(m=0.3) | 1.10 |
-| PS-spk-v1-1 | [onnx](pretrained/PS-spk-v1-1.onnx)<br>[pytorch](pretrained/PS-spk-v1-1.ckpt)<br>[config](conf/PS-spk-v1-1.yaml) | Fbank80 | ECAPA-TDNN | AAMSoftmax<br>(m=0.3) | 0.99 |
+| PS-spk-v1-1 | [onnx](pretrained/PS-spk-v1-1.onnx)<br>[pytorch](pretrained/PS-spk-v1-1.ckpt)<br>[config](conf/PS-spk-v1-1.yaml) | Fbank80 | ECAPA-TDNN | AAMSoftmax<br>(m=0.3, c=3, k=5) | 0.99 |
 
 | PARAMETER | DESCRIPTION |
 |:---:|:---:|
