@@ -367,7 +367,9 @@ if __name__ == "__main__":
             shuffle=False,
         )
         trainer = L.Trainer(inference_mode=True)
+        state_dict = torch.load(args.ckpt_path, map_location="cpu")["state_dict"]
         lighting_model = init_model(model_dict)
+        lighting_model.reload_checkpoint(state_dict)
         lighting_model.register_metrics_func(
             {
                 "pesq_wb": {"func": Metrics.pesq_wb, "sr": 16000},
@@ -378,9 +380,7 @@ if __name__ == "__main__":
                 "bss_sdr": {"func": Metrics.bss_sdr, "sr": None},
             }
         )
-        trainer.test(
-            lighting_model, dataloaders=test_dataloader, ckpt_path=args.ckpt_path
-        )
+        trainer.test(lighting_model, dataloaders=test_dataloader)
 
     # Stage of inferencing audio only
     if args.inference:
@@ -399,9 +399,9 @@ if __name__ == "__main__":
         trainer = L.Trainer(
             inference_mode=True, default_root_dir=corpus_dict["proc_output_folder"]
         )
+        state_dict = torch.load(args.ckpt_path, map_location="cpu")["state_dict"]
         lighting_model = init_model(model_dict)
+        lighting_model.reload_checkpoint(state_dict)
         create_folder(corpus_dict["proc_output_folder"])
         lighting_model.register_proc_output_folder(corpus_dict["proc_output_folder"])
-        trainer.predict(
-            lighting_model, dataloaders=test_dataloader, ckpt_path=args.ckpt_path
-        )
+        trainer.predict(lighting_model, dataloaders=test_dataloader)

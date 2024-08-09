@@ -400,14 +400,12 @@ if __name__ == "__main__":
         trainer = L.Trainer(
             inference_mode=True, default_root_dir=corpus_dict["proc_output_folder"]
         )
-        loss_func_list, loss_func_list_w = init_loss_func(hparam_conf=loss_dict)
+        state_dict = torch.load(args.ckpt_path, map_location="cpu")["state_dict"]
         lighting_model = init_model(model_dict)
-        lighting_model.register_loss_func(loss_func_list, loss_func_list_w)
+        lighting_model.reload_checkpoint(state_dict)
         create_folder(corpus_dict["proc_output_folder"])
         lighting_model.register_proc_output_folder(corpus_dict["proc_output_folder"])
-        trainer.predict(
-            lighting_model, dataloaders=test_dataloader, ckpt_path=args.ckpt_path
-        )
+        trainer.predict(lighting_model, dataloaders=test_dataloader)
 
     # Stage of export model to ONNX
     if args.export_onnx and args.pretrained_ckpt_path:
