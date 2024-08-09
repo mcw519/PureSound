@@ -115,6 +115,7 @@ class FeatureEncoder(nn.Module):
             "fbank80_16k",
             "logfbank80_16k",
             "fbank128_16k",
+            "shrink_channel",
         ]
 
         if self.feats_type == "complex":
@@ -134,14 +135,21 @@ class FeatureEncoder(nn.Module):
             )
         elif self.feats_type == "logfbank80_16k":
             self.transform = MelBank(
-                sr=16000, n_fft=512, n_banks=80, trainable=trainable, apply_log=True,
+                sr=16000,
+                n_fft=512,
+                n_banks=80,
+                trainable=trainable,
+                apply_log=True,
             )
         elif self.feats_type == "fbank128_16k":
             self.transform = MelBank(
                 sr=16000, n_fft=512, n_banks=128, trainable=trainable
             )
         elif self.feats_type == "free":
-            self.transform = nn.Identity
+            self.transform = nn.Identity()
+
+        elif self.feats_type == "shrink_channel":
+            self.transform = LambdaLayer(lambda_func=lambda x: x.squeeze(-1))
 
         if include_specaug:
             self.specaug = SpecAugment(**specaug_args)
@@ -176,7 +184,11 @@ class FeatureEncoder(nn.Module):
             x = self.peq(x.permute(0, 3, 1, 2))
             x = x.permute(0, 2, 3, 1)
 
-        feats_for_enhanced = self.transform(x)
+        if not self.feats_type == "shrink_channel":
+            feats_for_enhanced = self.transform(x)
+        else:
+            feats_for_enhanced = x
+
         if feats_for_enhanced.dim() == 3:
             feats_for_enhanced = feats_for_enhanced.unsqueeze(1)  # [N, 1, C, T]
 
@@ -187,6 +199,10 @@ class FeatureEncoder(nn.Module):
             feats = self.specaug(feats_for_enhanced)
         else:
             feats = feats_for_enhanced.clone()
+
+        if self.feats_type == "shrink_channel":
+            feats = self.transform(feats)
+            feats_for_enhanced = self.transform(feats_for_enhanced)
 
         return feats, feats_for_enhanced
 

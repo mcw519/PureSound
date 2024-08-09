@@ -14,7 +14,7 @@ class _LayerNorm(nn.Module):
 
     def apply_gain_and_bias(self, normed_x):
         """Assumes input of size `[batch, chanel, *]`."""
-        return (self.gamma * normed_x.transpose(1, -1) + self.beta).transpose(1, -1)
+        return (self.gamma * normed_x.transpose(1, -1).contiguous() + self.beta).transpose(1, -1).contiguous()
 
 
 class GlobLN(_LayerNorm):

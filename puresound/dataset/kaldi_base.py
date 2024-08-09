@@ -39,13 +39,17 @@ class KaldiFormBaseDataset(torch.utils.data.Dataset):
         self.audio_gain_nomalized_to = audio_gain_nomalized_to
         self.split_to_chunks_with_size = split_to_chunks_with_size
 
-        self.df = self._load_df(self.folder)
-        self.idx_df = self._idx2key(self.df)
+        # Basic contents
+        self._folder_content = {"wav2scp": "wav2scp.txt", "wav2ref": "wav2ref.txt"}
+        self._load_df(self.folder)
 
     def __len__(self):
         return len(self.idx_df)
 
     def __getitem__(self, index: int):
+        clean_speech = torch.empty(0)
+        enroll_speech = torch.empty(0)
+
         key = self.idx_df[index]
         noisy_speech, sr = AudioIO.open(
             f_path=self.df[key]["wav2scp"],
@@ -53,23 +57,28 @@ class KaldiFormBaseDataset(torch.utils.data.Dataset):
             target_lvl=self.audio_gain_nomalized_to,
         )
         noisy_speech = noisy_speech.squeeze()
+
+        if "wav2enroll" in self.df[key]:
+            enroll_speech, sr = AudioIO.open(
+                f_path=self.df[key]["wav2enroll"],
+                resample_to=self.resample_to,
+                target_lvl=self.audio_gain_nomalized_to,
+            )
+            enroll_speech = enroll_speech.squeeze()
+
         if self.mode == "eval":
             if self.split_to_chunks_with_size:
                 chunk_length = int(sr * self.split_to_chunks_with_size)
                 if noisy_speech.shape[-1] > chunk_length:
                     noisy_speech = noisy_speech.view(1, 1, 1, -1)
                     noisy_speech = torch.nn.functional.unfold(
-                        noisy_speech, kernel_size=(1, chunk_length), stride=(1, chunk_length // 2)
+                        noisy_speech,
+                        kernel_size=(1, chunk_length),
+                        stride=(1, chunk_length // 2),
                     )
                     noisy_speech = noisy_speech.squeeze(0).permute(1, 0)
                     if noisy_speech.dim() != 2:
                         noisy_speech = noisy_speech.view(1, -1)
-
-            return {
-                "noisy_speech": noisy_speech,
-                "sr": sr,
-                "name": key,
-            }
 
         else:
             clean_speech, _sr = AudioIO.open(
@@ -85,12 +94,14 @@ class KaldiFormBaseDataset(torch.utils.data.Dataset):
                     wav=clean_speech, origin_sr=_sr, target_sr=sr, backend="sox"
                 )
             clean_speech = clean_speech.squeeze()
-            return {
-                "noisy_speech": noisy_speech,
-                "clean_speech": clean_speech,
-                "sr": sr,
-                "name": key,
-            }
+
+        return {
+            "noisy_speech": noisy_speech,
+            "clean_speech": clean_speech,
+            "conditional_speech": enroll_speech,
+            "sr": sr,
+            "name": key,
+        }
 
     @property
     def folder_content(self):
@@ -101,21 +112,28 @@ class KaldiFormBaseDataset(torch.utils.data.Dataset):
             'wav2ref': wav2ref.txt
             etc.
         """
-        return {"wav2scp": "wav2scp.txt", "wav2ref": "wav2ref.txt"}
+        self._folder_content = {"wav2scp": "wav2scp.txt", "wav2ref": "wav2ref.txt"}
+        return self._folder_content
+
+    @folder_content.setter
+    def folder_content(self, dct: Dict):
+        self._folder_content.update(dct)
+        print(f"Updated the content: {self._folder_content.keys()}")
+        self._load_df(self.folder)
 
     def _load_df(self, folder: str) -> Dict:
         """method about loading manifest information."""
-        _df = {}
-        load_dct = self.folder_content
+        self.df = {}
+        load_dct = self._folder_content.copy()
 
         # check file, wav2scp is must needed
-        if not os.path.isfile(f"{folder}/{self.folder_content['wav2scp']}"):
-            raise FileNotFoundError(f"{self.folder_content['wav2scp']} is not found")
+        if not os.path.isfile(f"{folder}/{self._folder_content['wav2scp']}"):
+            raise FileNotFoundError(f"{self._folder_content['wav2scp']} is not found")
 
         else:
             _wav2scp = load_text_as_dict(f"{folder}/wav2scp.txt")
             for key in sorted(_wav2scp.keys()):
-                _df[key] = {"wav2scp": _wav2scp[key][0]}
+                self.df[key] = {"wav2scp": _wav2scp[key][0]}
 
             del load_dct["wav2scp"]
 
@@ -129,13 +147,13 @@ class KaldiFormBaseDataset(torch.utils.data.Dataset):
                     for key in sorted(_temp.keys()):
                         try:
                             if len(_temp[key]) != 1:
-                                _df[key].update({f: _temp[key][:]})
+                                self.df[key].update({f: _temp[key][:]})
                             else:
-                                _df[key].update({f: _temp[key][0]})
+                                self.df[key].update({f: _temp[key][0]})
                         except KeyError:
                             print(f"Non match key {key}")
 
-        return _df
+        self.idx_df = self._idx2key(self.df)
 
     def _idx2key(self, df) -> Dict:
         """mapping df.keys to idx."""

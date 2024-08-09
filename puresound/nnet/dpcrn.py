@@ -4,7 +4,7 @@ import torch
 import torch.nn as nn
 
 from .lobe.rnn import SingleRNN
-from .lobe.trivial import spectral_compression
+from .lobe.trivial import FiLM, spectral_compression
 from .unet import Unet
 
 
@@ -18,8 +18,27 @@ class DPRNNblock2D(nn.Module):
         dropout: dropout rate
     """
 
-    def __init__(self, input_size: int, hidden_size: int, dropout: float = 0.0) -> None:
+    def __init__(
+        self,
+        input_size: int,
+        hidden_size: int,
+        dropout: float = 0.0,
+        embedding_size: Optional[int] = None,
+        fused_type: Optional[str] = None,
+    ) -> None:
         super().__init__()
+        self.embedding_size = embedding_size
+        self.fused_type = fused_type.lower()
+
+        if embedding_size is not None:
+            if self.fused_type == "film":
+                self.film = FiLM(
+                    feats_size=input_size,
+                    embed_size=embedding_size,
+                    input_norm=True,
+                )
+            else:
+                raise NameError
 
         self.intra_rnn = SingleRNN(
             "LSTM", input_size, hidden_size, bidirectional=True, dropout=dropout
@@ -32,7 +51,11 @@ class DPRNNblock2D(nn.Module):
         self.inter_norm = nn.LayerNorm(input_size)
 
     def forward(
-        self, x: torch.Tensor, intra_skip: bool = True, inter_skip: bool = True
+        self,
+        x: torch.Tensor,
+        intra_skip: bool = True,
+        inter_skip: bool = True,
+        embed: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
         """
         Args:
@@ -64,6 +87,18 @@ class DPRNNblock2D(nn.Module):
 
         x_inter_skip = x.clone()
 
+        if self.embedding_size is not None and embed is not None:
+            if self.fused_type == "film":
+                x = x.permute(0, 2, 1, 3)  # [N, C, CH, T]
+                x = x.reshape(-1, CH, T)
+                embed_inp = embed.unsqueeze(1).repeat(1, C, 1)
+                embed_inp = embed_inp.reshape(-1, embed.shape[-1])
+                x = self.film(x, embed_inp)
+                x = x.reshape(N, C, CH, T)
+                x = x.permute(0, 2, 1, 3)
+            else:
+                raise NotImplementedError
+
         # inter-chunk, time dependent and frequency independent
         x = x.permute(0, 2, 3, 1).reshape(
             N * C, T, -1
@@ -85,6 +120,7 @@ class DPCRN(Unet):
     def __init__(
         self,
         input_dim: int = 512,
+        dvec_dim: Optional[int] = None,
         activation_type: str = "PReLU",
         norm_type: str = "bN2d",
         dropout: float = 0.05,
@@ -122,20 +158,32 @@ class DPCRN(Unet):
         self.transpose_delay = transpose_delay
         self.rnn_hidden = rnn_hidden
         self.spectral_compress = spectral_compress
+        self.dvec_dim = dvec_dim
 
         # DPRNN block
         self.dprnn_block1 = DPRNNblock2D(
-            input_size=channels[-1], hidden_size=rnn_hidden, dropout=dropout
+            input_size=channels[-1],
+            hidden_size=rnn_hidden,
+            dropout=dropout,
+            embedding_size=dvec_dim,
+            fused_type="FiLM",
         )
         self.dprnn_block2 = DPRNNblock2D(
-            input_size=channels[-1], hidden_size=rnn_hidden, dropout=dropout
+            input_size=channels[-1],
+            hidden_size=rnn_hidden,
+            dropout=dropout,
+            embedding_size=dvec_dim,
+            fused_type="FiLM",
         )
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(
+        self, x: torch.Tensor, dvec: Optional[torch.Tensor] = None
+    ) -> torch.Tensor:
         """
         Args:
             x: input tensor shape [N, CH, C, T]
-            
+            dvec: speaker embedding tensor shape [N, D]
+
         Returns:
             output tensor has shape [N, CH, C, T]
         """
@@ -146,6 +194,8 @@ class DPCRN(Unet):
             x = x.unsqueeze(1)  # [N, 1, C, T]
 
         x = self.input_norm(x)
+        if dvec is not None:
+            dvec = nn.functional.normalize(dvec, dim=1, p=2)
 
         skip = [x.clone()]
 
@@ -155,8 +205,8 @@ class DPCRN(Unet):
             skip.append(x)
 
         # forward dprnn
-        x = self.dprnn_block1(x)  # [N, ch, C, T]
-        x = self.dprnn_block2(x)  # [N, ch, C, T]
+        x = self.dprnn_block1(x, embed=dvec)  # [N, ch, C, T]
+        x = self.dprnn_block2(x, embed=dvec)  # [N, ch, C, T]
 
         # forward CNN-up layers
         for i, cnn_layer in enumerate(self.cnn_up):
@@ -177,24 +227,3 @@ class DPCRN(Unet):
                     ]  # transpose-conv with t-kernel size would increase (t-1) length
 
         return x
-
-    @property
-    def get_args(self) -> Dict:
-        return {
-            "input_dim": self.input_dim,
-            "activation_type": self.activation_type,
-            "norm_type": self.norm_type,
-            "dropout": self.dropout,
-            "channels": self.channels,
-            "transpose_t_size": self.transpose_t_size,
-            "transpose_delay": self.transpose_delay,
-            "skip_conv": self.skip_conv,
-            "kernel_t": self.kernel_t,
-            "stride_t": self.stride_t,
-            "dilation_t": self.dilation_t,
-            "kernel_f": self.kernel_f,
-            "stride_f": self.stride_f,
-            "dilation_f": self.dilation_f,
-            "delay": self.delay,
-            "rnn_hidden": self.rnn_hidden,
-        }

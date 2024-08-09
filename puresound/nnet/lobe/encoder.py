@@ -14,7 +14,7 @@ class FreeEncDec(nn.Module):
         win_len: samples in time axis
         latten_len: feature dimension
         hop_len: stride step in time axis
-        output_active: if true, add ReLU activation after encoder's output
+        output_active: if given, add ReLU activation after encoder's output
 
     Flows:
         waveform -> laten-feats -> waveform
@@ -25,7 +25,7 @@ class FreeEncDec(nn.Module):
         win_length: int = 512,
         laten_length: int = 512,
         hop_length: int = 128,
-        output_active: bool = False,
+        output_active: Optional[str] = None,
     ):
         super().__init__()
         self.win_length = win_length
@@ -48,6 +48,11 @@ class FreeEncDec(nn.Module):
             stride=hop_length,
             bias=False,
         )
+
+        if self.output_active is not None:
+            nonlinear = getattr(nn, self.output_active)()
+            encoder = nn.Sequential(encoder, nonlinear)
+
         return encoder
 
     def get_decoder(
@@ -65,15 +70,14 @@ class FreeEncDec(nn.Module):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
         Args:
-            input tensor x shape is [N, L]
+            input tensor x shape is [N, L] or [N, 1, L]
 
         Returns:
             output tensor shape is [N, C, T]
         """
-        x = x.unsqueeze(1)  # [N, 1, L]
+        if x.dim() == 2:
+            x = x.unsqueeze(1)  # [N, 1, L]
         x = self.encoder(x)
-        if self.output_active:
-            x = F.relu(x)
         return x
 
     def inverse(self, x: torch.Tensor) -> torch.Tensor:
@@ -166,7 +170,7 @@ class ConvEncDec(nn.Module):
         if self.preemphasis is not None:
             padded = torch.nn.functional.pad(x, (1, 0))
             x = x - self.preemphasis * padded[:, :-1]
-        
+
         x = x.unsqueeze(1)  # [N, 1, L]
         return self.encoder(x)
 
