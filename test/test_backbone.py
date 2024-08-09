@@ -7,6 +7,7 @@ from puresound.nnet.conv_tasnet import ConvTasNet
 from puresound.nnet.dpcrn import DPCRN
 from puresound.nnet.dprnn import DPRNN
 from puresound.nnet.skim import SkiM
+from puresound.nnet.tfgridnet import TFGridNet
 from puresound.nnet.unet import UnetTcn
 
 sys.path.insert(0, "./")
@@ -179,6 +180,27 @@ def test_dpcrn_backbone():
         rnn_hidden=128,
     )
 
+    input_x = torch.rand(1, 2, 256, 1000)
+    y = model(input_x)
+    assert input_x.shape == y.shape
+
+
+@pytest.mark.backbone
+def test_tfgrid_backbone():
+    model = TFGridNet(
+        inp_channel_dim=2,
+        input_dim=256,
+        channel_dim=32,
+        lstm_dim=128,
+        n_block=6,
+        block_delay_frames=0,
+        kernel_f_size=5,
+        kernel_t_size=5,
+        f_stride=4,
+        n_head=4,
+        channel_qk=4,
+        attent_range=100,
+    )
     input_x = torch.rand(1, 2, 256, 1000)
     y = model(input_x)
     assert input_x.shape == y.shape
