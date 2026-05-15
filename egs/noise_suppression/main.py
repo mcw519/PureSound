@@ -1,78 +1,22 @@
 import argparse
-from typing import Dict, List
+from typing import Dict
 
 import lightning as L
 import torch
 from lightning.pytorch.callbacks import LearningRateMonitor, ModelCheckpoint
 
-from puresound import nnet, system
 from puresound.audio.io import AudioIO
 from puresound.dataset.kaldi_base import KaldiFormBaseDataset
 from puresound.metrics import Metrics
-from puresound.nnet import loss as ploss
+from puresound.recipes import (
+    init_loss_func,
+    init_siso_model,
+    load_siso_recipe_config,
+)
 from puresound.system.optim import create_optimizer_and_scheduler
 from puresound.task.ns import NoiseSuppressionCollateFunc, NoiseSuppressionDataset
 from puresound.task.sampler import SpeakerSampler
-from puresound.utils import create_folder, load_hparam, str2bool
-
-
-def load_config(f_path: str):
-    config = load_hparam(file_path=f_path)
-    corpus_dict = config["dataset"]
-    trainer_dict = config["trainer"]
-    optim_dict = config["optimizer"]
-    scheduler_dict = config["scheduler"]
-    loss_dict = config["loss_func"]
-    model_dict = config["model"]
-
-    aug_speech_dict = None
-    aug_noise_dict = None
-    aug_reverb_dict = None
-    aug_speed_dict = None
-    aug_ir_dict = None
-    aug_src_dict = None
-    aug_hpf_dict = None
-    aug_volume_dict = None
-
-    if "augmentation_speech" in config:
-        if config["augmentation_speech"]["used"]:
-            aug_speech_dict = config["augmentation_speech"]
-    if "augmentation_noise" in config:
-        if config["augmentation_noise"]["used"]:
-            aug_noise_dict = config["augmentation_noise"]
-    if "augmentation_reverb" in config:
-        if config["augmentation_reverb"]["used"]:
-            aug_reverb_dict = config["augmentation_reverb"]
-    if "augmentation_speed" in config:
-        if config["augmentation_speed"]["used"]:
-            aug_speed_dict = config["augmentation_speed"]
-    if "augmentation_ir_response" in config:
-        if config["augmentation_ir_response"]["used"]:
-            aug_ir_dict = config["augmentation_ir_response"]
-    if "augmentation_src" in config:
-        if config["augmentation_src"]["used"]:
-            aug_src_dict = config["augmentation_src"]
-    if "augmentation_hpf" in config:
-        aug_hpf_dict = config["augmentation_hpf"]
-    if "augmentation_volume" in config:
-        aug_volume_dict = config["augmentation_volume"]
-
-    return (
-        corpus_dict,
-        trainer_dict,
-        optim_dict,
-        scheduler_dict,
-        loss_dict,
-        model_dict,
-        aug_speech_dict,
-        aug_noise_dict,
-        aug_reverb_dict,
-        aug_speed_dict,
-        aug_ir_dict,
-        aug_src_dict,
-        aug_hpf_dict,
-        aug_volume_dict,
-    )
+from puresound.utils import create_folder, str2bool
 
 
 def init_dataloader(
@@ -156,47 +100,6 @@ def init_dataloader(
     return train_dataloader, valid_dataloader
 
 
-def init_model(model_dict):
-    lighting_module = getattr(system, model_dict["lighting_module"]["type"])
-    encoder = getattr(nnet, model_dict["encoder"]["type"])(
-        **model_dict["encoder"]["encoder_args"]
-    )
-    if "freq_eq" in model_dict.keys():
-        peq_module = getattr(nnet, model_dict["freq_eq"]["type"])(
-            **model_dict["freq_eq"]["eq_args"]
-        )
-        # register peq inside the feature module
-        model_dict["features"]["peq_module"] = peq_module
-
-    feature_encoder = nnet.FeatureEncoder(**model_dict["features"])
-    backbone = getattr(nnet, model_dict["backbone"]["type"])(
-        **model_dict["backbone"]["backbone_args"]
-    )
-    model = lighting_module(
-        encoder,
-        feature_encoder,
-        backbone,
-        **model_dict["lighting_module"]["module_args"],
-    )
-    return model
-
-
-def init_loss_func(hparam_conf: List):
-    """
-    Returns:
-        loss_list contain ModuleList([loss_1, loss_2, ...])
-        loss_list_w contain [w1, w2, ...]
-    """
-    loss_list = torch.nn.ModuleList([])
-    loss_list_w = []
-    for item in hparam_conf:
-        loss_func = getattr(ploss, item["type"])(**item["args"])
-        loss_list.append(loss_func)
-        loss_list_w.append(item["weighted"])
-
-    return loss_list, loss_list_w
-
-
 if __name__ == "__main__":
     torch.set_float32_matmul_precision("high")
 
@@ -258,7 +161,7 @@ if __name__ == "__main__":
         aug_src_dict,
         aug_hpf_dict,
         aug_volume_dict,
-    ) = load_config(args.config_path)
+    ) = load_siso_recipe_config(args.config_path)
 
     if args.training or args.dump_training_samples:
         train_dataloader, valid_dataloader = init_dataloader(
@@ -299,7 +202,7 @@ if __name__ == "__main__":
         loss_func_list, loss_func_list_w = init_loss_func(hparam_conf=loss_dict)
 
         # PL-Model
-        lighting_model = init_model(model_dict)
+        lighting_model = init_siso_model(model_dict)
         lighting_model.register_loss_func(loss_func_list, loss_func_list_w)
         param_groups = lighting_model.get_total_param_groups()
         optimizer, scheduler = create_optimizer_and_scheduler(
@@ -368,7 +271,7 @@ if __name__ == "__main__":
         )
         trainer = L.Trainer(inference_mode=True)
         state_dict = torch.load(args.ckpt_path, map_location="cpu")["state_dict"]
-        lighting_model = init_model(model_dict)
+        lighting_model = init_siso_model(model_dict)
         lighting_model.reload_checkpoint(state_dict)
         lighting_model.register_metrics_func(
             {
@@ -400,7 +303,7 @@ if __name__ == "__main__":
             inference_mode=True, default_root_dir=corpus_dict["proc_output_folder"]
         )
         state_dict = torch.load(args.ckpt_path, map_location="cpu")["state_dict"]
-        lighting_model = init_model(model_dict)
+        lighting_model = init_siso_model(model_dict)
         lighting_model.reload_checkpoint(state_dict)
         create_folder(corpus_dict["proc_output_folder"])
         lighting_model.register_proc_output_folder(corpus_dict["proc_output_folder"])
