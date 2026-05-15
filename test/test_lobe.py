@@ -1,4 +1,5 @@
 import sys
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -13,8 +14,9 @@ from puresound.utils import create_folder
 
 sys.path.insert(0, "./")
 
-TEST_AUDIO_PATH = "./test_case/1272-141231-0008.flac"
-OUT_TEST_FOLDER = "./test_case/outputs"
+TEST_CASE_DIR = Path(__file__).resolve().parent / "test_case"
+TEST_AUDIO_PATH = str(TEST_CASE_DIR / "1272-141231-0008.flac")
+OUT_TEST_FOLDER = str(TEST_CASE_DIR / "outputs")
 SAVE_TEST_AUDIO = True
 
 create_folder(OUT_TEST_FOLDER)
@@ -47,7 +49,7 @@ def test_fsmn_block(l_ctx, r_ctx):
         output_x, memory = fsmn_block(input_x, memory)
 
     if r_ctx == 0:
-        assert np.where(np.isnan(output_x) == True)[-1][0] == 50
+        assert np.where(np.isnan(output_x))[-1][0] == 50
 
 
 @pytest.mark.nnet

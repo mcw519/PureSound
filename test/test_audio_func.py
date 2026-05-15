@@ -1,27 +1,43 @@
 import sys
+from pathlib import Path
 
 import pytest
 import torch
 
 from puresound.audio.augmentaion import AudioEffectAugmentor
-from puresound.audio.dsp import (ParametricEQ, get_biquad_params, wav_apply_biquad_filter,
-                                 wav_resampling)
+from puresound.audio.dsp import (
+    ParametricEQ,
+    get_biquad_params,
+    wav_apply_biquad_filter,
+    wav_resampling,
+)
 from puresound.audio.impluse_response import rand_add_2nd_filter_response, wav_apply_rir
 from puresound.audio.io import AudioIO
 from puresound.audio.noise import add_bg_noise, add_bg_white_noise
-from puresound.audio.spectrum import (cpx_stft_as_mag_and_phase, mag_and_phase_as_cpx_stft,
-                                      stft_to_wav, wav_to_stft)
-from puresound.audio.volume import (calculate_rms, rand_gain_distortion, wav_clipping, wav_fade_in,
-                                    wav_fade_out)
+from puresound.audio.spectrum import (
+    cpx_stft_as_mag_and_phase,
+    mag_and_phase_as_cpx_stft,
+    stft_to_wav,
+    wav_to_stft,
+)
+from puresound.audio.volume import (
+    calculate_rms,
+    rand_gain_distortion,
+    wav_clipping,
+    wav_fade_in,
+    wav_fade_out,
+)
 from puresound.utils import create_folder
 
 sys.path.insert(0, "./")
 
-
-TEST_AUDIO_PATH = "./test_case/1272-141231-0008.flac"
-TEST_NOISE_PATH = "./test_case/noise/zzpQAtOmMhQ.wav"
-TEST_RIR_PATH = "./test_case/rir/Room042-00093.wav"
-OUT_TEST_FOLDER = "./test_case/outputs"
+TEST_CASE_DIR = Path(__file__).resolve().parent / "test_case"
+TEST_AUDIO_PATH = str(TEST_CASE_DIR / "1272-141231-0008.flac")
+TEST_NOISE_FOLDER = str(TEST_CASE_DIR / "noise")
+TEST_RIR_FOLDER = str(TEST_CASE_DIR / "rir")
+TEST_NOISE_PATH = str(TEST_CASE_DIR / "noise" / "zzpQAtOmMhQ.wav")
+TEST_RIR_PATH = str(TEST_CASE_DIR / "rir" / "Room042-00093.wav")
+OUT_TEST_FOLDER = str(TEST_CASE_DIR / "outputs")
 SAVE_TEST_AUDIO = True
 
 create_folder(OUT_TEST_FOLDER)
@@ -293,7 +309,11 @@ def test_biquad_filter_and_eq_func():
     }
     peq = ParametricEQ(**EQ_param)
     wav, sr = AudioIO.open(
-        f_path=TEST_AUDIO_PATH, normalized=False, target_lvl=-28, verbose=True, resample_to=32000
+        f_path=TEST_AUDIO_PATH,
+        normalized=False,
+        target_lvl=-28,
+        verbose=True,
+        resample_to=32000,
     )
     eq_wav = peq.forward(wav=wav)
     if SAVE_TEST_AUDIO:
@@ -310,8 +330,8 @@ def test_biquad_filter_and_eq_func():
 @pytest.mark.audio_func
 def test_audio_effect_augmentor():
     augmentation = AudioEffectAugmentor()
-    augmentation.load_bg_noise_from_folder("./test_case/noise")
-    augmentation.load_rir_from_folder("./test_case/rir")
+    augmentation.load_bg_noise_from_folder(TEST_NOISE_FOLDER)
+    augmentation.load_rir_from_folder(TEST_RIR_FOLDER)
 
     wav, sr = AudioIO.open(
         f_path=TEST_AUDIO_PATH, normalized=False, target_lvl=-28, verbose=True
