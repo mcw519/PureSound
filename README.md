@@ -3,7 +3,9 @@ We hope this repo can help you to listen pure clean voice/sound.
 
 ## Install & Test
     git clone <project-url>
-    cd puresound && sh build_puresound.sh
+    cd puresound
+    uv sync --group dev
+    uv run pytest
 
 ## Repo struct & Recipes
 After merged the v2 branch, all of previous codes used to train a model has been adapted to utilize [PyTorch Lightning](https://lightning.ai/docs/pytorch/stable/)

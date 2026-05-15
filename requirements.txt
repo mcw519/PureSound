@@ -2,6 +2,7 @@ google
 protobuf
 torch
 torchaudio>=0.9.0
+torchcodec
 matplotlib
 numpy
 scikit-learn
