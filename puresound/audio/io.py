@@ -58,7 +58,7 @@ class AudioIO:
         if normalized:
             if target_lvl is not None and verbose:
                 print(
-                    f"You choosed the waveform nomalized, the target_lvl would not be used."
+                    "You choosed the waveform nomalized, the target_lvl would not be used."
                 )
                 wav = normalize_waveform(wav=wav, amp_type="avg")
 
@@ -88,7 +88,7 @@ class AudioIO:
         """
         if len(wav.shape) == 1:
             wav = wav.unsqueeze(0)
-        torchaudio.save(f"{f_path}", wav, sr, format="wav", **kwargs)
+        torchaudio.save(f"{f_path}", wav, sr, **kwargs)
 
     @staticmethod
     def audio_cut(wav: torch.Tensor, sr: int, length_s: float):
