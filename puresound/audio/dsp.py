@@ -31,7 +31,12 @@ def wav_resampling(
     backend = backend.lower()
     assert backend in ["sox", "torchaudio"]
 
-    if backend == "torch":
+    if origin_sr == target_sr:
+        if backend == "torchaudio":
+            return wav, target_sr, torch_backend_params or {}
+        return wav, target_sr
+
+    if backend == "torchaudio" or not hasattr(torchaudio, "sox_effects"):
         """downsample and upsample back by TorchAudio"""
         lp_width = None
         rolloff = None
@@ -59,11 +64,15 @@ def wav_resampling(
             rolloff=rolloff,
         )(wav)
 
-        torch_backend_params["lp_width"] = lp_width
-        torch_backend_params["rolloff"] = rolloff
-        torch_backend_params["window"] = window
+        torch_backend_params = {
+            "lp_width": lp_width,
+            "rolloff": rolloff,
+            "window": window,
+        }
 
-        return wav, target_sr, torch_backend_params
+        if backend == "torchaudio":
+            return wav, target_sr, torch_backend_params
+        return wav, target_sr
 
     else:
         """downsample and upsample back by Sox command"""
@@ -211,6 +220,7 @@ class ParametricEQ:
         high_shelf_q_factor: Q factor of high shelf filter
         dtype: default data type in numpy
     """
+
     def __init__(
         self,
         sample_rate: float,
@@ -271,7 +281,7 @@ class ParametricEQ:
 
         Args:
             wav: The waveform used for computing amplitude. Shape should be [..., L]
-        
+
         Returns:
             filtered wav has same shape of input
         """

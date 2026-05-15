@@ -75,8 +75,11 @@ class AudioEffectAugmentor:
         Returns:
             waveform has been done volume adjusted.
         """
-        effects = [["vol", str(vol_ratio)]]
-        wav, _ = torchaudio.sox_effects.apply_effects_tensor(wav, sr, effects)
+        if hasattr(torchaudio, "sox_effects"):
+            effects = [["vol", str(vol_ratio)]]
+            wav, _ = torchaudio.sox_effects.apply_effects_tensor(wav, sr, effects)
+        else:
+            wav = wav * vol_ratio
 
         return wav, (vol_ratio)
 
@@ -92,8 +95,15 @@ class AudioEffectAugmentor:
         Returns:
             waveform has been done speed up or slow down.
         """
-        effects = [["speed", str(speed)], ["rate", str(sr)]]
-        wav, _ = torchaudio.sox_effects.apply_effects_tensor(wav, sr, effects)
+        if hasattr(torchaudio, "sox_effects"):
+            effects = [["speed", str(speed)], ["rate", str(sr)]]
+            wav, _ = torchaudio.sox_effects.apply_effects_tensor(wav, sr, effects)
+        else:
+            wav = torchaudio.functional.resample(
+                wav,
+                orig_freq=max(1, int(sr * speed)),
+                new_freq=sr,
+            )
 
         return wav, (speed)
 
@@ -109,8 +119,9 @@ class AudioEffectAugmentor:
         Returns:
             waveform has been done pitch shifted.
         """
-        effects = [["pitch", str(shift_ratio)]]
-        wav, _ = torchaudio.sox_effects.apply_effects_tensor(wav, sr, effects)
+        if hasattr(torchaudio, "sox_effects"):
+            effects = [["pitch", str(shift_ratio)]]
+            wav, _ = torchaudio.sox_effects.apply_effects_tensor(wav, sr, effects)
 
         return wav, (shift_ratio)
 
@@ -140,9 +151,9 @@ class AudioEffectAugmentor:
             assert isinstance(noise_id, list)
         else:
             if dynamic_type:
-                noise_id = random.sample(self.bg_noise.keys(), k=2)
+                noise_id = random.sample(list(self.bg_noise.keys()), k=2)
             else:
-                noise_id = random.sample(self.bg_noise.keys(), k=1)[0]
+                noise_id = random.sample(list(self.bg_noise.keys()), k=1)[0]
 
         noise = []
         if dynamic_type:
