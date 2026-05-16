@@ -1,72 +1,247 @@
 # PureSound
-We hope this repo can help you to listen pure clean voice/sound.
 
-## Install & Test
-    git clone <project-url>
-    cd puresound
-    uv sync --group dev
-    uv run pytest
+PureSound is a speech processing toolkit based on PyTorch and PyTorch Lightning.
+PureSound 是一個以 PyTorch 與 PyTorch Lightning 為核心的語音處理工具包。
 
-## Repo struct & Recipes
-After merged the v2 branch, all of previous codes used to train a model has been adapted to utilize [PyTorch Lightning](https://lightning.ai/docs/pytorch/stable/)
-Belows only list the major parts  
+It provides reusable audio utilities, model components, and training recipes for:
+它提供可重用的音訊工具、模型元件與訓練流程，涵蓋：
 
-    puresound
-    ├── audio: <related to audio processing>
-    |   ├── augmentaion.py
-    │   ├── dsp.py
-    │   ├── impluse_response.py
-    │   ├── io.py
-    │   ├── noise.py
-    │   ├── spectrum.py
-    │   └── volume.py
-    ├── dataset: <data manifest format and its parser>
-    │   ├── base.py
-    │   ├── dynamic_base.py
-    │   ├── kaldi_base.py
-    │   └── parser.py
-    ├── nnet: <neural network modules>
-    │   ├── dparn.py
-    │   ├── dpcrn.py
-    │   ├── ecapa_tdnn.py
-    │   ├── features.py
-    │   ├── masker.py
-    │   ├── skim.py
-    │   │── unet.py
-    │   ├── lobe
-    │   │   ├── encoder.py
-    │   │   ├── stft.py
-    │   │   └── trivial.py
-    │   ├── loss
-    │   │   ├── sdr.py
-    │   │   ├── spk.py
-    │   │   └── stft_loss.py
-    ├── system: <lightning based modules>
-    │   ├── base.py
-    │   ├── logger.py
-    │   ├── optim.py
-    │   └── siso.py
-    ├── task: <extending dataset modules for each speech task>
-    │   ├── ns.py
-    │   └── sv.py
-    ├── metrics.py
-    └── utils.py
+- Noise Suppression (NS)
+- Speaker Embedding / Speaker Verification (SV)
+- Target Speaker Extraction (TSE)
 
-Some samples:
+## Highlights
 
-    egs
-    ├── default_config.yaml
-    ├── noise_suppression
-    │   ├── config
-    │   │   ├── dparn.yaml
-    │   │   └── dpcrn.yaml
-    │   ├── main.py
-    │   └── prepare_metafile.py
-    └── speaker_embedding
-        ├── conf
-        │   └── ecapa_tdnn.yaml
-        ├── local
-        │   ├── compute_eer.py
-        │   └── voxceleb-O-trail-file.txt
-        │── main.py
-        └── prepare_metafile.py
+- Modular design: `audio`, `dataset`, `nnet`, `system`, and `task`
+- Config-driven training and inference (YAML)
+- Multiple backbone models (for example: DPCRN, DPRNN, DPARn, ECAPA-TDNN, TF-GridNet)
+- Built-in objective and subjective metrics (for example: PESQ, STOI, SDR related tools)
+
+## Requirements / 系統需求
+
+- Python 3.10+
+- A working PyTorch environment compatible with your platform
+
+## Installation / 安裝
+
+### Option 1: Use uv (recommended for development)
+
+### 方案 1：使用 uv（建議開發使用）
+
+```bash
+git clone <project-url>
+cd PureSound
+uv sync --group dev
+```
+
+### Option 2: Use pip
+
+### 方案 2：使用 pip
+
+```bash
+git clone <project-url>
+cd PureSound
+python -m pip install -U pip
+python -m pip install -e .
+```
+
+## Quick Validation / 快速驗證
+
+Run the test suite:
+
+```bash
+uv run pytest
+```
+
+Or with pip environment:
+
+```bash
+pytest
+```
+
+## Quick Start Recipes / 快速開始（Recipes）
+
+The `egs` folder contains runnable examples.
+
+### 1) Noise Suppression
+
+```bash
+cd egs/noise_suppression
+
+# Prepare training/validation manifests
+uv run python prepare_metafile.py --help
+
+# Train
+uv run python main.py --training True config/dpcrn.yaml
+
+# Inference
+uv run python main.py --inference True --ckpt_path /path/to/model.ckpt config/dpcrn.yaml
+```
+
+### 2) Speaker Embedding / Verification
+
+```bash
+cd egs/speaker_embedding
+
+# Prepare metadata
+uv run python prepare_metafile.py --help
+
+# Train
+uv run python main.py --training True conf/PS-spk-v1.yaml
+
+# Inference (extract embeddings)
+uv run python main.py --inference True --ckpt_path /path/to/model.ckpt conf/PS-spk-v1.yaml
+```
+
+More speaker embedding details and pretrained checkpoints are documented in:
+
+- `egs/speaker_embedding/README.md`
+
+### 3) Target Speaker Extraction
+
+```bash
+cd egs/target_speaker_extraction
+
+# Prepare metadata
+uv run python prepare_metafile.py --help
+
+# Train
+uv run python main.py --training True config/default_config.yaml
+
+# Inference
+uv run python main.py --inference True --ckpt_path /path/to/model.ckpt config/default_config.yaml
+```
+
+## Repository Structure / 專案結構
+
+```text
+PureSound/
+├── puresound/                 # Core library
+│   ├── audio/                 # Audio I/O, DSP, augmentation
+│   ├── dataset/               # Dataset base classes and parsers
+│   ├── nnet/                  # Model architectures and building blocks
+│   ├── system/                # Lightning training systems
+│   ├── task/                  # Task-specific dataset logic
+│   ├── metrics.py             # Evaluation metrics
+│   ├── recipes.py             # Model/loss initialization helpers
+│   └── utils.py               # General utilities
+├── egs/                       # End-to-end recipes and configs
+├── docs/                      # API and module documentation
+└── test/                      # Unit tests
+```
+
+## Documentation / 文件
+
+- Main docs entry: `docs/index.md`
+- Audio modules: `docs/audio/index.md`
+- Neural network modules: `docs/nnet/index.md`
+- System modules: `docs/system/index.md`
+
+## Build Package / 打包
+
+```bash
+./build_puresound.sh
+```
+
+This script runs:
+
+- `uv sync --group dev`
+- `uv build`
+
+## Notes / 備註
+
+- Some recipe scripts use boolean CLI flags in the form `--training True` or `--inference True`.
+- Please adjust dataset paths and output folders in each YAML config before training.
+
+## Troubleshooting
+
+### 1) `ModuleNotFoundError: No module named 'puresound'`
+
+Cause:
+- The package is not installed in your active environment.
+
+Fix:
+
+```bash
+uv sync --group dev
+# or
+python -m pip install -e .
+```
+
+### 2) `OSError` or backend errors from `torchaudio`
+
+Cause:
+- PyTorch / torchaudio binary mismatch, or missing runtime codec/backend support.
+
+Fix:
+
+```bash
+python -c "import torch, torchaudio; print(torch.__version__, torchaudio.__version__)"
+```
+
+Make sure `torch` and `torchaudio` are installed from compatible channels/versions.
+
+### 3) CUDA not available (`torch.cuda.is_available() == False`)
+
+Cause:
+- CPU-only environment, unsupported CUDA runtime, or mismatched PyTorch build.
+
+Fix:
+
+```bash
+python -c "import torch; print(torch.cuda.is_available(), torch.version.cuda)"
+```
+
+If CUDA is required, reinstall a CUDA-enabled PyTorch build matching your system.
+
+### 4) Recipe starts but cannot find data files
+
+Cause:
+- Dataset paths in YAML are not updated for local machine.
+
+Fix:
+- Edit each recipe config in `egs/*/config` or `egs/speaker_embedding/conf`.
+- Run `prepare_metafile.py` first to generate manifests.
+
+## Minimal Demo
+
+### Demo A: Basic import smoke test
+
+```bash
+python - <<'PY'
+from puresound.audio.io import AudioIO
+from puresound.metrics import Metrics
+
+print("PureSound import OK")
+print("AudioIO:", AudioIO)
+print("Metrics:", Metrics)
+PY
+```
+
+### Demo B: Save and reload a 1-second silent waveform
+
+```bash
+python - <<'PY'
+import os
+import torch
+from puresound.audio.io import AudioIO
+
+sr = 16000
+wav = torch.zeros(sr)
+out_dir = "./tmp_demo"
+os.makedirs(out_dir, exist_ok=True)
+out_path = os.path.join(out_dir, "silence.wav")
+
+AudioIO.save(wav=wav, f_path=out_path, sr=sr)
+rwav, rsr = AudioIO.open(out_path)
+print("Saved:", out_path)
+print("Loaded shape:", tuple(rwav.shape), "sr:", rsr)
+PY
+```
+
+### Demo C: Run speaker verification web demo (requires ONNX model)
+
+```bash
+cd egs/speaker_embedding
+uv run python demo.py --address 0.0.0.0 --port 7860 pretrained/PS-spk-v1.onnx
+```
