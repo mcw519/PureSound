@@ -59,12 +59,12 @@ def main(args):
             gr.Audio(
                 label="Upload Enrollment Speech",
                 type="filepath",
-                show_download_button=True,
+                buttons=["download"],
             ),
             gr.Audio(
                 label="Upload Testing Speech",
                 type="filepath",
-                show_download_button=True,
+                buttons=["download"],
             ),
             gr.Slider(
                 label="Nomalized gain to (dB)",
