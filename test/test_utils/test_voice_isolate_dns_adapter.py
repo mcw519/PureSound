@@ -1,51 +1,33 @@
 from argparse import Namespace
-import importlib.util
-from pathlib import Path
 
-import torch
-
-from puresound.audio.io import AudioIO
 from puresound.dataset.parser import MetafileParser
 
 
-_ADAPTER_PATH = (
-    Path(__file__).resolve().parents[1] / "egs" / "voice_isolate" / "prepare_dns_challenge.py"
-)
-_SPEC = importlib.util.spec_from_file_location("prepare_dns_challenge", _ADAPTER_PATH)
-assert _SPEC is not None and _SPEC.loader is not None
-_ADAPTER = importlib.util.module_from_spec(_SPEC)
-_SPEC.loader.exec_module(_ADAPTER)
-
-prepare_dns_challenge_metafiles = _ADAPTER.prepare_dns_challenge_metafiles
-scan_clean_speech = _ADAPTER.scan_clean_speech
-split_records = _ADAPTER.split_records
-
-
-def _write_wav(path: Path, sample_rate: int = 16000) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    wav = torch.zeros(1, sample_rate // 10)
-    AudioIO.save(wav, str(path), sample_rate)
-
-
-def test_dns_adapter_scans_clean_speech_with_parent_speaker_ids(tmp_path):
+def test_dns_adapter_scans_clean_speech_with_parent_speaker_ids(
+    tmp_path, voice_isolate_dns_adapter, write_silent_wav
+):
     clean_root = tmp_path / "datasets_fullband" / "clean_fullband"
-    _write_wav(clean_root / "spk-a" / "utt-1.wav")
-    _write_wav(clean_root / "spk-a" / "utt-2.wav")
+    write_silent_wav(clean_root / "spk-a" / "utt-1.wav")
+    write_silent_wav(clean_root / "spk-a" / "utt-2.wav")
 
-    records = scan_clean_speech(clean_root, speaker_id_strategy="parent")
+    records = voice_isolate_dns_adapter.scan_clean_speech(
+        clean_root, speaker_id_strategy="parent"
+    )
 
     assert len(records) == 2
     assert {record.spkid for record in records} == {"dns4_spk-a"}
     assert all(record.sample_rate == 16000 for record in records)
 
 
-def test_dns_adapter_splits_by_speaker(tmp_path):
+def test_dns_adapter_splits_by_speaker(
+    tmp_path, voice_isolate_dns_adapter, write_silent_wav
+):
     clean_root = tmp_path / "clean"
     for speaker in ["spk-a", "spk-b", "spk-c"]:
-        _write_wav(clean_root / speaker / "utt-1.wav")
+        write_silent_wav(clean_root / speaker / "utt-1.wav")
 
-    records = scan_clean_speech(clean_root)
-    train_records, valid_records = split_records(
+    records = voice_isolate_dns_adapter.scan_clean_speech(clean_root)
+    train_records, valid_records = voice_isolate_dns_adapter.split_records(
         records, valid_ratio=0.34, seed=0, split_by="speaker"
     )
 
@@ -56,19 +38,21 @@ def test_dns_adapter_splits_by_speaker(tmp_path):
     )
 
 
-def test_dns_adapter_writes_puresound_metafiles_and_config_hint(tmp_path):
+def test_dns_adapter_writes_puresound_metafiles_and_config_hint(
+    tmp_path, voice_isolate_dns_adapter, write_silent_wav
+):
     dns_root = tmp_path / "dns4"
     clean_root = dns_root / "datasets_fullband" / "clean_fullband"
     noise_root = dns_root / "datasets_fullband" / "noise_fullband"
     rir_root = dns_root / "datasets_fullband" / "impulse_responses"
     for speaker in ["spk-a", "spk-b"]:
-        _write_wav(clean_root / speaker / "utt-1.wav")
-        _write_wav(clean_root / speaker / "utt-2.wav")
+        write_silent_wav(clean_root / speaker / "utt-1.wav")
+        write_silent_wav(clean_root / speaker / "utt-2.wav")
     noise_root.mkdir(parents=True)
     rir_root.mkdir(parents=True)
 
     output_dir = tmp_path / "out"
-    train_metafile, valid_metafile = prepare_dns_challenge_metafiles(
+    train_metafile, valid_metafile = voice_isolate_dns_adapter.prepare_dns_challenge_metafiles(
         Namespace(
             dns_root=str(dns_root),
             output_dir=str(output_dir),
