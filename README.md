@@ -21,7 +21,6 @@ It provides reusable audio utilities, model components, and training recipes for
 
 - Python 3.10+
 - A working PyTorch environment compatible with your platform
-- The default `uv` environment in this repository is pinned to CUDA 12.4 wheels for Linux x86_64
 
 ## Installation / 安裝
 
@@ -35,8 +34,6 @@ cd PureSound
 uv sync --group dev
 ```
 
-This repository routes `torch`, `torchaudio`, and `torchcodec` to the PyTorch `cu124` wheel index when using `uv`.
-
 ### Option 2: Use pip
 
 ### 方案 2：使用 pip
@@ -47,8 +44,6 @@ cd PureSound
 python -m pip install -U pip
 python -m pip install -e .
 ```
-
-If you need GPU support with `pip`, install a PyTorch build that matches your driver/runtime first, then install PureSound.
 
 ## Quick Validation / 快速驗證
 
@@ -185,7 +180,6 @@ python -c "import torch, torchaudio; print(torch.__version__, torchaudio.__versi
 ```
 
 Make sure `torch` and `torchaudio` are installed from compatible channels/versions.
-For the `uv` workflow in this repository, they are pinned to the PyTorch `cu124` index.
 
 ### 3) CUDA not available (`torch.cuda.is_available() == False`)
 
@@ -199,7 +193,6 @@ python -c "import torch; print(torch.cuda.is_available(), torch.version.cuda)"
 ```
 
 If CUDA is required, reinstall a CUDA-enabled PyTorch build matching your system.
-This repository's `uv` setup targets CUDA 12.4. If your driver is older than that, upgrade the driver or switch to an older PyTorch CUDA build.
 
 ### 4) Recipe starts but cannot find data files
 
