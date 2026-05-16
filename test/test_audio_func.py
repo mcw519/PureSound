@@ -241,6 +241,56 @@ def test_audio_reverb_func(rir_type):
 
 
 @pytest.mark.audio_func
+def test_audio_simulated_reverb_func():
+    augmentation = AudioEffectAugmentor()
+    augmentation.init_room_simulator(
+        {
+            "room_dim_range": [[6.0, 6.0], [6.0, 6.0], [2.8, 2.8]],
+            "rt60_range": [0.2, 0.4],
+            "source_receiver_distance_range": [0.5, 2.5],
+            "foreground_distance_range": [0.5, 1.0],
+            "interferer_distance_range": [1.5, 2.5],
+            "receiver_margin": 0.4,
+            "source_margin": 0.4,
+            "nsample": 2048,
+            "order": 4,
+        }
+    )
+    wav = torch.zeros(1, 4000)
+    wav[:, 200] = 1.0
+    scene = augmentation.sample_room_scene()
+    reverb_wav, (rir_id, rir_info) = augmentation.apply_rir(
+        wav=wav,
+        rir_mode="full",
+        sr=8000,
+        rir_id=None,
+        room_scene=scene,
+        source_role="foreground",
+    )
+    early_wav, _ = augmentation.apply_rir(
+        wav=wav, rir_mode="early", sr=8000, rir_id=rir_id
+    )
+    interferer_wav, (_, interferer_info) = augmentation.apply_rir(
+        wav=wav,
+        rir_mode="full",
+        sr=8000,
+        rir_id=None,
+        room_scene=scene,
+        source_role="interferer",
+    )
+    assert rir_id.startswith("simulated-")
+    assert rir_info["metadata"]["rt60"] >= 0.2
+    assert rir_info["metadata"]["room_dim"] == interferer_info["metadata"]["room_dim"]
+    assert rir_info["metadata"]["receiver"] == interferer_info["metadata"]["receiver"]
+    assert rir_info["metadata"]["source_receiver_distance"] <= 1.0
+    assert interferer_info["metadata"]["source_receiver_distance"] >= 1.5
+    assert reverb_wav.shape == wav.shape
+    assert early_wav.shape == wav.shape
+    assert interferer_wav.shape == wav.shape
+    assert reverb_wav.abs().sum() > wav.abs().sum()
+
+
+@pytest.mark.audio_func
 def test_audio_add_2nd_rand_response_func():
     wav, sr = AudioIO.open(
         f_path=TEST_AUDIO_PATH, normalized=False, target_lvl=-28, verbose=True

@@ -35,6 +35,22 @@ augmentation_reverb:
   prob: 0.5
   rir_folder:
   target_rir_type: "full" # ["full", "early", "direct", "anechoic"]
+  simulator:
+    used: False
+    source_level: True
+    room_dim_range:
+      - [3.0, 8.0]
+      - [3.0, 8.0]
+      - [2.4, 3.5]
+    rt60_range: [0.15, 0.8]
+    source_receiver_distance_range: [0.3, 4.0]
+    foreground_distance_range: [0.3, 1.2]
+    interferer_distance_range: [1.2, 4.0]
+    receiver_margin: 0.4
+    source_margin: 0.4
+    nsample: 8192
+    order: -1
+    hp_filter: True
 
 augmentation_speed:
   used: False
@@ -95,6 +111,16 @@ augmentation_volume:
     max:
       - 0.9
       - 1.0
+
+vad_label:
+  used: True
+  backend: silero
+  args:
+    frame_length: 800
+    hop_length: 320
+    threshold: 0.5
+    min_overlap: 0.5
+    model_sample_rate: 16000
 
 trainer:
   lighting_trainer_args:
@@ -188,6 +214,17 @@ loss_func:
       window: hann_window
       factor_sc: 0.1
       factor_mag: 0.1  
+
+  # VAD-driven objective: reduce background-speaker false activity while
+  # preserving clean foreground-active frames.
+  - type: VADActivityLoss
+    weighted: 0.1
+    args:
+      frame_length: 800
+      hop_length: 320
+      activity_threshold_db: -40
+      false_positive_weight: 2.0
+      false_negative_weight: 1.0
 
 model:
   lighting_module:

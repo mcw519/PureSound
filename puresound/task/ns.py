@@ -34,6 +34,7 @@ class NoiseSuppressionDataset(DynamicBaseDataset):
         augmentation_src_args: Optional[Dict] = None,
         augmentation_hpf_args: Optional[Dict] = None,
         augmentation_volume_args: Optional[Dict] = None,
+        vad_label_args: Optional[Dict] = None,
     ):
         super().__init__(
             metafile_path=metafile_path,
@@ -50,6 +51,7 @@ class NoiseSuppressionDataset(DynamicBaseDataset):
             augmentation_src_args=augmentation_src_args,
             augmentation_hpf_args=augmentation_hpf_args,
             augmentation_volume_args=augmentation_volume_args,
+            vad_label_args=vad_label_args,
         )
 
     def __getitem__(self, target_speaker: Tuple[str, int | None]):
@@ -68,7 +70,16 @@ class NoiseSuppressionDataset(DynamicBaseDataset):
                 int(self.ori_audio_sr * self.training_sample_length_in_seconds),
             ),
         )[0]
-        noisy_speech = target_speech.clone()
+        source_level_reverb = self.should_apply_source_level_reverb()
+        room_scene = self.augmentor.sample_room_scene() if source_level_reverb else None
+        if source_level_reverb:
+            noisy_speech, target_speech = self.apply_source_level_target_reverb(
+                wav=target_speech,
+                sr=if_none_else(self.target_sr, self.ori_audio_sr),
+                room_scene=room_scene,
+            )
+        else:
+            noisy_speech = target_speech.clone()
 
         # Add interference speech from other speakers
         interfered_speech = []
@@ -104,20 +115,36 @@ class NoiseSuppressionDataset(DynamicBaseDataset):
                     )
                 interfered_speech.append(_speech)
 
-            # Aligned and Mixing
-            clips_wav = [target_speech] + interfered_speech
-            clips_wav = self.align_audio_list(
-                wav_list=clips_wav,
-                length=if_none_else(
-                    self.training_sample_length,
-                    int(self.ori_audio_sr * self.training_sample_length_in_seconds),
-                ),
-                padding_type="zero",
-            )
-            # Here, we assume all clips has same shape equal to [1, L]
-            # For multi channel simulation should consider next time. TODO
-            target_speech = clips_wav[0]
-            interfered_speech = clips_wav[1:]
+            if source_level_reverb:
+                interfered_speech = self.align_audio_list(
+                    wav_list=interfered_speech,
+                    length=if_none_else(
+                        self.training_sample_length,
+                        int(self.ori_audio_sr * self.training_sample_length_in_seconds),
+                    ),
+                    padding_type="zero",
+                )
+                interfered_speech = [
+                    self.apply_source_level_interferer_reverb(
+                        wav=speech,
+                        sr=if_none_else(self.target_sr, self.ori_audio_sr),
+                        room_scene=room_scene,
+                    )
+                    for speech in interfered_speech
+                ]
+            else:
+                # Aligned and Mixing
+                clips_wav = [target_speech] + interfered_speech
+                clips_wav = self.align_audio_list(
+                    wav_list=clips_wav,
+                    length=if_none_else(
+                        self.training_sample_length,
+                        int(self.ori_audio_sr * self.training_sample_length_in_seconds),
+                    ),
+                    padding_type="zero",
+                )
+                target_speech = clips_wav[0]
+                interfered_speech = clips_wav[1:]
             interfered_speech = (
                 torch.cat(interfered_speech, dim=0).sum(dim=0).reshape(1, -1)
             )
@@ -132,7 +159,9 @@ class NoiseSuppressionDataset(DynamicBaseDataset):
 
             # Mixing with SIR
             noisy_speech, interfered_speech = add_bg_noise(
-                wav=target_speech, noise=[interfered_speech], snr_list=[sir]
+                wav=noisy_speech if source_level_reverb else target_speech,
+                noise=[interfered_speech],
+                snr_list=[sir],
             )
             noisy_speech = noisy_speech[0]
 
@@ -172,6 +201,7 @@ class NoiseSuppressionDataset(DynamicBaseDataset):
         if (
             self.augmentation_reverb_args
             and self.augmentation_reverb_args["used"]
+            and not source_level_reverb
             and torch.rand(1) < self.augmentation_reverb_args["prob"]
         ):
             # RIR's target for noisy is full
@@ -228,7 +258,7 @@ class NoiseSuppressionDataset(DynamicBaseDataset):
 
             # if dynamic is False, 1 / 4 add white noise
             if (
-                dynamic_type == False
+                not dynamic_type
                 and torch.rand(1) < self.augmentation_noise_args["prob_white_noise"]
             ):
                 snr = (
@@ -473,15 +503,21 @@ class NoiseSuppressionDataset(DynamicBaseDataset):
 
             added_noise = added_noise[..., : self.training_sample_length]
 
-        return {
+        audio_sr = if_none_else(self.target_sr, self.ori_audio_sr)
+        vad_target = self.create_vad_target(target_speech, sample_rate=audio_sr)
+
+        sample = {
             "noisy_speech": noisy_speech,
             "clean_speech": target_speech,
             "added_noise": added_noise,
             "consistency_noise": noisy_speech - target_speech,
             "speaker_id": self.spk2idx[target_speaker],
-            "audio_sr": if_none_else(self.target_sr, self.ori_audio_sr),
+            "audio_sr": audio_sr,
             "audio_length": noisy_speech.shape[-1],
         }
+        if vad_target is not None:
+            sample["vad_target"] = vad_target
+        return sample
 
 
 class NoiseSuppressionCollateFunc:
@@ -497,6 +533,7 @@ class NoiseSuppressionCollateFunc:
         col_spkid = []
         col_sr = []
         col_length = []
+        col_vad = []
 
         for b in batch:
             """
@@ -516,12 +553,14 @@ class NoiseSuppressionCollateFunc:
             col_spkid.append(b["speaker_id"])
             col_sr.append(b["audio_sr"])
             col_length.append(b["audio_length"])
+            if "vad_target" in b:
+                col_vad.append(b["vad_target"].squeeze())
 
         padded_clean = pad_sequence(col_clean, batch_first=True)  # [N, L]
         padded_noisy = pad_sequence(col_noisy, batch_first=True)  # [N, L]
         padded_consistency = pad_sequence(col_consistency, batch_first=True)  # [N, L]
 
-        return {
+        out = {
             "clean_speech": padded_clean,
             "noisy_speech": padded_noisy,
             "consistency_noise": padded_consistency,
@@ -529,3 +568,6 @@ class NoiseSuppressionCollateFunc:
             "sr": torch.Tensor(col_sr),
             "length": torch.Tensor(col_length),
         }
+        if col_vad:
+            out["vad_target"] = pad_sequence(col_vad, batch_first=True)
+        return out

@@ -1,4 +1,5 @@
 import random
+from itertools import count
 from typing import List, Optional
 
 import torch
@@ -8,6 +9,7 @@ from puresound.audio.dsp import wav_resampling
 from puresound.audio.impluse_response import rand_add_2nd_filter_response, wav_apply_rir
 from puresound.audio.io import AudioIO
 from puresound.audio.noise import add_bg_noise, add_bg_white_noise
+from puresound.audio.room_simulator import RoomImpulseResponseSimulator
 from puresound.audio.volume import rand_gain_distortion, wav_clipping
 from puresound.utils import recursive_read_folder
 
@@ -41,7 +43,11 @@ class AudioEffectAugmentor:
     """
 
     def __init__(self):
-        pass
+        self.bg_noise = {}
+        self.rir = {}
+        self.room_simulator = None
+        self.simulated_rir = {}
+        self.simulated_rir_counter = count()
 
     def load_bg_noise_from_folder(self, folder: str, suffix: str = ".wav"):
         """load bg-noise from folder path"""
@@ -50,6 +56,18 @@ class AudioEffectAugmentor:
     def load_rir_from_folder(self, folder: str, suffix: str = ".wav"):
         """load RIR from folder path"""
         self.rir = self._load_wav_folder(folder, suffix=suffix)
+
+    def init_room_simulator(self, config: dict):
+        """initialize physics-based shoebox RIR simulator."""
+        simulator_config = dict(config)
+        simulator_config.pop("used", None)
+        simulator_config.pop("source_level", None)
+        self.room_simulator = RoomImpulseResponseSimulator(**simulator_config)
+
+    def sample_room_scene(self) -> Optional[dict]:
+        if self.room_simulator is None:
+            return None
+        return self.room_simulator.sample_scene()
 
     def _load_wav_folder(self, folder: str, suffix: str = ".wav"):
         """load all waveform in folder, and split the waveform id to be key"""
@@ -208,6 +226,8 @@ class AudioEffectAugmentor:
         rir_mode: str = "image",
         sr: int = 16000,
         rir_id: Optional[str] = None,
+        room_scene: Optional[dict] = None,
+        source_role: str = "source",
     ) -> torch.Tensor:
         """
         Simulate reverberation data by convolue RIR in waveform by some specific paramters.
@@ -227,19 +247,42 @@ class AudioEffectAugmentor:
         Raises:
             NameError: if rir_mode not in (image, direct, early)
         """
-        if rir_id is None:
-            rir_id = random.choice(list(self.rir.keys()))
-
-        impaulse, rir_sr = AudioIO.open(self.rir[rir_id]["wav_path"])
-        if rir_sr != sr:
-            impaulse, _ = wav_resampling(
-                wav=impaulse, origin_sr=rir_sr, target_sr=sr, backend="sox"
+        rir_metadata = None
+        if self.room_simulator is not None and rir_id is None:
+            impaulse, rir_metadata = self.room_simulator.generate(
+                sample_rate=sr,
+                scene=room_scene,
+                source_role=source_role,
             )
+            rir_id = f"simulated-{next(self.simulated_rir_counter)}"
+            self.simulated_rir[rir_id] = {
+                "impulse": impaulse,
+                "sample_rate": sr,
+                "metadata": rir_metadata,
+            }
+        elif rir_id in self.simulated_rir:
+            cached_rir = self.simulated_rir[rir_id]
+            impaulse = cached_rir["impulse"]
+            rir_metadata = cached_rir["metadata"]
+            rir_sr = cached_rir["sample_rate"]
+            if rir_sr != sr:
+                impaulse, _ = wav_resampling(
+                    wav=impaulse, origin_sr=rir_sr, target_sr=sr, backend="sox"
+                )
+        else:
+            if rir_id is None:
+                rir_id = random.choice(list(self.rir.keys()))
+
+            impaulse, rir_sr = AudioIO.open(self.rir[rir_id]["wav_path"])
+            if rir_sr != sr:
+                impaulse, _ = wav_resampling(
+                    wav=impaulse, origin_sr=rir_sr, target_sr=sr, backend="sox"
+                )
 
         reverb_wav = wav_apply_rir(
             wav=wav, impaulse=impaulse, sample_rate=sr, rir_mode=rir_mode
         )
-        return reverb_wav, (rir_id, rir_mode)
+        return reverb_wav, (rir_id, {"mode": rir_mode, "metadata": rir_metadata})
 
     def apply_2nd_iir_response(
         self,

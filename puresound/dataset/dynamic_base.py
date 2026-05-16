@@ -9,6 +9,7 @@ import torch
 from puresound.audio.augmentaion import AudioEffectAugmentor
 from puresound.audio.io import AudioIO
 from puresound.audio.noise import add_bg_white_noise
+from puresound.audio.vad import create_vad_labeler, frame_count
 from puresound.dataset.parser import MetafileParser
 
 
@@ -29,6 +30,7 @@ class DynamicBaseDataset(torch.utils.data.Dataset):
         augmentation_src_args: Optional[Dict] = None,
         augmentation_hpf_args: Optional[Dict] = None,
         augmentation_volume_args: Optional[Dict] = None,
+        vad_label_args: Optional[Dict] = None,
     ):
         super().__init__()
         # Matafile related
@@ -56,6 +58,8 @@ class DynamicBaseDataset(torch.utils.data.Dataset):
         self.augmentation_src_args = augmentation_src_args
         self.augmentation_hpf_args = augmentation_hpf_args
         self.augmentation_volume_args = augmentation_volume_args
+        self.vad_label_args = vad_label_args
+        self.vad_labeler = None
 
         self.init_necessary()
 
@@ -73,6 +77,10 @@ class DynamicBaseDataset(torch.utils.data.Dataset):
             self.spk2idx[spkid] = idx
 
         self.init_augmentor()
+        self.init_vad_labeler()
+
+    def init_vad_labeler(self):
+        self.vad_labeler = create_vad_labeler(self.vad_label_args)
 
     def __len__(self):
         pass
@@ -232,12 +240,78 @@ class DynamicBaseDataset(torch.utils.data.Dataset):
             )
 
         if self.augmentation_reverb_args is not None:
-            self.augmentor.load_rir_from_folder(
-                self.augmentation_reverb_args["rir_folder"]
-            )
-            print(f"Augmentor finished load {len(self.augmentor.rir.keys())} rirs")
+            simulator_args = self.augmentation_reverb_args.get("simulator")
+            if simulator_args and simulator_args.get("used"):
+                self.augmentor.init_room_simulator(simulator_args)
+                print("Augmentor initialized physics-based room simulator")
+            else:
+                self.augmentor.load_rir_from_folder(
+                    self.augmentation_reverb_args["rir_folder"]
+                )
+                print(f"Augmentor finished load {len(self.augmentor.rir.keys())} rirs")
 
         print("----" * 30)
+
+    def should_apply_source_level_reverb(self) -> bool:
+        if not (self.augmentation_reverb_args and self.augmentation_reverb_args["used"]):
+            return False
+        simulator_args = self.augmentation_reverb_args.get("simulator")
+        if not (
+            simulator_args
+            and simulator_args.get("used")
+            and simulator_args.get("source_level")
+        ):
+            return False
+        return (torch.rand(1) < self.augmentation_reverb_args["prob"]).item()
+
+    def apply_source_level_target_reverb(
+        self, wav: torch.Tensor, sr: int, room_scene: dict
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        noisy_target, (rir_id, _) = self.augmentor.apply_rir(
+            wav=wav,
+            rir_mode="full",
+            sr=sr,
+            room_scene=room_scene,
+            source_role="foreground",
+        )
+        target_rir_type = self.augmentation_reverb_args["target_rir_type"]
+        if target_rir_type == "anechoic":
+            clean_target = wav
+        else:
+            clean_target, _ = self.augmentor.apply_rir(
+                wav=wav,
+                rir_id=rir_id,
+                rir_mode=target_rir_type,
+                sr=sr,
+            )
+        return noisy_target, clean_target
+
+    def apply_source_level_interferer_reverb(
+        self, wav: torch.Tensor, sr: int, room_scene: dict
+    ) -> torch.Tensor:
+        reverb_wav, _ = self.augmentor.apply_rir(
+            wav=wav,
+            rir_mode="full",
+            sr=sr,
+            room_scene=room_scene,
+            source_role="interferer",
+        )
+        return reverb_wav
+
+    def create_vad_target(self, clean_speech: torch.Tensor, sample_rate: int):
+        if self.vad_labeler is None:
+            return None
+        return self.vad_labeler(clean_speech, sample_rate=sample_rate)
+
+    def create_empty_vad_target(self, wav: torch.Tensor):
+        if self.vad_labeler is None:
+            return None
+        n_frames = frame_count(
+            length=wav.shape[-1],
+            frame_length=self.vad_labeler.frame_length,
+            hop_length=self.vad_labeler.hop_length,
+        )
+        return torch.zeros(n_frames, dtype=torch.float32)
 
     def choose_an_utterance_by_speaker_name(
         self,
@@ -301,7 +375,7 @@ class DynamicBaseDataset(torch.utils.data.Dataset):
                     )
                 )
             else:
-                raise RuntimeError(f"Timeout, can't find a useful utterance.")
+                raise RuntimeError("Timeout, can't find a useful utterance.")
 
         if select_channel is not None:
             if target_speech.shape[0] > select_channel:
@@ -339,11 +413,11 @@ class DynamicBaseDataset(torch.utils.data.Dataset):
                 assert clips_wav.shape[-1] == length
 
             else:
-                ch, l = wav.shape
+                ch, wav_length = wav.shape
                 offset = random.randint(0, length - int(wav.shape[-1]))
                 pre_padd = torch.zeros(ch, offset, device=wav.device, dtype=wav.dtype)
                 suf_padd = torch.zeros(
-                    ch, length - l - offset, device=wav.device, dtype=wav.dtype
+                    ch, length - wav_length - offset, device=wav.device, dtype=wav.dtype
                 )
                 clips_wav = torch.cat([pre_padd, wav, suf_padd], dim=-1)
                 assert clips_wav.shape[-1] == length

@@ -31,6 +31,22 @@ enroll_speech:
     prob: 0.5
     rir_folder: rir_folder_path
     target_rir_type: "full" # ["full", "early", "direct", "anechoic"]
+    simulator:
+      used: False
+      source_level: False
+      room_dim_range:
+        - [3.0, 8.0]
+        - [3.0, 8.0]
+        - [2.4, 3.5]
+      rt60_range: [0.15, 0.8]
+      source_receiver_distance_range: [0.3, 4.0]
+      foreground_distance_range: [0.3, 1.2]
+      interferer_distance_range: [1.2, 4.0]
+      receiver_margin: 0.4
+      source_margin: 0.4
+      nsample: 4096
+      order: -1
+      hp_filter: True
   add_volume:
     used: False
     prob: 0.5
@@ -75,6 +91,22 @@ augmentation_reverb:
   prob: 0.5
   rir_folder: rir_folder_path
   target_rir_type: "early" # ["full", "early", "direct", "anechoic"]
+  simulator:
+    used: False
+    source_level: True
+    room_dim_range:
+      - [3.0, 8.0]
+      - [3.0, 8.0]
+      - [2.4, 3.5]
+    rt60_range: [0.15, 0.8]
+    source_receiver_distance_range: [0.3, 4.0]
+    foreground_distance_range: [0.3, 1.2]
+    interferer_distance_range: [1.2, 4.0]
+    receiver_margin: 0.4
+    source_margin: 0.4
+    nsample: 4096
+    order: -1
+    hp_filter: True
 
 augmentation_speed:
   used: False
@@ -136,6 +168,16 @@ augmentation_volume:
       - 0.9
       - 1.0
 
+vad_label:
+  used: True
+  backend: silero
+  args:
+    frame_length: 400
+    hop_length: 160
+    threshold: 0.5
+    min_overlap: 0.5
+    model_sample_rate: 16000
+
 trainer:
   lighting_trainer_args:
     max_epochs: 200
@@ -176,6 +218,17 @@ signal_loss_func:
       zero_mean: True
       source_aggregated: False
       sdr_max: 50
+
+  # VAD-driven objective: suppress non-target/background activity while
+  # preserving foreground-active frames.
+  - type: VADActivityLoss
+    weighted: 0.1
+    args:
+      frame_length: 400
+      hop_length: 160
+      activity_threshold_db: -40
+      false_positive_weight: 2.0
+      false_negative_weight: 1.0
   
 class_loss_func:
   # The first loss func

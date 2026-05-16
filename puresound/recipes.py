@@ -32,6 +32,7 @@ def load_siso_recipe_config(f_path: str) -> Tuple:
         _enabled_config(config, "augmentation_src"),
         config.get("augmentation_hpf"),
         config.get("augmentation_volume"),
+        config.get("vad_label"),
     )
 
 

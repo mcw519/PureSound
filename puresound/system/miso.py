@@ -176,7 +176,12 @@ class EncDecCondMaskBase(BaseLightningModule):
         enh = torch.clamp_(enh, min=-1, max=1)
         return enh, c_features
 
-    def compute_loss(self, enhanced: torch.Tensor, target: torch.Tensor):
+    def compute_loss(
+        self,
+        enhanced: torch.Tensor,
+        target: torch.Tensor,
+        vad_target: torch.Tensor | None = None,
+    ):
         # wav aligned length
         if enhanced.shape[-1] < target.shape[-1]:
             target = target[..., : enhanced.shape[-1]]
@@ -186,7 +191,12 @@ class EncDecCondMaskBase(BaseLightningModule):
         losses = []
         for idx, loss_func in enumerate(self.loss_func_list):
             weighted = self.loss_func_list_w[idx]
-            weighted_loss = weighted * loss_func(enhanced, target)
+            if getattr(loss_func, "uses_vad_target", False):
+                weighted_loss = weighted * loss_func(
+                    enhanced, target, vad_target=vad_target
+                )
+            else:
+                weighted_loss = weighted * loss_func(enhanced, target)
             losses.append(weighted_loss.item())
             if idx == 0:
                 overall_loss = weighted_loss
@@ -215,10 +225,11 @@ class EncDecCondMaskBase(BaseLightningModule):
         clean_speech = batch["clean_speech"]
         conditional_speech = batch["conditional_speech"]
         conditional_target = batch["target"]
-        audio_sr = batch["sr"]
         enhanced_speech, embedding = self.forward(noisy_speech, conditional_speech)
         total_loss, losses = self.compute_loss(
-            enhanced=enhanced_speech, target=clean_speech
+            enhanced=enhanced_speech,
+            target=clean_speech,
+            vad_target=batch.get("vad_target"),
         )
         if self.jointed_trained and self.c_loss_func_list is not None:
             total_loss2, losses2 = self.compute_loss2(
@@ -245,11 +256,11 @@ class EncDecCondMaskBase(BaseLightningModule):
         noisy_speech = batch["noisy_speech"]
         clean_speech = batch["clean_speech"]
         conditional_speech = batch["conditional_speech"]
-        conditional_target = batch["target"]
-        audio_sr = batch["sr"]
         enhanced_speech, embedding = self.forward(noisy_speech, conditional_speech)
         total_loss, losses = self.compute_loss(
-            enhanced=enhanced_speech, target=clean_speech
+            enhanced=enhanced_speech,
+            target=clean_speech,
+            vad_target=batch.get("vad_target"),
         )
         # if self.jointed_trained and self.c_loss_func_list is not None:
         #     total_loss2, losses2 = self.compute_loss2(

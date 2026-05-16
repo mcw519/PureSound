@@ -35,6 +35,7 @@ dependencies = [
   "gradio",
   "onnx",
   "onnxruntime",
+  "silero-vad",
 ]
 
 [dependency-groups]

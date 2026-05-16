@@ -30,6 +30,7 @@ def init_dataloader(
     aug_src_dict: Dict,
     aug_hpf_dict: Dict,
     aug_volume_dict: Dict,
+    vad_label_dict: Dict,
 ):
     train_dataset = NoiseSuppressionDataset(
         metafile_path=corpus_dict["train_metafile"],
@@ -46,6 +47,7 @@ def init_dataloader(
         augmentation_src_args=aug_src_dict,
         augmentation_hpf_args=aug_hpf_dict,
         augmentation_volume_args=aug_volume_dict,
+        vad_label_args=vad_label_dict,
     )
 
     train_sampler = SpeakerSampler(
@@ -79,6 +81,7 @@ def init_dataloader(
         augmentation_src_args=aug_src_dict,
         augmentation_hpf_args=aug_hpf_dict,
         augmentation_volume_args=aug_volume_dict,
+        vad_label_args=vad_label_dict,
     )
 
     valid_sampler = SpeakerSampler(
@@ -161,6 +164,7 @@ if __name__ == "__main__":
         aug_src_dict,
         aug_hpf_dict,
         aug_volume_dict,
+        vad_label_dict,
     ) = load_siso_recipe_config(args.config_path)
 
     if args.training or args.dump_training_samples:
@@ -175,6 +179,7 @@ if __name__ == "__main__":
             aug_src_dict,
             aug_hpf_dict,
             aug_volume_dict,
+            vad_label_dict,
         )
 
     # Stage of dump the training samples

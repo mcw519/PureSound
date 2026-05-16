@@ -4,6 +4,18 @@ import torch.nn as nn
 from .sdr import SDRLoss
 from .spk import AAMsoftmax, SphereFace2
 from .stft_loss import MultiResolutionSTFTLoss, OverSuppressionLoss, SpectralLoss
+from .vad import VADActivityLoss
+
+__all__ = [
+    "AAMsoftmax",
+    "MultiResolutionSTFTLoss",
+    "OverSuppressionLoss",
+    "SDRLoss",
+    "SpectralLoss",
+    "SphereFace2",
+    "TimeDomainBasicLoss",
+    "VADActivityLoss",
+]
 
 
 class TimeDomainBasicLoss(nn.Module):

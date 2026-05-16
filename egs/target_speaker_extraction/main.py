@@ -35,6 +35,7 @@ def load_config(f_path: str):
     aug_src_dict = None
     aug_hpf_dict = None
     aug_volume_dict = None
+    vad_label_dict = None
 
     if "augmentation_speech" in config:
         if config["augmentation_speech"]["used"]:
@@ -58,6 +59,8 @@ def load_config(f_path: str):
         aug_hpf_dict = config["augmentation_hpf"]
     if "augmentation_volume" in config:
         aug_volume_dict = config["augmentation_volume"]
+    if "vad_label" in config and config["vad_label"]["used"]:
+        vad_label_dict = config["vad_label"]
 
     return (
         corpus_dict,
@@ -76,6 +79,7 @@ def load_config(f_path: str):
         aug_src_dict,
         aug_hpf_dict,
         aug_volume_dict,
+        vad_label_dict,
     )
 
 
@@ -91,6 +95,7 @@ def init_dataloader(
     aug_src_dict: Dict,
     aug_hpf_dict: Dict,
     aug_volume_dict: Dict,
+    vad_label_dict: Dict,
 ):
     train_dataset = TargetSpeakerExtractDataset(
         metafile_path=corpus_dict["train_metafile"],
@@ -108,6 +113,7 @@ def init_dataloader(
         augmentation_src_args=aug_src_dict,
         augmentation_hpf_args=aug_hpf_dict,
         augmentation_volume_args=aug_volume_dict,
+        vad_label_args=vad_label_dict,
     )
 
     train_sampler = SpeakerSampler(
@@ -142,6 +148,7 @@ def init_dataloader(
         augmentation_src_args=aug_src_dict,
         augmentation_hpf_args=aug_hpf_dict,
         augmentation_volume_args=aug_volume_dict,
+        vad_label_args=vad_label_dict,
     )
 
     valid_sampler = SpeakerSampler(
@@ -287,6 +294,7 @@ if __name__ == "__main__":
         aug_src_dict,
         aug_hpf_dict,
         aug_volume_dict,
+        vad_label_dict,
     ) = load_config(args.config_path)
 
     if args.training or args.dump_training_samples:
@@ -302,6 +310,7 @@ if __name__ == "__main__":
             aug_src_dict,
             aug_hpf_dict,
             aug_volume_dict,
+            vad_label_dict,
         )
 
     # Stage of dump the training samples
