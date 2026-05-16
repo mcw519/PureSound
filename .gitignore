@@ -24,6 +24,8 @@ dist/
 *.egg-info/
 .eggs/
 pip-wheel-metadata/
+__pycache__/
+*.egg
 
 # Logs and local runtime artifacts
 *.log
