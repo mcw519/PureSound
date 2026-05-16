@@ -3,9 +3,22 @@ from pathlib import Path
 
 puresound_dir = Path(__file__).parent
 requirements_path = puresound_dir / "requirements.txt"
-install_requires = (
-    requirements_path.read_text().splitlines() if requirements_path.exists() else []
-)
+
+
+def read_requirements(path: Path) -> list[str]:
+    if not path.exists():
+        return []
+
+    requirements = []
+    for line in path.read_text().splitlines():
+        requirement = line.strip()
+        if not requirement or requirement.startswith("#") or requirement.startswith("-"):
+            continue
+        requirements.append(requirement)
+    return requirements
+
+
+install_requires = read_requirements(requirements_path)
 
 setup(
     name="puresound",

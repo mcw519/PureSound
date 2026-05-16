@@ -31,8 +31,10 @@ It provides reusable audio utilities, model components, and training recipes for
 ```bash
 git clone <project-url>
 cd PureSound
-uv sync --group dev
+uv sync --locked --group dev
 ```
+
+The repository pins `torch`, `torchaudio`, and `torchcodec` to the PyTorch CUDA 12.4 wheel index in `pyproject.toml` and `uv.lock`, so the same `uv` setup can be reused on another machine without re-resolving to a different CUDA build.
 
 ### Option 2: Use pip
 
@@ -42,8 +44,11 @@ uv sync --group dev
 git clone <project-url>
 cd PureSound
 python -m pip install -U pip
-python -m pip install -e .
+python -m pip install -r requirements.txt
+python -m pip install -e . --no-deps
 ```
+
+`requirements.txt` mirrors the runtime dependencies and includes the PyTorch CUDA 12.4 wheel index for `pip`.
 
 ## Quick Validation / 快速驗證
 
@@ -146,6 +151,7 @@ PureSound/
 This script runs:
 
 - `uv sync --group dev`
+- `uv sync --locked --group dev`
 - `uv build`
 
 ## Notes / 備註
@@ -163,9 +169,10 @@ Cause:
 Fix:
 
 ```bash
-uv sync --group dev
+uv sync --locked --group dev
 # or
-python -m pip install -e .
+python -m pip install -r requirements.txt
+python -m pip install -e . --no-deps
 ```
 
 ### 2) `OSError` or backend errors from `torchaudio`
@@ -180,6 +187,7 @@ python -c "import torch, torchaudio; print(torch.__version__, torchaudio.__versi
 ```
 
 Make sure `torch` and `torchaudio` are installed from compatible channels/versions.
+For the repository-managed `uv` flow, they are pinned to the PyTorch CUDA 12.4 wheel index and should be installed with the checked-in lock file.
 
 ### 3) CUDA not available (`torch.cuda.is_available() == False`)
 
@@ -193,6 +201,7 @@ python -c "import torch; print(torch.cuda.is_available(), torch.version.cuda)"
 ```
 
 If CUDA is required, reinstall a CUDA-enabled PyTorch build matching your system.
+This repository's reusable `uv` setup targets CUDA 12.4.
 
 ### 4) Recipe starts but cannot find data files
 

@@ -1,5 +1,5 @@
 #!/bin/bash
 set -euo pipefail
 
-uv sync --group dev
+uv sync --locked --group dev
 uv build

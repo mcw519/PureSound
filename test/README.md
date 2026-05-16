@@ -1,5 +1,11 @@
 # Test Utilities
 
+Bootstrap the repository-managed environment first:
+
+```bash
+uv sync --locked --group dev
+```
+
 Run focused checks while iterating:
 
 ```bash
