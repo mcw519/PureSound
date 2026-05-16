@@ -35,7 +35,10 @@ dependencies = [
   "gradio",
   "onnx",
   "onnxruntime",
+  "requests",
   "silero-vad",
+  "librosa",
+  "torchmetrics",
 ]
 
 [dependency-groups]

@@ -228,7 +228,10 @@ class EncDecMaskBase(BaseLightningModule):
                 )
 
             score = self._metrics_func[name]["func"](_clean_speech, _enhanced_speech)
-            self.puresound_logging.update({name: score})
+            if isinstance(score, dict):
+                self.puresound_logging.update(score)
+            else:
+                self.puresound_logging.update({name: score})
 
     def predict_step(self, batch, batch_idx):
         noisy_speech = batch["noisy_speech"]

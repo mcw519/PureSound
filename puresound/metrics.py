@@ -1,5 +1,3 @@
-from typing import List, Optional
-
 import numpy as np
 import torch
 from mir_eval.separation import bss_eval_sources
@@ -7,6 +5,18 @@ from pesq import pesq
 from pystoi.stoi import stoi
 
 from puresound.nnet.loss.sdr import si_snr
+
+
+_DNSMOS_METRICS = {}
+
+
+def _mono_audio_tensor(wav: torch.Tensor) -> torch.Tensor:
+    wav = wav.detach().cpu().float()
+    while wav.dim() > 1 and wav.shape[0] == 1:
+        wav = wav.squeeze(0)
+    if wav.dim() > 1:
+        wav = wav[0]
+    return wav.clamp(min=-1.0, max=1.0)
 
 
 class Metrics:
@@ -97,6 +107,37 @@ class Metrics:
         ) - si_snr(noisy.reshape(1, -1), clean.reshape(1, -1)).reshape(-1)
 
         return improvement.item()
+
+    @staticmethod
+    def dnsmos_p835(
+        clean: torch.Tensor,
+        enhanced: torch.Tensor,
+        sr: int = 16000,
+        personalized: bool = False,
+    ):
+        del clean
+        try:
+            from torchmetrics.audio.dnsmos import (
+                DeepNoiseSuppressionMeanOpinionScore,
+            )
+        except ModuleNotFoundError as exc:
+            raise ModuleNotFoundError(
+                "DNSMOS requires torchmetrics audio dependencies. "
+                "Install with `uv sync`, or install librosa, onnxruntime, and requests."
+            ) from exc
+
+        key = (int(sr), bool(personalized))
+        if key not in _DNSMOS_METRICS:
+            _DNSMOS_METRICS[key] = DeepNoiseSuppressionMeanOpinionScore(
+                fs=int(sr),
+                personalized=bool(personalized),
+                device="cpu",
+            )
+
+        wav = _mono_audio_tensor(enhanced)
+        score = _DNSMOS_METRICS[key](wav)
+        names = ["dnsmos_p808", "dnsmos_sig", "dnsmos_bak", "dnsmos_ovr"]
+        return {name: float(value) for name, value in zip(names, score)}
 
     @staticmethod
     def f1_score(y_true: torch.Tensor, y_pred: torch.Tensor):

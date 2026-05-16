@@ -286,6 +286,7 @@ if __name__ == "__main__":
                 "estoi": {"func": Metrics.estoi, "sr": None},
                 "sisnr": {"func": Metrics.sisnr, "sr": None},
                 "bss_sdr": {"func": Metrics.bss_sdr, "sr": None},
+                "dnsmos_p835": {"func": Metrics.dnsmos_p835, "sr": 16000},
             }
         )
         trainer.test(lighting_model, dataloaders=test_dataloader)
