@@ -1,3 +1,4 @@
+import csv
 import io
 import os
 from typing import Optional
@@ -19,6 +20,16 @@ class MetafileParser:
     """
 
     @staticmethod
+    def _is_header_row(row):
+        normalized = [field.strip().lower() for field in row]
+        return (
+            len(normalized) >= 7
+            and normalized[0] == "uttid"
+            and normalized[1] == "spkid"
+            and normalized[4] == "length"
+        )
+
+    @staticmethod
     def read_from_metafile(
         f_path: str,
         use_speaker_as_key: bool = False,
@@ -38,10 +49,25 @@ class MetafileParser:
             Dict
         """
         meta_dict = {}
-        with io.open(f_path, "r", encoding="utf-8") as f:
-            for idx, line in enumerate(f.readlines()):
-                if idx == 0 or line == "":
+        expected_cols = 7
+        if with_label_column:
+            expected_cols += 1
+        if with_start_time_column:
+            expected_cols += 1
+
+        with io.open(f_path, "r", encoding="utf-8", newline="") as f:
+            reader = csv.reader(f, skipinitialspace=True)
+            for line_no, row in enumerate(reader, start=1):
+                row = [field.strip() for field in row]
+                if not row or not any(row) or MetafileParser._is_header_row(row):
                     continue
+
+                if len(row) != expected_cols:
+                    raise ValueError(
+                        f"Malformed metafile row {line_no} in {f_path}: "
+                        f"expected {expected_cols} comma-separated fields, "
+                        f"got {len(row)}"
+                    )
 
                 if not with_label_column:
                     (
@@ -52,7 +78,7 @@ class MetafileParser:
                         length,
                         sr,
                         channels,
-                    ) = line.strip().split(", ")
+                    ) = row
 
                 else:
                     if not with_start_time_column:
@@ -65,7 +91,7 @@ class MetafileParser:
                             sr,
                             channels,
                             label_path,
-                        ) = line.strip().split(", ")
+                        ) = row
 
                     else:
                         (
@@ -78,7 +104,7 @@ class MetafileParser:
                             channels,
                             label_path,
                             start_time,
-                        ) = line.strip().split(", ")
+                        ) = row
 
                 if insert_corpus_root_path is not None:
                     audio_path = os.path.join(insert_corpus_root_path, audio_path)
