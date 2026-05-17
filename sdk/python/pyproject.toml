@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "puresound-streaming"
+version = "0.1.0"
+description = "Portable PureSound streaming ONNX Runtime SDK"
+requires-python = ">=3.10"
+dependencies = [
+  "numpy",
+  "onnxruntime",
+]
+
+[tool.setuptools.packages.find]
+include = ["puresound_streaming*"]
