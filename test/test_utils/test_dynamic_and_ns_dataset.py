@@ -64,3 +64,68 @@ def test_noise_suppression_dataset_returns_training_contract(
     assert batch["noisy_speech"].shape == (2, 1600)
     assert batch["clean_speech"].shape == (2, 1600)
     assert batch["vad_target"].shape[0] == 2
+
+
+def test_noise_suppression_dataset_samples_speech_interference_from_sequence(
+    tmp_path, write_puresound_metafile
+):
+    metafile = write_puresound_metafile(
+        tmp_path / "meta.csv", speakers=3, utterances_per_speaker=2
+    )
+    dataset = NoiseSuppressionDataset(
+        **_dataset_args(metafile),
+        augmentation_speech_args={
+            "used": True,
+            "is_target": False,
+            "prob": 1.0,
+            "add_n_cases": 1,
+            "snr_range": [-5, 5],
+        },
+        vad_label_args={"used": False},
+    )
+
+    sample = dataset[("corpus_spk0", 16000)]
+
+    assert sample["noisy_speech"].shape == (1, 1600)
+    assert sample["clean_speech"].shape == (1, 1600)
+
+
+def test_noise_suppression_dataset_resamples_interference_from_mixed_sr_pool(
+    tmp_path, write_tone_wav
+):
+    rows = ["uttid, spkid, gender, path, length, sample rate, channels"]
+    for spk_idx, sample_rate in enumerate([22050, 24000, 48000]):
+        spkid = f"corpus_spk{spk_idx}"
+        for utt_idx in range(2):
+            uttid = f"{spkid}_utt{utt_idx}"
+            wav_path = tmp_path / "wav" / spkid / f"{uttid}.wav"
+            write_tone_wav(
+                wav_path,
+                sample_rate=sample_rate,
+                duration=0.25,
+                freq=180.0 + spk_idx * 80.0 + utt_idx * 10.0,
+            )
+            rows.append(
+                f"{uttid}, {spkid}, m, {wav_path}, "
+                f"{int(sample_rate * 0.25)}, {sample_rate}, 1"
+            )
+    metafile = tmp_path / "meta.csv"
+    metafile.write_text("\n".join(rows) + "\n", encoding="utf-8")
+
+    dataset = NoiseSuppressionDataset(
+        **_dataset_args(metafile),
+        augmentation_speech_args={
+            "used": True,
+            "is_target": False,
+            "prob": 1.0,
+            "add_n_cases": 1,
+            "snr_range": [-5, 5],
+        },
+        vad_label_args={"used": False},
+    )
+
+    sample = dataset[("corpus_spk0", None)]
+
+    assert sample["audio_sr"] == 16000
+    assert sample["noisy_speech"].shape == (1, 1600)
+    assert sample["clean_speech"].shape == (1, 1600)

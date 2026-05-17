@@ -70,7 +70,7 @@ class SpeakerSampler:
 
             if not self.fast_sampling:
                 if self.select_by_sr_first:
-                    sr = random.sample(self.sr_meta.keys(), 1)[0]
+                    sr = random.sample(list(self.sr_meta.keys()), 1)[0]
                     classes = random.sample(list(self.sr_meta[sr].keys()), self.n_spks)
                 else:
                     classes = random.sample(self.spk_pool, self.n_spks)

@@ -248,7 +248,7 @@ class TargetSpeakerExtractDataset(DynamicBaseDataset):
             spk_pool = set(spk_pool)
             spk_pool.remove(target_speaker)
 
-            inactive_target_speaker = random.sample(spk_pool, k=1)[0]
+            inactive_target_speaker = random.sample(sorted(spk_pool), k=1)[0]
             target_speech, self.ori_audio_sr, (_, _) = (
                 self.choose_an_utterance_by_speaker_name(
                     target_speaker_name=inactive_target_speaker,
@@ -297,20 +297,21 @@ class TargetSpeakerExtractDataset(DynamicBaseDataset):
                 spk_pool.remove(inactive_target_speaker)
 
             interference_spk_list = random.sample(
-                spk_pool, k=self.augmentation_speech_args["add_n_cases"]
+                sorted(spk_pool), k=self.augmentation_speech_args["add_n_cases"]
             )
+            interference_sr = None if self.target_sr is not None else self.ori_audio_sr
             for spk in interference_spk_list:
                 _speech, _sr, _ = self.choose_an_utterance_by_speaker_name(
                     target_speaker_name=spk,
                     select_channel=0,
-                    select_with_sr_as_key=self.ori_audio_sr,
+                    select_with_sr_as_key=interference_sr,
                 )
                 # Interfered speech has to be same sample rate of target speech
                 while _sr != self.ori_audio_sr:
                     _speech, _sr, _ = self.choose_an_utterance_by_speaker_name(
                         target_speaker_name=spk,
                         select_channel=0,
-                        select_with_sr_as_key=self.ori_audio_sr,
+                        select_with_sr_as_key=interference_sr,
                     )
                 interfered_speech.append(_speech)
 
