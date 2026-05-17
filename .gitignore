@@ -38,3 +38,9 @@ __pycache__/
 
 # Project-specific generated outputs
 test/test_case/outputs/
+
+# Experimental and temporary files
+exp
+exp/
+proc/
+data/
