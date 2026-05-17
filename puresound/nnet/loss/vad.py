@@ -5,14 +5,13 @@ import torch.nn.functional as F
 
 class VADActivityLoss(nn.Module):
     """
-
-    uses_vad_target = True
     Differentiable VAD-style activity loss.
 
-    The target activity is derived from clean foreground energy. The enhanced
-    waveform is penalized when it is active on clean-silent frames or inactive
-    on clean-active frames.
+    When an external VAD target is provided, that target is used as the label.
+    Otherwise the target activity falls back to clean foreground energy.
     """
+
+    uses_vad_target = True
 
     def __init__(
         self,
@@ -22,6 +21,7 @@ class VADActivityLoss(nn.Module):
         logit_scale: float = 0.25,
         false_positive_weight: float = 1.0,
         false_negative_weight: float = 1.0,
+        require_vad_target: bool = False,
         eps: float = 1e-8,
     ):
         super().__init__()
@@ -31,6 +31,7 @@ class VADActivityLoss(nn.Module):
         self.logit_scale = float(logit_scale)
         self.false_positive_weight = float(false_positive_weight)
         self.false_negative_weight = float(false_negative_weight)
+        self.require_vad_target = bool(require_vad_target)
         self.eps = float(eps)
 
     def _as_batch_waveform(self, wav: torch.Tensor) -> torch.Tensor:
@@ -39,7 +40,9 @@ class VADActivityLoss(nn.Module):
         if wav.dim() == 3:
             wav = wav.mean(dim=1)
         if wav.dim() != 2:
-            raise ValueError(f"Expected waveform shape [B, T] or [B, C, T], got {wav.shape}")
+            raise ValueError(
+                f"Expected waveform shape [B, T] or [B, C, T], got {wav.shape}"
+            )
         return wav
 
     def _frame_power(self, wav: torch.Tensor) -> torch.Tensor:
@@ -68,6 +71,12 @@ class VADActivityLoss(nn.Module):
 
         enh_power = self._frame_power(enh)
         if vad_target is None:
+            if self.require_vad_target:
+                raise ValueError(
+                    "VADActivityLoss requires `vad_target`, but the batch did not "
+                    "provide one. Enable `vad_label` in the config to generate VAD "
+                    "labels, for example with `backend: silero`."
+                )
             ref_power = self._frame_power(ref)
             reference_power = ref_power.amax(dim=-1, keepdim=True)
             silent_utterance = reference_power <= self.eps

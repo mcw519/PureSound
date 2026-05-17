@@ -1,4 +1,5 @@
 import torch
+import pytest
 
 from puresound.nnet.loss import VADActivityLoss
 from puresound.recipes import init_loss_func
@@ -66,3 +67,20 @@ def test_vad_activity_loss_uses_external_vad_target():
 
     assert torch.isfinite(external_label_loss)
     assert torch.allclose(fallback_loss, external_label_loss)
+
+
+def test_vad_activity_loss_can_require_external_vad_target():
+    loss_func = VADActivityLoss(
+        frame_length=160,
+        hop_length=80,
+        require_vad_target=True,
+    )
+    ref = torch.zeros(1, 1600)
+
+    with pytest.raises(ValueError, match="requires `vad_target`"):
+        loss_func(ref, ref)
+
+    vad_target = torch.zeros(1, 19)
+    loss = loss_func(ref, ref, vad_target=vad_target)
+
+    assert torch.isfinite(loss)
