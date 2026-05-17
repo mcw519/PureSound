@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 import gradio as gr
+import numpy as np
 import torch
 
 
@@ -19,9 +20,10 @@ from puresound.audio.io import AudioIO
 from puresound.utils import create_folder, load_hparam
 
 
-CHECKPOINT_EXTENSIONS = (".ckpt", ".pt", ".pth")
+CHECKPOINT_EXTENSIONS = (".ckpt", ".pt", ".pth", ".onnx")
 DEFAULT_CONFIG_PATH = "config/skim.yaml"
 MODEL_CACHE: dict[tuple[str, str, str], torch.nn.Module] = {}
+ORT_RUNTIME_CACHE: dict[tuple[str, str], Any] = {}
 Metrics = None
 LOGGER = logging.getLogger("voice_isolate_demo")
 
@@ -184,6 +186,21 @@ def get_cached_model(config_path: str | Path, checkpoint_path: str | Path) -> tu
     return MODEL_CACHE[cache_key], device
 
 
+def get_cached_ort_runtime(onnx_path: str | Path, provider: str = "auto"):
+    from puresound.streaming import StreamingDparnOrt
+
+    onnx_path = resolve_path(onnx_path)
+    cache_key = (str(onnx_path), provider)
+    if cache_key not in ORT_RUNTIME_CACHE:
+        LOGGER.info("ORT runtime cache miss for onnx=%s provider=%s", onnx_path, provider)
+        ORT_RUNTIME_CACHE[cache_key] = StreamingDparnOrt(onnx_path=onnx_path, provider=provider)
+    else:
+        LOGGER.info("ORT runtime cache hit for onnx=%s provider=%s", onnx_path, provider)
+    runtime = ORT_RUNTIME_CACHE[cache_key]
+    runtime.reset()
+    return runtime
+
+
 def to_model_input(wav: torch.Tensor) -> torch.Tensor:
     wav = wav.detach().float().cpu()
     if wav.dim() == 1:
@@ -337,6 +354,8 @@ def enhance_audio(
     config_path: str | Path,
     checkpoint_path: str | Path,
     input_audio_path: str | Path,
+    backend: str = "PyTorch offline",
+    ort_provider: str = "auto",
     progress: Any | None = None,
 ) -> tuple[str, str, str, list[list[str]], str]:
     if not input_audio_path:
@@ -359,8 +378,14 @@ def enhance_audio(
         0.10,
     )
 
+    use_ort = backend.lower().startswith("ort")
     report_progress("Loading checkpoint/model", log_messages, progress, 0.18)
-    model, device = get_cached_model(config_path, checkpoint_path)
+    if use_ort:
+        runtime = get_cached_ort_runtime(checkpoint_path, provider=ort_provider)
+        target_sample_rate = runtime.sample_rate
+        device = f"onnxruntime:{','.join(runtime.providers)}"
+    else:
+        model, device = get_cached_model(config_path, checkpoint_path)
     report_progress(f"Reading input audio: {input_audio_path}", log_messages, progress, 0.32)
     wav, sample_rate = AudioIO.open(
         f_path=str(input_audio_path),
@@ -368,15 +393,27 @@ def enhance_audio(
         resample_to=target_sample_rate,
     )
     model_input = to_model_input(wav)
-    report_progress(
-        f"Running inference on {device} for {model_input.shape[-1] / float(sample_rate):.2f}s audio",
-        log_messages,
-        progress,
-        0.50,
-    )
-    with torch.no_grad():
-        enhanced = model(model_input.to(device)).detach().cpu()
-    enhanced = to_model_input(enhanced).clamp(min=-1.0, max=1.0)
+    if use_ort:
+        report_progress(
+            f"Running ORT streaming inference on {runtime.providers} for {model_input.shape[-1] / float(sample_rate):.2f}s audio",
+            log_messages,
+            progress,
+            0.50,
+        )
+        samples = model_input.squeeze(0).detach().cpu().numpy()
+        enhanced_np = runtime.process_samples(samples)
+        enhanced_np = np.concatenate([enhanced_np, runtime.flush()])
+        enhanced = torch.from_numpy(enhanced_np).view(1, -1).clamp(min=-1.0, max=1.0)
+    else:
+        report_progress(
+            f"Running inference on {device} for {model_input.shape[-1] / float(sample_rate):.2f}s audio",
+            log_messages,
+            progress,
+            0.50,
+        )
+        with torch.no_grad():
+            enhanced = model(model_input.to(device)).detach().cpu()
+        enhanced = to_model_input(enhanced).clamp(min=-1.0, max=1.0)
 
     report_progress("Saving enhanced audio", log_messages, progress, 0.68)
     output_folder = output_folder_from_config(config, recipe_root)
@@ -402,10 +439,19 @@ def run_demo_inference(
     config_path: str,
     checkpoint_path: str,
     input_audio_path: str,
+    backend: str = "PyTorch offline",
+    ort_provider: str = "auto",
     progress=gr.Progress(track_tqdm=True),
 ):
     try:
-        return enhance_audio(config_path, checkpoint_path, input_audio_path, progress=progress)
+        return enhance_audio(
+            config_path,
+            checkpoint_path,
+            input_audio_path,
+            backend=backend,
+            ort_provider=ort_provider,
+            progress=progress,
+        )
     except Exception as exc:
         LOGGER.exception("Demo inference failed")
         return input_audio_path, None, None, [], f"Error: {exc}"
@@ -416,7 +462,17 @@ def build_app(default_config_path: str = DEFAULT_CONFIG_PATH) -> gr.Blocks:
         gr.Markdown("# PureSound Voice Isolate Demo")
         config_path = gr.Textbox(label="Config Path", value=default_config_path)
         refresh_button = gr.Button("Refresh checkpoints")
-        checkpoint = gr.Dropdown(label="Checkpoint", choices=[], value=None)
+        checkpoint = gr.Dropdown(label="Checkpoint / ONNX Model", choices=[], value=None)
+        backend = gr.Radio(
+            label="Backend",
+            choices=["PyTorch offline", "ORT streaming"],
+            value="PyTorch offline",
+        )
+        ort_provider = gr.Dropdown(
+            label="ORT Provider",
+            choices=["auto", "cpu", "cuda"],
+            value="auto",
+        )
         input_audio = gr.Audio(
             label="Input Audio",
             sources=["upload", "microphone"],
@@ -437,7 +493,7 @@ def build_app(default_config_path: str = DEFAULT_CONFIG_PATH) -> gr.Blocks:
         refresh_button.click(refresh_checkpoints, inputs=config_path, outputs=[checkpoint, status])
         run_button.click(
             run_demo_inference,
-            inputs=[config_path, checkpoint, input_audio],
+            inputs=[config_path, checkpoint, input_audio, backend, ort_provider],
             outputs=[input_player, enhanced_player, spectrogram_image, metrics, status],
         )
 

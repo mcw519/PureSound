@@ -246,3 +246,56 @@ def test_run_demo_inference_returns_five_outputs_on_error(tmp_path):
     assert outputs[2] is None
     assert outputs[3] == []
     assert outputs[4].startswith("Error:")
+
+
+def test_enhance_audio_can_use_ort_streaming_backend(
+    tmp_path, monkeypatch, write_tone_wav
+):
+    demo = _load_demo_module()
+    config_path = _write_demo_config(tmp_path)
+    input_path = tmp_path / "input.wav"
+    onnx_path = tmp_path / "exp" / "work" / "model.onnx"
+    onnx_path.parent.mkdir(parents=True)
+    onnx_path.write_text("onnx", encoding="utf-8")
+    write_tone_wav(input_path, sample_rate=16000, duration=0.1)
+
+    class FakeRuntime:
+        sample_rate = 16000
+        providers = ["CPUExecutionProvider"]
+
+        def process_samples(self, samples):
+            return samples
+
+        def flush(self):
+            return demo.np.zeros(0, dtype="float32")
+
+    monkeypatch.setattr(
+        demo,
+        "get_cached_ort_runtime",
+        lambda onnx_path, provider="auto": FakeRuntime(),
+    )
+
+    class FakeMetrics:
+        @staticmethod
+        def noise_reduction(noisy, enhanced):
+            return torch.tensor([0.0])
+
+        @staticmethod
+        def dnsmos_p835(*args, **kwargs):
+            raise RuntimeError("dnsmos unavailable")
+
+    monkeypatch.setattr(demo, "get_metrics_class", lambda: FakeMetrics)
+
+    before, after, spectrogram, metrics_rows, status = demo.enhance_audio(
+        config_path,
+        onnx_path,
+        input_path,
+        backend="ORT streaming",
+        ort_provider="cpu",
+    )
+
+    assert Path(before) == input_path
+    assert Path(after).is_file()
+    assert Path(spectrogram).is_file()
+    assert "Running ORT streaming inference" in status
+    assert ["sample_rate", "16000", "16000", "Hz"] in metrics_rows
