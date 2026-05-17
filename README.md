@@ -15,6 +15,7 @@ It provides reusable audio utilities, model components, and training recipes for
 - Modular design: `audio`, `dataset`, `nnet`, `system`, and `task`
 - Config-driven training and inference (YAML)
 - Multiple backbone models (for example: DPCRN, DPRNN, DPARn, ECAPA-TDNN, TF-GridNet)
+- Streaming DPARN ONNX Runtime deployment for realtime voice-isolate inference
 - Built-in objective and subjective metrics (for example: PESQ, STOI, SDR related tools)
 
 ## Requirements / 系統需求
@@ -117,6 +118,34 @@ uv run python main.py --training True config/default_config.yaml
 uv run python main.py --inference True --ckpt_path /path/to/model.ckpt config/default_config.yaml
 ```
 
+### 4) Voice Isolate Streaming ONNX
+
+Train or fine-tune the 16 kHz DPARN voice-isolate recipe, then export a
+feature-frame ONNX model:
+
+```bash
+uv run python egs/voice_isolate/streaming_onnx.py export \
+  egs/voice_isolate/config/dparn.yaml \
+  /path/to/model.ckpt \
+  /path/to/model.onnx
+```
+
+Run streaming ONNX inference:
+
+```bash
+uv run python egs/voice_isolate/streaming_onnx.py infer \
+  /path/to/model.onnx \
+  input.wav \
+  output.wav \
+  --provider auto
+```
+
+More details are documented in `docs/streaming/dparn_onnx.md`.
+
+For deployment in another project without the full PureSound training package,
+install or copy the portable runtime in `sdk/python`. It only requires NumPy,
+ONNX Runtime, `model.onnx`, and `model.json`.
+
 ## Repository Structure / 專案結構
 
 ```text
@@ -125,6 +154,7 @@ PureSound/
 │   ├── audio/                 # Audio I/O, DSP, augmentation
 │   ├── dataset/               # Dataset base classes and parsers
 │   ├── nnet/                  # Model architectures and building blocks
+│   ├── streaming/             # Streaming inference and ONNX Runtime utilities
 │   ├── system/                # Lightning training systems
 │   ├── task/                  # Task-specific dataset logic
 │   ├── metrics.py             # Evaluation metrics
@@ -132,6 +162,7 @@ PureSound/
 │   └── utils.py               # General utilities
 ├── egs/                       # End-to-end recipes and configs
 ├── docs/                      # API and module documentation
+├── sdk/                       # Portable inference SDKs for external projects
 └── test/                      # Unit tests
 ```
 
@@ -141,6 +172,7 @@ PureSound/
 - Audio modules: `docs/audio/index.md`
 - Neural network modules: `docs/nnet/index.md`
 - System modules: `docs/system/index.md`
+- Streaming runtimes: `docs/streaming/index.md`
 
 ## Build Package / 打包
 

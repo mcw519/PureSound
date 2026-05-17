@@ -89,3 +89,26 @@ model = DPARN(
     bidirectional=True,
 )
 ```
+
+## Streaming ONNX Runtime
+
+DPARN can be exported as a feature-frame ONNX model for low-latency inference.
+The streaming path keeps the offline model unchanged and wraps the DPARN
+backbone with explicit frame state:
+
+- CNN temporal caches for the downsampling path
+- transpose-convolution pending caches for the upsampling path
+- LSTM hidden and cell states for each DPARN block
+
+The ONNX model consumes one complex STFT frame at a time:
+
+```python
+enhanced_frame, next_state = forward_frame(noisy_frame, state)
+```
+
+`noisy_frame` and `enhanced_frame` have shape `[batch, 257, 2]`. Audio
+buffering, Hann STFT, iSTFT, and overlap-add are handled outside ONNX by
+`puresound.streaming.StreamingDparnOrt`.
+
+See [DPARN Streaming ONNX Runtime](../../streaming/dparn_onnx.md) for the
+supported config, export command, runtime API, and Gradio demo workflow.

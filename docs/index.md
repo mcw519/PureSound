@@ -15,6 +15,7 @@ PureSound is a modular audio processing and deep learning framework for speech e
 | [puresound.nnet](nnet/index.md) | Neural network architectures and building blocks |
 | [puresound.system](system/index.md) | PyTorch Lightning training systems |
 | [puresound.task](task/index.md) | Task-specific dataset implementations |
+| [puresound.streaming](streaming/index.md) | Streaming inference and ONNX Runtime deployment |
 | [puresound.metrics](metrics.md) | Audio quality evaluation metrics |
 | [puresound.utils](utils.md) | General utility functions |
 | [puresound.recipes](recipes.md) | High-level model initialization recipes |
@@ -29,6 +30,7 @@ puresound/
 │   ├── lobe/       # Reusable network building blocks
 │   └── loss/       # Loss functions
 ├── system/         # Training system (PyTorch Lightning)
+├── streaming/      # Streaming inference runtimes
 ├── task/           # Task-specific datasets (NS, SV, TSE)
 ├── metrics.py      # Evaluation metrics
 ├── utils.py        # Utilities
