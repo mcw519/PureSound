@@ -3,6 +3,8 @@ import io
 import os
 from typing import Optional
 
+from tqdm import tqdm
+
 from puresound.audio.io import AudioIO
 from puresound.utils import load_text_as_dict
 
@@ -23,7 +25,7 @@ def convert_kaldi_format_to_puresound_metafile(
         utt2gender = load_text_as_dict(file_path=utt2gender, separator=separator)
     keys = sorted(wav2scp.keys())
 
-    for utt_key in keys:
+    for utt_key in tqdm(keys, desc="Processing audio files"):
         gender = None
 
         if utt_key not in utt2spk:
@@ -46,12 +48,16 @@ def convert_kaldi_format_to_puresound_metafile(
             audio_path = os.path.join(insert_root_path, wav2scp[utt_key][0])
         else:
             audio_path = wav2scp[utt_key][0]
-        sample_rate, total_samples, _, num_channels = AudioIO.audio_info(
-            f_path=audio_path
-        )
-        metafile.writelines(
-            f"{utt_key}, {speaker}, {gender}, {audio_path}, {total_samples}, {sample_rate}, {num_channels}\n"
-        )
+
+        try:
+            sample_rate, total_samples, _, num_channels = AudioIO.audio_info(
+                f_path=audio_path
+            )
+            metafile.writelines(
+                f"{utt_key}, {speaker}, {gender}, {audio_path}, {total_samples}, {sample_rate}, {num_channels}\n"
+            )
+        except Exception:
+            print(f"Error processing {audio_path}")
 
     metafile.close()
 

@@ -8,15 +8,11 @@ from lightning.pytorch.callbacks import LearningRateMonitor, ModelCheckpoint
 from puresound.audio.io import AudioIO
 from puresound.dataset.kaldi_base import KaldiFormBaseDataset
 from puresound.metrics import Metrics
-from puresound.recipes import (
-    init_loss_func,
-    init_siso_model,
-    load_siso_recipe_config,
-)
+from puresound.recipes import init_loss_func, init_siso_model, load_siso_recipe_config
 from puresound.system.optim import create_optimizer_and_scheduler
 from puresound.task.ns import NoiseSuppressionCollateFunc, NoiseSuppressionDataset
 from puresound.task.sampler import SpeakerSampler
-from puresound.utils import create_folder, str2bool
+from puresound.utils import create_folder
 
 
 def init_dataloader(
@@ -110,13 +106,16 @@ if __name__ == "__main__":
     parser.add_argument("config_path", type=str)
     parser.add_argument("--set_seed", type=int, default=None, help="set random seed.")
     parser.add_argument(
-        "--training", type=str2bool, default=False, help="start training new model."
+        "--training",
+        action="store_true",
+        default=False,
+        help="start training new model.",
     )
     parser.add_argument(
-        "--scoring", type=str2bool, default=False, help="compute metrics."
+        "--scoring", action="store_true", default=False, help="compute metrics."
     )
     parser.add_argument(
-        "--inference", type=str2bool, default=False, help="inference audios."
+        "--inference", action="store_true", default=False, help="inference audios."
     )
     parser.add_argument(
         "--ckpt_path",
@@ -133,7 +132,7 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--dump_training_samples",
-        type=str2bool,
+        action="store_true",
         default=False,
         help="generate some training samples.",
     )
