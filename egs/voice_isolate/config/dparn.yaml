@@ -3,7 +3,7 @@ dataset:
   valid_metafile: ./data/voice_isolate_valid
   test_folder: ./data/test
   proc_output_folder: ./proc
-  target_sample_rate: 48000
+  target_sample_rate: 16000
   gain_nomalized_to: -28
   training_length_seconds: 6.
   filter_min_utterance_length: 4.
@@ -123,9 +123,9 @@ trainer:
   valid_iter_per_epoch: 200
   n_spk_per_batch: 4
   n_utt_per_speaker: 1
-  num_workers: 24
-  num_gpus: 1
-  work_folder: ./exp/dparn_near_field
+  num_workers: 12
+  num_gpus: 2
+  work_folder: ./exp/dparn_near_field_16k_v1
 
 optimizer:
   type: AdamW
@@ -200,13 +200,13 @@ model:
       win_length: 512
       hop_length: 128
       fmin: 0
-      fmax: 24000
-      sr: 48000
-      trainable: True
+      fmax: 8000
+      sr: 16000
+      trainable: False
   features:
     feats_type: complex
     drop_stft_first_bin: True
-    trainable: True
+    trainable: False
     include_specaug: False
   backbone:
     type: DPARN
