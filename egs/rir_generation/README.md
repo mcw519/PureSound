@@ -27,6 +27,7 @@ for the acoustic model and tuning details.
 |--------|---------|
 | `generate_hybrid_rir.py` | Sample rooms and write 5-channel RIR WAV + metadata JSON. |
 | `apply_rir_to_wav.py` | Convolve a dry WAV with a generated RIR WAV. |
+| `rir_viz.py` | Visualize a RIR: room geometry, reflection paths, or a 2D wave-field animation. |
 
 ## Install
 
@@ -137,3 +138,92 @@ python apply_rir_to_wav.py \
 Useful flags: `--rir-mode {full,early,direct}` (trim to direct path or early
 reflections), `--dry-wet` (blend dry/wet), and `--metadata PATH` (write a
 convolution metadata JSON).
+
+## Visualize a RIR
+
+`rir_viz.py` is one CLI with three subcommands. Each reads a RIR WAV and its
+`.json` sidecar, and writes its output next to the RIR by default (override with
+`--output`). Common flags: `--rir` (required), `--json`, `--output`, `--dpi`.
+
+| Subcommand | Output | Shows |
+|------------|--------|-------|
+| `overview` | `*_overview.png` | Floor plan + 3D scene + per-channel RIR waveforms + Schroeder energy decay. |
+| `paths` | `*_paths_chN.png` | Geometric sound paths to the mic (image-source: direct + 1st/2nd-order wall reflections). |
+| `field` | `*_field_chN.mp4` (+ `.gif`, `_sheet.png`) | Illustrative 2D wave-field animation: reflection off walls and diffraction/scattering around furniture. |
+
+```bash
+RIR=exp/hybrid_rir/room_000000/room_000000_000000.wav
+
+# Geometry + waveforms + energy decay
+python rir_viz.py overview --rir "$RIR"
+
+# Reflection paths for source channel 2 (far_0), up to 2nd order
+python rir_viz.py paths --rir "$RIR" --channel 2 --order 2
+
+# 2D wave-field animation for channel 2 (MP4 + GIF + contact sheet)
+python rir_viz.py field --rir "$RIR" --channel 2 --nx 340 --t-ms 40 --gif
+```
+
+`paths`/`field` take `--channel` (0–4, see the channel table above); `paths`
+takes `--order {1,2}`; `field` takes `--nx` (grid resolution), `--t-ms`
+(duration), `--fps`, `--frame-stride`, and `--gif`.
+
+A caveats worth stating plainly:
+
+* **`field` is a standalone 2D FDTD for visualization only** — not the
+  pipeline's low-band modal solver, which runs on an empty box without
+  obstacles. It illustrates wave behavior; it is not the exact RIR computation.
+
+### How the wave-field (`field`) is computed
+
+The animation is a small 2D **FDTD** (finite-difference time-domain) solver on a
+horizontal slice at mic height. Five steps:
+
+**1. Physics — the 2D wave equation.** The acoustic pressure `p(x, y, t)` obeys
+
+```
+∂²p/∂t² = c²·∇²p ,   c = 343 m/s ,   ∇²p = ∂²p/∂x² + ∂²p/∂y²
+```
+
+i.e. a point's pressure *accelerates* in proportion to how it differs from its
+surroundings (the Laplacian), which is what makes energy spread outward as waves.
+
+**2. Discretization — a grid you can step cell by cell.** The room slice becomes
+an `ny × nx` grid (`--nx`), time becomes steps `dt`. Central differences turn the
+derivatives into a leapfrog update of the whole field per step:
+
+```
+p^{n+1} = 2·p^n − p^{n-1} + C²·∇²p^n ,   C = c·dt/dx
+```
+
+with the Laplacian as the 5-point stencil (each cell vs. its 4 neighbors). This
+is the one line in `cmd_field`:
+
+```python
+p_next = (2.0 * p_cur - p_prev + c2 * _laplacian_neumann(p_cur, air)) * air
+```
+
+**Stability (CFL).** An explicit scheme only stays bounded if a wave travels less
+than one cell per step; in 2D that means `C ≤ 1/√2 ≈ 0.707`. The code fixes
+`courant = 0.5` and derives `dt = 0.5·dx/c`.
+
+**3. Boundaries — rigid walls and furniture.** A rigid surface means zero normal
+pressure gradient (`∂p/∂n = 0`, Neumann). `_laplacian_neumann` enforces it with
+one trick: when a neighbor is wall/furniture, substitute the center value
+(`np.where(rolled_air, rolled, p)`), so that direction's pressure difference is
+zero and the wave reflects. Furniture footprints from the JSON are rasterized
+into the boolean `air` mask (`_rasterize_air_mask`); waves reflect off them and
+diffract around their edges.
+
+**4. Source — a Ricker wavelet.** A bipolar pulse (2nd derivative of a Gaussian)
+is injected at the source cell each step. Bipolar so the animation shows
+compressions (red) and rarefactions (blue); band-limited and low enough in
+frequency that its wavelength spans many cells, which avoids grid dispersion
+ripples.
+
+**5. Rendering.** Every `--frame-stride` steps a snapshot is saved. Frames use the
+`RdBu_r` colormap (red = positive pressure, blue = negative, white = zero). Each
+frame is normalized to its own 99.8th-percentile amplitude, because the pulse is
+huge at the source but spreads thin — a single fixed color scale would wash out
+later frames. `FuncAnimation` + `FFMpegWriter` write the MP4 (plus an optional
+GIF and a 6-frame contact sheet).
