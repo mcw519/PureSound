@@ -1,0 +1,6 @@
+*.pyc
+venv/
+.idea/
+*.wav
+*.wave
+*.xz
