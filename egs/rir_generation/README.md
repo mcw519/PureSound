@@ -28,6 +28,7 @@ for the acoustic model and tuning details.
 | `generate_hybrid_rir.py` | Sample rooms and write 5-channel RIR WAV + metadata JSON. |
 | `apply_rir_to_wav.py` | Convolve a dry WAV with a generated RIR WAV. |
 | `rir_viz.py` | Visualize a RIR: room geometry, reflection paths, or a 2D wave-field animation. |
+| `rir_stats.py` | Print statistics for a folder of RIRs (room dims, RT60, distances, obstacles) to the terminal. |
 
 ## Install
 
