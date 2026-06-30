@@ -65,6 +65,15 @@ def _parse_args():
         help="Comma-separated CUDA devices assigned to workers, for example '0,1'.",
     )
     parser.add_argument("--seed", type=int, default=1337)
+    parser.add_argument(
+        "--resume",
+        action="store_true",
+        help="Skip RIRs already present in --output-dir and generate only the "
+        "rest. Scene sampling is deterministic, so resuming with the same "
+        "--seed/--n-rooms/--rir-per-room/room settings reproduces the exact same "
+        "room/mic/source geometry an uninterrupted run would have used (the "
+        "high-band acoustic realization is randomized per RIR either way).",
+    )
     parser.add_argument("--sample-rate", type=int, default=48000)
     parser.add_argument("--duration", type=float, default=1.5)
     parser.add_argument("--crossover-hz", type=float, default=1000.0)
@@ -345,6 +354,30 @@ def _init_worker(config, args, output_dir, gpu_device):
     print(f"worker ready gpu={gpu_label}", flush=True)
 
 
+def _task_output_paths(output_dir, task):
+    room_dir = Path(output_dir) / task["room_id"]
+    wav_path = room_dir / f"{task['sample_id']}.wav"
+    json_path = room_dir / f"{task['sample_id']}.json"
+    return wav_path, json_path
+
+
+def _task_is_complete(output_dir, task):
+    """Return True when a task's RIR was already fully written.
+
+    ``_write_room_rir_item`` writes the WAV first and the JSON last, so a present
+    and parseable JSON sidecar implies a complete WAV. We still require both files
+    and that the JSON parses, so a run interrupted mid-write is regenerated.
+    """
+    wav_path, json_path = _task_output_paths(output_dir, task)
+    if not (wav_path.exists() and json_path.exists()):
+        return False
+    try:
+        json.loads(json_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return False
+    return True
+
+
 def _write_room_rir_item(output_dir, task, rir, metadata, sample_rate):
     room_dir = Path(output_dir) / task["room_id"]
     room_dir.mkdir(parents=True, exist_ok=True)
@@ -427,15 +460,15 @@ def _worker_plan(num_workers, gpu_devices):
     return plan
 
 
-def _generate_tasks_serial(tasks, total, config, args, output_dir, gpu_device):
+def _generate_tasks_serial(tasks, total, config, args, output_dir, gpu_device, initial=0):
     _init_worker(config, args, output_dir, gpu_device)
-    with tqdm(total=total, desc="hybrid-rir") as progress:
+    with tqdm(total=total, initial=initial, desc="hybrid-rir") as progress:
         for task in tasks:
             _generate_task(task)
             progress.update(1)
 
 
-def _generate_tasks_parallel(tasks, total, config, args, output_dir, worker_plan):
+def _generate_tasks_parallel(tasks, total, config, args, output_dir, worker_plan, initial=0):
     mp_context = get_context("spawn")
     executors = []
     futures = set()
@@ -450,7 +483,7 @@ def _generate_tasks_parallel(tasks, total, config, args, output_dir, worker_plan
             )
             executors.append(executor)
 
-        with tqdm(total=total, desc="hybrid-rir") as progress:
+        with tqdm(total=total, initial=initial, desc="hybrid-rir") as progress:
             for index, task in enumerate(tasks):
                 while len(futures) >= max_pending:
                     done, futures = wait(futures, return_when=FIRST_COMPLETED)
@@ -492,17 +525,42 @@ def main():
         crossover_match_gain_range=(1e-4, args.crossover_max_gain),
     )
 
-    total = args.n_rooms * args.rir_per_room
-    tasks = _iter_tasks(config, args)
+    # Materialize the deterministic task plan up front. Scene sampling only draws
+    # positions (cheap relative to the RIR solve) and consumes the RNG in a fixed
+    # order, so building the full list yields the same room/mic/source geometry a
+    # fresh run would, while letting us count how many items are already done.
+    tasks = list(_iter_tasks(config, args))
+    total = len(tasks)
+    skipped = 0
+    if args.resume:
+        pending = [
+            task for task in tasks if not _task_is_complete(args.output_dir, task)
+        ]
+        skipped = total - len(pending)
+        print(
+            f"[generate_hybrid_rir] resume: {skipped} already generated, "
+            f"{len(pending)} remaining (of {total}).",
+            flush=True,
+        )
+        if not pending:
+            print(
+                "[generate_hybrid_rir] resume: nothing to do; all RIRs present.",
+                flush=True,
+            )
+            return
+        tasks = pending
+
     worker_args = vars(args).copy()
     plan = _worker_plan(args.num_workers, gpu_devices)
     if args.num_workers == 1:
         gpu_device = plan[0][0]
         _generate_tasks_serial(
-            tasks, total, config, worker_args, args.output_dir, gpu_device
+            tasks, total, config, worker_args, args.output_dir, gpu_device, initial=skipped
         )
     else:
-        _generate_tasks_parallel(tasks, total, config, worker_args, args.output_dir, plan)
+        _generate_tasks_parallel(
+            tasks, total, config, worker_args, args.output_dir, plan, initial=skipped
+        )
 
 
 if __name__ == "__main__":

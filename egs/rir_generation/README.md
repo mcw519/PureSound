@@ -1,7 +1,10 @@
 # rir_generation
 
-Generate hybrid wave/geometric room impulse responses (RIRs) for near/far
-speech augmentation, and convolve dry audio with them.
+Tooling for the room-impulse-response (RIR) side of near/far speech
+augmentation. It covers the whole pipeline: **generate** synthetic hybrid
+wave/geometric RIRs, **inspect / apply** them, and **package** them — whether
+synthesised here or measured in a real room — into training banks that
+[`PreGeneratedRoomBank`](../../puresound/audio/rir_bank.py) consumes.
 
 Each room item has **one microphone and five sources** (2 near, 3 far), written
 as a 5-channel RIR WAV plus a JSON sidecar:
@@ -23,12 +26,17 @@ for the acoustic model and tuning details.
 
 ## Scripts
 
+The bold tag marks each script's stage in the pipeline: **Generate** synthetic
+RIRs → **Apply / Inspect** them → **Bank** them for training.
+
 | Script | Purpose |
 |--------|---------|
-| `generate_hybrid_rir.py` | Sample rooms and write 5-channel RIR WAV + metadata JSON. |
-| `apply_rir_to_wav.py` | Convolve a dry WAV with a generated RIR WAV. |
-| `rir_viz.py` | Visualize a RIR: room geometry, reflection paths, or a 2D wave-field animation. |
-| `rir_stats.py` | Print statistics for a folder of RIRs (room dims, RT60, distances, obstacles) to the terminal. |
+| `generate_hybrid_rir.py` | **Generate** — sample rooms and write 5-channel RIR WAV + metadata JSON. |
+| `apply_rir_to_wav.py` | **Apply** — convolve a dry WAV with a generated RIR WAV. |
+| `rir_viz.py` | **Inspect** — visualize one RIR: room geometry, reflection paths, or a 2D wave-field animation. |
+| `rir_stats.py` | **Inspect** — print distribution stats for a folder of RIRs (room dims, RT60, distances, obstacles) to the terminal. |
+| `filter_rir_levels.py` | **Bank** — slice a generated bank into cumulative curriculum levels (core/expand/stress) by RT60 + DRR; symlink-only views. |
+| `real_rir_to_bank.py` | **Bank** — convert a real measured RIR dataset (e.g. BUT ReverbDB) into a `PreGeneratedRoomBank` folder. |
 
 ## Install
 
@@ -98,8 +106,34 @@ multi-worker can out-throughput a small number of GPUs — benchmark both.
 | `--pytard-low-sample-rate` | Internal wave simulation rate (resampled to `--sample-rate` afterwards). |
 | `--pytard-spatial-samples-per-wavelength` | Grid resolution; `2` is practical, larger is slower. |
 | `--seed` | RNG seed. Scene sampling is deterministic and independent of `--num-workers`. |
+| `--resume` | Skip RIRs already written to `--output-dir` and generate only the rest. |
 
 Run `python generate_hybrid_rir.py --help` for the full list.
+
+### Resume an interrupted run
+
+If a run is killed partway through, rerun the **same command** with `--resume`
+added. It rescans `--output-dir`, skips every room/RIR that already has both a
+`.wav` and a parseable `.json` (a half-written item is regenerated), and
+continues with the remainder; the progress bar starts at the already-finished
+count:
+
+```bash
+python generate_hybrid_rir.py \
+  --output-dir exp/hybrid_rir \
+  --n-rooms 1000 --rir-per-room 4 \
+  --sample-rate 16000 --duration 1.6 \
+  --low-backend pytard --num-workers 22 \
+  --pytard-low-sample-rate 16000 \
+  --pytard-spatial-samples-per-wavelength 2 \
+  --resume
+```
+
+Keep `--seed`, `--n-rooms`, `--rir-per-room`, and the room/RT60/obstacle options
+identical to the original run. Scene sampling is deterministic, so the resumed
+items reuse the exact room/mic/source geometry the uninterrupted run would have
+produced (the high-band acoustic realization is randomized per RIR regardless of
+resume).
 
 ### Output layout
 
@@ -139,6 +173,84 @@ python apply_rir_to_wav.py \
 Useful flags: `--rir-mode {full,early,direct}` (trim to direct path or early
 reflections), `--dry-wet` (blend dry/wet), and `--metadata PATH` (write a
 convolution metadata JSON).
+
+## Build a training RIR bank
+
+Both bank scripts emit folders that
+[`PreGeneratedRoomBank`](../../puresound/audio/rir_bank.py) indexes directly:
+same-stem `.wav`/`.json` pairs whose JSON carries a `scene.channel_map` giving a
+near/far label and a distance per channel. Training recipes point at one of
+these folders. `filter_rir_levels.py` reshapes a bank you generated above;
+`real_rir_to_bank.py` builds one from RIRs measured in real rooms.
+
+### Curriculum levels from a generated bank — `filter_rir_levels.py`
+
+Slices an existing hybrid RIR bank into three **cumulative** difficulty levels
+for curriculum training, judged by RT60 and the measured near/far DRR
+(direct-to-reverberant ratio) separation. The conservative gap per item is
+`min(DRR over near channels) − max(DRR over far channels)`, so every near/far
+pair in a level clears the printed bound.
+
+| Level | RT60 | Worst-case near/far DRR gap |
+|-------|------|------------------------------|
+| `core`   | 0.20–0.45 s | ≥ 6 dB |
+| `expand` | 0.20–0.65 s | ≥ 3 dB |
+| `stress` | all remaining valid items | — |
+
+Output folders hold **relative symlinks only** (no RIR audio is copied), each
+under an `items/` child, plus a per-level `manifest.json` (RT60, near/far DRR,
+gap per item) and a top-level `summary.json` carrying the thresholds and
+RT60/gap percentiles.
+
+```bash
+# Measure and report only; nothing is written to disk
+python filter_rir_levels.py \
+  exp/hybrid_rir_16k exp/hybrid_rir_16k_levels --dry-run
+
+# Build the core/expand/stress views
+python filter_rir_levels.py \
+  exp/hybrid_rir_16k exp/hybrid_rir_16k_levels \
+  --drr-window-ms 2.5 --workers 16
+```
+
+Set `--drr-window-ms` to match the direct-path window your recipe config uses.
+The output path must not already exist — there is no overwrite option by design.
+
+### Real measured RIRs → a bank — `real_rir_to_bank.py`
+
+Converts a real measured RIR dataset into a bank to narrow the synthetic→real
+domain gap. It runs in two stages decoupled by a JSON-Lines manifest, so the
+exact bank emission is independent of any one dataset's on-disk layout:
+
+* **Stage A — scan** a specific dataset into `manifest.jsonl`, one JSON object
+  per RIR: `room_id`, `rir_path`, `channel`, optional `rt60`, and a distance
+  given either as `distance_m` or as `src_xyz`/`mic_xyz` (Euclidean). This
+  scanner is dataset-specific and best-effort — verify it against your download.
+* **Stage B — assemble** the manifest into a bank. Within each `room_id`, RIRs
+  split near/far at `--d0` metres and group into multi-channel items (≤2 near,
+  ≤3 far). This stage is the definitive, self-tested one.
+
+By acoustic reciprocity a measured RIR is identical read source→mic or
+mic→source, so a dataset with one loudspeaker and many microphones maps cleanly
+onto the bank's "one receiver, many sources at various distances" item — the
+distance is just `‖loudspeaker − microphone‖`.
+
+```bash
+# Stage B only — you supply the manifest
+python real_rir_to_bank.py from-manifest \
+  --manifest manifest.jsonl --output exp/real_rir_bank \
+  --d0 1.0 --target-sr 16000
+
+# BUT ReverbDB end-to-end (scan → manifest → bank)
+python real_rir_to_bank.py but \
+  --input /path/to/BUT_ReverbDB --output exp/real_rir_bank --d0 1.0
+
+# Self-test Stage B against PreGeneratedRoomBank (no dataset needed)
+python real_rir_to_bank.py self-test
+```
+
+Only the BUT ReverbDB scanner ships today. To add another dataset, write a
+`scan_*` that emits the manifest schema above, then reuse Stage B unchanged.
 
 ## Visualize a RIR
 
