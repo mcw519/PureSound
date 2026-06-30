@@ -281,6 +281,32 @@ python rir_viz.py field --rir "$RIR" --channel 2 --nx 340 --t-ms 40 --gif
 takes `--order {1,2}`; `field` takes `--nx` (grid resolution), `--t-ms`
 (duration), `--fps`, `--frame-stride`, and `--gif`.
 
+### Example outputs
+
+All three are rendered from the same item (`room_000000_000000`, a
+`7.5 × 4.1 × 3.5 m`, `RT60 = 0.81 s` room), with `paths`/`field` on channel 2
+(`far_0`, `2.53 m` from the mic).
+
+**`overview`** — floor plan + 3D scene + per-channel RIR waveforms + Schroeder
+energy decay:
+
+![rir_viz overview output](assets/overview.png)
+
+**`paths`** — image-source reflection paths to the mic (solid = direct,
+dashed = 1st-order, dotted = 2nd-order wall reflections):
+
+![rir_viz paths output for far_0](assets/paths_ch2.png)
+
+**`field`** — 2D FDTD wave-field animation (red = compression, blue =
+rarefaction); note the wave reflecting off the walls and bending around the
+furniture footprints:
+
+![rir_viz field animation for far_0](assets/field_ch2.gif)
+
+> The GIF here is downsized (`--nx 190`, sparse frames) to keep the repo light;
+> the default `--nx 340` render is sharper. `field` also writes an MP4 and a
+> 6-frame `_sheet.png` contact sheet, not shown here.
+
 A caveats worth stating plainly:
 
 * **`field` is a standalone 2D FDTD for visualization only** — not the
@@ -340,3 +366,44 @@ frame is normalized to its own 99.8th-percentile amplitude, because the pulse is
 huge at the source but spreads thin — a single fixed color scale would wash out
 later frames. `FuncAnimation` + `FFMpegWriter` write the MP4 (plus an optional
 GIF and a 6-frame contact sheet).
+
+## Third-party libraries and projects
+
+These scripts stand on the following external code. Generic numerics and audio
+I/O (`numpy`, `scipy`, `torch`/`torchaudio`) are repo-wide dependencies declared
+in [`pyproject.toml`](../../pyproject.toml); the acoustics- and rendering-specific
+ones are called out here with their role and which script pulls them in.
+
+| Library | Role here | Used by |
+|---------|-----------|---------|
+| [Pyroomacoustics](https://github.com/LCAV/pyroomacoustics) | High-band **geometric (image-source)** room simulation | `generate_hybrid_rir.py` (via `puresound.audio.hybrid_rir`) |
+| [CuPy](https://cupy.dev/) (`cupy-cuda12x`) | Optional **GPU** acceleration of the low-band modal solve (`--low-backend pytard-cupy`) | `generate_hybrid_rir.py` |
+| [PyTorch / torchaudio](https://pytorch.org/audio/) | Tensors, WAV I/O, resampling, FFT convolution | `generate_hybrid_rir.py`, `apply_rir_to_wav.py`, `real_rir_to_bank.py` |
+| [SciPy](https://scipy.org/) | Modal DCT/IDCT transforms; WAV-read fallback | low-band solver, `rir_viz.py` |
+
+`pyroomacoustics` and `cupy-cuda12x` are **optional extras**, not installed by
+default — see [Install](#install) (the `hybrid-rir` / `hybrid-rir-gpu` extras in
+`pyproject.toml`). `ffmpeg` is a system binary Matplotlib shells out to for MP4;
+without it, `field` can still write the GIF and contact sheet.
+
+### Vendored: gpuard/pytARD — low-band wave solver
+
+The low band (`20 Hz`–crossover) is solved with **Adaptive Rectangular
+Decomposition (ARD)** from [`gpuard/pytARD`](https://github.com/gpuard/pytARD),
+vendored under
+[`puresound/third_party/pytARD/`](../../puresound/third_party/pytARD). The
+adapter in [`puresound/audio/hybrid_rir.py`](../../puresound/audio/hybrid_rir.py)
+wraps pytARD's 3D partition modules and replaces its per-step FFT loop with an
+exact batched modal recurrence (optionally CuPy-accelerated) **without modifying
+the vendored source**. pytARD is licensed **AGPL-3.0** (see its bundled
+`LICENSE`); that license governs the vendored subtree.
+
+### External datasets (downloaded separately, not bundled)
+
+`real_rir_to_bank.py` converts *real measured* RIR corpora into banks. It ships a
+scanner for the [**BUT Speech@FIT Reverb Database**](https://speech.fit.vut.cz/software/but-speech-fit-reverb-database)
+(Brno University of Technology; CC-BY 4.0) — specifically the `rel_19_06`
+*RIR-Only* release. The dataset is downloaded separately and is not part of this
+repo; only the scanner and the manifest→bank converter live here. The
+docstring's "BUT, UPV, ..." notes other one-loudspeaker/many-microphone corpora
+that the same Stage-A→Stage-B path can target once a `scan_*` is added.
