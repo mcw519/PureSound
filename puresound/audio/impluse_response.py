@@ -1,9 +1,35 @@
+import math
 from typing import Optional
 
 import torch
 import torchaudio
 
 from puresound.utils import fftconvolve
+
+
+def compute_drr_db(
+    rir: torch.Tensor,
+    sample_rate: int,
+    direct_window_ms: float = 2.5,
+) -> float:
+    """Direct-to-reverberant ratio (dB) of an RIR.
+
+    Direct path = energy in ``[peak, peak + direct_window_ms]``; everything
+    after that window is treated as the reverberant tail. Returns ``+inf``
+    when the tail carries no energy (e.g. anechoic or trimmed RIR).
+    """
+    flat = rir.detach().reshape(-1).float()
+    if flat.numel() == 0:
+        return float("inf")
+    peak = int(torch.argmax(flat.abs()).item())
+    window = max(1, int(round(direct_window_ms * 1e-3 * float(sample_rate))))
+    direct_end = min(peak + window, flat.numel())
+    direct_energy = float(flat[peak:direct_end].pow(2).sum().item())
+    reverb_energy = float(flat[direct_end:].pow(2).sum().item())
+    if reverb_energy <= 0.0:
+        return float("inf")
+    direct_energy = max(direct_energy, 1e-12)
+    return 10.0 * math.log10(direct_energy / reverb_energy)
 
 
 def wav_apply_rir(
@@ -43,7 +69,15 @@ def wav_apply_rir(
         early_range = peak_idx + int(sample_rate * 0.05)  # 50ms range
         impaulse = impaulse[:, : int(early_range)]
 
-    impaulse = impaulse / torch.norm(impaulse, p=2)
+    # Peak-normalize so convolved output stays at ~ input signal level.
+    # Slicing for early/direct preserves the direct-path peak, so all three
+    # rir_modes get the same scale factor for the same source RIR — keeping
+    # clean_target (early) and noisy_speech (full) at the same direct-path
+    # level (only late-reverb energy differs).
+    peak = impaulse.abs().max()
+    if peak > 1e-12:
+        impaulse = impaulse / peak
+
     out = []
     if rir_ch == 1:
         for i in range(wav_ch):

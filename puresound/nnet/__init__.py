@@ -1,3 +1,4 @@
+from .conformer import TSConformer
 from .dparn import DPARN
 from .dpcrn import DPCRN
 from .ecapa_tdnn import EcapaTdnnExtracotr

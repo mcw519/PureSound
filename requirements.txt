@@ -5,6 +5,7 @@ torchaudio==2.6.0+cu124
 torchcodec==0.2.1+cu124
 matplotlib
 numpy
+scipy
 scikit-learn
 tqdm
 tensorboard

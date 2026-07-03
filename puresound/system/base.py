@@ -37,6 +37,62 @@ class BaseLightningModule(LightningModule):
         self.loss_func_list = loss_func_list
         self.loss_func_list_w = loss_func_list_weights
 
+    def register_qd_contrastive(self, cfg: Any):
+        """Register the optional query-distance contrastive loss config.
+
+        See ``siso.EncDecMaskBase._qd_contrastive_loss``. A ``None`` config or
+        ``used: false`` makes it a no-op, so registering is always safe.
+        """
+        self.qd_contrastive_cfg = cfg
+
+    def register_gpu_vad_labeler(self, labeler: Any):
+        """Attach a batched GPU VAD labeler used to build ``vad_target`` from
+        the per-batch ``vad_reference`` waveform after device transfer.
+
+        Stored inside a list so ``nn.Module`` does not register the Silero
+        TorchScript model as a submodule (it must stay out of state_dict /
+        checkpoints -- it is an auxiliary labeler, not trained weights).
+        """
+        self._gpu_vad_labeler = [labeler]
+
+    def ensure_vad_targets(self, batch: Any):
+        """Materialize deferred VAD labels if a batch still carries references.
+
+        Lightning normally calls ``on_after_batch_transfer`` before
+        ``training_step``/``validation_step``. Keeping the conversion in this
+        helper lets the step methods call it defensively as well, which is
+        useful across strategy/DDP versions and for direct unit-test calls.
+        """
+        labeler = getattr(self, "_gpu_vad_labeler", None)
+        if not labeler or not isinstance(batch, dict):
+            return batch
+
+        if "sr" in batch and batch["sr"].numel() > 0:
+            sample_rate = int(batch["sr"].reshape(-1)[0].item())
+        else:
+            sample_rate = labeler[0].model_sample_rate
+
+        if "vad_reference" in batch and "vad_target" not in batch:
+            ref = batch.pop("vad_reference")
+            batch["vad_target"] = labeler[0](ref, sample_rate=sample_rate)
+
+        if "background_vad_reference" in batch and "background_vad_target" not in batch:
+            ref = batch.pop("background_vad_reference")
+            batch["background_vad_target"] = labeler[0](
+                ref,
+                sample_rate=sample_rate,
+            )
+        return batch
+
+    def on_after_batch_transfer(self, batch: Any, dataloader_idx: int):
+        """Label VAD activity on GPU for the whole batch at once.
+
+        Silero is lifted out of the DataLoader workers: the dataset emits the
+        clean reference waveform as ``vad_reference`` and the labeling happens
+        here, batched, on the same device as the batch.
+        """
+        return self.ensure_vad_targets(batch)
+
     def register_optimizer(self, optimizer: Any):
         self._optimizer = optimizer
 

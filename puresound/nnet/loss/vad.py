@@ -101,8 +101,11 @@ class VADActivityLoss(nn.Module):
                 target_activity = F.pad(
                     target_activity, (0, n_frames - target_activity.shape[-1])
                 )
-            ref_power = self._frame_power(ref)
-            reference_power = ref_power.amax(dim=-1, keepdim=True).clamp_min(self.eps)
+            # Anchor to 0 dBFS so activity_threshold_db is an absolute dBFS
+            # threshold, invariant to volume / clipping perturbations on the
+            # reference signal. Model output is clamped to [-1, 1] so enh_db
+            # lies in (-inf, 0] dBFS.
+            reference_power = enh_power.new_ones(enh_power.shape[0], 1)
 
         enh_db = self._power_to_db(enh_power, reference_power)
         logits = (enh_db - self.activity_threshold_db) * self.logit_scale
@@ -114,3 +117,155 @@ class VADActivityLoss(nn.Module):
         return F.binary_cross_entropy_with_logits(
             logits, target_activity, weight=weights
         )
+
+
+class VADHeadBCELoss(nn.Module):
+    """BCE on a backbone VAD-head's frame-level logits against a VAD target.
+
+    Unlike VADActivityLoss (which derives activity from the enhanced waveform
+    energy), this supervises an explicit per-frame logit head exposed by the
+    backbone. EncDecMaskBase routes ``backbone.last_vad_logits`` here via the
+    ``uses_vad_logits`` dispatch flag. ``false_positive_weight`` upweights
+    silence frames so background speech is less likely to trigger the head.
+    ``balance_per_batch`` makes positive and negative frames contribute equal
+    total BCE mass, preventing an imbalanced batch from rewarding an all-speech
+    or all-silence constant. Calibrate the deployment threshold separately.
+    """
+
+    uses_vad_logits = True
+
+    def __init__(
+        self,
+        false_positive_weight: float = 1.0,
+        false_negative_weight: float = 1.0,
+        balance_per_batch: bool = False,
+    ):
+        super().__init__()
+        self.false_positive_weight = float(false_positive_weight)
+        self.false_negative_weight = float(false_negative_weight)
+        self.balance_per_batch = bool(balance_per_batch)
+
+    def forward(
+        self,
+        vad_logits: torch.Tensor | None,
+        vad_target: torch.Tensor | None,
+    ) -> torch.Tensor:
+        if vad_logits is None:
+            raise ValueError(
+                "VADHeadBCELoss requires the backbone to expose `last_vad_logits`; "
+                "enable a vad_head in the backbone config."
+            )
+        if vad_target is None:
+            raise ValueError(
+                "VADHeadBCELoss requires `vad_target`; enable `vad_label` in the "
+                "config to generate VAD labels."
+            )
+
+        if vad_logits.dim() == 1:
+            vad_logits = vad_logits.unsqueeze(0)
+        target = vad_target.to(device=vad_logits.device, dtype=vad_logits.dtype)
+        if target.dim() == 1:
+            target = target.unsqueeze(0)
+
+        # align frame counts (STFT framing vs label framing can differ by 1)
+        n = min(vad_logits.shape[-1], target.shape[-1])
+        vad_logits = vad_logits[..., :n]
+        target = target[..., :n]
+
+        weights = torch.where(
+            target > 0.5,
+            torch.full_like(target, self.false_negative_weight),
+            torch.full_like(target, self.false_positive_weight),
+        )
+        if self.balance_per_batch:
+            positive = target > 0.5
+            n_positive = positive.sum()
+            n_negative = positive.numel() - n_positive
+            # An all-active or all-silent batch has no class trade-off to
+            # balance; retain its configured static weight in that case.
+            if n_positive > 0 and n_negative > 0:
+                total = target.new_tensor(float(positive.numel()))
+                pos_scale = total / (2.0 * n_positive.to(target.dtype))
+                neg_scale = total / (2.0 * n_negative.to(target.dtype))
+                weights = weights * torch.where(
+                    positive,
+                    torch.full_like(target, pos_scale),
+                    torch.full_like(target, neg_scale),
+                )
+        return F.binary_cross_entropy_with_logits(vad_logits, target, weight=weights)
+
+
+class BackgroundVADHeadBCELoss(VADHeadBCELoss):
+    """BCE on a background-speech activity head.
+
+    The foreground VAD head learns "should ASR listen now"; this companion head
+    learns "is non-target speech present now". It gives the bottleneck an
+    explicit representation for background talkers without making background
+    speech part of the enhanced output.
+    """
+
+    uses_vad_logits = False
+    uses_background_vad_logits = True
+
+
+class ScalarAuxiliaryLoss(nn.Module):
+    """Supervise utterance-level auxiliary scalar heads.
+
+    Config example:
+
+    heads:
+      drr_gap:
+        target: drr_gap
+        loss: l1
+        weight: 0.1
+      target_present:
+        target: target_present
+        loss: bce
+        weight: 0.5
+    """
+
+    uses_aux_outputs = True
+
+    def __init__(self, heads: dict, reduction: str = "mean"):
+        super().__init__()
+        self.heads = heads
+        self.reduction = reduction
+
+    def forward(self, aux_outputs: dict, batch: dict) -> torch.Tensor:
+        losses = []
+        for pred_key, cfg in self.heads.items():
+            if pred_key not in aux_outputs:
+                raise ValueError(f"Auxiliary head `{pred_key}` was not produced.")
+            target_key = cfg.get("target", pred_key)
+            if target_key not in batch:
+                raise ValueError(f"Batch is missing auxiliary target `{target_key}`.")
+
+            pred = aux_outputs[pred_key]
+            target = batch[target_key].to(device=pred.device, dtype=pred.dtype)
+            if target.dim() > 1:
+                target = target.reshape(target.shape[0], -1).mean(dim=1)
+            target = target.reshape_as(pred)
+
+            valid = torch.isfinite(target)
+            if not bool(valid.any()):
+                continue
+            pred = pred[valid]
+            target = target[valid]
+
+            loss_type = cfg.get("loss", "l1").lower()
+            if loss_type == "bce":
+                loss = F.binary_cross_entropy_with_logits(pred, target, reduction=self.reduction)
+            elif loss_type == "mse":
+                loss = F.mse_loss(pred, target, reduction=self.reduction)
+            elif loss_type == "smooth_l1":
+                loss = F.smooth_l1_loss(pred, target, reduction=self.reduction)
+            elif loss_type == "l1":
+                loss = F.l1_loss(pred, target, reduction=self.reduction)
+            else:
+                raise ValueError(f"Unsupported auxiliary loss type: {loss_type}")
+            losses.append(float(cfg.get("weight", 1.0)) * loss)
+
+        if not losses:
+            device = next(iter(aux_outputs.values())).device
+            return torch.zeros((), device=device)
+        return torch.stack(losses).sum()

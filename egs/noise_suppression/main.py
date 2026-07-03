@@ -4,6 +4,7 @@ from typing import Dict
 import lightning as L
 import torch
 from lightning.pytorch.callbacks import LearningRateMonitor, ModelCheckpoint
+from lightning.pytorch.strategies import DDPStrategy
 
 from puresound.audio.io import AudioIO
 from puresound.dataset.kaldi_base import KaldiFormBaseDataset
@@ -11,8 +12,21 @@ from puresound.metrics import Metrics
 from puresound.recipes import init_loss_func, init_siso_model, load_siso_recipe_config
 from puresound.system.optim import create_optimizer_and_scheduler
 from puresound.task.ns import NoiseSuppressionCollateFunc, NoiseSuppressionDataset
+from puresound.task.voice_isolation import VoiceIsolationCollateFunc, VoiceIsolationDataset
 from puresound.task.sampler import SpeakerSampler
-from puresound.utils import create_folder
+from puresound.utils import create_folder, load_hparam
+
+
+# Training uses a fixed sample length, so input tensor shapes are constant
+# across steps. That makes cuDNN autotuning a pure win: it benchmarks each conv
+# shape once and reuses the fastest algorithm, instead of the default heuristic
+# -- which picks a pathologically slow dgrad algorithm for the dilated encoder
+# convs (measured ~3.6x slower per step end to end). TF32 lets the attention /
+# linear matmuls use tensor cores at negligible precision cost on Ampere+.
+torch.backends.cudnn.benchmark = True
+torch.backends.cuda.matmul.allow_tf32 = True
+torch.backends.cudnn.allow_tf32 = True
+torch.set_float32_matmul_precision("high")
 
 
 def init_dataloader(
@@ -26,9 +40,23 @@ def init_dataloader(
     aug_src_dict: Dict,
     aug_hpf_dict: Dict,
     aug_volume_dict: Dict,
+    aug_codec_dict: Dict,
+    aug_packet_loss_dict: Dict,
+    aug_target_absent_dict: Dict,
+    aug_query_distance_dict: Dict,
     vad_label_dict: Dict,
 ):
-    train_dataset = NoiseSuppressionDataset(
+    task_name = corpus_dict.get("task", "noise_suppression")
+    if task_name == "voice_isolation":
+        dataset_cls = VoiceIsolationDataset
+        collate_fn = VoiceIsolationCollateFunc()
+    elif task_name == "noise_suppression":
+        dataset_cls = NoiseSuppressionDataset
+        collate_fn = NoiseSuppressionCollateFunc()
+    else:
+        raise ValueError(f"Unsupported dataset.task: {task_name}")
+
+    train_dataset = dataset_cls(
         metafile_path=corpus_dict["train_metafile"],
         min_utt_length_in_seconds=corpus_dict["filter_min_utterance_length"],
         min_utts_in_each_speaker=corpus_dict["filter_min_utterance_per_speaker"],
@@ -43,6 +71,10 @@ def init_dataloader(
         augmentation_src_args=aug_src_dict,
         augmentation_hpf_args=aug_hpf_dict,
         augmentation_volume_args=aug_volume_dict,
+        augmentation_codec_args=aug_codec_dict,
+        augmentation_packet_loss_args=aug_packet_loss_dict,
+        augmentation_target_absent_args=aug_target_absent_dict,
+        augmentation_query_distance_args=aug_query_distance_dict,
         vad_label_args=vad_label_dict,
     )
 
@@ -59,10 +91,10 @@ def init_dataloader(
         batch_sampler=train_sampler,
         pin_memory=True,
         num_workers=trainer_dict["num_workers"],
-        collate_fn=NoiseSuppressionCollateFunc(),
+        collate_fn=collate_fn,
     )
 
-    valid_dataset = NoiseSuppressionDataset(
+    valid_dataset = dataset_cls(
         metafile_path=corpus_dict["valid_metafile"],
         min_utt_length_in_seconds=corpus_dict["filter_min_utterance_length"],
         min_utts_in_each_speaker=corpus_dict["filter_min_utterance_per_speaker"],
@@ -77,15 +109,23 @@ def init_dataloader(
         augmentation_src_args=aug_src_dict,
         augmentation_hpf_args=aug_hpf_dict,
         augmentation_volume_args=aug_volume_dict,
+        augmentation_codec_args=aug_codec_dict,
+        augmentation_packet_loss_args=aug_packet_loss_dict,
+        augmentation_target_absent_args=aug_target_absent_dict,
+        augmentation_query_distance_args=aug_query_distance_dict,
         vad_label_args=vad_label_dict,
     )
 
+    # Seeded sampler -> same valid batches every epoch, and per-item seeds make
+    # the on-the-fly synthesis reproducible, so val metrics are comparable
+    # across epochs and runs.
     valid_sampler = SpeakerSampler(
         data=valid_dataset.meta,
         total_batch=trainer_dict["valid_iter_per_epoch"],
         n_spks=trainer_dict["n_spk_per_batch"],
         n_per=trainer_dict["n_utt_per_speaker"],
         select_by_sr_first=False if corpus_dict["target_sample_rate"] else True,
+        seed=trainer_dict.get("valid_seed", 1234),
     )
 
     valid_dataloader = torch.utils.data.DataLoader(
@@ -93,15 +133,13 @@ def init_dataloader(
         batch_sampler=valid_sampler,
         pin_memory=True,
         num_workers=trainer_dict["num_workers"],
-        collate_fn=NoiseSuppressionCollateFunc(),
+        collate_fn=collate_fn,
     )
 
     return train_dataloader, valid_dataloader
 
 
 if __name__ == "__main__":
-    torch.set_float32_matmul_precision("high")
-
     parser = argparse.ArgumentParser()
     parser.add_argument("config_path", type=str)
     parser.add_argument("--set_seed", type=int, default=None, help="set random seed.")
@@ -163,6 +201,10 @@ if __name__ == "__main__":
         aug_src_dict,
         aug_hpf_dict,
         aug_volume_dict,
+        aug_codec_dict,
+        aug_packet_loss_dict,
+        aug_target_absent_dict,
+        aug_query_distance_dict,
         vad_label_dict,
     ) = load_siso_recipe_config(args.config_path)
 
@@ -178,6 +220,10 @@ if __name__ == "__main__":
             aug_src_dict,
             aug_hpf_dict,
             aug_volume_dict,
+            aug_codec_dict,
+            aug_packet_loss_dict,
+            aug_target_absent_dict,
+            aug_query_distance_dict,
             vad_label_dict,
         )
 
@@ -208,6 +254,30 @@ if __name__ == "__main__":
         # PL-Model
         lighting_model = init_siso_model(model_dict)
         lighting_model.register_loss_func(loss_func_list, loss_func_list_w)
+
+        # Optional query-distance contrastive loss (③). Off unless the config
+        # carries a `qd_contrastive` block with `used: true`; only the distance
+        # task emits the `foreground_distance` it needs, so it is a no-op
+        # elsewhere even if registered.
+        qd_contrastive_dict = load_hparam(file_path=args.config_path).get(
+            "qd_contrastive"
+        )
+        if qd_contrastive_dict and qd_contrastive_dict.get("used", False):
+            lighting_model.register_qd_contrastive(qd_contrastive_dict)
+
+        # Silero VAD labels are computed batched on GPU (lifted out of the
+        # DataLoader workers); the dataset emits `vad_reference` and the module
+        # labels the batch in on_after_batch_transfer.
+        if (
+            vad_label_dict
+            and vad_label_dict.get("used")
+            and vad_label_dict.get("backend", "energy").lower() == "silero"
+        ):
+            from puresound.audio.vad import BatchedSileroVADLabeler
+
+            lighting_model.register_gpu_vad_labeler(
+                BatchedSileroVADLabeler(**vad_label_dict.get("args", {}))
+            )
         param_groups = lighting_model.get_total_param_groups()
         optimizer, scheduler = create_optimizer_and_scheduler(
             overall_params_and_lr_factor=param_groups,
@@ -224,7 +294,14 @@ if __name__ == "__main__":
             state_dict = torch.load(args.pretrained_ckpt_path, map_location="cpu")[
                 "state_dict"
             ]
-            lighting_model.load_state_dict(state_dict)
+            # strict=False: warm-starting a model that ADDED params (e.g. new aux
+            # heads for a curriculum stage) must keep those new params at init
+            # rather than error on missing keys. Mismatches are reported.
+            missing, unexpected = lighting_model.load_state_dict(state_dict, strict=False)
+            if missing:
+                print(f"  [pretrained] {len(missing)} new param(s) kept at init: {missing[:4]}{' ...' if len(missing) > 4 else ''}")
+            if unexpected:
+                print(f"  [pretrained] {len(unexpected)} ckpt param(s) ignored: {unexpected[:4]}{' ...' if len(unexpected) > 4 else ''}")
 
         # Callbacks
         lr_monitor = LearningRateMonitor(logging_interval="epoch")
@@ -232,10 +309,42 @@ if __name__ == "__main__":
             save_on_train_epoch_end=True, every_n_epochs=1, save_top_k=-1
         )
 
+        # gradient_as_bucket_view=True makes DDP all-reduce read gradients in
+        # place from the bucket, which removes the "grad strides do not match
+        # bucket view strides" warning (triggered by cuDNN's 1x1-conv weight-grad
+        # layout) and lowers memory. Only meaningful with >1 device; fall back to
+        # Lightning's auto strategy otherwise.
+        #
+        # find_unused_parameters is config-driven (trainer.find_unused_parameters,
+        # default False). The voice-isolation model has parameter groups whose
+        # gradient contribution is data-dependent -- the distance embedding/FiLM
+        # only run when a batch carries query_distance, and each scalar aux head
+        # (drr_gap, boundary_margin, ...) is skipped when its target is all-NaN
+        # for the batch (e.g. no interferer / no RIR metadata). DDP then errors
+        # unless told these may be unused. Plain noise-suppression configs have
+        # no such heads, so they leave it False and avoid the per-step graph walk.
+        strategy = (
+            DDPStrategy(
+                gradient_as_bucket_view=True,
+                find_unused_parameters=trainer_dict.get(
+                    "find_unused_parameters", False
+                ),
+            )
+            if trainer_dict["num_gpus"] > 1
+            else "auto"
+        )
+        # Precision defaults to full precision (Lightning's 32-true) and is
+        # config-driven: to trade a little accuracy for speed/memory, add
+        # `precision: bf16-mixed` under trainer.lighting_trainer_args -- it
+        # threads through the spread below. bf16 (not fp16) is preferred for the
+        # complex-spectral magnitude/division ops (needs fp32 range, no
+        # GradScaler); measured ~1.57x faster steps and ~40% less activation
+        # memory on Ampere when enabled.
         trainer = L.Trainer(
             **trainer_dict["lighting_trainer_args"],
             accelerator="gpu" if trainer_dict["num_gpus"] > 0 else "cpu",
             devices=trainer_dict["num_gpus"],
+            strategy=strategy,
             limit_train_batches=trainer_dict["train_iter_per_epoch"],
             limit_val_batches=trainer_dict["valid_iter_per_epoch"],
             use_distributed_sampler=False,

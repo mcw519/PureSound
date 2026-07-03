@@ -268,7 +268,7 @@ class TargetSpeakerExtractDataset(DynamicBaseDataset):
         source_level_reverb = self.should_apply_source_level_reverb()
         room_scene = self.augmentor.sample_room_scene() if source_level_reverb else None
         if source_level_reverb:
-            noisy_speech, target_speech = self.apply_source_level_target_reverb(
+            noisy_speech, target_speech, _ = self.apply_source_level_target_reverb(
                 wav=target_speech,
                 sr=if_none_else(self.target_sr, self.ori_audio_sr),
                 room_scene=room_scene,

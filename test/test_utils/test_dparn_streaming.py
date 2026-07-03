@@ -4,18 +4,63 @@ from types import SimpleNamespace
 
 import numpy as np
 import torch
+import yaml
 
 from puresound.streaming import (
     StreamingDparnOrt,
     load_streaming_dparn_model,
     validate_streaming_dparn_config,
 )
-from puresound.utils import load_hparam
+
+# Self-contained minimal DPARN recipe (streaming-compliant): only the fields that
+# differ from puresound.nnet.dparn.DPARN's defaults are set explicitly (5 down
+# layers / 2 dparn blocks / stride_t=dilation_t=1 all come from the class
+# defaults). Kept inline rather than pointing at an egs/ recipe so this test
+# doesn't depend on any specific recipe directory existing.
+MINIMAL_DPARN_CONFIG = {
+    "dataset": {"target_sample_rate": 16000},
+    "trainer": {"work_folder": "./exp"},
+    "optimizer": {"type": "AdamW", "learning_rate": 0.001, "args": {}},
+    "scheduler": {"type": "CosineAnnealingWarmRestarts", "args": {"T_0": 20}},
+    "loss_func": [],
+    "model": {
+        "lighting_module": {
+            "type": "EncDecMaskBase",
+            "module_args": {"mask_type": "complex"},
+        },
+        "encoder": {
+            "type": "ConvEncDec",
+            "encoder_args": {
+                "fft_length": 512,
+                "win_type": "hann",
+                "win_length": 512,
+                "hop_length": 128,
+                "fmin": 0,
+                "fmax": 8000,
+                "sr": 16000,
+                "trainable": False,
+            },
+        },
+        "features": {
+            "feats_type": "complex",
+            "drop_stft_first_bin": True,
+            "trainable": False,
+            "include_specaug": False,
+        },
+        "backbone": {
+            "type": "DPARN",
+            "backbone_args": {
+                "input_dim": 256,
+                "norm_type": "cLN",
+                "channels": [2, 32, 32, 32, 64, 128],
+            },
+        },
+    },
+}
 
 
 def test_dparn_streaming_config_validates_current_recipe():
-    config = load_hparam("egs/voice_isolate/config/dparn.yaml")
-    manifest = validate_streaming_dparn_config(config)
+    manifest = validate_streaming_dparn_config(MINIMAL_DPARN_CONFIG)
 
     assert manifest["sample_rate"] == 16000
     assert manifest["fft_length"] == 512
@@ -23,8 +68,11 @@ def test_dparn_streaming_config_validates_current_recipe():
     assert manifest["freq_bins"] == 257
 
 
-def test_dparn_streaming_frame_model_returns_frame_and_state():
-    model = load_streaming_dparn_model("egs/voice_isolate/config/dparn.yaml")
+def test_dparn_streaming_frame_model_returns_frame_and_state(tmp_path):
+    config_path = tmp_path / "dparn.yaml"
+    config_path.write_text(yaml.safe_dump(MINIMAL_DPARN_CONFIG), encoding="utf-8")
+
+    model = load_streaming_dparn_model(config_path)
     state = model.initial_state(batch_size=1)
     frame = torch.randn(1, 257, 2)
 

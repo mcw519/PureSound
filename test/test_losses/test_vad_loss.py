@@ -1,7 +1,7 @@
 import torch
 import pytest
 
-from puresound.nnet.loss import VADActivityLoss
+from puresound.nnet.loss import VADActivityLoss, VADHeadBCELoss
 from puresound.recipes import init_loss_func
 from puresound.audio.vad import EnergyVADLabeler
 
@@ -61,12 +61,14 @@ def test_vad_activity_loss_uses_external_vad_target():
     vad_target = labeler(ref, sample_rate=16000).unsqueeze(0)
     enh_bad = ref.clone()
     enh_bad[:, :800] = 0.2
+    enh_good = ref.clone()
 
-    fallback_loss = loss_func(enh_bad, ref)
-    external_label_loss = loss_func(enh_bad, ref, vad_target=vad_target)
+    external_bad_loss = loss_func(enh_bad, ref, vad_target=vad_target)
+    external_good_loss = loss_func(enh_good, ref, vad_target=vad_target)
 
-    assert torch.isfinite(external_label_loss)
-    assert torch.allclose(fallback_loss, external_label_loss)
+    assert torch.isfinite(external_bad_loss)
+    assert torch.isfinite(external_good_loss)
+    assert external_good_loss < external_bad_loss
 
 
 def test_vad_activity_loss_can_require_external_vad_target():
@@ -84,3 +86,22 @@ def test_vad_activity_loss_can_require_external_vad_target():
     loss = loss_func(ref, ref, vad_target=vad_target)
 
     assert torch.isfinite(loss)
+
+
+def test_vad_head_bce_can_balance_imbalanced_frames():
+    # At a constant zero logit both classes have BCE=log(2), so balancing
+    # preserves that value while changing the gradient contribution by class.
+    logits = torch.zeros(1, 10)
+    target = torch.tensor([[1.0, 1.0] + [0.0] * 8])
+    balanced = VADHeadBCELoss(balance_per_batch=True)
+    unbalanced = VADHeadBCELoss(balance_per_batch=False)
+
+    assert torch.isclose(balanced(logits, target), torch.tensor(0.6931472), atol=1e-5)
+    assert torch.isclose(unbalanced(logits, target), torch.tensor(0.6931472), atol=1e-5)
+
+    all_positive = torch.full_like(logits, 4.0)
+    all_negative = torch.full_like(logits, -4.0)
+    assert torch.isclose(
+        balanced(all_positive, target), balanced(all_negative, target), atol=1e-5
+    )
+    assert unbalanced(all_positive, target) > unbalanced(all_negative, target)

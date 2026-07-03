@@ -19,6 +19,7 @@ dependencies = [
   "torchcodec==0.2.1+cu124",
   "matplotlib",
   "numpy",
+  "scipy",
   "scikit-learn",
   "tqdm",
   "tensorboard",
@@ -39,6 +40,18 @@ dependencies = [
   "silero-vad",
   "librosa",
   "torchmetrics",
+  "pyarrow>=24.0.0",
+  "jiwer>=4.0.0",
+  "faster-whisper>=1.2.1",
+]
+
+[project.optional-dependencies]
+hybrid-rir = [
+  "pyroomacoustics",
+]
+hybrid-rir-gpu = [
+  "pyroomacoustics",
+  "cupy-cuda12x",
 ]
 
 [dependency-groups]

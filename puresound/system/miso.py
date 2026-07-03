@@ -1,5 +1,16 @@
 """
-Multiple Input Single Ouput (MISO) PL-Module
+Multiple Input Single Output (MISO) PL-Module
+
+"Multiple input" here means a second *acoustic* input alongside the noisy
+mixture: a conditioning waveform (e.g. an enrollment utterance) that is run
+through its own front-end (``c_encoder`` / ``c_feats`` / ``c_backbone``) to
+produce a speaker embedding which then steers the mask. Use this only when the
+condition is itself audio that must be encoded.
+
+A model conditioned on a *non-acoustic* control signal (e.g. a scalar
+``query_distance`` query) is NOT MISO -- it has a single acoustic input and
+belongs in ``siso.EncDecMaskBase`` (conditional SISO), which forwards the
+scalar to the backbone as a FiLM bias without any second front-end.
 
 Use cases:
     EncDecCondMaskBase:
@@ -238,7 +249,10 @@ class EncDecCondMaskBase(BaseLightningModule):
             total_loss += total_loss2
             losses += losses2
 
-        self.log("train_step_loss", total_loss, prog_bar=True, sync_dist=True)
+        # sync_dist False on purpose: a synced metric read by the progress bar
+        # deadlocks DDP (bar refresh is not in lockstep across ranks, so the
+        # metric all-reduce collides with the next iteration's collective).
+        self.log("train_step_loss", total_loss, prog_bar=True, sync_dist=False)
         if self.verbose:
             if len(losses) != 1:
                 for i in range(len(losses)):
@@ -246,7 +260,7 @@ class EncDecCondMaskBase(BaseLightningModule):
                         f"train_step_loss_{i}",
                         losses[i],
                         prog_bar=False,
-                        sync_dist=True,
+                        sync_dist=False,
                         on_step=True,
                     )
         self.puresound_logging.update({"epoch_train_loss": total_loss.item()})
@@ -275,11 +289,17 @@ class EncDecCondMaskBase(BaseLightningModule):
                     f"valid_step_loss_{i}",
                     losses[i],
                     prog_bar=False,
+                    on_step=False,
+                    on_epoch=True,
                     sync_dist=True,
-                    on_step=True,
                 )
         self.log(
-            "valid_step_loss", total_loss, prog_bar=True, sync_dist=True, on_step=True
+            "valid_step_loss",
+            total_loss,
+            prog_bar=True,
+            on_step=False,
+            on_epoch=True,
+            sync_dist=True,
         )
         return {"loss": total_loss}
 

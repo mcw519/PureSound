@@ -45,7 +45,11 @@ class MelBank(nn.Module):
         spec_imag = x[..., 0]
         spec_real = x[..., 1]
         spec = spec_real.pow(2) + spec_imag.pow(2)
-        mag = torch.sqrt(spec + 1e-8) if self.trainable else torch.sqrt(spec)
+        # Epsilon is unconditional: sqrt(0) is finite but d/dx sqrt(x) = 1/(2*sqrt(x))
+        # is Inf at x=0, so any STFT bin with exact-zero magnitude poisons the backward
+        # pass. This bit the voice_isolate v7 run, where SpeakerConsistencyLoss
+        # backprops through this MelBank and the enhanced output had zero bins.
+        mag = torch.sqrt(spec + 1e-8)
         mag = mag.permute(0, 2, 1)  # [N, T, C]
         melspec = torch.matmul(mag, self.filterbank)
 

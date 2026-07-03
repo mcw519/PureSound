@@ -3,6 +3,14 @@ import random
 from collections import defaultdict
 from typing import Dict, List, Optional
 
+import torch.distributed as dist
+
+
+def _distributed_rank_world() -> tuple[int, int]:
+    if dist.is_available() and dist.is_initialized():
+        return dist.get_rank(), dist.get_world_size()
+    return 0, 1
+
 
 class SpeakerSampler:
     def __init__(
@@ -13,6 +21,9 @@ class SpeakerSampler:
         n_per: int,
         fast_sampling: bool = False,
         select_by_sr_first: bool = False,
+        seed: Optional[int] = None,
+        rank: Optional[int] = None,
+        world_size: Optional[int] = None,
     ):
         """
         Sample a batch of data for specific speaker number and per-speaker's utterance.
@@ -24,7 +35,13 @@ class SpeakerSampler:
             n_spks: Numbers of utterance per speaker.
             fast_sampling: If True, sample speaker by group first, then sample speaker from group.
             select_by_sr_first: If True, sample speaker by SR group first, then sample speaker from group.
+            seed: If set, yields the same batches every epoch and attaches a per-item
+                seed to each entry, i.e. (spk, sr, item_seed) instead of (spk, sr), so
+                the dataset can regenerate identical samples (deterministic validation).
         """
+        self.seed = seed
+        self.rank = rank
+        self.world_size = world_size
         self.n_batch = total_batch
         self.n_spks = n_spks
         self.n_per = n_per
@@ -64,26 +81,46 @@ class SpeakerSampler:
         return self.n_batch
 
     def __iter__(self):
-        for _ in range(self.n_batch):
+        rank, world_size = _distributed_rank_world()
+        if self.rank is not None:
+            rank = int(self.rank)
+        if self.world_size is not None:
+            world_size = int(self.world_size)
+        if self.seed is not None:
+            rng = random.Random(self.seed + rank * 1_000_003)
+        elif world_size > 1:
+            rng = random.Random(random.getrandbits(63) + rank * 1_000_003)
+        else:
+            rng = random
+        for batch_idx in range(self.n_batch):
             batch = []
             sr = None
 
             if not self.fast_sampling:
                 if self.select_by_sr_first:
-                    sr = random.sample(list(self.sr_meta.keys()), 1)[0]
-                    classes = random.sample(list(self.sr_meta[sr].keys()), self.n_spks)
+                    sr = rng.sample(list(self.sr_meta.keys()), 1)[0]
+                    classes = rng.sample(list(self.sr_meta[sr].keys()), self.n_spks)
                 else:
-                    classes = random.sample(self.spk_pool, self.n_spks)
+                    classes = rng.sample(self.spk_pool, self.n_spks)
             else:
                 # sample group first
-                group = random.sample(self.spk_pool_group, 1)[0]
-                classes = random.sample(group, self.n_spks)
+                group = rng.sample(self.spk_pool_group, 1)[0]
+                classes = rng.sample(group, self.n_spks)
 
-            for c in classes:
-                batch += [(c, sr)] * self.n_per
+            for i, c in enumerate(classes):
+                if self.seed is not None:
+                    item_seed = (
+                        self.seed * 1_000_003
+                        + rank * self.n_batch * 1_009
+                        + batch_idx * 1_009
+                        + i * self.n_per
+                    )
+                    batch += [(c, sr, item_seed + j) for j in range(self.n_per)]
+                else:
+                    batch += [(c, sr)] * self.n_per
 
             # shuffling the sequence
-            random.shuffle(batch)
+            rng.shuffle(batch)
             yield batch
 
 

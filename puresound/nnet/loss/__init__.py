@@ -3,18 +3,30 @@ import torch.nn as nn
 
 from .sdr import SDRLoss
 from .spk import AAMsoftmax, SphereFace2
+from .spk_consistency import SpeakerConsistencyLoss
+from .residual import ResidualReferenceLoss
+from .far_parent import FarReconstructionLoss, MixtureConsistencyLoss
+from .asr_feature import ASRFeatureLoss
 from .stft_loss import MultiResolutionSTFTLoss, OverSuppressionLoss, SpectralLoss
-from .vad import VADActivityLoss
+from .vad import BackgroundVADHeadBCELoss, ScalarAuxiliaryLoss, VADActivityLoss, VADHeadBCELoss
 
 __all__ = [
     "AAMsoftmax",
+    "ASRFeatureLoss",
+    "FarReconstructionLoss",
+    "MixtureConsistencyLoss",
     "MultiResolutionSTFTLoss",
     "OverSuppressionLoss",
+    "ResidualReferenceLoss",
     "SDRLoss",
+    "SpeakerConsistencyLoss",
     "SpectralLoss",
     "SphereFace2",
     "TimeDomainBasicLoss",
+    "BackgroundVADHeadBCELoss",
+    "ScalarAuxiliaryLoss",
     "VADActivityLoss",
+    "VADHeadBCELoss",
 ]
 
 
@@ -25,7 +37,7 @@ class TimeDomainBasicLoss(nn.Module):
         self.reduction = reduction
         if self.name == "l1":
             self.loss_func = nn.functional.l1_loss
-        elif self.name in ["l1", "mse"]:
+        elif self.name == "mse":
             self.loss_func = nn.functional.mse_loss
         else:
             raise NotImplementedError

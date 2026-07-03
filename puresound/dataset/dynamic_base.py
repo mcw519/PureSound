@@ -9,7 +9,7 @@ import torch
 from puresound.audio.augmentaion import AudioEffectAugmentor
 from puresound.audio.io import AudioIO
 from puresound.audio.noise import add_bg_white_noise
-from puresound.audio.vad import create_vad_labeler, frame_count
+from puresound.audio.vad import EnergyVADLabeler, create_vad_labeler, frame_count
 from puresound.dataset.parser import MetafileParser
 
 
@@ -80,7 +80,33 @@ class DynamicBaseDataset(torch.utils.data.Dataset):
         self.init_vad_labeler()
 
     def init_vad_labeler(self):
-        self.vad_labeler = create_vad_labeler(self.vad_label_args)
+        cfg = self.vad_label_args
+        # Coarse activity labeler used only by overlap gating; it runs inside
+        # the DataLoader workers so it must stay cheap (energy VAD), never
+        # Silero.
+        self.gating_vad_labeler = None
+        # When the loss label uses Silero, defer it to a batched GPU pass owned
+        # by the training module: __getitem__ emits the clean reference
+        # waveform and the module labels the whole batch at once on GPU,
+        # lifting Silero out of the per-sample worker path entirely.
+        self.defer_vad_to_gpu = False
+
+        if not cfg or not cfg.get("used"):
+            self.vad_labeler = None
+            return
+
+        args = dict(cfg.get("args", {}))
+        frame_length = args.get("frame_length", cfg.get("frame_length", 400))
+        hop_length = args.get("hop_length", cfg.get("hop_length", 160))
+        self.gating_vad_labeler = EnergyVADLabeler(
+            frame_length=frame_length, hop_length=hop_length
+        )
+
+        if cfg.get("backend", "energy").lower() == "silero":
+            self.defer_vad_to_gpu = True
+            self.vad_labeler = None
+        else:
+            self.vad_labeler = create_vad_labeler(cfg)
 
     def __len__(self):
         pass
@@ -242,8 +268,16 @@ class DynamicBaseDataset(torch.utils.data.Dataset):
         if self.augmentation_reverb_args is not None:
             simulator_args = self.augmentation_reverb_args.get("simulator")
             if simulator_args and simulator_args.get("used"):
-                self.augmentor.init_room_simulator(simulator_args)
-                print("Augmentor initialized physics-based room simulator")
+                pregenerated_args = simulator_args.get("pregenerated")
+                if pregenerated_args and pregenerated_args.get("used"):
+                    self.augmentor.init_room_bank(pregenerated_args)
+                    print(
+                        "Augmentor initialized pre-generated room RIR bank "
+                        f"({len(self.augmentor.room_bank)} rooms)"
+                    )
+                else:
+                    self.augmentor.init_room_simulator(simulator_args)
+                    print("Augmentor initialized physics-based room simulator")
             else:
                 self.augmentor.load_rir_from_folder(
                     self.augmentation_reverb_args["rir_folder"]
@@ -265,15 +299,25 @@ class DynamicBaseDataset(torch.utils.data.Dataset):
         return (torch.rand(1) < self.augmentation_reverb_args["prob"]).item()
 
     def apply_source_level_target_reverb(
-        self, wav: torch.Tensor, sr: int, room_scene: dict
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        noisy_target, (rir_id, _) = self.augmentor.apply_rir(
+        self,
+        wav: torch.Tensor,
+        sr: int,
+        room_scene: dict,
+        distance_range_override: Optional[List[float]] = None,
+    ) -> tuple[torch.Tensor, torch.Tensor, Optional[dict]]:
+        """Returns (noisy_target, clean_target, rir_metadata). rir_metadata
+        carries the realized placement (e.g. source_receiver_distance) so
+        callers can condition on where the foreground actually landed; None
+        when the RIR came from a folder instead of the simulator."""
+        noisy_target, (rir_id, rir_info) = self.augmentor.apply_rir(
             wav=wav,
             rir_mode="full",
             sr=sr,
             room_scene=room_scene,
             source_role="foreground",
+            distance_range_override=distance_range_override,
         )
+        rir_metadata = rir_info.get("metadata") if isinstance(rir_info, dict) else None
         target_rir_type = self.augmentation_reverb_args["target_rir_type"]
         if target_rir_type == "anechoic":
             clean_target = wav
@@ -284,23 +328,34 @@ class DynamicBaseDataset(torch.utils.data.Dataset):
                 rir_mode=target_rir_type,
                 sr=sr,
             )
-        return noisy_target, clean_target
+        return noisy_target, clean_target, rir_metadata
 
     def apply_source_level_interferer_reverb(
-        self, wav: torch.Tensor, sr: int, room_scene: dict
+        self,
+        wav: torch.Tensor,
+        sr: int,
+        room_scene: dict,
+        distance_range_override: Optional[List[float]] = None,
+        source_role: str = "interferer",
     ) -> torch.Tensor:
         reverb_wav, _ = self.augmentor.apply_rir(
             wav=wav,
             rir_mode="full",
             sr=sr,
             room_scene=room_scene,
-            source_role="interferer",
+            source_role=source_role,
+            distance_range_override=distance_range_override,
         )
         return reverb_wav
 
     def create_vad_target(self, clean_speech: torch.Tensor, sample_rate: int):
         if self.vad_labeler is None:
             return None
+        # All-zero reference (e.g. target-absent training samples) makes the
+        # energy VAD return all-one due to its self-relative dB normalization;
+        # short-circuit so every backend reports "no activity" consistently.
+        if torch.is_tensor(clean_speech) and clean_speech.abs().max().item() == 0.0:
+            return self.create_empty_vad_target(clean_speech)
         return self.vad_labeler(clean_speech, sample_rate=sample_rate)
 
     def create_empty_vad_target(self, wav: torch.Tensor):
@@ -401,14 +456,19 @@ class DynamicBaseDataset(torch.utils.data.Dataset):
         for wav in wav_list:
             if wav.shape[-1] >= length:
                 offset = random.randint(0, int(wav.shape[-1]) - length)
-                # Avoid choice the zero tensor
+                # Avoid choosing an all-silent crop, but BOUND the search: if the
+                # whole waveform is (near-)silent, no offset ever satisfies the
+                # condition and this spins forever -- a stalled DataLoader worker
+                # then deadlocks DDP (one rank never reaches the next collective).
+                # After a few tries accept the current window; a silent segment is
+                # legitimate (quiet interferer / target-absent source) and handled
+                # downstream.
+                silent_retry = 0
                 while wav[:, offset : offset + length].abs().mean() == 0:
-                    # print(
-                    #     f"This segment {wav[..., offset : offset + length]} from {offset} to {offset + length} is a empty tensor. RETRY."
-                    # )
-                    offset = random.randint(0, int(wav.shape[-1]) - length)
-                    if wav[:, offset : offset + length].abs().mean() != 0:
+                    if silent_retry >= 10:
                         break
+                    silent_retry += 1
+                    offset = random.randint(0, int(wav.shape[-1]) - length)
                 clips_wav = wav[:, offset : offset + length]
                 assert clips_wav.shape[-1] == length
 

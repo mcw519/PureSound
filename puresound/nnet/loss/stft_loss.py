@@ -155,15 +155,34 @@ class MultiResolutionSTFTLoss(torch.nn.Module):
         self.factor_sc = factor_sc
         self.factor_mag = factor_mag
 
-    def forward(self, x, y):
+    # Spectral losses are undefined against an all-zero reference: spectral
+    # convergence divides by ||ref|| and log-magnitude hits the eps clamp, so
+    # one silent-target row (target-absent / distance-gated sample) can yield
+    # a loss ~1000x the active-row level and its gradient drowns the batch.
+    # Opt into the trainer's inactive-row mask and score active rows only;
+    # silent rows are already supervised by inactive-SDR and VAD losses.
+    uses_inactive_labels = True
+
+    def forward(self, x, y, inactive_labels: torch.Tensor = None):
         """Calculate forward propagation.
         Args:
             x (Tensor): Predicted signal (B, T).
             y (Tensor): Groundtruth signal (B, T).
+            inactive_labels (BoolTensor): per-row True where the reference is
+                fully silent; those rows are excluded from this loss.
         Returns:
             Tensor: Multi resolution spectral convergence loss value.
             Tensor: Multi resolution log STFT magnitude loss value.
         """
+        if inactive_labels is None:
+            active = y.abs().amax(dim=-1) > 0
+        else:
+            active = ~inactive_labels.to(torch.bool).reshape(-1)
+        if not bool(active.any()):
+            return x.new_zeros(())
+        x = x[active]
+        y = y[active]
+
         sc_loss = 0.0
         mag_loss = 0.0
         for f in self.stft_losses:

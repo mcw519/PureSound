@@ -1,7 +1,8 @@
 import random
 from copy import deepcopy
-from typing import Dict, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
+import numpy as np
 import torch
 from torch.nn.utils.rnn import pad_sequence
 
@@ -15,6 +16,62 @@ def if_none_else(a, b):
         return a
     else:
         return b
+
+
+def _intersect_range(
+    low: float,
+    high: float,
+    bounds: Optional[List[float]],
+) -> Optional[List[float]]:
+    """Intersect [low, high] with optional config bounds.
+
+    Returns None for a degenerate interval so callers can fall back to the
+    simulator's role defaults instead of silently sampling an invalid range.
+    """
+    lo = float(low)
+    hi = float(high)
+    if bounds is not None:
+        b_lo, b_hi = float(bounds[0]), float(bounds[1])
+        lo = b_lo if b_lo > lo else lo
+        hi = b_hi if b_hi < hi else hi
+    if hi > lo:
+        return [lo, hi]
+    return None
+
+
+def sample_query_distance_overrides(
+    qd_cfg: Optional[Dict],
+    sim_cfg: Optional[Dict] = None,
+) -> tuple[Optional[float], Optional[List[float]], Optional[List[float]], float]:
+    """Sample query distance and role-specific simulator range overrides."""
+    near_floor = float((qd_cfg or {}).get("near_floor", 0.3))
+    if qd_cfg is None or not qd_cfg.get("used", False):
+        return None, None, None, near_floor
+
+    sim_cfg = sim_cfg or {}
+    lo, hi = qd_cfg.get("range", [0.5, 2.0])
+    peak = float(qd_cfg.get("peak_distance", 1.0))
+    peak_prob = float(qd_cfg.get("peak_prob", 0.5))
+    peak_half_width = float(qd_cfg.get("peak_half_width", 0.2))
+    if torch.rand(1).item() < peak_prob:
+        p_lo = float(lo) if float(lo) > peak - peak_half_width else peak - peak_half_width
+        p_hi = float(hi) if float(hi) < peak + peak_half_width else peak + peak_half_width
+        query_distance = float(torch.empty(1).uniform_(p_lo, p_hi).item())
+    else:
+        query_distance = float(torch.empty(1).uniform_(float(lo), float(hi)).item())
+
+    far_ceiling = float(qd_cfg.get("far_ceiling", 5.0))
+    foreground_override = _intersect_range(
+        near_floor,
+        query_distance,
+        sim_cfg.get("foreground_distance_range"),
+    )
+    interferer_override = _intersect_range(
+        query_distance,
+        far_ceiling,
+        sim_cfg.get("interferer_distance_range"),
+    )
+    return query_distance, foreground_override, interferer_override, near_floor
 
 
 class NoiseSuppressionDataset(DynamicBaseDataset):
@@ -34,6 +91,10 @@ class NoiseSuppressionDataset(DynamicBaseDataset):
         augmentation_src_args: Optional[Dict] = None,
         augmentation_hpf_args: Optional[Dict] = None,
         augmentation_volume_args: Optional[Dict] = None,
+        augmentation_codec_args: Optional[Dict] = None,
+        augmentation_packet_loss_args: Optional[Dict] = None,
+        augmentation_target_absent_args: Optional[Dict] = None,
+        augmentation_query_distance_args: Optional[Dict] = None,
         vad_label_args: Optional[Dict] = None,
     ):
         super().__init__(
@@ -53,9 +114,23 @@ class NoiseSuppressionDataset(DynamicBaseDataset):
             augmentation_volume_args=augmentation_volume_args,
             vad_label_args=vad_label_args,
         )
+        self.augmentation_codec_args = augmentation_codec_args
+        self.augmentation_packet_loss_args = augmentation_packet_loss_args
+        self.augmentation_target_absent_args = augmentation_target_absent_args
+        self.augmentation_query_distance_args = augmentation_query_distance_args
 
-    def __getitem__(self, target_speaker: Tuple[str, int | None]):
-        target_speaker, batch_sr = target_speaker
+    def __getitem__(self, target_speaker: Tuple[str, int | None] | Tuple[str, int | None, int]):
+        # A 3-tuple carries a per-item seed from a seeded SpeakerSampler
+        # (deterministic validation): reseed every RNG the synthesis path uses
+        # (utterance pick / room sim / augmentation draws) so the same item
+        # regenerates bit-exact across epochs, runs and worker layouts.
+        if len(target_speaker) == 3:
+            target_speaker, batch_sr, item_seed = target_speaker
+            random.seed(item_seed)
+            np.random.seed(item_seed % (2**32))
+            torch.manual_seed(item_seed)
+        else:
+            target_speaker, batch_sr = target_speaker
         batch_sr = int(batch_sr) if batch_sr is not None else batch_sr
         target_speech, self.ori_audio_sr, (_, _) = (
             self.choose_an_utterance_by_speaker_name(
@@ -70,23 +145,148 @@ class NoiseSuppressionDataset(DynamicBaseDataset):
                 int(self.ori_audio_sr * self.training_sample_length_in_seconds),
             ),
         )[0]
+        # Decide once per sample whether this is a "target-absent" case
+        # (near-field foreground is silent, only far-field interferers + noise
+        # remain). Concrete gating happens after the augmentation_speech block
+        # so SIR sampling and overlap-control still use the real target as a
+        # reference; we subtract target_in_mix at the end.
+        target_absent_cfg = self.augmentation_target_absent_args
+        target_absent = (
+            target_absent_cfg is not None
+            and target_absent_cfg.get("used", False)
+            and torch.rand(1).item() < float(target_absent_cfg.get("prob", 0.0))
+        )
+        force_interferer = bool(
+            target_absent
+            and target_absent_cfg is not None
+            and target_absent_cfg.get("force_interferer", False)
+        )
+
+        # Optional distance-conditioned training: pick a query distance d, then
+        # constrain foreground placement to [near_floor, d] and interferer
+        # placement to [d, far_ceiling]. The same d is exposed to the model so
+        # at inference the deployment picks "keep within X metres".
+        qd_cfg = self.augmentation_query_distance_args
+        query_distance: Optional[float] = None
+        foreground_override: Optional[List[float]] = None
+        interferer_override: Optional[List[float]] = None
+        interferer_rir_metadata: List[dict] = []
+        background_speech_reference = None
+        near_floor = float((qd_cfg or {}).get("near_floor", 0.3))
+        # A pre-generated RIR bank has fixed source distances, so a config-sampled
+        # query cannot be matched by moving a source. Instead let the foreground
+        # take any near channel and derive the query afterwards so it just covers
+        # the realized foreground distance (handled after foreground reverb).
+        bank_mode = getattr(self.augmentor, "room_bank", None) is not None
+        derive_query_from_bank = (
+            bank_mode
+            and qd_cfg is not None
+            and qd_cfg.get("used", False)
+            and qd_cfg.get("derive_from_bank", True)
+        )
+        if (
+            qd_cfg is not None
+            and qd_cfg.get("used", False)
+            and not derive_query_from_bank
+        ):
+            sim_cfg = (self.augmentation_reverb_args or {}).get("simulator") or {}
+            (
+                query_distance,
+                foreground_override,
+                interferer_override,
+                near_floor,
+            ) = sample_query_distance_overrides(
+                qd_cfg=qd_cfg,
+                sim_cfg=sim_cfg,
+            )
+
         source_level_reverb = self.should_apply_source_level_reverb()
         room_scene = self.augmentor.sample_room_scene() if source_level_reverb else None
+        fg_rir_metadata = None
         if source_level_reverb:
-            noisy_speech, target_speech = self.apply_source_level_target_reverb(
-                wav=target_speech,
-                sr=if_none_else(self.target_sr, self.ori_audio_sr),
-                room_scene=room_scene,
+            noisy_speech, target_speech, fg_rir_metadata = (
+                self.apply_source_level_target_reverb(
+                    wav=target_speech,
+                    sr=if_none_else(self.target_sr, self.ori_audio_sr),
+                    room_scene=room_scene,
+                    distance_range_override=foreground_override,
+                )
             )
         else:
             noisy_speech = target_speech.clone()
+
+        # Bank mode: derive the query distance from the realized foreground
+        # placement so the boundary cleanly covers the near source and sits below
+        # every far interferer in the same room. Falls back to a config-range
+        # draw on samples where source-level reverb was skipped.
+        if derive_query_from_bank:
+            if fg_rir_metadata is not None and isinstance(room_scene, dict):
+                query_distance = self.augmentor.room_bank.suggest_query_distance(
+                    scene=room_scene,
+                    foreground_distance=float(
+                        fg_rir_metadata["source_receiver_distance"]
+                    ),
+                    near_floor=near_floor,
+                    far_ceiling=float(qd_cfg.get("far_ceiling", 5.0)),
+                    margin=float(qd_cfg.get("bank_margin", 0.2)),
+                    peak_distance=qd_cfg.get("peak_distance"),
+                    peak_prob=float(qd_cfg.get("peak_prob", 0.0)),
+                    peak_half_width=float(qd_cfg.get("peak_half_width", 0.2)),
+                )
+            else:
+                lo, hi = qd_cfg.get("range", [0.5, 2.0])
+                query_distance = float(
+                    torch.empty(1).uniform_(float(lo), float(hi)).item()
+                )
+
+        # Distance-gated silence (arXiv:2412.20144 inactive-query insight): keep
+        # the mixture EXACTLY as generated but re-sample the exposed query
+        # distance to BELOW the foreground's realized distance, so the correct
+        # output flips to silence. This is the only sample type where the
+        # mixture alone cannot determine the answer -- the model must read d.
+        # (Plain target_absent removes the foreground from the mix, so the mix
+        # itself gives the answer away and d stays redundant.)
+        distance_gated = False
+        gate_cfg = qd_cfg.get("gate_silence") if qd_cfg and qd_cfg.get("used", False) else None
+        if (
+            gate_cfg
+            and gate_cfg.get("used", True)
+            and not target_absent
+            and source_level_reverb
+            and query_distance is not None
+            and fg_rir_metadata is not None
+            and not (
+                self.augmentation_speech_args
+                and self.augmentation_speech_args.get("is_target", False)
+            )
+            and torch.rand(1).item() < float(gate_cfg.get("prob", 0.0))
+        ):
+            fg_distance = float(fg_rir_metadata["source_receiver_distance"])
+            gate_hi = fg_distance - float(gate_cfg.get("margin", 0.15))
+            if gate_hi > near_floor:
+                query_distance = float(
+                    torch.empty(1).uniform_(near_floor, gate_hi).item()
+                )
+                distance_gated = True
+
+        # Snapshot the target's contribution to the mixture; subtracted later
+        # for target-absent samples so noisy_speech keeps only interferer+noise.
+        target_in_mix = noisy_speech.clone()
+
+        # Diagnostic scalars emitted as per-sample metadata (DISTANCE_PARENT
+        # proposal §4/§7). Defaults cover the no-interferer / no-noise paths.
+        far_count = 0
+        mix_mode_name = "none"
+        realized_speech_sir = float("nan")
+        noise_snr = float("nan")
+        self._last_overlap_fraction = float("nan")
 
         # Add interference speech from other speakers
         interfered_speech = []
         if (
             self.augmentation_speech_args
             and self.augmentation_speech_args["used"]
-            and torch.rand(1) < self.augmentation_speech_args["prob"]
+            and (force_interferer or torch.rand(1) < self.augmentation_speech_args["prob"])
         ):
             # Samples speakers from overall speaker pool
             if self.target_sr is not None:
@@ -97,9 +297,17 @@ class NoiseSuppressionDataset(DynamicBaseDataset):
             
             spk_pool = set(spk_pool)
             spk_pool.remove(target_speaker)
-            interference_spk_list = random.sample(
-                sorted(spk_pool), k=self.augmentation_speech_args["add_n_cases"]
-            )
+            add_n_cases_cfg = self.augmentation_speech_args["add_n_cases"]
+            if isinstance(add_n_cases_cfg, (list, tuple)):
+                lo, hi = int(add_n_cases_cfg[0]), int(add_n_cases_cfg[1])
+                n_interferers = random.randint(lo, hi)
+            else:
+                n_interferers = int(add_n_cases_cfg)
+            if n_interferers > len(spk_pool):
+                n_interferers = len(spk_pool)
+            if n_interferers < 1:
+                n_interferers = 1
+            interference_spk_list = random.sample(sorted(spk_pool), k=n_interferers)
             interference_sr = None if self.target_sr is not None else self.ori_audio_sr
             for spk in interference_spk_list:
                 _speech, _sr, _ = self.choose_an_utterance_by_speaker_name(
@@ -107,14 +315,49 @@ class NoiseSuppressionDataset(DynamicBaseDataset):
                     select_channel=0,
                     select_with_sr_as_key=interference_sr,
                 )
-                # Interfered speech has to be same sample rate of target speech
-                while _sr != self.ori_audio_sr:
+                # Interfered speech has to be same sample rate of target speech.
+                # BOUND the redraw: a speaker with no utterance at ori_audio_sr
+                # would otherwise loop forever -- a stalled DataLoader worker then
+                # deadlocks DDP. Give up after a few tries and skip this interferer
+                # (the interferer count is already random) rather than hang.
+                sr_retry = 0
+                while _sr != self.ori_audio_sr and sr_retry < 5:
+                    sr_retry += 1
                     _speech, _sr, _ = self.choose_an_utterance_by_speaker_name(
                         target_speaker_name=spk,
                         select_channel=0,
                         select_with_sr_as_key=interference_sr,
                     )
+                if _sr != self.ori_audio_sr:
+                    continue
                 interfered_speech.append(_speech)
+
+            # Some interferers become "media-device" speech (TV / loudspeaker
+            # playback): band-limited + lightly compressed before its RIR, and
+            # placed wall-adjacent by the room simulator (source_role="media").
+            media_cfg = self.augmentation_speech_args.get("media_voice")
+            media_flags = [
+                bool(
+                    media_cfg
+                    and media_cfg.get("used", False)
+                    and torch.rand(1).item() < float(media_cfg.get("prob", 0.0))
+                )
+                for _ in interfered_speech
+            ]
+            if any(media_flags):
+                hp_lo, hp_hi = media_cfg.get("hp_cutoff_range", [200, 400])
+                lp_lo, lp_hi = media_cfg.get("lp_cutoff_range", [3500, 7000])
+                cp_lo, cp_hi = media_cfg.get("compress_power_range", [0.6, 0.9])
+                for idx, is_media in enumerate(media_flags):
+                    if not is_media:
+                        continue
+                    interfered_speech[idx], _ = self.augmentor.apply_media_coloring(
+                        wav=interfered_speech[idx],
+                        sr=if_none_else(self.target_sr, self.ori_audio_sr),
+                        hp_cutoff=torch.empty(1).uniform_(hp_lo, hp_hi).item(),
+                        lp_cutoff=torch.empty(1).uniform_(lp_lo, lp_hi).item(),
+                        compress_power=torch.empty(1).uniform_(cp_lo, cp_hi).item(),
+                    )
 
             if source_level_reverb:
                 interfered_speech = self.align_audio_list(
@@ -125,14 +368,21 @@ class NoiseSuppressionDataset(DynamicBaseDataset):
                     ),
                     padding_type="zero",
                 )
-                interfered_speech = [
-                    self.apply_source_level_interferer_reverb(
-                        wav=speech,
-                        sr=if_none_else(self.target_sr, self.ori_audio_sr),
-                        room_scene=room_scene,
+                reverb_interferers = []
+                for speech, is_media in zip(interfered_speech, media_flags):
+                    reverb_interferers.append(
+                        self.apply_source_level_interferer_reverb(
+                            wav=speech,
+                            sr=if_none_else(self.target_sr, self.ori_audio_sr),
+                            room_scene=room_scene,
+                            distance_range_override=interferer_override,
+                            source_role="media" if is_media else "interferer",
+                        )
                     )
-                    for speech in interfered_speech
-                ]
+                    rir_meta = getattr(self.augmentor, "_last_rir_meta", None)
+                    if rir_meta is not None:
+                        interferer_rir_metadata.append(dict(rir_meta))
+                interfered_speech = reverb_interferers
             else:
                 # Aligned and Mixing
                 clips_wav = [target_speech] + interfered_speech
@@ -146,29 +396,132 @@ class NoiseSuppressionDataset(DynamicBaseDataset):
                 )
                 target_speech = clips_wav[0]
                 interfered_speech = clips_wav[1:]
+
+            interfered_speech = self._apply_overlap_gating(
+                target_speech=target_speech,
+                interferers=interfered_speech,
+                sr=if_none_else(self.target_sr, self.ori_audio_sr),
+            )
+
+            far_count = len(interfered_speech)
             interfered_speech = (
                 torch.cat(interfered_speech, dim=0).sum(dim=0).reshape(1, -1)
             )
-            sir = (
-                torch.FloatTensor(1)
-                .uniform_(
-                    self.augmentation_speech_args["snr_range"][0],
-                    self.augmentation_speech_args["snr_range"][1],
-                )
-                .item()
-            )
 
-            # Mixing with SIR
-            noisy_speech, interfered_speech = add_bg_noise(
-                wav=noisy_speech if source_level_reverb else target_speech,
-                noise=[interfered_speech],
-                snr_list=[sir],
-            )
-            noisy_speech = noisy_speech[0]
+            # Foreground-vs-interferer mixing. When mix_mode is enabled
+            # (DISTANCE_PARENT proposal §4) it replaces the single hard SIR draw
+            # with explicit modes: 'physical' keeps the natural post-RIR level
+            # ratio so the real DRR/proximity cue survives; the rescaling modes
+            # draw a mode-specific SIR range. Falls back bit-exact to the legacy
+            # snr_range path when mix_mode is off / absent.
+            fg_wav = noisy_speech if source_level_reverb else target_speech
+            mm_cfg = (self.augmentation_speech_args or {}).get("mix_mode")
+            if mm_cfg and mm_cfg.get("used", False):
+                mode = self._sample_mix_mode(mm_cfg)
+                mix_mode_name = mode.get("name", "physical")
+                if mode.get("physical", False):
+                    # No relative rescale: sum at natural post-RIR levels.
+                    noisy_speech = fg_wav + interfered_speech
+                    background_speech_reference = interfered_speech
+                    fg_p = float(fg_wav.pow(2).sum())
+                    itf_p = float(interfered_speech.pow(2).sum())
+                    realized_speech_sir = float(
+                        10.0 * np.log10((fg_p + 1e-8) / (itf_p + 1e-8))
+                    )
+                else:
+                    lo, hi = mode["sir_range"]
+                    sir = float(torch.empty(1).uniform_(float(lo), float(hi)).item())
+                    noisy_speech, interfered_speech = add_bg_noise(
+                        wav=fg_wav, noise=[interfered_speech], snr_list=[sir],
+                    )
+                    noisy_speech = noisy_speech[0]
+                    background_speech_reference = interfered_speech[0]
+                    realized_speech_sir = sir
+            else:
+                sir = (
+                    torch.FloatTensor(1)
+                    .uniform_(
+                        self.augmentation_speech_args["snr_range"][0],
+                        self.augmentation_speech_args["snr_range"][1],
+                    )
+                    .item()
+                )
+
+                # Mixing with SIR
+                noisy_speech, interfered_speech = add_bg_noise(
+                    wav=fg_wav,
+                    noise=[interfered_speech],
+                    snr_list=[sir],
+                )
+                noisy_speech = noisy_speech[0]
+                background_speech_reference = interfered_speech[0]
+                mix_mode_name = "legacy"
+                realized_speech_sir = sir
 
             # Treating all speech clips as target speech
             if self.augmentation_speech_args["is_target"]:
                 target_speech = noisy_speech.clone()
+
+        # Target-absent gating: strip the foreground contribution from the
+        # mixture and zero the reference so VAD / SDR / consistency_noise
+        # downstream all reflect "no near-field speaker". Done before any
+        # rescaling so the leftover mixture levels stay self-consistent.
+        if target_absent:
+            noisy_speech = noisy_speech - target_in_mix
+            target_speech = torch.zeros_like(target_speech)
+        elif distance_gated:
+            # Mixture untouched: the foreground is still audible, but the query
+            # distance now sits below its realized distance, so every source is
+            # "far" and the reference (hence VAD labels downstream) is silence.
+            target_speech = torch.zeros_like(target_speech)
+
+        # Residual TTS-playback echo (plan section 9.5 stage 5): the robot's own
+        # loudspeaker leaks into the mic. Modeled as another utterance through a
+        # near-field RIR from the same room, added at the residual level an
+        # upstream AEC would leave (erle_db_range below the mixture). Never in
+        # the target; requires source-level reverb for its own RIR.
+        echo_cfg = (
+            self.augmentation_speech_args.get("echo_playback")
+            if self.augmentation_speech_args
+            else None
+        )
+        if (
+            echo_cfg
+            and echo_cfg.get("used", False)
+            and source_level_reverb
+            and torch.rand(1).item() < float(echo_cfg.get("prob", 0.0))
+        ):
+            if self.target_sr is not None:
+                echo_pool = set(self.total_spks)
+            else:
+                echo_pool = set(self.sr_meta[self.ori_audio_sr].keys())
+            echo_pool.discard(target_speaker)
+            echo_spk = random.choice(sorted(echo_pool))
+            echo_speech, _, _ = self.choose_an_utterance_by_speaker_name(
+                target_speaker_name=echo_spk,
+                select_channel=0,
+                select_with_sr_as_key=None if self.target_sr is not None else self.ori_audio_sr,
+            )
+            echo_speech = self.align_audio_list(
+                wav_list=[echo_speech],
+                length=if_none_else(
+                    self.training_sample_length,
+                    int(self.ori_audio_sr * self.training_sample_length_in_seconds),
+                ),
+                padding_type="zero",
+            )[0]
+            echo_speech = self.apply_source_level_interferer_reverb(
+                wav=echo_speech,
+                sr=if_none_else(self.target_sr, self.ori_audio_sr),
+                room_scene=room_scene,
+                distance_range_override=echo_cfg.get("distance_range", [0.2, 1.0]),
+            )
+            erle_lo, erle_hi = echo_cfg.get("erle_db_range", [20.0, 35.0])
+            erle_db = torch.empty(1).uniform_(float(erle_lo), float(erle_hi)).item()
+            noisy_speech, _ = add_bg_noise(
+                wav=noisy_speech, noise=[echo_speech], snr_list=[erle_db]
+            )
+            noisy_speech = noisy_speech[0]
 
         # Avoiding clipping issue
         [noisy_speech, target_speech] = self.avoid_audio_clipping(
@@ -241,6 +594,8 @@ class NoiseSuppressionDataset(DynamicBaseDataset):
                 )
                 .item()
             )
+            # Record before the white-noise branch below re-draws ``snr``.
+            noise_snr = snr
 
             # 1 / 4 cases add dynamic noise type
             if torch.rand(1) < self.augmentation_noise_args["prob"] / 4:
@@ -279,6 +634,12 @@ class NoiseSuppressionDataset(DynamicBaseDataset):
 
         if isinstance(noisy_speech, list):
             noisy_speech = noisy_speech[0]
+
+        # Snapshot the clean target for VAD labeling before the downstream
+        # distortion chain (SRC / IIR / HPF / volume / clipping). Silero VAD
+        # gets unreliable on heavily distorted speech, so we label activity on
+        # the early-reverb clean signal (post speed-perturb so timing matches).
+        vad_reference = target_speech.clone()
 
         # SRC
         flag_src = False
@@ -427,6 +788,52 @@ class NoiseSuppressionDataset(DynamicBaseDataset):
                     sr=if_none_else(self.target_sr, self.ori_audio_sr),
                 )
 
+        # Codec round-trip (channel-side artifact: VoIP/PSTN compression).
+        # Applied to noisy_speech only -- target_speech is the clean reference.
+        if (
+            self.augmentation_codec_args
+            and self.augmentation_codec_args.get("used")
+            and torch.rand(1) < self.augmentation_codec_args["prob"]
+        ):
+            codecs = self.augmentation_codec_args["codecs"]
+            prob_each = self.augmentation_codec_args.get("prob_each")
+            if prob_each:
+                codec_name = random.choices(codecs, weights=prob_each, k=1)[0]
+            else:
+                codec_name = random.choice(codecs)
+            bitrate_range = self.augmentation_codec_args.get("bitrate_range", {}).get(
+                codec_name
+            )
+            bit_rate = (
+                random.randint(int(bitrate_range[0]), int(bitrate_range[1]))
+                if bitrate_range
+                else None
+            )
+            noisy_speech, _ = self.augmentor.apply_codec(
+                wav=noisy_speech,
+                sr=if_none_else(self.target_sr, self.ori_audio_sr),
+                codec_name=codec_name,
+                bit_rate=bit_rate,
+            )
+
+        # Packet loss (VoIP transmission artifact).
+        if (
+            self.augmentation_packet_loss_args
+            and self.augmentation_packet_loss_args.get("used")
+            and torch.rand(1) < self.augmentation_packet_loss_args["prob"]
+        ):
+            packet_ms = random.choice(
+                self.augmentation_packet_loss_args["packet_ms_choices"]
+            )
+            lo, hi = self.augmentation_packet_loss_args["loss_rate_range"]
+            loss_rate = random.uniform(float(lo), float(hi))
+            noisy_speech, _ = self.augmentor.apply_packet_loss(
+                wav=noisy_speech,
+                sr=if_none_else(self.target_sr, self.ori_audio_sr),
+                packet_ms=int(packet_ms),
+                loss_rate=loss_rate,
+            )
+
         # Snipts to training target sample length
         noisy_speech = noisy_speech[
             ...,
@@ -505,20 +912,206 @@ class NoiseSuppressionDataset(DynamicBaseDataset):
             added_noise = added_noise[..., : self.training_sample_length]
 
         audio_sr = if_none_else(self.target_sr, self.ori_audio_sr)
-        vad_target = self.create_vad_target(target_speech, sample_rate=audio_sr)
+        vad_reference = vad_reference[..., : noisy_speech.shape[-1]]
+        vad_target = None
+        if not self.defer_vad_to_gpu:
+            vad_target = self.create_vad_target(vad_reference, sample_rate=audio_sr)
+        background_vad_target = None
+        if background_speech_reference is not None:
+            background_speech_reference = background_speech_reference[
+                ..., : noisy_speech.shape[-1]
+            ]
+            if not self.defer_vad_to_gpu:
+                background_vad_target = self.create_vad_target(
+                    background_speech_reference,
+                    sample_rate=audio_sr,
+                )
 
+        # Far parent target (DISTANCE_PARENT P1): the summed full-RIR interferer
+        # speech (post-SIR), zeros when no interferer is present. Used only by an
+        # optional far decoder + FarReconstructionLoss; harmless otherwise.
+        far_target = (
+            background_speech_reference
+            if background_speech_reference is not None
+            else torch.zeros_like(noisy_speech)
+        )
         sample = {
             "noisy_speech": noisy_speech,
             "clean_speech": target_speech,
             "added_noise": added_noise,
             "consistency_noise": noisy_speech - target_speech,
+            "far_target": far_target,
             "speaker_id": self.spk2idx[target_speaker],
             "audio_sr": audio_sr,
             "audio_length": noisy_speech.shape[-1],
         }
         if vad_target is not None:
             sample["vad_target"] = vad_target
+        elif self.defer_vad_to_gpu:
+            # Clean (pre-distortion) reference for the batched GPU VAD labeler.
+            sample["vad_reference"] = vad_reference
+        if background_vad_target is not None:
+            sample["background_vad_target"] = background_vad_target
+        elif self.defer_vad_to_gpu and background_speech_reference is not None:
+            sample["background_vad_reference"] = background_speech_reference
+        if query_distance is not None:
+            sample["query_distance"] = torch.tensor(query_distance, dtype=torch.float32)
+        self._emit_task_metadata(
+            sample,
+            query_distance=query_distance,
+            foreground_metadata=fg_rir_metadata,
+            interferer_metadata=interferer_rir_metadata,
+            target_absent=target_absent,
+            distance_gated=distance_gated,
+            background_speech_reference=background_speech_reference,
+            near_count=0 if target_absent else 1,
+            far_count=far_count,
+            mix_mode=mix_mode_name,
+            realized_speech_sir=realized_speech_sir,
+            noise_snr=noise_snr,
+            overlap_fraction=getattr(self, "_last_overlap_fraction", float("nan")),
+        )
         return sample
+
+    def _emit_task_metadata(
+        self,
+        sample: Dict,
+        *,
+        query_distance: Optional[float],
+        foreground_metadata: Optional[dict],
+        interferer_metadata: List[dict],
+        target_absent: bool,
+        distance_gated: bool,
+        background_speech_reference: Optional[torch.Tensor],
+        near_count: int = 1,
+        far_count: int = 0,
+        mix_mode: str = "none",
+        realized_speech_sir: float = float("nan"),
+        noise_snr: float = float("nan"),
+        overlap_fraction: float = float("nan"),
+    ) -> None:
+        """Hook for task subclasses to attach extra per-sample labels.
+
+        No-op in the base noise-suppression dataset. Task subclasses (e.g. the
+        distance-cued voice isolation dataset) override this to derive auxiliary
+        labels from the simulation metadata and ``sample.update`` them in. The
+        base dataset stays unaware of any derived task's label schema.
+        """
+        return
+
+    def _sample_mix_mode(self, mm_cfg: Dict) -> Dict:
+        """Pick one foreground/interferer mixing mode by its prob weight.
+
+        Modes come from ``augmentation_speech.mix_mode.modes`` (DISTANCE_PARENT
+        proposal §4): a ``physical`` mode keeps the natural post-RIR level ratio,
+        the others carry an explicit ``sir_range``. Probs need not sum to 1.
+        """
+        modes = mm_cfg.get("modes") or []
+        if not modes:
+            return {"name": "physical", "physical": True}
+        probs = [max(0.0, float(m.get("prob", 0.0))) for m in modes]
+        total = sum(probs)
+        if total <= 0.0:
+            return dict(modes[0])
+        r = float(torch.empty(1).uniform_(0.0, total).item())
+        acc = 0.0
+        for m, pr in zip(modes, probs):
+            acc += pr
+            if r <= acc:
+                return dict(m)
+        return dict(modes[-1])
+
+    def _apply_overlap_gating(
+        self,
+        target_speech: torch.Tensor,
+        interferers: list,
+        sr: int,
+    ) -> list:
+        """Gate each interferer's activity so it covers a sampled fraction of
+        the target's active frames.
+
+        Without this, both target and interferer clips are continuous speech
+        and >80% overlap dominates the training distribution. We sample each
+        interferer independently into one of three regimes (no/mid/high
+        overlap) so the model sees the full spread, including the easier
+        cases where the interferer talks during the target's silences.
+
+        Only runs when ``augmentation_speech.overlap_control.used`` is True
+        and a VAD labeler is configured.
+        """
+        overlap_cfg = (self.augmentation_speech_args or {}).get("overlap_control")
+        if not overlap_cfg or not overlap_cfg.get("used"):
+            return interferers
+        if self.gating_vad_labeler is None or not interferers:
+            return interferers
+
+        target_wav = target_speech.squeeze(0) if target_speech.dim() == 2 else target_speech
+        target_vad = self.gating_vad_labeler(target_wav, sample_rate=sr)
+        target_active = target_vad.bool()
+        if int(target_active.sum().item()) == 0:
+            # No active target frames -> no meaningful overlap concept; pass through.
+            return interferers
+        hop = self.gating_vad_labeler.hop_length
+        n_frames = target_vad.shape[0]
+
+        no_overlap_prob = float(overlap_cfg.get("no_overlap_prob", 0.25))
+        high_overlap_prob = float(overlap_cfg.get("high_overlap_prob", 0.25))
+        mid_range = overlap_cfg.get("mid_overlap_range", [0.1, 0.5])
+        high_range = overlap_cfg.get("high_overlap_range", [0.5, 1.0])
+        fill_range = overlap_cfg.get("fill_on_silent_range", [0.3, 0.5])
+        fade_samples = int(overlap_cfg.get("fade_samples", 400))
+
+        fade_kernel = torch.hann_window(fade_samples * 2 + 1)
+        fade_kernel = fade_kernel / fade_kernel.sum().clamp_min(1e-6)
+        fade_kernel = fade_kernel.view(1, 1, -1)
+
+        gated = []
+        union_wanted = torch.zeros(n_frames, dtype=torch.bool)
+        for intf in interferers:
+            r = torch.rand(1).item()
+            if r < no_overlap_prob:
+                overlap_p = 0.0
+            elif r < no_overlap_prob + high_overlap_prob:
+                overlap_p = float(
+                    torch.empty(1).uniform_(float(high_range[0]), float(high_range[1]))
+                )
+            else:
+                overlap_p = float(
+                    torch.empty(1).uniform_(float(mid_range[0]), float(mid_range[1]))
+                )
+            fill_p = float(
+                torch.empty(1).uniform_(float(fill_range[0]), float(fill_range[1]))
+            )
+
+            wanted = torch.zeros(n_frames)
+            rand_vals = torch.rand(n_frames)
+            wanted[target_active] = (rand_vals[target_active] < overlap_p).float()
+            wanted[~target_active] = (rand_vals[~target_active] < fill_p).float()
+            union_wanted |= wanted.bool()
+
+            L = intf.shape[-1]
+            env = wanted.repeat_interleave(hop)
+            if env.shape[0] < L:
+                env = torch.nn.functional.pad(env, (0, L - env.shape[0]))
+            else:
+                env = env[:L]
+            env = (
+                torch.nn.functional.conv1d(
+                    env.view(1, 1, -1), fade_kernel, padding=fade_samples
+                )
+                .view(-1)
+                .clamp(0.0, 1.0)
+            )
+            gated.append(intf * env.view(1, -1))
+        # Realized overlap = fraction of target-active frames also covered by some
+        # interferer. Emitted as metadata so eval can bucket by overlap and read
+        # whether the model is overlap-limited without a separate no-overlap run.
+        active = int(target_active.sum().item())
+        if active > 0:
+            self._last_overlap_fraction = float(
+                int((union_wanted & target_active).sum().item()) / active
+            )
+        return gated
 
 
 class NoiseSuppressionCollateFunc:
@@ -535,6 +1128,8 @@ class NoiseSuppressionCollateFunc:
         col_sr = []
         col_length = []
         col_vad = []
+        col_vad_ref = []
+        col_query_distance = []
 
         for b in batch:
             """
@@ -556,6 +1151,10 @@ class NoiseSuppressionCollateFunc:
             col_length.append(b["audio_length"])
             if "vad_target" in b:
                 col_vad.append(b["vad_target"].squeeze())
+            if "vad_reference" in b:
+                col_vad_ref.append(b["vad_reference"].squeeze())
+            if "query_distance" in b:
+                col_query_distance.append(b["query_distance"].view(-1))
 
         padded_clean = pad_sequence(col_clean, batch_first=True)  # [N, L]
         padded_noisy = pad_sequence(col_noisy, batch_first=True)  # [N, L]
@@ -571,4 +1170,8 @@ class NoiseSuppressionCollateFunc:
         }
         if col_vad:
             out["vad_target"] = pad_sequence(col_vad, batch_first=True)
+        if col_vad_ref:
+            out["vad_reference"] = pad_sequence(col_vad_ref, batch_first=True)
+        if col_query_distance:
+            out["query_distance"] = torch.cat(col_query_distance, dim=0)
         return out

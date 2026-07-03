@@ -1,3 +1,4 @@
+import math
 from typing import Dict, Optional, Tuple
 
 import torch
@@ -7,6 +8,74 @@ from .lobe.attention import MhaSelfAttenLayer
 from .lobe.rnn import SingleRNN
 from .lobe.trivial import spectral_compression
 from .unet import Unet
+
+
+class DistanceEmbeddingGenerator(nn.Module):
+    """Maps a scalar distance (m) to a learned embedding.
+
+    Follows the Distance Query (DQ) block from arXiv:2412.20144 (ICASSP'25)
+    but is used here as a fixed-at-deployment query that lets a single model
+    support multiple "keep within d metres" thresholds.
+
+    The raw metre value is first normalised by ``max_distance`` (the query
+    operating range) and lifted into Fourier features before the MLP. This
+    fixes two failure modes of feeding a raw metre scalar straight into a Tanh
+    MLP:
+
+      1. Scale saturation -- an un-normalised metre value drives the first Tanh
+         into saturation as distance grows, so sensitivity ``||d emb / d dist||``
+         decays ~8x from the near to the far end of the range.
+      2. Spectral bias -- a plain MLP on a single coordinate struggles to
+         represent the sharp "within d" threshold; sin/cos features give it the
+         high-frequency basis it needs.
+
+    The MLP uses GELU activations and ends in a LayerNorm (instead of a final
+    Tanh): the embedding scale stays bounded for the downstream FiLM projection
+    without re-introducing a saturating nonlinearity that throttles gradients.
+
+    Args:
+        out_dim: dimensionality of the produced distance embedding.
+        hidden_dim: width of the intermediate hidden layers.
+        max_distance: distance (m) used to normalise the input to ~[0, 1];
+            should match the query operating range (default 2 m).
+        num_fourier_bands: number of log-spaced sin/cos frequency bands.
+    """
+
+    def __init__(
+        self,
+        out_dim: int = 64,
+        hidden_dim: int = 64,
+        max_distance: float = 2.0,
+        num_fourier_bands: int = 6,
+    ) -> None:
+        super().__init__()
+        self.max_distance = float(max_distance)
+        # Fixed (non-trainable) log-spaced frequencies pi, 2pi, 4pi, ... kept in
+        # a buffer so they follow device moves and state_dict but are not
+        # learned -- the encoding stays deterministic across runs and exports.
+        freqs = (2.0 ** torch.arange(num_fourier_bands).float()) * math.pi
+        self.register_buffer("freqs", freqs)
+        in_dim = 1 + 2 * num_fourier_bands  # normalised distance + [sin, cos] per band
+        self.net = nn.Sequential(
+            nn.Linear(in_dim, hidden_dim),
+            nn.GELU(),
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.GELU(),
+            nn.Linear(hidden_dim, out_dim),
+            nn.LayerNorm(out_dim),
+        )
+
+    def _featurize(self, distance: torch.Tensor) -> torch.Tensor:
+        # distance: [B, 1] (m) -> normalised distance + Fourier features [B, 1 + 2F]
+        d = distance / self.max_distance
+        ang = d * self.freqs  # [B, F] via broadcast over the band dim
+        return torch.cat([d, torch.sin(ang), torch.cos(ang)], dim=-1)
+
+    def forward(self, distance: torch.Tensor) -> torch.Tensor:
+        # distance: [B] or [B, 1] -> embedding: [B, out_dim]
+        if distance.dim() == 1:
+            distance = distance.unsqueeze(-1)
+        return self.net(self._featurize(distance.float()))
 
 
 class DPARNblock2D(nn.Module):
@@ -129,6 +198,7 @@ class DPARN(Unet):
         rnn_hidden: int = 128,
         nhead: int = 1,
         spectral_compress: bool = False,
+        distance_embedding_dim: int = 0,
     ):
         super().__init__(
             input_dim,
@@ -151,6 +221,7 @@ class DPARN(Unet):
         self.n_dparn_block = n_dparn_block
         self.rnn_hidden = rnn_hidden
         self.spectral_compress = spectral_compress
+        self.distance_embedding_dim = distance_embedding_dim
 
         # DPRNN block
         self.dparn_block = nn.ModuleList()
@@ -164,11 +235,37 @@ class DPARN(Unet):
                 )
             )
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        # Optional distance conditioning. FiLM-style additive bias on the
+        # bottleneck so the projection is shape-preserving and can be turned
+        # off at init by zeroing the projection -- the model then behaves
+        # exactly like the un-conditioned DPARN and learns to use distance
+        # gradually instead of having to relearn enhancement from scratch.
+        if self.distance_embedding_dim > 0:
+            self.distance_embedding = DistanceEmbeddingGenerator(
+                out_dim=self.distance_embedding_dim
+            )
+            self.distance_projection = nn.Linear(
+                self.distance_embedding_dim, channels[-1]
+            )
+            nn.init.zeros_(self.distance_projection.weight)
+            nn.init.zeros_(self.distance_projection.bias)
+        else:
+            self.distance_embedding = None
+            self.distance_projection = None
+
+    def forward(
+        self,
+        x: torch.Tensor,
+        query_distance: Optional[torch.Tensor] = None,
+    ) -> torch.Tensor:
         """
         Args:
             x: input tensor shape [N, CH, C, T]
-            
+            query_distance: optional [N] or [N, 1] tensor (metres). When
+                ``distance_embedding_dim > 0`` and a value is supplied the
+                bottleneck is FiLM-biased to "keep speakers within ~d m";
+                ignored otherwise.
+
         Returns:
             output tensor has shape [N, CH, C, T]
         """
@@ -179,13 +276,27 @@ class DPARN(Unet):
             x = x.unsqueeze(1)  # [N, 1, C, T]
 
         x = self.input_norm(x)
-        
+
         skip = [x.clone()]
 
         # forward CNN-down layers
         for cnn_layer in self.cnn_down:
             x = cnn_layer(x)  # [N, ch, C, T]
             skip.append(x)
+
+        # Inject distance conditioning right at the bottleneck so it
+        # influences both DPARN blocks and the up-path. The projection is
+        # zero-initialised, so an untrained model with the new arch still
+        # matches the un-conditioned baseline exactly.
+        if (
+            self.distance_embedding is not None
+            and self.distance_projection is not None
+            and query_distance is not None
+        ):
+            d_emb = self.distance_embedding(query_distance.to(x.dtype))  # [N, D]
+            bias = self.distance_projection(d_emb)  # [N, ch]
+            bias = bias.view(bias.shape[0], bias.shape[1], 1, 1)
+            x = x + bias
 
         # forward dprnn
         for dparn_block in self.dparn_block:
@@ -231,4 +342,5 @@ class DPARN(Unet):
             "delay": self.delay,
             "n_dparn_block": self.n_dparn_block,
             "rnn_hidden": self.rnn_hidden,
+            "distance_embedding_dim": self.distance_embedding_dim,
         }
