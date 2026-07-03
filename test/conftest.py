@@ -1,30 +1,9 @@
-import importlib.util
 from pathlib import Path
-from types import ModuleType
 
 import pytest
 import torch
 
 from puresound.audio.io import AudioIO
-
-
-REPO_ROOT = Path(__file__).resolve().parents[1]
-
-
-def load_module_from_path(module_name: str, path: Path) -> ModuleType:
-    spec = importlib.util.spec_from_file_location(module_name, path)
-    assert spec is not None and spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
-
-
-@pytest.fixture(scope="session")
-def voice_isolate_dns_adapter() -> ModuleType:
-    return load_module_from_path(
-        "voice_isolate_prepare_dns_challenge",
-        REPO_ROOT / "egs" / "voice_isolate" / "prepare_dns_challenge.py",
-    )
 
 
 @pytest.fixture

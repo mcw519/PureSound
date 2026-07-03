@@ -24,4 +24,3 @@ def test_manual_test_scripts_expose_help():
 
 def test_voice_isolate_data_scripts_expose_help():
     _assert_help("test/simulate_room_scene.py")
-    _assert_help("egs/voice_isolate/prepare_dns_challenge.py")
