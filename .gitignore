@@ -44,3 +44,12 @@ exp
 exp/
 proc/
 data/
+dummy_samples/
+eval_set*/
+data_report/
+backup/
+anna_test.wav
+EXPERIMENT_LOG.md
+FAILED_NOTE.md
+NEXT_STEPS.md
+robot_foreground_voice_full_plan.md
