@@ -120,27 +120,28 @@ uv run python main.py --inference True --ckpt_path /path/to/model.ckpt config/de
 
 ### 4) Voice Isolate Streaming ONNX
 
-Train or fine-tune the 16 kHz DPARN voice-isolate recipe, then export a
-feature-frame ONNX model:
+Train or fine-tune the 16 kHz DPARN/DPCRN voice-isolate recipe, then export a
+feature-frame ONNX model. Example using the `egs/voice_isolate` (DPCRN) recipe
+and a pretrained checkpoint:
 
 ```bash
-uv run python egs/voice_isolate/streaming_onnx.py export \
-  egs/voice_isolate/config/dparn.yaml \
-  /path/to/model.ckpt \
+uv run python egs/voice_isolate/scripts/streaming_onnx.py export \
+  egs/voice_isolate/config/infer_dpcrn.yaml \
+  egs/voice_isolate/pretrained_ckpt/dpcrn_wide_antisup_ep19.ckpt \
   /path/to/model.onnx
 ```
 
 Run streaming ONNX inference:
 
 ```bash
-uv run python egs/voice_isolate/streaming_onnx.py infer \
+uv run python egs/voice_isolate/scripts/streaming_onnx.py infer \
   /path/to/model.onnx \
   input.wav \
   output.wav \
   --provider auto
 ```
 
-More details are documented in `docs/streaming/dparn_onnx.md`.
+The DPARN streaming path is documented separately in `docs/streaming/dparn_onnx.md`.
 
 For deployment in another project without the full PureSound training package,
 install or copy the portable runtime in `sdk/python`. It only requires NumPy,

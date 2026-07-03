@@ -9,7 +9,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 
 def _load_demo_module():
     spec = importlib.util.spec_from_file_location(
-        "voice_isolate_demo", REPO_ROOT / "egs" / "voice_isolate" / "demo.py"
+        "voice_isolate_demo", REPO_ROOT / "egs" / "voice_isolate" / "scripts" / "demo.py"
     )
     module = importlib.util.module_from_spec(spec)
     assert spec is not None and spec.loader is not None
@@ -40,24 +40,48 @@ def _write_demo_config(
     return config_path
 
 
-def test_scan_checkpoints_uses_work_folder_and_exp_fallback(tmp_path):
+def test_scan_checkpoints_uses_only_work_folder_for_pytorch_backend(tmp_path):
     demo = _load_demo_module()
     config_path = _write_demo_config(tmp_path)
     work_ckpt = tmp_path / "exp" / "work" / "lightning" / "epoch=1.ckpt"
     fallback_ckpt = tmp_path / "exp" / "fallback.pth"
+    onnx_model = tmp_path / "exp" / "work" / "streaming.onnx"
     work_ckpt.parent.mkdir(parents=True)
     fallback_ckpt.parent.mkdir(parents=True, exist_ok=True)
     work_ckpt.write_text("ckpt", encoding="utf-8")
     fallback_ckpt.write_text("ckpt", encoding="utf-8")
+    onnx_model.write_text("onnx", encoding="utf-8")
 
     choices = demo.scan_checkpoints(config_path)
 
     labels = [label for label, _value in choices]
     values = [Path(value) for _label, value in choices]
     assert "exp/work/lightning/epoch=1.ckpt" in labels
-    assert "exp/fallback.pth" in labels
+    assert "exp/fallback.pth" not in labels
+    assert "exp/work/streaming.onnx" not in labels
     assert work_ckpt.resolve() in values
-    assert fallback_ckpt.resolve() in values
+    assert fallback_ckpt.resolve() not in values
+    assert onnx_model.resolve() not in values
+
+
+def test_scan_checkpoints_uses_only_onnx_for_ort_backend(tmp_path):
+    demo = _load_demo_module()
+    config_path = _write_demo_config(tmp_path)
+    work_ckpt = tmp_path / "exp" / "work" / "lightning" / "epoch=1.ckpt"
+    onnx_model = tmp_path / "exp" / "work" / "streaming.onnx"
+    fallback_onnx = tmp_path / "exp" / "other.onnx"
+    work_ckpt.parent.mkdir(parents=True)
+    fallback_onnx.parent.mkdir(parents=True, exist_ok=True)
+    work_ckpt.write_text("ckpt", encoding="utf-8")
+    onnx_model.write_text("onnx", encoding="utf-8")
+    fallback_onnx.write_text("onnx", encoding="utf-8")
+
+    choices = demo.scan_checkpoints(config_path, backend="ORT streaming")
+
+    labels = [label for label, _value in choices]
+    values = [Path(value) for _label, value in choices]
+    assert labels == ["exp/work/streaming.onnx"]
+    assert values == [onnx_model.resolve()]
 
 
 def test_refresh_checkpoints_reports_empty_choices(tmp_path):
@@ -71,6 +95,21 @@ def test_refresh_checkpoints_reports_empty_choices(tmp_path):
     assert "No checkpoints found" in status
 
 
+def test_refresh_checkpoints_reports_empty_onnx_choices_for_ort(tmp_path):
+    demo = _load_demo_module()
+    config_path = _write_demo_config(tmp_path)
+    ckpt_path = tmp_path / "exp" / "work" / "model.ckpt"
+    ckpt_path.parent.mkdir(parents=True)
+    ckpt_path.write_text("ckpt", encoding="utf-8")
+
+    update, status = demo.refresh_checkpoints(config_path, backend="ORT streaming")
+
+    assert update["choices"] == []
+    assert update["value"] is None
+    assert "No ONNX models found" in status
+    assert ".onnx" in status
+
+
 def test_get_cached_model_reuses_same_config_checkpoint_pair(tmp_path, monkeypatch):
     demo = _load_demo_module()
     demo.MODEL_CACHE.clear()
@@ -81,7 +120,7 @@ def test_get_cached_model_reuses_same_config_checkpoint_pair(tmp_path, monkeypat
     calls = []
 
     class IdentityModel(torch.nn.Module):
-        def forward(self, wav):
+        def forward(self, wav, **kwargs):
             return wav
 
     def fake_load_model_from_checkpoint(config_path, checkpoint_path, device):
@@ -111,7 +150,7 @@ def test_enhance_audio_writes_output_and_skips_dnsmos(
     write_tone_wav(input_path, sample_rate=16000, duration=0.1)
 
     class IdentityModel(torch.nn.Module):
-        def forward(self, wav):
+        def forward(self, wav, **kwargs):
             return wav
 
     monkeypatch.setattr(
@@ -157,7 +196,7 @@ def test_demo_keeps_uploaded_audio_gain_for_eval(tmp_path, monkeypatch, write_to
     original_open = demo.AudioIO.open
 
     class IdentityModel(torch.nn.Module):
-        def forward(self, wav):
+        def forward(self, wav, **kwargs):
             return wav
 
     monkeypatch.setattr(
@@ -196,7 +235,7 @@ def test_enhance_audio_reports_progress_steps(tmp_path, monkeypatch, write_tone_
     events = []
 
     class IdentityModel(torch.nn.Module):
-        def forward(self, wav):
+        def forward(self, wav, **kwargs):
             return wav
 
     class FakeMetrics:
@@ -262,6 +301,7 @@ def test_enhance_audio_can_use_ort_streaming_backend(
     class FakeRuntime:
         sample_rate = 16000
         providers = ["CPUExecutionProvider"]
+        uses_distance = False
 
         def process_samples(self, samples):
             return samples
