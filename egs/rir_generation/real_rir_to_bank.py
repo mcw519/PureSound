@@ -1,6 +1,6 @@
 """Convert a REAL measured RIR dataset into a PreGeneratedRoomBank folder.
 
-Motivation (see egs/voice_isolate2/EXPERIMENT_LOG.md): in-domain near/far
+Motivation (see egs/voice_isolate/EXPERIMENT_LOG.md): in-domain near/far
 separation is solved (DPCRN) but real-domain WER is stuck (synthetic->real gap).
 Real RIRs with known source-receiver DISTANCE let us build bank items whose
 near/far structure matches the training task, narrowing the RIR part of the gap.

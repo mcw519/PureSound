@@ -30,8 +30,8 @@ Unsupported configs fail fast with a `ValueError`.
 Export a trained checkpoint to a streaming feature-frame ONNX model:
 
 ```bash
-uv run python egs/voice_isolate/streaming_onnx.py export \
-  egs/voice_isolate/config/dparn.yaml \
+uv run python <your_recipe>/streaming_onnx.py export \
+  <your_recipe>/config/dparn.yaml \
   /path/to/model.ckpt \
   /path/to/model.onnx
 ```
@@ -52,7 +52,7 @@ wrapper output. Export fails if they do not match within tolerance.
 Run streaming inference on an audio file:
 
 ```bash
-uv run python egs/voice_isolate/streaming_onnx.py infer \
+uv run python <your_recipe>/streaming_onnx.py infer \
   /path/to/model.onnx \
   input.wav \
   output.wav \
@@ -68,7 +68,7 @@ Provider options:
 Benchmark realtime factor:
 
 ```bash
-uv run python egs/voice_isolate/streaming_onnx.py benchmark \
+uv run python <your_recipe>/streaming_onnx.py benchmark \
   /path/to/model.onnx \
   --provider cuda \
   --seconds 10
@@ -96,7 +96,7 @@ For lower-level testing or custom export flows:
 from puresound.streaming import load_streaming_dparn_model
 
 model = load_streaming_dparn_model(
-    "egs/voice_isolate/config/dparn.yaml",
+    "<your_recipe>/config/dparn.yaml",
     "/path/to/model.ckpt",
 )
 state = model.initial_state(batch_size=1)
@@ -150,8 +150,8 @@ The voice-isolate demo supports two backends:
 Start the demo:
 
 ```bash
-uv run python egs/voice_isolate/demo.py \
-  --config_path egs/voice_isolate/config/dparn.yaml
+uv run python <your_recipe>/demo.py \
+  --config_path <your_recipe>/config/dparn.yaml
 ```
 
 Use **Refresh checkpoints** to scan the configured `work_folder` and `exp`
