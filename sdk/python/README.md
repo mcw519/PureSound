@@ -39,6 +39,22 @@ out_i16 = runtime.process_int16(input_i16)
 tail_i16 = runtime.flush_int16()
 ```
 
+## Enhance a WAV File
+
+`examples/enhance_wav_file.py` is a runnable offline example (reads a file,
+streams it through the runtime, writes the enhanced result). It needs
+`soundfile` in addition to the SDK's own deps:
+
+```bash
+python examples/enhance_wav_file.py model.onnx input.wav output.wav
+python examples/enhance_wav_file.py model.onnx input.wav output.wav \
+    --manifest model.json --provider cuda
+```
+
+Input must be 16 kHz mono; the SDK does not resample. Its output is verified
+byte-identical to the training repo's own ORT inference path
+(`puresound.streaming.StreamingDpcrnOrt`) for the DPCRN export.
+
 ## LiveKit Agent Shape
 
 Use this SDK inside a small LiveKit `FrameProcessor` adapter:
@@ -60,9 +76,11 @@ returned int16 or float32 samples to its own audio frame type.
 
 ## Supported Profiles
 
-The current SDK supports the `stft_frame_ort` processor profile used by the
-DPARN voice-isolate export. Future PureSound models can use the same SDK by
-exporting a compatible manifest, or by adding another processor profile.
+The current SDK supports the `stft_frame_ort` processor profile, used by both
+the DPARN and DPCRN voice-isolate exports (the manifest's `model_type` differs
+but the per-frame STFT streaming contract is shared). Future PureSound models
+can use the same SDK by exporting a compatible manifest, or by adding another
+processor profile.
 
 The public runtime intentionally stays model-neutral:
 
