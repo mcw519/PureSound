@@ -9,7 +9,7 @@ synthesised here or measured in a real room — into training banks that
 Each room item has **one microphone and five sources** (2 near, 3 far), written
 as a 5-channel RIR WAV plus a JSON sidecar:
 
-| WAV channel | Source label | Distance from mic |
+| WAV channel | Source label | Horizontal distance from mic |
 |-------------|--------------|-------------------|
 | 0 | `near_0` | `< 1 m` |
 | 1 | `near_1` | `< 1 m` |
@@ -20,9 +20,11 @@ as a 5-channel RIR WAV plus a JSON sidecar:
 The low band (`20 Hz`–`1000 Hz`) is a wave simulation (vendored `gpuard/pytARD`
 modal model, solved with an exact batched modal recurrence); the high band
 (`1000 Hz`–Nyquist) is a Pyroomacoustics geometric simulation; the two are glued
-with a causal Linkwitz-Riley crossover. Furniture obstacles add height-aware
-occlusion and scattering. See [`docs/audio/hybrid_rir.md`](../../docs/audio/hybrid_rir.md)
-for the acoustic model and tuning details.
+with a causal Linkwitz-Riley crossover. Furniture obstacles are sampled with
+area-aware counts and material-specific footprint/height profiles, then applied
+as height-aware high-frequency occlusion and scattering. See
+[`docs/audio/hybrid_rir.md`](../../docs/audio/hybrid_rir.md) for the acoustic
+model and tuning details.
 
 ## Scripts
 
@@ -102,6 +104,7 @@ multi-worker can out-throughput a small number of GPUs — benchmark both.
 | `--low-backend` | `pytard` (CPU), `pytard-cupy` (GPU), or `analytic` (fast smoke fallback). |
 | `--sample-rate`, `--duration` | Output sample rate (Hz) and RIR length (s). |
 | `--rt60 MIN MAX` | RT60 range; one value is sampled per room and drives both bands. |
+| `--obstacles MIN MAX` | Hard cap for sampled furniture count; actual count also tracks room floor area and coverage limits. |
 | `--crossover-hz` | Low/high crossover frequency. |
 | `--pytard-low-sample-rate` | Internal wave simulation rate (resampled to `--sample-rate` afterwards). |
 | `--pytard-spatial-samples-per-wavelength` | Grid resolution; `2` is practical, larger is slower. |

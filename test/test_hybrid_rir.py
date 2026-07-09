@@ -14,8 +14,11 @@ from puresound.audio.hybrid_rir import (
     apply_obstacle_high_frequency_effects,
     generate_hybrid_rir,
     hybrid_crossover,
+    obstacle_effects_metadata,
     sample_hybrid_rir_scene,
     write_hybrid_rir_dataset_item,
+    _obstacle_floor_coverage,
+    _polygons_overlap,
 )
 
 
@@ -39,10 +42,53 @@ def test_scene_sampler_enforces_two_near_and_three_far_sources():
 
     assert scene.source_labels == ["near_0", "near_1", "far_0", "far_1", "far_2"]
     distances = scene.source_distances()
+    horizontal_distances = scene.source_horizontal_distances()
     assert len(distances) == 5
-    assert all(distance < 1.0 for distance in distances[:2])
-    assert all(distance > 2.0 for distance in distances[2:])
+    assert all(distance < 1.0 for distance in horizontal_distances[:2])
+    assert all(distance > 2.0 for distance in horizontal_distances[2:])
+    assert config.mic_height_range[0] <= scene.mic_pos[2] <= config.mic_height_range[1]
+    assert all(
+        config.speech_source_height_range[0] <= source[2] <= config.speech_source_height_range[1]
+        for source in scene.source_pos
+    )
     assert len(scene.obstacles) == 1
+
+
+def test_area_aware_obstacles_respect_coverage_and_clearance():
+    config = HybridRIRConfig(
+        room_dim_range=((8.0, 8.0), (7.0, 7.0), (3.0, 3.0)),
+        num_obstacles_range=(4, 8),
+        max_obstacle_floor_coverage=0.18,
+        obstacle_obstacle_clearance=0.08,
+    )
+    scene = sample_hybrid_rir_scene(config, seed=17)
+
+    assert 1 <= len(scene.obstacles) <= 8
+    assert _obstacle_floor_coverage(
+        scene.obstacles, np.asarray(scene.room_dim, dtype=np.float64)
+    ) <= config.max_obstacle_floor_coverage + 1e-6
+    for idx, obstacle in enumerate(scene.obstacles):
+        footprint = np.asarray(obstacle.footprint, dtype=np.float64)
+        for other in scene.obstacles[idx + 1 :]:
+            assert not _polygons_overlap(
+                footprint, np.asarray(other.footprint, dtype=np.float64)
+            )
+
+
+def test_obstacle_count_tracks_room_area():
+    small = HybridRIRConfig(
+        room_dim_range=((3.5, 3.5), (3.5, 3.5), (2.8, 2.8)),
+        num_obstacles_range=(1, 8),
+    )
+    large = HybridRIRConfig(
+        room_dim_range=((8.0, 8.0), (7.0, 7.0), (2.8, 2.8)),
+        num_obstacles_range=(1, 8),
+    )
+
+    small_counts = [len(sample_hybrid_rir_scene(small, seed=seed).obstacles) for seed in range(8)]
+    large_counts = [len(sample_hybrid_rir_scene(large, seed=seed).obstacles) for seed in range(8)]
+
+    assert np.mean(large_counts) > np.mean(small_counts)
 
 
 def test_hybrid_generation_returns_five_channel_rir():
@@ -62,6 +108,8 @@ def test_hybrid_generation_returns_five_channel_rir():
 
     assert tuple(rir.shape) == (5, 800)
     assert metadata["scene"]["channel_map"][0]["label"] == "near_0"
+    assert "horizontal_distance_m" in metadata["scene"]["channel_map"][0]
+    assert metadata["obstacle_effects"]["obstacle_model"] == "high_frequency_post_occlusion_scatter"
     assert metadata["bands"]["low"]["frequency_hz"] == [20.0, 1000.0]
     assert torch.max(torch.abs(rir)) <= 0.981
 
@@ -101,6 +149,9 @@ def test_obstacle_effect_attenuates_occluded_source():
 
     assert out[0, 0] < rir[0, 0]
     assert out[1, 0] == rir[1, 0]
+    metadata = obstacle_effects_metadata(scene, config)
+    assert metadata["events"][0]["source_index"] == 0
+    assert metadata["events"][0]["attenuation"] < 1.0
 
 
 def test_obstacle_below_path_height_does_not_occlude():

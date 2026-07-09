@@ -52,12 +52,17 @@ class HybridRIRConfig:
     rt60_range: tuple[float, float] = (0.25, 0.8)
     mic_margin: float = 0.45
     source_margin: float = 0.35
+    mic_height_range: tuple[float, float] = (0.65, 1.35)
+    speech_source_height_range: tuple[float, float] = (1.1, 1.8)
     near_distance_range: tuple[float, float] = (0.35, 0.95)
     far_distance_range: tuple[float, float] = (2.05, 5.5)
     num_near_sources: int = 2
     num_far_sources: int = 3
-    num_obstacles_range: tuple[int, int] = (2, 6)
+    num_obstacles_range: tuple[int, int] = (1, 6)
+    obstacle_density_per_m2: tuple[float, float] = (0.08, 0.16)
+    max_obstacle_floor_coverage: float = 0.28
     obstacle_clearance: float = 0.25
+    obstacle_obstacle_clearance: float = 0.12
     obstacle_margin: float = 0.4
     obstacle_height_range: tuple[float, float] = (0.35, 1.8)
     obstacle_radius_range: tuple[float, float] = (0.25, 0.9)
@@ -112,15 +117,25 @@ class HybridRIRScene:
         src = np.asarray(self.source_pos, dtype=np.float64)
         return np.linalg.norm(src - mic[None, :], axis=1).astype(float).tolist()
 
+    def source_horizontal_distances(self) -> list[float]:
+        mic = np.asarray(self.mic_pos, dtype=np.float64)[:2]
+        src = np.asarray(self.source_pos, dtype=np.float64)[:, :2]
+        return np.linalg.norm(src - mic[None, :], axis=1).astype(float).tolist()
+
     def to_metadata(self) -> dict[str, Any]:
         data = asdict(self)
         data["source_distances"] = self.source_distances()
+        data["source_horizontal_distances"] = self.source_horizontal_distances()
+        data["obstacle_floor_coverage_ratio"] = _obstacle_floor_coverage(
+            self.obstacles, np.asarray(self.room_dim, dtype=np.float64)
+        )
         data["channel_map"] = [
             {
                 "channel": idx,
                 "label": label,
                 "source_pos": self.source_pos[idx],
                 "distance_m": data["source_distances"][idx],
+                "horizontal_distance_m": data["source_horizontal_distances"][idx],
             }
             for idx, label in enumerate(self.source_labels)
         ]
@@ -597,18 +612,24 @@ def sample_hybrid_rir_scene(
         dtype=np.float64,
     )
     rt60 = float(rng.uniform(*config.rt60_range))
-    mic_pos = _sample_point(room_dim, config.mic_margin, rng)
+    mic_pos = _sample_point(
+        room_dim,
+        config.mic_margin,
+        rng,
+        height_range=config.mic_height_range,
+    )
 
     source_pos: list[np.ndarray] = []
     labels: list[str] = []
     for idx in range(config.num_near_sources):
         source_pos.append(
-            _sample_source_in_shell(
+            _sample_source_in_horizontal_shell(
                 room_dim,
                 mic_pos,
                 config.near_distance_range[0],
                 config.near_distance_range[1],
                 config.source_margin,
+                config.speech_source_height_range,
                 rng,
             )
         )
@@ -616,16 +637,19 @@ def sample_hybrid_rir_scene(
     for idx in range(config.num_far_sources):
         max_far = min(
             float(config.far_distance_range[1]),
-            _max_room_distance_from_point(room_dim, mic_pos, config.source_margin),
+            _max_room_horizontal_distance_from_point(
+                room_dim, mic_pos, config.source_margin
+            ),
         )
         min_far = min(float(config.far_distance_range[0]), max_far)
         source_pos.append(
-            _sample_source_in_shell(
+            _sample_source_in_horizontal_shell(
                 room_dim,
                 mic_pos,
                 min_far,
                 max_far,
                 config.source_margin,
+                config.speech_source_height_range,
                 rng,
             )
         )
@@ -653,25 +677,28 @@ def sample_polygon_obstacles(
     config: HybridRIRConfig,
     rng: np.random.Generator,
 ) -> list[PolygonObstacle]:
-    materials = {
-        "wood": (0.25, 0.35),
-        "sofa": (0.65, 0.65),
-        "table": (0.18, 0.30),
-        "curtain": (0.75, 0.55),
-    }
-    n_min, n_max = config.num_obstacles_range
-    num_obstacles = int(rng.integers(n_min, n_max + 1))
+    materials = _obstacle_material_profiles(room_dim)
+    material_names = list(materials.keys())
+    material_weights = np.asarray(
+        [materials[name]["sample_weight"] for name in material_names], dtype=np.float64
+    )
+    material_weights = material_weights / material_weights.sum()
+    num_obstacles = _sample_obstacle_count(room_dim, config, rng)
     obstacles: list[PolygonObstacle] = []
+    floor_area = max(float(room_dim[0] * room_dim[1]), 1e-6)
+    used_area = 0.0
     for _ in range(num_obstacles):
-        for _attempt in range(96):
+        for _attempt in range(128):
+            material = str(rng.choice(material_names, p=material_weights))
+            profile = materials[material]
             n_vertices = int(rng.integers(4, 8))
-            radius = float(rng.uniform(*config.obstacle_radius_range))
-            center = np.asarray(
-                [
-                    rng.uniform(config.obstacle_margin, room_dim[0] - config.obstacle_margin),
-                    rng.uniform(config.obstacle_margin, room_dim[1] - config.obstacle_margin),
-                ],
-                dtype=np.float64,
+            radius = float(rng.uniform(*profile["radius_range"]))
+            center = _sample_obstacle_center(
+                room_dim=room_dim,
+                radius=radius,
+                margin=float(config.obstacle_margin),
+                placement=str(profile["placement"]),
+                rng=rng,
             )
             angles = np.sort(rng.uniform(0.0, 2.0 * math.pi, size=n_vertices))
             radii = radius * rng.uniform(0.55, 1.0, size=n_vertices)
@@ -687,18 +714,30 @@ def sample_polygon_obstacles(
                 for point in protected_points
             ):
                 continue
-            material = str(rng.choice(list(materials.keys())))
-            absorption, scattering = materials[material]
+            if _obstacle_conflicts(
+                footprint,
+                obstacles,
+                clearance=float(config.obstacle_obstacle_clearance),
+            ):
+                continue
+            footprint_area = _polygon_area(footprint)
+            if (
+                used_area + footprint_area
+                > floor_area * float(config.max_obstacle_floor_coverage)
+            ):
+                continue
+            z_min, z_max = _sample_obstacle_height(room_dim, profile, config, rng)
             obstacles.append(
                 PolygonObstacle(
                     footprint=footprint.astype(float).tolist(),
-                    z_min=0.0,
-                    z_max=float(rng.uniform(*config.obstacle_height_range)),
+                    z_min=float(z_min),
+                    z_max=float(z_max),
                     material=material,
-                    absorption=float(absorption),
-                    scattering=float(scattering),
+                    absorption=float(profile["absorption"]),
+                    scattering=float(profile["scattering"]),
                 )
             )
+            used_area += footprint_area
             break
     return obstacles
 
@@ -720,6 +759,7 @@ def generate_hybrid_rir(
     metadata = {
         "config": _config_metadata(config),
         "scene": scene.to_metadata(),
+        "obstacle_effects": obstacle_effects_metadata(scene, config),
         "bands": {
             "low": {
                 "backend": low_backend.__class__.__name__,
@@ -892,11 +932,40 @@ def apply_obstacle_high_frequency_effects(
     """
 
     out = np.asarray(rir, dtype=np.float64).copy()
+    for event in _obstacle_high_frequency_events(scene, config):
+        source_idx = int(event["source_index"])
+        out[source_idx] *= float(event["attenuation"])
+        scatter_idx = int(event["scatter_index"])
+        if 0 <= scatter_idx < out.shape[-1]:
+            out[source_idx, scatter_idx] += float(event["scatter_amplitude"])
+    return out.astype(np.float32)
+
+
+def obstacle_effects_metadata(
+    scene: HybridRIRScene,
+    config: HybridRIRConfig,
+) -> dict[str, Any]:
+    return {
+        "obstacle_model": "high_frequency_post_occlusion_scatter",
+        "low_band_obstacle_model": "none",
+        "obstacle_count": len(scene.obstacles),
+        "floor_coverage_ratio": _obstacle_floor_coverage(
+            scene.obstacles, np.asarray(scene.room_dim, dtype=np.float64)
+        ),
+        "events": _obstacle_high_frequency_events(scene, config),
+    }
+
+
+def _obstacle_high_frequency_events(
+    scene: HybridRIRScene,
+    config: HybridRIRConfig,
+) -> list[dict[str, Any]]:
+    events: list[dict[str, Any]] = []
     mic = np.asarray(scene.mic_pos, dtype=np.float64)
     srcs = np.asarray(scene.source_pos, dtype=np.float64)
     fs = int(config.sample_rate)
     for source_idx, src in enumerate(srcs):
-        for obstacle in scene.obstacles:
+        for obstacle_idx, obstacle in enumerate(scene.obstacles):
             footprint = np.asarray(obstacle.footprint, dtype=np.float64)
             interval = _segment_polygon_crossing_interval(src[:2], mic[:2], footprint)
             if interval is None:
@@ -908,29 +977,42 @@ def apply_obstacle_high_frequency_effects(
             z_line = float(src[2] + t_mid * (mic[2] - src[2]))
             if not (float(obstacle.z_min) <= z_line <= float(obstacle.z_max)):
                 continue
-            # Shadowing loss is driven mainly by how much energy the obstacle
-            # absorbs, with scattering removing further energy from the direct
-            # line (it reappears as the scatter tap below).
-            attenuation = (
-                1.0 - 0.5 * float(obstacle.absorption) - 0.3 * float(obstacle.scattering)
+            attenuation = max(
+                0.2,
+                1.0 - 0.5 * float(obstacle.absorption) - 0.3 * float(obstacle.scattering),
             )
-            out[source_idx] *= max(0.2, attenuation)
-
             scatter_point = obstacle.center
             scatter_distance = float(
                 np.linalg.norm(src - scatter_point) + np.linalg.norm(scatter_point - mic)
             )
             scatter_idx = int(round(scatter_distance / config.sound_speed * fs))
-            if 0 <= scatter_idx < out.shape[-1]:
-                direct_distance = max(float(np.linalg.norm(src - mic)), 0.1)
-                amp = (
-                    float(obstacle.scattering)
-                    * (1.0 - float(obstacle.absorption))
-                    * direct_distance
-                    / max(scatter_distance, 0.1)
-                )
-                out[source_idx, scatter_idx] += 0.08 * amp
-    return out.astype(np.float32)
+            direct_distance = max(float(np.linalg.norm(src - mic)), 0.1)
+            amp = (
+                float(obstacle.scattering)
+                * (1.0 - float(obstacle.absorption))
+                * direct_distance
+                / max(scatter_distance, 0.1)
+            )
+            events.append(
+                {
+                    "source_index": int(source_idx),
+                    "source_label": (
+                        scene.source_labels[source_idx]
+                        if source_idx < len(scene.source_labels)
+                        else str(source_idx)
+                    ),
+                    "obstacle_index": int(obstacle_idx),
+                    "material": obstacle.material,
+                    "z_line_m": z_line,
+                    "attenuation": float(attenuation),
+                    "attenuation_db": float(20.0 * math.log10(max(attenuation, 1e-12))),
+                    "scatter_distance_m": scatter_distance,
+                    "scatter_index": int(scatter_idx),
+                    "scatter_delay_s": float(scatter_idx / max(fs, 1)),
+                    "scatter_amplitude": float(0.08 * amp),
+                }
+            )
+    return events
 
 
 def _coerce_rir_array(rir: Any, num_sources: int, num_samples: int) -> np.ndarray:
@@ -1072,10 +1154,68 @@ def _sample_point(
     room_dim: np.ndarray,
     margin: float,
     rng: np.random.Generator,
+    height_range: Optional[tuple[float, float]] = None,
 ) -> np.ndarray:
     lower = np.full(3, float(margin), dtype=np.float64)
     upper = np.maximum(room_dim - float(margin), lower + 0.01)
-    return rng.uniform(lower, upper)
+    point = rng.uniform(lower, upper)
+    if height_range is not None:
+        point[2] = _sample_height(room_dim, margin, height_range, rng)
+    return point
+
+
+def _sample_height(
+    room_dim: np.ndarray,
+    margin: float,
+    height_range: tuple[float, float],
+    rng: np.random.Generator,
+) -> float:
+    lower = float(max(float(margin), min(height_range)))
+    upper = float(min(float(room_dim[2]) - float(margin), max(height_range)))
+    if upper <= lower:
+        return 0.5 * (lower + upper)
+    return float(rng.uniform(lower, upper))
+
+
+def _sample_source_in_horizontal_shell(
+    room_dim: np.ndarray,
+    mic_pos: np.ndarray,
+    min_dist: float,
+    max_dist: float,
+    margin: float,
+    height_range: tuple[float, float],
+    rng: np.random.Generator,
+) -> np.ndarray:
+    lower = np.full(3, float(margin), dtype=np.float64)
+    upper = np.maximum(room_dim - float(margin), lower + 0.01)
+    for _ in range(512):
+        radius = float(rng.uniform(min_dist, max_dist))
+        direction = rng.normal(size=2)
+        norm = float(np.linalg.norm(direction))
+        if norm < 1e-12:
+            continue
+        point = np.asarray(mic_pos, dtype=np.float64).copy()
+        point[:2] = mic_pos[:2] + direction / norm * radius
+        point[2] = _sample_height(room_dim, margin, height_range, rng)
+        if np.all(point >= lower) and np.all(point <= upper):
+            return point
+
+    corners = np.array(
+        [
+            [x, y]
+            for x in (lower[0], upper[0])
+            for y in (lower[1], upper[1])
+        ],
+        dtype=np.float64,
+    )
+    spans = np.linalg.norm(corners - mic_pos[None, :2], axis=1)
+    corner_xy = corners[int(np.argmax(spans))]
+    span = max(float(spans.max()), 1e-9)
+    radius = float(np.clip(rng.uniform(min_dist, max_dist), 0.0, span))
+    point = np.asarray(mic_pos, dtype=np.float64).copy()
+    point[:2] = mic_pos[:2] + (corner_xy - mic_pos[:2]) / span * radius
+    point[2] = _sample_height(room_dim, margin, height_range, rng)
+    return point
 
 
 def _sample_source_in_shell(
@@ -1086,32 +1226,15 @@ def _sample_source_in_shell(
     margin: float,
     rng: np.random.Generator,
 ) -> np.ndarray:
-    lower = np.full(3, float(margin), dtype=np.float64)
-    upper = np.maximum(room_dim - float(margin), lower + 0.01)
-    for _ in range(512):
-        radius = float(rng.uniform(min_dist, max_dist))
-        direction = rng.normal(size=3)
-        norm = float(np.linalg.norm(direction))
-        if norm < 1e-12:
-            continue
-        point = mic_pos + direction / norm * radius
-        if np.all(point >= lower) and np.all(point <= upper):
-            return point
-
-    corners = np.array(
-        [
-            [x, y, z]
-            for x in (lower[0], upper[0])
-            for y in (lower[1], upper[1])
-            for z in (lower[2], upper[2])
-        ],
-        dtype=np.float64,
+    return _sample_source_in_horizontal_shell(
+        room_dim,
+        mic_pos,
+        min_dist,
+        max_dist,
+        margin,
+        (float(margin), float(room_dim[2]) - float(margin)),
+        rng,
     )
-    spans = np.linalg.norm(corners - mic_pos[None, :], axis=1)
-    corner = corners[int(np.argmax(spans))]
-    span = max(float(spans.max()), 1e-9)
-    radius = float(np.clip(rng.uniform(min_dist, max_dist), 0.0, span))
-    return mic_pos + (corner - mic_pos) / span * radius
 
 
 def _max_room_distance_from_point(
@@ -1131,6 +1254,138 @@ def _max_room_distance_from_point(
         dtype=np.float64,
     )
     return float(np.linalg.norm(corners - point[None, :], axis=1).max())
+
+
+def _max_room_horizontal_distance_from_point(
+    room_dim: np.ndarray,
+    point: np.ndarray,
+    margin: float,
+) -> float:
+    lower = np.full(2, float(margin), dtype=np.float64)
+    upper = np.maximum(room_dim[:2] - float(margin), lower + 0.01)
+    corners = np.array(
+        [[x, y] for x in (lower[0], upper[0]) for y in (lower[1], upper[1])],
+        dtype=np.float64,
+    )
+    return float(np.linalg.norm(corners - point[None, :2], axis=1).max())
+
+
+def _sample_obstacle_count(
+    room_dim: np.ndarray,
+    config: HybridRIRConfig,
+    rng: np.random.Generator,
+) -> int:
+    n_min, n_max = config.num_obstacles_range
+    floor_area = max(float(room_dim[0] * room_dim[1]), 1e-6)
+    density = float(rng.uniform(*config.obstacle_density_per_m2))
+    target = int(round(floor_area * density))
+    return int(np.clip(target, int(n_min), int(n_max)))
+
+
+def _obstacle_material_profiles(room_dim: np.ndarray) -> dict[str, dict[str, Any]]:
+    room_height = float(room_dim[2])
+    return {
+        "table": {
+            "absorption": 0.18,
+            "scattering": 0.30,
+            "height_range": (0.65, 0.90),
+            "radius_range": (0.25, 0.75),
+            "placement": "free",
+            "sample_weight": 1.0,
+        },
+        "sofa": {
+            "absorption": 0.65,
+            "scattering": 0.65,
+            "height_range": (0.60, 1.10),
+            "radius_range": (0.45, 1.05),
+            "placement": "wall",
+            "sample_weight": 0.7,
+        },
+        "chair": {
+            "absorption": 0.35,
+            "scattering": 0.45,
+            "height_range": (0.45, 1.10),
+            "radius_range": (0.20, 0.45),
+            "placement": "free",
+            "sample_weight": 1.2,
+        },
+        "curtain": {
+            "absorption": 0.75,
+            "scattering": 0.55,
+            "height_range": (max(1.8, room_height * 0.75), room_height),
+            "radius_range": (0.20, 0.55),
+            "placement": "wall",
+            "sample_weight": 0.45,
+        },
+        "cabinet": {
+            "absorption": 0.25,
+            "scattering": 0.50,
+            "height_range": (0.80, min(2.0, room_height)),
+            "radius_range": (0.35, 0.85),
+            "placement": "wall",
+            "sample_weight": 0.65,
+        },
+    }
+
+
+def _sample_obstacle_center(
+    room_dim: np.ndarray,
+    radius: float,
+    margin: float,
+    placement: str,
+    rng: np.random.Generator,
+) -> np.ndarray:
+    lower = np.asarray([margin + radius, margin + radius], dtype=np.float64)
+    upper = np.maximum(room_dim[:2] - margin - radius, lower + 0.01)
+    center = rng.uniform(lower, upper)
+    if placement == "wall":
+        axis = int(rng.integers(0, 2))
+        side = int(rng.integers(0, 2))
+        center[axis] = lower[axis] if side == 0 else upper[axis]
+    return center
+
+
+def _sample_obstacle_height(
+    room_dim: np.ndarray,
+    profile: dict[str, Any],
+    config: HybridRIRConfig,
+    rng: np.random.Generator,
+) -> tuple[float, float]:
+    lo = max(float(profile["height_range"][0]), float(config.obstacle_height_range[0]))
+    hi = min(
+        float(profile["height_range"][1]),
+        float(config.obstacle_height_range[1]),
+        float(room_dim[2]),
+    )
+    if hi <= lo:
+        hi = max(lo, min(float(room_dim[2]), lo + 0.01))
+    return 0.0, float(rng.uniform(lo, hi))
+
+
+def _obstacle_floor_coverage(
+    obstacles: list[PolygonObstacle],
+    room_dim: np.ndarray,
+) -> float:
+    floor_area = max(float(room_dim[0] * room_dim[1]), 1e-6)
+    area = sum(
+        _polygon_area(np.asarray(obstacle.footprint, dtype=np.float64))
+        for obstacle in obstacles
+    )
+    return float(area / floor_area)
+
+
+def _obstacle_conflicts(
+    footprint: np.ndarray,
+    obstacles: list[PolygonObstacle],
+    clearance: float,
+) -> bool:
+    for obstacle in obstacles:
+        existing = np.asarray(obstacle.footprint, dtype=np.float64)
+        if _polygons_overlap(footprint, existing):
+            return True
+        if _polygon_distance(footprint, existing) < float(clearance):
+            return True
+    return False
 
 
 def _polygon_inside_room(
@@ -1169,6 +1424,46 @@ def _distance_point_to_polygon(point: ArrayLike, polygon: np.ndarray) -> float:
         for idx in range(polygon.shape[0])
     ]
     return float(min(distances))
+
+
+def _polygon_area(polygon: np.ndarray) -> float:
+    pts = np.asarray(polygon, dtype=np.float64)
+    if pts.shape[0] < 3:
+        return 0.0
+    x = pts[:, 0]
+    y = pts[:, 1]
+    return float(0.5 * abs(np.dot(x, np.roll(y, -1)) - np.dot(y, np.roll(x, -1))))
+
+
+def _polygons_overlap(a: np.ndarray, b: np.ndarray) -> bool:
+    a = np.asarray(a, dtype=np.float64)
+    b = np.asarray(b, dtype=np.float64)
+    if any(_point_in_polygon(point, b) for point in a):
+        return True
+    if any(_point_in_polygon(point, a) for point in b):
+        return True
+    for idx in range(a.shape[0]):
+        a0 = a[idx]
+        a1 = a[(idx + 1) % a.shape[0]]
+        for jdx in range(b.shape[0]):
+            if _segments_intersect(a0, a1, b[jdx], b[(jdx + 1) % b.shape[0]]):
+                return True
+    return False
+
+
+def _polygon_distance(a: np.ndarray, b: np.ndarray) -> float:
+    a = np.asarray(a, dtype=np.float64)
+    b = np.asarray(b, dtype=np.float64)
+    distances = []
+    for idx in range(a.shape[0]):
+        a0 = a[idx]
+        a1 = a[(idx + 1) % a.shape[0]]
+        distances.extend(_distance_point_to_segment(point, a0, a1) for point in b)
+    for idx in range(b.shape[0]):
+        b0 = b[idx]
+        b1 = b[(idx + 1) % b.shape[0]]
+        distances.extend(_distance_point_to_segment(point, b0, b1) for point in a)
+    return float(min(distances)) if distances else 0.0
 
 
 def _distance_point_to_segment(

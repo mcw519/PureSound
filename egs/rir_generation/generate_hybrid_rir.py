@@ -34,9 +34,9 @@ from puresound.audio.hybrid_rir import (
     HybridRIRScene,
     PyroomacousticsHighFrequencyBackend,
     _distance_point_to_polygon,
-    _max_room_distance_from_point,
+    _max_room_horizontal_distance_from_point,
     _sample_point,
-    _sample_source_in_shell,
+    _sample_source_in_horizontal_shell,
     generate_hybrid_rir,
     sample_polygon_obstacles,
 )
@@ -87,7 +87,23 @@ def _parse_args():
     parser.add_argument("--room-y", nargs=2, type=float, default=[3.5, 7.0])
     parser.add_argument("--room-z", nargs=2, type=float, default=[2.4, 3.6])
     parser.add_argument("--rt60", nargs=2, type=float, default=[0.25, 0.8])
-    parser.add_argument("--obstacles", nargs=2, type=int, default=[2, 6])
+    parser.add_argument("--obstacles", nargs=2, type=int, default=[1, 6])
+    parser.add_argument(
+        "--near-dist",
+        nargs=2,
+        type=float,
+        default=[0.35, 0.95],
+        help="Mic-to-source distance range (m) for the near_* channels.",
+    )
+    parser.add_argument(
+        "--far-dist",
+        nargs=2,
+        type=float,
+        default=[2.05, 5.5],
+        help="Mic-to-source distance range (m) for the far_* channels. The "
+        "default leaves 0.95-2.05 m unoccupied; pass e.g. '--far-dist 1.10 3.5' "
+        "to build a boundary-coverage bank.",
+    )
     parser.add_argument("--pra-max-order", type=int, default=12)
     parser.add_argument("--pra-n-rays", type=int, default=20000)
     parser.add_argument(
@@ -188,9 +204,9 @@ def _point_hits_obstacle(point, obstacles, clearance):
     return False
 
 
-def _sample_clear_point(room_dim, margin, obstacles, clearance, rng):
+def _sample_clear_point(room_dim, margin, obstacles, clearance, rng, height_range=None):
     for _ in range(512):
-        point = _sample_point(room_dim, margin, rng)
+        point = _sample_point(room_dim, margin, rng, height_range=height_range)
         if not _point_hits_obstacle(point, obstacles, clearance):
             return point
     raise RuntimeError("Failed to sample a point clear of room obstacles.")
@@ -198,12 +214,13 @@ def _sample_clear_point(room_dim, margin, obstacles, clearance, rng):
 
 def _sample_clear_source(room_dim, mic_pos, min_dist, max_dist, config, obstacles, rng):
     for _ in range(512):
-        source = _sample_source_in_shell(
+        source = _sample_source_in_horizontal_shell(
             room_dim,
             mic_pos,
             min_dist,
             max_dist,
             config.source_margin,
+            config.speech_source_height_range,
             rng,
         )
         if not _point_hits_obstacle(source, obstacles, config.obstacle_clearance):
@@ -240,6 +257,7 @@ def _sample_room_scene(
             obstacles,
             config.obstacle_clearance,
             rng,
+            height_range=config.mic_height_range,
         )
         source_pos = []
         labels = []
@@ -259,7 +277,9 @@ def _sample_room_scene(
         for idx in range(config.num_far_sources):
             max_far = min(
                 float(config.far_distance_range[1]),
-                _max_room_distance_from_point(room_dim, mic_pos, config.source_margin),
+                _max_room_horizontal_distance_from_point(
+                    room_dim, mic_pos, config.source_margin
+                ),
             )
             min_far = min(float(config.far_distance_range[0]), max_far)
             source_pos.append(
@@ -521,6 +541,8 @@ def main():
         room_dim_range=(tuple(args.room_x), tuple(args.room_y), tuple(args.room_z)),
         rt60_range=tuple(args.rt60),
         num_obstacles_range=tuple(args.obstacles),
+        near_distance_range=tuple(args.near_dist),
+        far_distance_range=tuple(args.far_dist),
         crossover_match_target_db=args.crossover_target_db,
         crossover_match_gain_range=(1e-4, args.crossover_max_gain),
     )

@@ -4,7 +4,7 @@ Hybrid RIR generation for near/far speech augmentation.
 
 The generator creates one room item with one microphone and five sources:
 
-| WAV channel | Source label | Distance from mic |
+| WAV channel | Source label | Horizontal distance from mic |
 |-------------|--------------|-------------------|
 | 0 | `near_0` | `< 1m` |
 | 1 | `near_1` | `< 1m` |
@@ -42,7 +42,11 @@ The generator creates one room item with one microphone and five sources:
   magnitude while keeping the RIR causal (no pre-ringing).
 - Furniture: random polygon-prism obstacles are stored in metadata and applied
   to the high-frequency RIR as deterministic, height-aware occlusion and
-  scattering (a low obstacle does not shadow a path above its top).
+  scattering (a low obstacle does not shadow a path above its top). Obstacle
+  counts are area-aware, furniture profiles constrain footprint/height/material,
+  and the sampler rejects overlapping or over-crowded layouts. Low-frequency
+  obstacle diffraction is not modeled; metadata marks this as a high-frequency
+  post-process.
 
 `gpuard/pytARD` is vendored under `puresound/third_party/pytARD` because the
 upstream project is not packaged as a normal pip dependency. PureSound imports
@@ -110,6 +114,11 @@ resampling non-overlapping microphone/source positions. Output directories are
 grouped by `room_id`, and each RIR/metadata pair is named `{room_id}_{index}`,
 for example `room_000000/room_000000_000003.wav` and
 `room_000000/room_000000_000003.json`.
+
+Microphone and speech-source heights are sampled from deployment-like ranges
+instead of the full room height. Near/far labels are sampled by horizontal
+source-to-mic distance; metadata stores both `distance_m` (3D propagation
+distance) and `horizontal_distance_m` (near/far geometry).
 
 `--pytard-low-sample-rate` controls the internal wave simulation rate. The RIR
 is resampled to `--sample-rate` after pytARD finishes.
