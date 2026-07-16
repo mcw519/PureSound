@@ -85,21 +85,6 @@ augmentation_target_absent:
   prob: 0.20
   force_interferer: True
 
-# OFF: runtime distance query. Fixed near-field task; scalar-query / FiLM not used.
-augmentation_query_distance:
-  used: False
-  derive_from_bank: True
-  bank_margin: 0.2
-  range: [0.8, 1.2]
-  peak_distance: 1.0
-  peak_prob: 0.3
-  peak_half_width: 0.2
-  near_floor: 0.3
-  far_ceiling: 5.0
-  gate_silence:
-    prob: 0.2
-    margin: 0.15
-
 augmentation_noise:
   used: True
   prob: 0.8
@@ -249,13 +234,6 @@ scheduler:
     T_0: 20
     T_mult: 1
     eta_min: 0.00001
-
-qd_contrastive:
-  used: False
-  weight: 1.0
-  margin: 0.15
-  near_floor: 0.3
-  apply_prob: 1.0
 
 loss_func:
   - type: SDRLoss

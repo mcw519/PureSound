@@ -78,7 +78,6 @@ def main() -> None:
         aug_codec,
         aug_packet_loss,
         aug_target_absent,
-        aug_query_distance,
         vad_label,
     ) = load_siso_recipe_config(config_path)
 
@@ -106,7 +105,6 @@ def main() -> None:
         aug_codec,
         aug_packet_loss,
         aug_target_absent,
-        aug_query_distance,
         vad_label,
     )
 

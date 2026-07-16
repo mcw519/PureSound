@@ -43,7 +43,6 @@ def init_dataloader(
     aug_codec_dict: Dict,
     aug_packet_loss_dict: Dict,
     aug_target_absent_dict: Dict,
-    aug_query_distance_dict: Dict,
     vad_label_dict: Dict,
 ):
     task_name = corpus_dict.get("task", "noise_suppression")
@@ -74,7 +73,6 @@ def init_dataloader(
         augmentation_codec_args=aug_codec_dict,
         augmentation_packet_loss_args=aug_packet_loss_dict,
         augmentation_target_absent_args=aug_target_absent_dict,
-        augmentation_query_distance_args=aug_query_distance_dict,
         vad_label_args=vad_label_dict,
     )
 
@@ -112,7 +110,6 @@ def init_dataloader(
         augmentation_codec_args=aug_codec_dict,
         augmentation_packet_loss_args=aug_packet_loss_dict,
         augmentation_target_absent_args=aug_target_absent_dict,
-        augmentation_query_distance_args=aug_query_distance_dict,
         vad_label_args=vad_label_dict,
     )
 
@@ -204,7 +201,6 @@ if __name__ == "__main__":
         aug_codec_dict,
         aug_packet_loss_dict,
         aug_target_absent_dict,
-        aug_query_distance_dict,
         vad_label_dict,
     ) = load_siso_recipe_config(args.config_path)
 
@@ -223,7 +219,6 @@ if __name__ == "__main__":
             aug_codec_dict,
             aug_packet_loss_dict,
             aug_target_absent_dict,
-            aug_query_distance_dict,
             vad_label_dict,
         )
 
@@ -254,16 +249,6 @@ if __name__ == "__main__":
         # PL-Model
         lighting_model = init_siso_model(model_dict)
         lighting_model.register_loss_func(loss_func_list, loss_func_list_w)
-
-        # Optional query-distance contrastive loss (③). Off unless the config
-        # carries a `qd_contrastive` block with `used: true`; only the distance
-        # task emits the `foreground_distance` it needs, so it is a no-op
-        # elsewhere even if registered.
-        qd_contrastive_dict = load_hparam(file_path=args.config_path).get(
-            "qd_contrastive"
-        )
-        if qd_contrastive_dict and qd_contrastive_dict.get("used", False):
-            lighting_model.register_qd_contrastive(qd_contrastive_dict)
 
         # Silero VAD labels are computed batched on GPU (lifted out of the
         # DataLoader workers); the dataset emits `vad_reference` and the module
@@ -316,13 +301,10 @@ if __name__ == "__main__":
         # Lightning's auto strategy otherwise.
         #
         # find_unused_parameters is config-driven (trainer.find_unused_parameters,
-        # default False). The voice-isolation model has parameter groups whose
-        # gradient contribution is data-dependent -- the distance embedding/FiLM
-        # only run when a batch carries query_distance, and each scalar aux head
-        # (drr_gap, boundary_margin, ...) is skipped when its target is all-NaN
-        # for the batch (e.g. no interferer / no RIR metadata). DDP then errors
-        # unless told these may be unused. Plain noise-suppression configs have
-        # no such heads, so they leave it False and avoid the per-step graph walk.
+        # default False). Models with data-dependent parameter groups (e.g. a
+        # cold-started VAD gate head that some batches never exercise) need it
+        # True or DDP errors. Plain noise-suppression configs leave it False and
+        # avoid the per-step graph walk.
         strategy = (
             DDPStrategy(
                 gradient_as_bucket_view=True,

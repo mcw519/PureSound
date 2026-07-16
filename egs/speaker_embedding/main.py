@@ -171,7 +171,7 @@ if __name__ == "__main__":
         aug_src_dict,
         aug_hpf_dict,
         aug_volume_dict,
-        _vad_label_dict,
+        *_rest,
     ) = load_siso_recipe_config(args.config_path)
 
     if args.training or args.dump_training_samples:

@@ -171,12 +171,12 @@ def main():
 
     cfg = load_siso_recipe_config(config_path)
     (corpus, trainer, _opt, _sch, _loss, model_dict, a_sp, a_no, a_rv, a_spd,
-     a_ir, a_src, a_hpf, a_vol, a_cod, a_pl, a_ta, a_qd, a_vad) = cfg
+     a_ir, a_src, a_hpf, a_vol, a_cod, a_pl, a_ta, a_vad) = cfg
     trainer["num_workers"] = args.num_workers
 
     _train_dl, valid_dl = M.init_dataloader(
         corpus, trainer, a_sp, a_no, a_rv, a_spd, a_ir, a_src, a_hpf,
-        a_vol, a_cod, a_pl, a_ta, a_qd, a_vad)
+        a_vol, a_cod, a_pl, a_ta, a_vad)
 
     model = init_siso_model(model_dict)
     state = torch.load(ckpt_path, map_location="cpu")["state_dict"]
@@ -202,9 +202,7 @@ def main():
                 break
             noisy = batch["noisy_speech"].to(args.device)
             clean = batch["clean_speech"].to(args.device)
-            qd = batch.get("query_distance")
-            qd = qd.to(args.device) if qd is not None else None
-            enh = model(noisy, query_distance=qd)
+            enh = model(noisy)
             B = clean.shape[0]
             n_total += B
             for r in range(B):

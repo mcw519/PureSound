@@ -112,40 +112,6 @@ def test_distance_range_override_filters_channels(tmp_path):
     assert meta["source_receiver_distance"] >= 4.0
 
 
-def test_suggest_query_distance_covers_foreground_and_excludes_far(tmp_path):
-    root = _make_bank_folder(tmp_path)
-    bank = PreGeneratedRoomBank(str(root))
-    scene = bank.sample_scene()
-
-    fg_imp, fg_meta, _ = bank.select_channel(scene, source_role="foreground")
-    fg_dist = fg_meta["source_receiver_distance"]
-    nearest_far = min(c["distance"] for c in scene["far"])
-
-    for _ in range(50):
-        q = bank.suggest_query_distance(
-            scene=scene,
-            foreground_distance=fg_dist,
-            near_floor=0.3,
-            far_ceiling=5.0,
-            margin=0.2,
-        )
-        # Foreground is inside the query; every far interferer stays outside it.
-        assert q > fg_dist
-        assert q < nearest_far
-
-
-def test_suggest_query_distance_clamps_when_band_collapses(tmp_path):
-    root = tmp_path / "tight"
-    # near at 1.9, far at 2.0: margin 0.2 makes [2.1, 1.8] empty -> must clamp.
-    _write_room(root, "room_000000", [1.9, 1.9, 2.0, 2.0, 2.0])
-    bank = PreGeneratedRoomBank(str(root))
-    scene = bank.sample_scene()
-    q = bank.suggest_query_distance(
-        scene=scene, foreground_distance=1.9, near_floor=0.3, far_ceiling=5.0, margin=0.2
-    )
-    assert 0.3 <= q <= 5.0
-
-
 def test_augmentor_bank_path_reuses_channel_for_target_rir_type(tmp_path):
     root = _make_bank_folder(tmp_path)
     aug = AudioEffectAugmentor()

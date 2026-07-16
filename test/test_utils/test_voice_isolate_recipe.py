@@ -2,34 +2,7 @@ import torch
 
 from puresound.audio import augmentaion as aug_mod
 from puresound.audio.augmentaion import AudioEffectAugmentor
-from puresound.task.ns import sample_query_distance_overrides
 from puresound.task.sampler import SpeakerSampler
-
-
-def test_query_distance_override_respects_simulator_role_ranges():
-    # Stage-A v2 query distances live around 1 m, but the simulator curriculum
-    # still wants far-field interferers to start at 2 m.
-    qd_cfg = {
-        "used": True,
-        "range": [1.0, 1.0],
-        "peak_prob": 0.0,
-        "near_floor": 0.3,
-        "far_ceiling": 5.0,
-    }
-    sim_cfg = {
-        "foreground_distance_range": [0.3, 1.0],
-        "interferer_distance_range": [2.0, 5.0],
-    }
-
-    qd, fg_override, itf_override, near_floor = sample_query_distance_overrides(
-        qd_cfg,
-        sim_cfg,
-    )
-
-    assert qd == 1.0
-    assert near_floor == 0.3
-    assert fg_override == [0.3, 1.0]
-    assert itf_override == [2.0, 5.0]
 
 
 def test_speaker_sampler_uses_distinct_seeded_streams_per_rank():

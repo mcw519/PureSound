@@ -173,43 +173,6 @@ class PreGeneratedRoomBank:
         }
         return impulse, metadata, sr
 
-    def suggest_query_distance(
-        self,
-        scene: dict,
-        foreground_distance: float,
-        near_floor: float = 0.3,
-        far_ceiling: float = 5.0,
-        margin: float = 0.2,
-        peak_distance: Optional[float] = None,
-        peak_prob: float = 0.0,
-        peak_half_width: float = 0.2,
-    ) -> float:
-        """Pick a query distance that covers the (fixed) foreground channel.
-
-        The query is sampled in ``[foreground_distance + margin, nearest far
-        channel - margin]`` so the near source always falls inside the query
-        while every far interferer in the room stays outside it. Because the
-        bank's distances are fixed at generation time, deriving the query from
-        the realized placement keeps the decision boundary consistent with the
-        RIR (unlike sampling the query independently from config).
-        """
-        fg = float(foreground_distance)
-        far_distances = [c["distance"] for c in scene.get("far", [])]
-        upper = (min(far_distances) - margin) if far_distances else float(far_ceiling)
-        upper = min(upper, float(far_ceiling))
-        lower = max(fg + margin, float(near_floor))
-        if not (upper > lower):
-            # Fixed channels are too close to fit a separating boundary; sit just
-            # above the foreground and clamp into the room's valid span.
-            return float(min(max(fg + 0.5 * margin, float(near_floor)), float(far_ceiling)))
-        if peak_distance is not None and float(torch.rand(1).item()) < float(peak_prob):
-            peak = float(peak_distance)
-            p_lo = max(lower, peak - float(peak_half_width))
-            p_hi = min(upper, peak + float(peak_half_width))
-            if p_hi > p_lo:
-                lower, upper = p_lo, p_hi
-        return float(torch.empty(1).uniform_(lower, upper).item())
-
     @staticmethod
     def _pick(
         pool: list[dict],

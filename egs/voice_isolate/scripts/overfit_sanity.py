@@ -79,12 +79,12 @@ def main():
 
     cfg = load_siso_recipe_config(config_path)
     (corpus, trainer, _opt, _sch, _loss, model_dict, a_sp, a_no, a_rv, a_spd,
-     a_ir, a_src, a_hpf, a_vol, a_cod, a_pl, a_ta, a_qd, a_vad) = cfg
+     a_ir, a_src, a_hpf, a_vol, a_cod, a_pl, a_ta, a_vad) = cfg
     trainer["num_workers"] = args.num_workers
 
     _train_dl, valid_dl = M.init_dataloader(
         corpus, trainer, a_sp, a_no, a_rv, a_spd, a_ir, a_src, a_hpf,
-        a_vol, a_cod, a_pl, a_ta, a_qd, a_vad)
+        a_vol, a_cod, a_pl, a_ta, a_vad)
 
     model = init_siso_model(model_dict)
     # attach the real training losses (init_siso_model does not) -- same as main.py

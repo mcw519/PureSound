@@ -48,7 +48,6 @@ from puresound.recipes import load_siso_recipe_config
 from puresound.task.ns import (
     NoiseSuppressionCollateFunc,
     NoiseSuppressionDataset,
-    sample_query_distance_overrides,
 )
 from puresound.task.sampler import SpeakerSampler
 from puresound.task.voice_isolation import (
@@ -169,36 +168,25 @@ def build_simulator(aug_reverb: dict) -> RoomImpulseResponseSimulator:
 
 def validate_scenes(
     aug_reverb: dict,
-    aug_query_distance: dict | None,
     sample_rate: int,
     n: int,
 ) -> dict:
     sim = build_simulator(aug_reverb)
     fg = {"drr": [], "dist": []}
     itf = {"drr": [], "dist": []}
-    qd = []
     rt60s = []
-    sim_cfg = aug_reverb.get("simulator", {})
     for _ in range(n):
         scene = sim.sample_scene()
         rt60s.append(float(scene["rt60"]))
-        query_distance, fg_override, itf_override, _ = sample_query_distance_overrides(
-            aug_query_distance,
-            sim_cfg,
-        )
-        if query_distance is not None:
-            qd.append(query_distance)
         _, fg_meta = sim.generate(
             sample_rate,
             scene=scene,
             source_role="foreground",
-            distance_range_override=fg_override,
         )
         _, itf_meta = sim.generate(
             sample_rate,
             scene=scene,
             source_role="interferer",
-            distance_range_override=itf_override,
         )
         fg["drr"].append(fg_meta["drr_db"])
         fg["dist"].append(fg_meta["source_receiver_distance"])
@@ -226,9 +214,6 @@ def validate_scenes(
     print(text_histogram(fg["dist"]))
     print("\nInterferer distance (m):")
     print(text_histogram(itf["dist"]))
-    if qd:
-        print("\nQuery distance (m):")
-        print(text_histogram(qd))
     print("\nRT60 (s):")
     print(text_histogram(rt60s))
 
@@ -240,7 +225,6 @@ def validate_scenes(
         "drr_gap_pass": passed,
         "foreground_distance": summary(fg["dist"]),
         "interferer_distance": summary(itf["dist"]),
-        "query_distance": summary(qd),
         "rt60": summary(rt60s),
     }
 
@@ -255,7 +239,7 @@ def dump_samples(cfg, n_dump: int, out_dir: Path, config_path: str) -> dict:
         corpus_dict, trainer_dict, _optim, _sched, _loss, _model,
         aug_speech, aug_noise, aug_reverb, aug_speed, aug_ir, aug_src,
         aug_hpf, aug_volume, aug_codec, aug_packet_loss, aug_target_absent,
-        aug_query_distance, vad_label,
+        vad_label,
     ) = cfg
 
     task_name = corpus_dict.get("task", "noise_suppression")
@@ -284,7 +268,6 @@ def dump_samples(cfg, n_dump: int, out_dir: Path, config_path: str) -> dict:
         augmentation_codec_args=aug_codec,
         augmentation_packet_loss_args=aug_packet_loss,
         augmentation_target_absent_args=aug_target_absent,
-        augmentation_query_distance_args=aug_query_distance,
         vad_label_args=vad_label,
     )
     sampler = SpeakerSampler(
@@ -432,7 +415,7 @@ def main():
     report["manifests"] = validate_manifests(cfg[0], args.config_path, args.check_paths)
 
     if aug_reverb and aug_reverb.get("simulator", {}).get("used"):
-        report["scenes"] = validate_scenes(aug_reverb, cfg[17], sample_rate, args.n)
+        report["scenes"] = validate_scenes(aug_reverb, sample_rate, args.n)
     else:
         print("augmentation_reverb.simulator not enabled; skipping DRR check.")
 

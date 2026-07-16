@@ -82,7 +82,7 @@ def main() -> None:
 
     cfg = load_siso_recipe_config(str(Path(args.config_path).resolve()))
     (corpus, trainer, _opt, _sch, _loss, _md, a_sp, a_no, a_rv, a_spd,
-     a_ir, a_src, a_hpf, a_vol, a_cod, a_pl, a_ta, a_qd, a_vad) = cfg
+     a_ir, a_src, a_hpf, a_vol, a_cod, a_pl, a_ta, a_vad) = cfg
     trainer["num_workers"] = 0
     if args.length_seconds is not None:
         corpus["training_length_seconds"] = float(args.length_seconds)
@@ -96,7 +96,7 @@ def main() -> None:
     torch.manual_seed(args.seed)
     _tr, valid_dl = M.init_dataloader(
         corpus, trainer, a_sp, a_no, a_rv, a_spd, a_ir, a_src, a_hpf,
-        a_vol, a_cod, a_pl, a_ta, a_qd, a_vad)
+        a_vol, a_cod, a_pl, a_ta, a_vad)
 
     sr = int(corpus.get("target_sample_rate", 16000))
     out = Path(args.out_dir)
