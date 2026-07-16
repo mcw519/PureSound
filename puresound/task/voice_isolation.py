@@ -29,6 +29,10 @@ VOICE_ISOLATION_SCALAR_KEYS = (
     "realized_speech_sir",
     "noise_snr",
     "overlap_fraction",
+    # Phase-1 boundary experiment: 1.0 when the row used the conversational
+    # turn-taking gating (long alternating near/far turns) instead of the
+    # per-frame Bernoulli overlap gating.
+    "turn_taking",
 )
 
 # mix_mode is emitted as a float code so it collates with the other scalars.
@@ -66,6 +70,7 @@ class VoiceIsolationDataset(NoiseSuppressionDataset):
         realized_speech_sir: float = float("nan"),
         noise_snr: float = float("nan"),
         overlap_fraction: float = float("nan"),
+        turn_taking: float = 0.0,
     ) -> None:
         sample.update(
             self._build_voice_isolation_metadata(
@@ -81,6 +86,7 @@ class VoiceIsolationDataset(NoiseSuppressionDataset):
                 realized_speech_sir=realized_speech_sir,
                 noise_snr=noise_snr,
                 overlap_fraction=overlap_fraction,
+                turn_taking=turn_taking,
             )
         )
 
@@ -98,6 +104,7 @@ class VoiceIsolationDataset(NoiseSuppressionDataset):
         realized_speech_sir: float = float("nan"),
         noise_snr: float = float("nan"),
         overlap_fraction: float = float("nan"),
+        turn_taking: float = 0.0,
     ) -> Dict[str, torch.Tensor]:
         """Create scalar labels useful for distance-cued voice isolation.
 
@@ -165,6 +172,7 @@ class VoiceIsolationDataset(NoiseSuppressionDataset):
             "realized_speech_sir": float(realized_speech_sir),
             "noise_snr": float(noise_snr),
             "overlap_fraction": float(overlap_fraction),
+            "turn_taking": float(turn_taking),
         }
         return {
             key: torch.tensor(value, dtype=torch.float32)

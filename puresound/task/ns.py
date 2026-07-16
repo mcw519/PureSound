@@ -202,6 +202,26 @@ class NoiseSuppressionDataset(DynamicBaseDataset):
 
         source_level_reverb = self.should_apply_source_level_reverb()
         room_scene = self.augmentor.sample_room_scene() if source_level_reverb else None
+        # Per-origin target_absent override (real-far rung): a bank item whose
+        # scene json carries "origin" (e.g. "real" for measured RIRs emitted by
+        # real_rir_to_bank.py) can use its own lone-far probability from
+        # augmentation_target_absent.prob_by_origin ({origin: prob}), so e.g.
+        # only real-RIR rows train "suppress lone far speech" while synthetic
+        # rows keep the base prob. Without the key no RNG is drawn here and
+        # behaviour is bit-identical to before.
+        scene_origin = room_scene.get("origin") if isinstance(room_scene, dict) else None
+        origin_probs = (target_absent_cfg or {}).get("prob_by_origin") or {}
+        if (
+            target_absent_cfg is not None
+            and target_absent_cfg.get("used", False)
+            and scene_origin in origin_probs
+        ):
+            target_absent = (
+                torch.rand(1).item() < float(origin_probs[scene_origin])
+            )
+            force_interferer = bool(
+                target_absent and target_absent_cfg.get("force_interferer", False)
+            )
         fg_rir_metadata = None
         if source_level_reverb:
             noisy_speech, target_speech, fg_rir_metadata = (
@@ -280,6 +300,7 @@ class NoiseSuppressionDataset(DynamicBaseDataset):
         realized_speech_sir = float("nan")
         noise_snr = float("nan")
         self._last_overlap_fraction = float("nan")
+        self._last_turn_taking = 0.0
 
         # Add interference speech from other speakers
         interfered_speech = []
@@ -397,10 +418,13 @@ class NoiseSuppressionDataset(DynamicBaseDataset):
                 target_speech = clips_wav[0]
                 interfered_speech = clips_wav[1:]
 
-            interfered_speech = self._apply_overlap_gating(
+            target_speech, noisy_speech, interfered_speech = self._apply_overlap_gating(
                 target_speech=target_speech,
                 interferers=interfered_speech,
                 sr=if_none_else(self.target_sr, self.ori_audio_sr),
+                target_mix=noisy_speech,
+                allow_turn_taking=not target_absent,
+                scene_origin=scene_origin,
             )
 
             far_count = len(interfered_speech)
@@ -970,6 +994,7 @@ class NoiseSuppressionDataset(DynamicBaseDataset):
             realized_speech_sir=realized_speech_sir,
             noise_snr=noise_snr,
             overlap_fraction=getattr(self, "_last_overlap_fraction", float("nan")),
+            turn_taking=getattr(self, "_last_turn_taking", 0.0),
         )
         return sample
 
@@ -989,6 +1014,7 @@ class NoiseSuppressionDataset(DynamicBaseDataset):
         realized_speech_sir: float = float("nan"),
         noise_snr: float = float("nan"),
         overlap_fraction: float = float("nan"),
+        turn_taking: float = 0.0,
     ) -> None:
         """Hook for task subclasses to attach extra per-sample labels.
 
@@ -1021,49 +1047,150 @@ class NoiseSuppressionDataset(DynamicBaseDataset):
                 return dict(m)
         return dict(modes[-1])
 
+    def _sample_turn_script(
+        self, n_frames: int, hop: int, sr: int, overlap_cfg: dict
+    ) -> tuple:
+        """Sample a conversational turn script on the VAD frame grid.
+
+        Alternating near/far turns like a real exchange: the near (target)
+        speaker and the far interferer take turns, with small gaps or slight
+        boundary overlaps between turns. 50% of rows start with a FAR turn --
+        the hardest streaming case (a far monologue with no preceding near
+        anchor), which the per-frame Bernoulli fill can never produce.
+        Returns (near_frames, far_frames) boolean masks over the frame grid.
+        """
+        near_len = overlap_cfg.get("turn_near_seconds", [1.5, 3.0])
+        far_len = overlap_cfg.get("turn_far_seconds", [2.0, 4.5])
+        gap_rng = overlap_cfg.get("turn_gap_seconds", [0.0, 0.4])
+        ovl_rng = overlap_cfg.get("turn_overlap_seconds", [0.0, 0.3])
+        far_first = torch.rand(1).item() < float(overlap_cfg.get("far_first_prob", 0.5))
+
+        fps = float(sr) / float(hop)
+        near_mask = torch.zeros(n_frames, dtype=torch.bool)
+        far_mask = torch.zeros(n_frames, dtype=torch.bool)
+        pos = 0
+        turn_is_far = far_first
+        while pos < n_frames:
+            rng = far_len if turn_is_far else near_len
+            turn_s = float(torch.empty(1).uniform_(float(rng[0]), float(rng[1])))
+            turn_f = max(1, int(round(turn_s * fps)))
+            end = min(pos + turn_f, n_frames)
+            (far_mask if turn_is_far else near_mask)[pos:end] = True
+            if torch.rand(1).item() < 0.5:  # gap between turns
+                step_s = float(torch.empty(1).uniform_(float(gap_rng[0]), float(gap_rng[1])))
+                pos = end + int(round(step_s * fps))
+            else:  # slight boundary overlap (next turn starts before this ends)
+                step_s = float(torch.empty(1).uniform_(float(ovl_rng[0]), float(ovl_rng[1])))
+                pos = max(pos + 1, end - int(round(step_s * fps)))
+            turn_is_far = not turn_is_far
+        return near_mask, far_mask
+
     def _apply_overlap_gating(
         self,
         target_speech: torch.Tensor,
         interferers: list,
         sr: int,
-    ) -> list:
-        """Gate each interferer's activity so it covers a sampled fraction of
-        the target's active frames.
+        target_mix: Optional[torch.Tensor] = None,
+        allow_turn_taking: bool = True,
+        scene_origin: Optional[str] = None,
+    ) -> tuple:
+        """Gate interferer (and, in turn-taking mode, target) activity.
 
-        Without this, both target and interferer clips are continuous speech
-        and >80% overlap dominates the training distribution. We sample each
-        interferer independently into one of three regimes (no/mid/high
-        overlap) so the model sees the full spread, including the easier
-        cases where the interferer talks during the target's silences.
+        Default path: gate each interferer's activity so it covers a sampled
+        fraction of the target's active frames. Without this, both target and
+        interferer clips are continuous speech and >80% overlap dominates the
+        training distribution. We sample each interferer independently into one
+        of three regimes (no/mid/high overlap) so the model sees the full
+        spread, including the easier cases where the interferer talks during
+        the target's silences.
+
+        Turn-taking path (``turn_taking_prob`` > 0, sampled per ROW): instead
+        of per-frame Bernoulli gating, build complementary block envelopes so
+        near and far speakers alternate in long conversational turns -- the far
+        side gets continuous multi-second solo stretches (incl. row-initial),
+        the structure the Bernoulli fill never produces and the regime where
+        real far speech was observed to pass through untouched. The target's
+        label AND its contribution to the mix are gated with the same near
+        envelope so mix and label stay consistent. ``allow_turn_taking=False``
+        (target-absent rows) skips target gating: the foreground is subtracted
+        from the mix later using a pre-gating snapshot, so gating it here would
+        leave a residual.
 
         Only runs when ``augmentation_speech.overlap_control.used`` is True
         and a VAD labeler is configured.
+
+        Returns ``(target_speech, target_mix, interferers)``.
         """
         overlap_cfg = (self.augmentation_speech_args or {}).get("overlap_control")
         if not overlap_cfg or not overlap_cfg.get("used"):
-            return interferers
+            return target_speech, target_mix, interferers
         if self.gating_vad_labeler is None or not interferers:
-            return interferers
+            return target_speech, target_mix, interferers
 
         target_wav = target_speech.squeeze(0) if target_speech.dim() == 2 else target_speech
         target_vad = self.gating_vad_labeler(target_wav, sample_rate=sr)
         target_active = target_vad.bool()
         if int(target_active.sum().item()) == 0:
             # No active target frames -> no meaningful overlap concept; pass through.
-            return interferers
+            return target_speech, target_mix, interferers
         hop = self.gating_vad_labeler.hop_length
         n_frames = target_vad.shape[0]
+
+        fade_samples = int(overlap_cfg.get("fade_samples", 400))
+        fade_kernel = torch.hann_window(fade_samples * 2 + 1)
+        fade_kernel = fade_kernel / fade_kernel.sum().clamp_min(1e-6)
+        fade_kernel = fade_kernel.view(1, 1, -1)
+
+        def _smooth_env(frames_mask: torch.Tensor, length: int) -> torch.Tensor:
+            env = frames_mask.float().repeat_interleave(hop)
+            if env.shape[0] < length:
+                env = torch.nn.functional.pad(env, (0, length - env.shape[0]))
+            else:
+                env = env[:length]
+            return (
+                torch.nn.functional.conv1d(
+                    env.view(1, 1, -1), fade_kernel, padding=fade_samples
+                )
+                .view(-1)
+                .clamp(0.0, 1.0)
+            )
+
+        def _gate(sig: torch.Tensor, frames_mask: torch.Tensor) -> torch.Tensor:
+            env = _smooth_env(frames_mask, sig.shape[-1])
+            return sig * env.view(*([1] * (sig.dim() - 1)), -1)
+
+        # Per-origin turn-taking prob: overlap_control.turn_taking_prob_by_origin
+        # ({origin: prob}) overrides the base prob when the row's RIR bank item
+        # carries a matching scene origin (see prob_by_origin in __getitem__).
+        turn_taking_prob = float(overlap_cfg.get("turn_taking_prob", 0.0))
+        origin_tt_probs = overlap_cfg.get("turn_taking_prob_by_origin") or {}
+        if scene_origin in origin_tt_probs:
+            turn_taking_prob = float(origin_tt_probs[scene_origin])
+        if (
+            allow_turn_taking
+            and turn_taking_prob > 0.0
+            and torch.rand(1).item() < turn_taking_prob
+        ):
+            near_mask, far_mask = self._sample_turn_script(n_frames, hop, sr, overlap_cfg)
+            target_speech = _gate(target_speech, near_mask)
+            if target_mix is not None:
+                target_mix = _gate(target_mix, near_mask)
+            gated = [_gate(intf, far_mask) for intf in interferers]
+            active_gated = target_active & near_mask
+            active = int(active_gated.sum().item())
+            self._last_overlap_fraction = (
+                float(int((far_mask & active_gated).sum().item()) / active)
+                if active > 0
+                else 0.0
+            )
+            self._last_turn_taking = 1.0
+            return target_speech, target_mix, gated
 
         no_overlap_prob = float(overlap_cfg.get("no_overlap_prob", 0.25))
         high_overlap_prob = float(overlap_cfg.get("high_overlap_prob", 0.25))
         mid_range = overlap_cfg.get("mid_overlap_range", [0.1, 0.5])
         high_range = overlap_cfg.get("high_overlap_range", [0.5, 1.0])
         fill_range = overlap_cfg.get("fill_on_silent_range", [0.3, 0.5])
-        fade_samples = int(overlap_cfg.get("fade_samples", 400))
-
-        fade_kernel = torch.hann_window(fade_samples * 2 + 1)
-        fade_kernel = fade_kernel / fade_kernel.sum().clamp_min(1e-6)
-        fade_kernel = fade_kernel.view(1, 1, -1)
 
         gated = []
         union_wanted = torch.zeros(n_frames, dtype=torch.bool)
@@ -1088,21 +1215,7 @@ class NoiseSuppressionDataset(DynamicBaseDataset):
             wanted[target_active] = (rand_vals[target_active] < overlap_p).float()
             wanted[~target_active] = (rand_vals[~target_active] < fill_p).float()
             union_wanted |= wanted.bool()
-
-            L = intf.shape[-1]
-            env = wanted.repeat_interleave(hop)
-            if env.shape[0] < L:
-                env = torch.nn.functional.pad(env, (0, L - env.shape[0]))
-            else:
-                env = env[:L]
-            env = (
-                torch.nn.functional.conv1d(
-                    env.view(1, 1, -1), fade_kernel, padding=fade_samples
-                )
-                .view(-1)
-                .clamp(0.0, 1.0)
-            )
-            gated.append(intf * env.view(1, -1))
+            gated.append(_gate(intf, wanted.bool()))
         # Realized overlap = fraction of target-active frames also covered by some
         # interferer. Emitted as metadata so eval can bucket by overlap and read
         # whether the model is overlap-limited without a separate no-overlap run.
@@ -1111,7 +1224,7 @@ class NoiseSuppressionDataset(DynamicBaseDataset):
             self._last_overlap_fraction = float(
                 int((union_wanted & target_active).sum().item()) / active
             )
-        return gated
+        return target_speech, target_mix, gated
 
 
 class NoiseSuppressionCollateFunc:

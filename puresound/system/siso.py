@@ -59,6 +59,8 @@ class EncDecMaskBase(BaseLightningModule):
         encoder_lr_factor: float = 1.0,
         feats_lr_factor: float = 1.0,
         backbone_lr_factor: float = 1.0,
+        train_vad_head_only: bool = False,
+        gate_head_lr_factor: float = 1.0,
         verbose: bool = False,
     ):
         super().__init__(verbose=verbose)
@@ -77,8 +79,41 @@ class EncDecMaskBase(BaseLightningModule):
         self.encoder_lr_factor = encoder_lr_factor
         self.feats_lr_factor = feats_lr_factor
         self.backbone_lr_factor = backbone_lr_factor
+        self.train_vad_head_only = bool(train_vad_head_only)
+        self.gate_head_lr_factor = float(gate_head_lr_factor)
+
+        if self.train_vad_head_only:
+            vad_head = getattr(self.backbone, "vad_head", None)
+            if vad_head is None:
+                raise ValueError(
+                    "train_vad_head_only=True requires an enabled backbone vad_head"
+                )
+            for parameter in self.encoder.parameters():
+                parameter.requires_grad_(False)
+            for parameter in self.feats.parameters():
+                parameter.requires_grad_(False)
+            for parameter in self.backbone.parameters():
+                parameter.requires_grad_(False)
+            for parameter in vad_head.parameters():
+                parameter.requires_grad_(True)
 
         # Loss
+
+    def train(self, mode: bool = True):
+        """Keep the frozen separator deterministic during gate-only training.
+
+        ``requires_grad=False`` does not stop BatchNorm running statistics or
+        dropout from changing. Gate-only adaptation must preserve the exact
+        separator, so frozen modules stay in eval while the VAD head follows
+        the requested mode.
+        """
+        super().train(mode)
+        if self.train_vad_head_only:
+            self.encoder.eval()
+            self.feats.eval()
+            self.backbone.eval()
+            self.backbone.vad_head.train(mode)
+        return self
 
     def forward(
         self,
@@ -494,6 +529,14 @@ class EncDecMaskBase(BaseLightningModule):
         )
 
     def get_total_param_groups(self):
+        if self.train_vad_head_only:
+            return {
+                "gate_head": {
+                    "params": self.backbone.vad_head.parameters(),
+                    "lr_factor": self.gate_head_lr_factor,
+                }
+            }
+
         overall_params = {}
         overall_params["encoder"] = {
             "params": self.encoder.parameters(),

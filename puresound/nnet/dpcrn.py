@@ -5,6 +5,7 @@ import torch.nn as nn
 
 from .lobe.rnn import SingleRNN
 from .lobe.trivial import FiLM, spectral_compression
+from .conformer import VADHead
 from .unet import Unet
 
 
@@ -137,6 +138,7 @@ class DPCRN(Unet):
         delay: Tuple = (0, 0, 0, 0, 0),
         rnn_hidden: int = 128,
         spectral_compress: bool = False,
+        vad_head: Optional[Dict] = None,
     ):
         super().__init__(
             input_dim,
@@ -159,6 +161,7 @@ class DPCRN(Unet):
         self.rnn_hidden = rnn_hidden
         self.spectral_compress = spectral_compress
         self.dvec_dim = dvec_dim
+        self.vad_head_args = vad_head
 
         # DPRNN block
         self.dprnn_block1 = DPRNNblock2D(
@@ -175,6 +178,16 @@ class DPCRN(Unet):
             embedding_size=dvec_dim,
             fused_type="FiLM",
         )
+
+        if vad_head is not None and vad_head.get("enabled", False):
+            self.vad_head = VADHead(
+                enc_channels=channels[-1],
+                hidden=vad_head.get("hidden", channels[-1]),
+                kernel_t=vad_head.get("kernel_t", 5),
+            )
+        else:
+            self.vad_head = None
+        self.last_vad_logits: Optional[torch.Tensor] = None
 
     def forward(
         self, x: torch.Tensor, dvec: Optional[torch.Tensor] = None
@@ -207,6 +220,11 @@ class DPCRN(Unet):
         # forward dprnn
         x = self.dprnn_block1(x, embed=dvec)  # [N, ch, C, T]
         x = self.dprnn_block2(x, embed=dvec)  # [N, ch, C, T]
+
+        if self.vad_head is not None:
+            self.last_vad_logits = self.vad_head(x)
+        else:
+            self.last_vad_logits = None
 
         # forward CNN-up layers
         for i, cnn_layer in enumerate(self.cnn_up):

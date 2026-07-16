@@ -99,10 +99,14 @@ class PreGeneratedRoomBank:
         if not channels:
             return None
         rt60 = scene.get("rt60")
+        origin = scene.get("origin")
         return {
             "id": str(item_id),
             "wav_path": str(wav_path),
             "rt60": float(rt60) if rt60 is not None else None,
+            # e.g. "real" for measured-RIR banks (real_rir_to_bank.py); None for
+            # synthetic banks whose scene json predates this field.
+            "origin": str(origin) if origin is not None else None,
             "channels": channels,
         }
 
@@ -126,6 +130,7 @@ class PreGeneratedRoomBank:
             "room_id": room["id"],
             "wav_path": room["wav_path"],
             "rt60": room["rt60"],
+            "origin": room.get("origin"),
             "near": near,
             "far": far,
             "all": list(room["channels"]),
@@ -164,6 +169,7 @@ class PreGeneratedRoomBank:
             "rt60": scene["rt60"],
             "label": chosen["label"],
             "room_id": scene["room_id"],
+            "origin": scene.get("origin"),
         }
         return impulse, metadata, sr
 
