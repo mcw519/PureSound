@@ -71,11 +71,22 @@ the primary judge. Also exports `init_asr`/`wer_breakdown`, reused by `eval_but_
 `overfit_sanity.py` — small-batch memorization test: can the model learn to separate at all? Config-driven,
 architecture-agnostic (use before trusting a new backbone/loss on a full run).
 
+`overfit_gate_sanity.py` — gate-only integration smoke: loads the real synthetic dataloader and
+`wide-ep19`, captures one frozen DPCRN bottleneck batch, and verifies that only the causal gate head can
+overfit its near-activity BCE. This validates plumbing only, not real-domain transfer.
+
+```bash
+uv run python egs/voice_isolate/scripts/overfit_gate_sanity.py \
+    egs/voice_isolate/config/train_dpcrn_gate.yaml \
+    --ckpt egs/voice_isolate/pretrained_ckpt/dpcrn_wide_antisup_ep19.ckpt \
+    --device cpu --steps 50
+```
+
 ## 6. Inference / deployment
 
 | script | purpose |
 |---|---|
-| `demo.py` | Gradio offline-enhance demo. Scans `trainer.work_folder` in the config for checkpoints (`config/infer_dpcrn.yaml` points at `../pretrained_ckpt/`, so all 6 pipeline checkpoints show up in the dropdown). |
+| `demo.py` | Gradio demo, two tabs. **Offline / File**: upload or record a clip, enhance the whole file (PyTorch or ORT-streaming backend). **Realtime Mic**: live per-frame streaming through an `.onnx` model — press record and enhanced audio plays back live, with optional realtime STT (off by default). Both tabs scan `trainer.work_folder` for models (`config/infer_dpcrn.yaml` → `../pretrained_ckpt/`, so all pipeline checkpoints + the exported `pretrained_ckpt/streaming/*.onnx` show up). |
 | `streaming_onnx.py` | DPCRN streaming ONNX: `export` (config+ckpt → per-frame ONNX + manifest), `infer` (run on a wav), `benchmark` (real-time factor), `verify` (offline-vs-streaming parity, aligned + trimmed by the model's algorithmic latency — see `../pretrained_ckpt/README.md`). |
 
 ```bash
@@ -86,3 +97,23 @@ uv run python egs/voice_isolate/scripts/streaming_onnx.py verify \
     egs/voice_isolate/pretrained_ckpt/dpcrn_wide_antisup_ep19.ckpt \
     egs/voice_isolate/pretrained_ckpt/streaming/dpcrn_wide_antisup_ep19.onnx
 ```
+
+For the joint separator+gate checkpoint, use the gate training config so the demo
+discovers the `exp/dpcrn_v2_sepgate` checkpoints. In the Offline / File tab, select
+`Raw probability`, `Binary`, `Binary + EMA`, or `Binary + envelope` under
+**Near-field gate**. Binary modes use the threshold slider; EMA and envelope
+expose their smoothing parameters in the UI.
+Gate application is currently supported by the PyTorch offline backend only.
+
+```bash
+uv run python egs/voice_isolate/scripts/demo.py \
+    --config_path egs/voice_isolate/config/train_dpcrn_v2_sepgate.yaml
+```
+
+**Realtime Mic tab notes.** ORT `.onnx` models only (the PyTorch backend does a whole-utterance
+forward and can't stream). Each session gets its own `StreamingDparnOrt` runtime, so streaming state
+(OLA + ONNX recurrent state) is per-session and reset on each new recording. Output latency = the
+model's algorithmic look-ahead (`streaming_delay_frames`, ~30 ms for this recipe) plus the mic chunk
+size (`stream_every`, 0.5 s). STT is **off by default**; when enabled it transcribes the enhanced audio
+in fixed-length segments (default 4 s) via `faster-whisper` (or `openai-whisper`) with auto language
+detection — use `tiny`/`base` for realtime, larger models lag.

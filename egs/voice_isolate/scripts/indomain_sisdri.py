@@ -51,12 +51,46 @@ def si_sdr(est: torch.Tensor, ref: torch.Tensor, eps: float = 1e-8) -> float:
     return float(10.0 * torch.log10(((s @ s) + eps) / ((e @ e) + eps)))
 
 
+def _solo_leakage_db(noisy, enh, clean, far, frame=512, hop=256,
+                     rel_far_db=-30.0, rel_clean_db=-40.0, min_frames=5):
+    """Interferer-solo leakage: on frames where the interferer (far_target) is
+    active but the clean target is silent -- the turn-taking / no-simultaneous-cue
+    regime -- how much of the input does the model let through?
+    10*log10(enh_energy/noisy_energy) over those frames; ~0 dB = full passthrough,
+    very negative = suppressed. None if fewer than min_frames qualify."""
+    t = min(noisy.shape[-1], enh.shape[-1], clean.shape[-1], far.shape[-1])
+    if t < frame:
+        return None
+    def _fdb(x):
+        fr = x[..., :t].reshape(-1).unfold(0, frame, hop)
+        e = fr.pow(2).mean(dim=-1)
+        return 10.0 * torch.log10(e + 1e-12), e
+    far_db, _ = _fdb(far)
+    clean_db, _ = _fdb(clean)
+    _, noisy_e = _fdb(noisy)
+    _, enh_e = _fdb(enh)
+    if not torch.isfinite(far_db).any():
+        return None
+    far_active = (far_db > far_db.max() + rel_far_db) & (far_db > -70.0)
+    clean_silent = clean_db < clean_db.max() + rel_clean_db
+    solo = far_active & clean_silent
+    if int(solo.sum()) < min_frames:
+        return None
+    num = float(enh_e[solo].sum())
+    den = float(noisy_e[solo].sum())
+    if den <= 0:
+        return None
+    return 10.0 * float(np.log10(num / den + 1e-12))
+
+
 # mix_mode float codes -> names (mirror puresound/task/voice_isolation.py).
 MIX_MODE_NAMES = {0.0: "none", 1.0: "legacy", 2.0: "physical",
                   3.0: "moderate", 4.0: "counter_level"}
 _META_KEYS = ("drr_gap", "foreground_distance", "rt60", "n_interferers",
               "near_count", "far_count", "overlap_fraction", "mix_mode",
-              "realized_speech_sir", "noise_snr")
+              "realized_speech_sir", "noise_snr",
+              "nearest_interferer_distance", "strongest_interferer_drr",
+              "turn_taking")
 
 
 def _pull(batch, key, r):
@@ -87,12 +121,12 @@ def _binned(v, edges, names):
     return names[i]
 
 
-def _report_buckets(title, rows, key_of):
+def _report_buckets(title, rows, key_of, val_key="sisdri"):
     groups = defaultdict(list)
     for row in rows:
         k = key_of(row)
-        if k is not None:
-            groups[k].append(row["sisdri"])
+        if k is not None and row.get(val_key) is not None:
+            groups[k].append(row[val_key])
     if not groups:
         return
     print(f"  -- by {title} --")
@@ -199,6 +233,13 @@ def main():
                 if args.by_bucket:
                     meta = _row_meta(batch, r)
                     meta.update(sisdri=e - m, mix=m, enh=e)
+                    ft = batch.get("far_target")
+                    if ft is not None:
+                        leak = _solo_leakage_db(
+                            noisy[r].detach().cpu(), enh[r].detach().cpu(),
+                            cl.detach().cpu(), ft[r].detach().cpu())
+                        if leak is not None:
+                            meta["solo_leakage_db"] = leak
                     rows.append(meta)
                 if saved < args.save_audio:
                     meta = _row_meta(batch, r)
@@ -231,6 +272,46 @@ def main():
             print(f"  n={len(red)}  median power reduction={st.median(red):+.1f} dB "
                   f"(more negative = better suppression)")
             print(f"  false-near rate (reduction > -6 dB) = {false_near:.0%}")
+            if args.by_bucket:
+                # Does far-suppression weaken as the far source nears the trained
+                # near/far boundary? Bucket F-only power-reduction by the far
+                # (interferer) source distance and DRR. Training places far
+                # sources at 2.05-5.5 m (0.95-2.05 m is unoccupied); if
+                # suppression already weakens toward 2.05 m, that boundary zone
+                # -- where real moderate-DRR far speakers sit -- will leak.
+                dvals = [r["nearest_interferer_distance"] for r in fonly
+                         if r.get("nearest_interferer_distance") is not None]
+                drrvals = [r["strongest_interferer_drr"] for r in fonly
+                           if r.get("strongest_interferer_drr") is not None]
+                if dvals:
+                    print(f"  far-distance range: min={min(dvals):.2f} "
+                          f"p50={st.median(dvals):.2f} max={max(dvals):.2f} m (n={len(dvals)})")
+                if drrvals:
+                    print(f"  far-DRR range: min={min(drrvals):+.1f} "
+                          f"p50={st.median(drrvals):+.1f} max={max(drrvals):+.1f} dB (n={len(drrvals)})")
+                print("  -- F-only power-reduction by far-source distance / DRR "
+                      "(closer to 0 = leakier) --")
+                _report_buckets("far distance (m)", fonly, lambda r: _binned(
+                    r.get("nearest_interferer_distance"), [1.5, 2.05, 2.5, 3.0, 3.5, 4.5],
+                    ["<1.5", "1.5-2.05", "2.05-2.5", "2.5-3", "3-3.5", "3.5-4.5", ">4.5"]),
+                    val_key="power_reduction_db")
+                _report_buckets("far DRR (dB)", fonly, lambda r: _binned(
+                    r.get("strongest_interferer_drr"), [-6, -3, 0, 3],
+                    ["<-6", "-6..-3", "-3..0", "0..3", ">3"]),
+                    val_key="power_reduction_db")
+                # E0a: does LOW reverb weaken the far cue? (dry room -> far DRR
+                # high -> far signature near-like). Bucket by rt60 and the
+                # rt60 x distance cross so the two axes don't mask each other.
+                _report_buckets("rt60 (s)", fonly, lambda r: _binned(
+                    r.get("rt60"), [0.3, 0.5, 0.7],
+                    ["<0.3", "0.3-0.5", "0.5-0.7", ">0.7"]),
+                    val_key="power_reduction_db")
+                _report_buckets("rt60 x far-dist", fonly, lambda r: (
+                    None if r.get("rt60") is None
+                    or r.get("nearest_interferer_distance") is None
+                    else f"rt60{_binned(r['rt60'], [0.45], ['<.45', '>.45'])}"
+                         f"/d{_binned(r['nearest_interferer_distance'], [3.0], ['<3m', '>3m'])}"),
+                    val_key="power_reduction_db")
         else:
             print("no foreground-present rows found -- nothing to score")
         return
@@ -274,6 +355,22 @@ def main():
         _report_buckets("realized_sir (dB)", rows, lambda r: _binned(
             r.get("realized_speech_sir"), [-3, 3, 9],
             ["<-3", "-3..3", "3..9", ">9"]))
+        # E0b: interferer-solo leakage -- frames where the interferer talks and
+        # the target is silent (the turn-taking / no-simultaneous-cue regime).
+        # ~0 dB = far speech passes through untouched (the clip-3 failure);
+        # very negative = suppressed even without a simultaneous near anchor.
+        leak_rows = [r for r in rows if r.get("solo_leakage_db") is not None]
+        if leak_rows:
+            lv = [r["solo_leakage_db"] for r in leak_rows]
+            print("  -- interferer-solo leakage (fg-present rows; ~0 dB = passthrough) --")
+            print(f"     n={len(lv)}  median={st.median(lv):+6.2f}  mean={st.mean(lv):+6.2f}")
+            _report_buckets("solo leakage by overlap", leak_rows, lambda r: _binned(
+                r.get("overlap_fraction"), [0.1, 0.4, 0.7],
+                ["<.1", ".1-.4", ".4-.7", ">.7"]), val_key="solo_leakage_db")
+            _report_buckets("solo leakage by turn_taking", leak_rows, lambda r: (
+                None if r.get("turn_taking") is None
+                else ("turn" if r["turn_taking"] >= 0.5 else "no-turn")),
+                val_key="solo_leakage_db")
         print("  -- F-only (silent-target) suppression --")
         if fonly:
             red = [row["power_reduction_db"] for row in fonly]

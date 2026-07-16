@@ -1,0 +1,381 @@
+# voice_isolate -- DPCRN. v2 JOINT separator+gate fine-tune on the hybrid_rir_16k_v2 bank.
+# Base = train_dpcrn_wide_antisup.yaml (full separation-loss stack, trainable separator);
+# merged with the gate head + VADHeadBCELoss (equal weight) from train_dpcrn_gate.yaml.
+# This time the separator is NOT frozen: separator and gate are trained jointly.
+#   warm-start: pretrained_ckpt/dpcrn_wide_antisup_ep19.ckpt  (gate head COLD -> missing keys kept at init)
+# DESIGN (2026-07-10 milowu): target_absent stays OFF (whole-row silence retrains the separator toward
+#   global over-suppression -- the Azure-STT deletion blow-up wide_antisup avoided). The gate gets its
+#   label-0 frames from turn-taking far-only turns instead (bounded, correct-to-silence within mixed rows).
+#   training_length_seconds lengthened to 10 s so 2-3 turns fit (gate can learn the near<->far switch).
+dataset:
+  task: voice_isolation
+  train_metafile: data/dns5-read.train.list
+  valid_metafile: data/dns5-read.dev.list
+  test_folder: data/test
+  proc_output_folder: proc
+  target_sample_rate: 16000
+  gain_nomalized_to: -28
+  training_length_seconds: 6.   # was 6.; lengthened for multi-turn turn-taking (gate switch signal)
+  filter_min_utterance_length: 2 # 4.
+  filter_min_utterance_per_speaker: 1.
+
+# The first sampled speaker is the near-field foreground; the rest are far-field
+# interferers to suppress.
+augmentation_speech:
+  used: True
+  is_target: False
+  prob: 0.70
+  add_n_cases:        # number of interferers (far speakers) per item
+    - 1
+    - 2
+  snr_range:          # HARD SIR: foreground may be up to 10 dB QUIETER than the
+    - -10             # interferer, so loudness alone cannot solve it and the
+    - 10              # in-domain SI-SDRi metric stays sensitive (no passthrough rows).
+  media_voice:        # TV/loudspeaker-style band-limited interferer -- ON for the deployment
+    used: True        # recipe: the most common non-human interferer in real near-field rooms.
+    prob: 0.30
+    hp_cutoff_range: [200, 400]
+    lp_cutoff_range: [3500, 7000]
+    compress_power_range: [0.6, 0.9]
+  echo_playback:      # device self-playback echo as residual interferer (OFF for now)
+    used: False
+    prob: 0.20
+    distance_range: [0.2, 1.0]
+    erle_db_range: [20, 35]
+  overlap_control:    # spread the foreground/interferer temporal overlap across
+    used: True        # no/mid/high regimes (else >80% overlap dominates training)
+    # Turn-taking ON: near/far alternate in long turns -> supplies the gate's far-only
+    # label-0 frames WITHOUT whole-row target-absent (so the separator is not pushed to
+    # global silence). Far-only turns are correct-to-silence within a mixed row.
+    turn_taking_prob: 0.50
+    turn_near_seconds: [1.5, 3.0]
+    turn_far_seconds: [2.5, 5.0]
+    turn_gap_seconds: [0.0, 0.4]
+    turn_overlap_seconds: [0.0, 0.3]
+    far_first_prob: 0.5
+    no_overlap_prob: 0.20
+    high_overlap_prob: 0.35
+    mid_overlap_range:
+      - 0.10
+      - 0.50
+    high_overlap_range:
+      - 0.50
+      - 1.00
+    fill_on_silent_range:
+      - 0.50
+      - 0.80
+    fade_samples: 400
+  mix_mode:           # foreground/interferer level relationship (N+F rows only):
+    used: True        # keep the natural physical cue most of the time, stress the rest.
+    modes:
+      # physical: sum at natural post-RIR levels -> real DRR/proximity cue survives.
+      - {name: physical,      prob: 0.5, physical: True}
+      # moderate: mild rescale, keeps difficulty without routinely inverting levels.
+      - {name: moderate,      prob: 0.3, sir_range: [-3, 6]}
+      # counter_level: near deliberately quieter -> forces a non-energy cue (hardest).
+      - {name: counter_level, prob: 0.2, sir_range: [-10, 0]}
+
+# OFF (deliberate): whole-row target-absent silence injection retrains the UNFROZEN separator toward
+# global "output silence when foreground absent" -> real-domain over-suppression / deletion (the
+# allrir_la blow-up, Azure-STT deletion 0.264->0.444). The gate's label-0 frames come from turn-taking
+# far-only turns instead. Re-enable at a small prob ONLY if interferer LEAKAGE (not over-suppression)
+# becomes the measured problem.
+augmentation_target_absent:
+  used: False
+  prob: 0.20
+  force_interferer: True
+
+# OFF: runtime distance query. Fixed near-field task; scalar-query / FiLM not used.
+augmentation_query_distance:
+  used: False
+  derive_from_bank: True
+  bank_margin: 0.2
+  range: [0.8, 1.2]
+  peak_distance: 1.0
+  peak_prob: 0.3
+  peak_half_width: 0.2
+  near_floor: 0.3
+  far_ceiling: 5.0
+  gate_silence:
+    prob: 0.2
+    margin: 0.15
+
+augmentation_noise:
+  used: True
+  prob: 0.8
+  noise_folder: /data/audio/dns-5/datasets_fullband_16k/noise_fullband
+  snr_range:
+    - 0
+    - 20
+  prob_white_noise: 0.1
+  white_noise_snr_range:
+    - 10
+    - 30
+
+# Reverb from the pre-generated RIR bank (source-level: foreground = near channel,
+# interferers = far channels of the SAME room).
+augmentation_reverb:
+  used: True
+  prob: 1.
+  rir_folder:
+  # target_rir_type "early": target is the early-reflection (de-reverbed) near speech.
+  target_rir_type: "early"
+  simulator:
+    used: True
+    source_level: True
+    pregenerated:
+      used: True
+      # NEW v2 bank: 2000 rooms x 20 = 40000 items, near 0.2-0.95 m / far 1.5-5.5 m, 1-6 obstacles,
+      # RT60 0.18-0.85. Per-room subdirs (rir_bank.py iterates subdirs -> *.wav/.json pairs directly,
+      # no items/ view needed). source_labels = [near_0,near_1,far_0,far_1,far_2] (wide-compatible).
+      folder: /work/any_exp_link/puresound_exp/hybrid_rir_16k_v2
+      near_labels: [near_0, near_1]
+      far_labels: [far_0, far_1, far_2]
+      drr_window_ms: 2.5
+      cache_size: 128
+
+augmentation_speed:
+  used: True
+  prob: 0.5
+  speed_range:
+    - 0.95
+    - 1.05
+
+augmentation_ir_response:
+  used: True
+  prob: 0.3
+
+augmentation_src:        # random down/up-sample (bandwidth variation)
+  used: True
+  prob: 0.5
+  src_range:
+    - 8000
+    - 16000
+  prob_each:
+    - 0.2
+    - 0.8
+
+# ON for the deployment recipe: real device mic front-ends commonly high-pass at 100-300 Hz.
+augmentation_hpf:
+  used: True
+  prob: 0.25
+  cutoff:
+    - 100
+    - 200
+    - 300
+  prob_each:
+    - 0.4
+    - 0.4
+    - 0.2
+
+augmentation_volume:
+  used: True
+  prob: 0.5
+  perturbed_range:
+    - 0.4
+    - 1.6
+  clipping_prob: 0.
+  clipping_range:
+    min:
+      - 0.
+      - 0.1
+    max:
+      - 0.9
+      - 1.0
+
+augmentation_codec:      # OFF for now (QVF2 realism, add incrementally on expand)
+  used: False
+  prob: 0.5
+  codecs:
+    - libopus
+    - g722
+  prob_each:
+    - 0.7
+    - 0.3
+  bitrate_range:
+    libopus:
+      - 6000
+      - 32000
+
+augmentation_packet_loss:  # OFF for now (QVF2 realism, add incrementally on expand)
+  used: False
+  prob: 0.3
+  packet_ms_choices:
+    - 20
+    - 40
+    - 60
+  loss_rate_range:
+    - 0.01
+    - 0.10
+
+# VAD energy backend ON: supplies overlap_control's gating labeler AND the per-frame
+# vad_target that VADHeadBCELoss consumes to train the gate head.
+vad_label:
+  used: True
+  backend: energy
+  args:
+    frame_length: 400
+    hop_length: 160
+
+trainer:
+  lighting_trainer_args:
+    max_epochs: 20            # one cosine cycle (trough ~ep19); fine-tune from wide_ep19
+    gradient_clip_val: 5.
+    accumulate_grad_batches: 2
+    precision: bf16-mixed
+  train_iter_per_epoch: 1000
+  valid_iter_per_epoch: 100
+  valid_seed: 1234
+  n_spk_per_batch: 12         # if VRAM tight at 10 s with dual-SSL losses, lower this
+  n_utt_per_speaker: 1
+  num_workers: 20
+  num_gpus: 2
+  find_unused_parameters: true
+  work_folder: exp/dpcrn_v2_sepgate
+
+optimizer:
+  type: AdamW
+  learning_rate: 0.001
+  args:
+    weight_decay: 0.00001
+    betas:
+     - 0.9
+     - 0.999
+
+scheduler:
+  type: CosineAnnealingWarmRestarts
+  warmup_step: 250
+  args:
+    T_0: 20
+    T_mult: 1
+    eta_min: 0.00001
+
+qd_contrastive:
+  used: False
+  weight: 1.0
+  margin: 0.15
+  near_floor: 0.3
+  apply_prob: 1.0
+
+loss_func:
+  - type: SDRLoss
+    weighted: 1.
+    args:
+      scaled: False
+      scale_dependent: True
+      zero_mean: True
+      source_aggregated: False
+      sdr_max: 50
+      threshold: -50
+
+  - type: MultiResolutionSTFTLoss
+    weighted: 0.5
+    args:
+      fft_sizes:
+        - 512
+        - 1024
+        - 256
+      hop_sizes:
+        - 128
+        - 256
+        - 64
+      win_lengths:
+        - 512
+        - 1024
+        - 256
+      window: hann_window
+      factor_sc: 0.5
+      factor_mag: 0.5
+
+  # TIER-1 ANTI-SUPPRESSION: mean(ReLU(|T|^p - |E|^p)^2); penalises enhanced magnitude
+  # falling BELOW target (deletion). Fights over-suppression (Azure STT del 0.264->0.444).
+  - type: OverSuppressionLoss
+    weighted: 3.0
+    args:
+      p: 0.5
+      fft_size: 512
+      hop_size: 128
+      win_length: 512
+
+  # Training-only background accounting: residual = noisy - enhanced supervised
+  # against consistency_noise (= noisy - clean). Deployment stays single-output.
+  - type: ResidualReferenceLoss
+    weighted: 0.2
+    args:
+      reference_key: consistency_noise
+      loss: l1
+      target_present_only: True
+
+  - type: ASRFeatureLoss          # term 1: HuBERT (w1 best, current strongest synthetic-WER)
+    weighted: 1.0
+    args:
+      bundle: HUBERT_BASE
+      layers: [6, 9]
+      loss: cosine
+
+  - type: ASRFeatureLoss          # term 2: WavLM-Base+ (noise/overlap-robust SSL)
+    weighted: 1.0
+    args:
+      bundle: WAVLM_BASE_PLUS
+      layers: [6, 9]
+      loss: cosine
+
+  # NEW: gate head, equal weight with separation (milowu 2026-07-10). Consumes vad_target
+  # (per-frame near-foreground activity) via uses_vad_logits; trained jointly with the separator.
+  - type: VADHeadBCELoss
+    weighted: 1.0
+    args:
+      false_positive_weight: 1.0
+      false_negative_weight: 1.0
+      balance_per_batch: True
+
+model:
+  lighting_module:
+    type: EncDecMaskBase
+    module_args:
+      mask_type: complex   # DPCRN emits a complex ratio mask applied to the noisy STFT
+      encoder_lr_factor: 0.1
+      feats_lr_factor: 0.1
+      backbone_lr_factor: 1.0    # separator UNFROZEN (was 0.0 in gate-only)
+      train_vad_head_only: False # train separator AND gate jointly
+      gate_head_lr_factor: 1.0
+  encoder:
+    type: ConvEncDec
+    encoder_args:
+      fft_length: 512
+      win_type: "hann"
+      win_length: 512
+      hop_length: 160
+      fmin: 0
+      fmax: 8000
+      sr: 16000
+      trainable: False
+  features:
+    feats_type: complex
+    drop_stft_first_bin: True
+    trainable: False
+    include_specaug: False
+  backbone:
+    type: DPCRN
+    backbone_args:
+      input_dim: 256
+      activation_type: PReLU
+      norm_type: bN2d
+      dropout: 0.05
+      channels: [2, 32, 64, 128]
+      transpose_t_size: 2
+      transpose_delay: False
+      skip_conv: False
+      kernel_t: [2, 2, 2]
+      stride_t: [1, 1, 1]
+      dilation_t: [1, 1, 1]
+      kernel_f: [5, 3, 3]
+      stride_f: [2, 2, 1]
+      dilation_f: [1, 1, 1]
+      delay: [1, 1, 1]      # 3-frame (~30ms) look-ahead; inter-RNN unidirectional
+      rnn_hidden: 96
+      spectral_compress: False
+      vad_head:
+        enabled: True
+        hidden: 128
+        kernel_t: 5

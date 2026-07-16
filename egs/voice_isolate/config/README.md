@@ -21,11 +21,18 @@ augmentation, and loss weights change stage to stage.
 `train_dpcrn_wide_causal.yaml` — untrained alternative (fully-causal, `delay=[0,0,0]`), kept only as a
 documented fallback; not needed since streaming export solved look-ahead via future-buffering instead.
 
+`train_dpcrn_gate.yaml` — gate-only synthetic pretraining / engineering validation. It must warm-start
+from `dpcrn_wide_antisup_ep19.ckpt`; the encoder, features, DPCRN separator, BatchNorm state, and mask
+decoder remain frozen, while a causal frame-level VAD head learns near-active vs inactive/far-only
+labels. Its synthetic score is not evidence of real-recording transfer.
+
 Run (from repo root):
 ```bash
 uv run python egs/voice_isolate/main.py egs/voice_isolate/config/train_dpcrn_curriculum_core.yaml --training
 uv run python egs/voice_isolate/main.py egs/voice_isolate/config/train_dpcrn_curriculum_expand.yaml --training \
     --pretrained_ckpt_path egs/voice_isolate/pretrained_ckpt/dpcrn_curriculum_core_ep39.ckpt
+uv run python egs/voice_isolate/main.py egs/voice_isolate/config/train_dpcrn_gate.yaml --training \
+    --pretrained_ckpt_path egs/voice_isolate/pretrained_ckpt/dpcrn_wide_antisup_ep19.ckpt
 ```
 `--ckpt_path <ckpt>` instead of `--pretrained_ckpt_path` = true resume (restores optimizer/scheduler/epoch).
 
