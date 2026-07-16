@@ -43,6 +43,7 @@ test/test_case/outputs/
 exp
 exp/
 proc/
+.gradio/
 data/
 dummy_samples/
 eval_set*/

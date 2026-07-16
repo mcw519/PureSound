@@ -1,0 +1,161 @@
+{
+  "model_type": "dpcrn_streaming_frame",
+  "processor": "stft_frame_ort",
+  "created_at": 1783307247,
+  "onnx_path": "egs/voice_isolate/pretrained_ckpt/streaming/dpcrn_boundary_0703_ep19.onnx",
+  "sample_rate": 16000,
+  "fft_length": 512,
+  "win_length": 512,
+  "hop_length": 160,
+  "freq_bins": 257,
+  "feature_bins": 256,
+  "streaming_delay_frames": 3,
+  "input_names": [
+    "noisy_frame",
+    "down_cache_0",
+    "down_cache_1",
+    "down_cache_2",
+    "up_cache_0",
+    "up_cache_1",
+    "up_cache_2",
+    "h_0",
+    "h_1",
+    "c_0",
+    "c_1",
+    "skip_cache_1",
+    "skip_cache_2",
+    "noisy_cache",
+    "counter"
+  ],
+  "output_names": [
+    "enhanced_frame",
+    "next_down_cache_0",
+    "next_down_cache_1",
+    "next_down_cache_2",
+    "next_up_cache_0",
+    "next_up_cache_1",
+    "next_up_cache_2",
+    "next_h_0",
+    "next_h_1",
+    "next_c_0",
+    "next_c_1",
+    "next_skip_cache_1",
+    "next_skip_cache_2",
+    "next_noisy_cache",
+    "next_counter"
+  ],
+  "state_input_names": [
+    "down_cache_0",
+    "down_cache_1",
+    "down_cache_2",
+    "up_cache_0",
+    "up_cache_1",
+    "up_cache_2",
+    "h_0",
+    "h_1",
+    "c_0",
+    "c_1",
+    "skip_cache_1",
+    "skip_cache_2",
+    "noisy_cache",
+    "counter"
+  ],
+  "state_output_names": [
+    "next_down_cache_0",
+    "next_down_cache_1",
+    "next_down_cache_2",
+    "next_up_cache_0",
+    "next_up_cache_1",
+    "next_up_cache_2",
+    "next_h_0",
+    "next_h_1",
+    "next_c_0",
+    "next_c_1",
+    "next_skip_cache_1",
+    "next_skip_cache_2",
+    "next_noisy_cache",
+    "next_counter"
+  ],
+  "state_shapes": {
+    "down_cache_0": [
+      1,
+      2,
+      256,
+      1
+    ],
+    "down_cache_1": [
+      1,
+      32,
+      128,
+      1
+    ],
+    "down_cache_2": [
+      1,
+      64,
+      64,
+      1
+    ],
+    "up_cache_0": [
+      1,
+      64,
+      64,
+      1
+    ],
+    "up_cache_1": [
+      1,
+      32,
+      128,
+      1
+    ],
+    "up_cache_2": [
+      1,
+      2,
+      256,
+      1
+    ],
+    "h_0": [
+      1,
+      64,
+      96
+    ],
+    "h_1": [
+      1,
+      64,
+      96
+    ],
+    "c_0": [
+      1,
+      64,
+      96
+    ],
+    "c_1": [
+      1,
+      64,
+      96
+    ],
+    "skip_cache_1": [
+      1,
+      64,
+      64,
+      1
+    ],
+    "skip_cache_2": [
+      1,
+      32,
+      128,
+      2
+    ],
+    "noisy_cache": [
+      1,
+      2,
+      256,
+      3
+    ],
+    "counter": [
+      1
+    ]
+  },
+  "providers": [
+    "CPUExecutionProvider"
+  ]
+}
