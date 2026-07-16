@@ -9,7 +9,14 @@ Levels are cumulative for curriculum training:
 
 * ``core``: RT60 0.20--0.45 s and worst-case near/far DRR gap >= 6 dB.
 * ``expand``: RT60 0.20--0.65 s and worst-case near/far DRR gap >= 3 dB.
-* ``stress``: all remaining valid items (high RT60 and/or weak DRR gap).
+* ``wide``: RT60 0.20--0.85 s and worst-case near/far DRR gap >= 3 dB (the
+  dpcrn_wide_antisup deployment domain; re-added here after originally being
+  built from an uncommitted variant of this script).
+* ``stress``: valid items in none of core/expand/wide (extreme RT60 and/or
+  weak DRR gap).
+* ``all``: every valid item, no filtering -- the view to use for banks whose
+  whole point is unfiltered coverage (e.g. the boundary-distance bank, where
+  low DRR gap is desired, or the high-reverb bank probed above rt60 0.85).
 
 The conservative DRR gap is ``min(DRR_near) - max(DRR_far)``. Thus every
 near/far channel pair in a core item meets the printed lower bound.
@@ -112,12 +119,15 @@ def in_range(value: float, low: float, high: float) -> bool:
 
 def memberships(item: Item) -> tuple[str, ...]:
     labels = []
+    if in_range(item.rt60, 0.20, 0.85) and item.drr_gap >= 3.0:
+        labels.append("wide")
     if in_range(item.rt60, 0.20, 0.65) and item.drr_gap >= 3.0:
         labels.append("expand")
     if in_range(item.rt60, 0.20, 0.45) and item.drr_gap >= 6.0:
         labels.append("core")
     if not labels:
         labels.append("stress")
+    labels.append("all")
     return tuple(labels)
 
 
@@ -183,7 +193,7 @@ def main() -> None:
     if not items:
         raise SystemExit("no valid RIR items with both near_* and far_* channels")
 
-    levels = {name: [] for name in ("core", "expand", "stress")}
+    levels = {name: [] for name in ("core", "expand", "wide", "stress", "all")}
     for item in items:
         for name in memberships(item):
             levels[name].append(item)
@@ -194,7 +204,9 @@ def main() -> None:
         "thresholds": {
             "core": "0.20 <= RT60 <= 0.45 and worst-case DRR gap >= 6 dB",
             "expand": "0.20 <= RT60 <= 0.65 and worst-case DRR gap >= 3 dB",
-            "stress": "remaining valid RIR items",
+            "wide": "0.20 <= RT60 <= 0.85 and worst-case DRR gap >= 3 dB",
+            "stress": "valid items in none of core/expand/wide",
+            "all": "every valid RIR item, no filtering",
         },
         "all": {
             "rt60_s": percentiles(item.rt60 for item in items),

@@ -99,17 +99,26 @@ def assemble_room_items(
     require_near: int = 1,
     require_far: int = 1,
     rng: torch.Generator | None = None,
+    near_pool: list[dict] | None = None,
 ) -> list[list[tuple[dict, str]]]:
     """Split a room's RIR entries into near/far by distance and assemble items.
 
     Each returned item is a list of ``(entry, label)`` with labels near_0.. and
-    far_0.. . Rooms without enough near/far entries (per require_*) yield nothing.
+    far_0.. . Rooms without enough near/far entries (per require_*) yield
+    nothing -- unless ``near_pool`` is given: rooms with far entries but NO
+    near entries then borrow near channels from the pool (real <d0 RIRs from
+    other rooms/corpora). Physically the borrowed near channel belongs to a
+    different room, but a <1 m channel is direct-path dominated so the
+    room-mismatch contribution is small -- this is what lets far-only measured
+    corpora (ACE, DIFFRIR classroom/complex) contribute their real far field.
     """
     rng = rng or torch.Generator().manual_seed(0)
     near = sorted((e for e in room_entries if _entry_distance(e) < d0),
                   key=_entry_distance)
     far = sorted((e for e in room_entries if _entry_distance(e) >= d0),
                  key=_entry_distance)
+    if not near and far and near_pool:
+        near = list(near_pool)
     if len(near) < require_near or len(far) < require_far:
         return []
 
@@ -148,7 +157,9 @@ def write_bank_item(
         {"channel": i, "label": label, "distance_m": _entry_distance(e)}
         for i, (e, label) in enumerate(channels)
     ]
-    scene = {"channel_map": channel_map}
+    # origin: "real" marks measured-RIR items so the training pipeline can gate
+    # per-origin augmentation probs (ns.py prob_by_origin / turn_taking_prob_by_origin).
+    scene = {"channel_map": channel_map, "origin": "real"}
     if rt60 is not None:
         scene["rt60"] = float(rt60)
 
@@ -159,6 +170,16 @@ def write_bank_item(
     )
 
 
+def _read_manifest(manifest_path: str) -> list[dict]:
+    entries: list[dict] = []
+    with open(manifest_path, encoding="utf-8") as fh:
+        for line in fh:
+            line = line.strip()
+            if line:
+                entries.append(json.loads(line))
+    return entries
+
+
 def manifest_to_bank(
     manifest_path: str,
     output: str,
@@ -166,15 +187,18 @@ def manifest_to_bank(
     target_sr: int,
     items_per_room: int,
     seed: int = 0,
+    near_pool_manifest: str | None = None,
 ) -> dict:
     rooms: dict[str, list[dict]] = {}
-    with open(manifest_path, encoding="utf-8") as fh:
-        for line in fh:
-            line = line.strip()
-            if not line:
-                continue
-            e = json.loads(line)
-            rooms.setdefault(str(e["room_id"]), []).append(e)
+    for e in _read_manifest(manifest_path):
+        rooms.setdefault(str(e["room_id"]), []).append(e)
+
+    near_pool: list[dict] | None = None
+    if near_pool_manifest is not None:
+        near_pool = [e for e in _read_manifest(near_pool_manifest)
+                     if _entry_distance(e) < d0]
+        if not near_pool:
+            raise ValueError(f"near-pool manifest has no entries < d0={d0}")
 
     out_dir = Path(output)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -183,7 +207,8 @@ def manifest_to_bank(
     for room_id, entries in sorted(rooms.items()):
         rt60s = [e["rt60"] for e in entries if e.get("rt60") is not None]
         rt60 = (sum(rt60s) / len(rt60s)) if rt60s else None
-        items = assemble_room_items(entries, d0, items_per_room, rng=rng)
+        items = assemble_room_items(entries, d0, items_per_room, rng=rng,
+                                    near_pool=near_pool)
         if items:
             n_rooms_used += 1
         for k, channels in enumerate(items):
@@ -302,17 +327,21 @@ def self_test() -> None:
         # Two rooms, each with 2 near (<1m) + 3 far (>=1m) mics; random RIRs.
         manifest = tmp / "manifest.jsonl"
         lines = []
+
+        def _dump(name: str, dist: float, room: str) -> str:
+            p = rir_dir / name
+            imp = torch.zeros(1, sr)  # 1 s
+            imp[0, 10] = 1.0
+            imp[0, 200:400] = 0.1 * torch.randn(200)
+            torchaudio.save(str(p), imp, sr, encoding="PCM_F", bits_per_sample=32)
+            return json.dumps({
+                "room_id": room, "rir_path": str(p), "channel": 0,
+                "rt60": 0.45, "distance_m": dist,
+            })
+
         for r in range(2):
             for i, dist in enumerate([0.4, 0.8, 2.0, 3.0, 4.5]):
-                p = rir_dir / f"room{r}_mic{i}.wav"
-                imp = torch.zeros(1, sr)  # 1 s
-                imp[0, 10] = 1.0
-                imp[0, 200:400] = 0.1 * torch.randn(200)
-                torchaudio.save(str(p), imp, sr, encoding="PCM_F", bits_per_sample=32)
-                lines.append(json.dumps({
-                    "room_id": f"room{r}", "rir_path": str(p), "channel": 0,
-                    "rt60": 0.45, "distance_m": dist,
-                }))
+                lines.append(_dump(f"room{r}_mic{i}.wav", dist, f"room{r}"))
         manifest.write_text("\n".join(lines), encoding="utf-8")
 
         bank_dir = tmp / "bank"
@@ -326,6 +355,7 @@ def self_test() -> None:
         assert len(bank) == 6, len(bank)
         scene = bank.sample_scene()
         assert scene["near"] and scene["far"], scene
+        assert scene.get("origin") == "real", scene.get("origin")
         for c in scene["near"]:
             assert c["label"] in NEAR_LABELS and c["distance"] < 1.0
         for c in scene["far"]:
@@ -335,6 +365,32 @@ def self_test() -> None:
         assert md["label"] in NEAR_LABELS and "drr_db" in md
         imp_f, md_f, _ = bank.select_channel(scene, source_role="interferer")
         assert md_f["label"] in FAR_LABELS
+
+        # near-pool: a far-only room must yield nothing without the pool and
+        # borrow pool near channels (<d0) with it.
+        fonly = tmp / "faronly.jsonl"
+        fonly.write_text("\n".join(
+            [_dump(f"fonly_mic{i}.wav", d, "fonly") for i, d in enumerate([1.5, 2.5, 3.5])]
+        ), encoding="utf-8")
+        pool = tmp / "pool.jsonl"
+        pool.write_text("\n".join(
+            [_dump(f"pool_mic{i}.wav", d, "poolroom") for i, d in enumerate([0.3, 0.7, 2.2])]
+        ), encoding="utf-8")
+        s0 = manifest_to_bank(str(fonly), str(tmp / "bank_np0"), d0=1.0,
+                              target_sr=sr, items_per_room=3, seed=1)
+        assert s0["items_written"] == 0, s0
+        s1 = manifest_to_bank(str(fonly), str(tmp / "bank_np1"), d0=1.0,
+                              target_sr=sr, items_per_room=3, seed=1,
+                              near_pool_manifest=str(pool))
+        assert s1["items_written"] == 3, s1
+        np_bank = PreGeneratedRoomBank(str(tmp / "bank_np1"),
+                                       wav_name="rir_5ch.wav",
+                                       meta_name="metadata.json")
+        np_scene = np_bank.sample_scene()
+        assert np_scene["near"] and np_scene["far"], np_scene
+        for c in np_scene["near"]:
+            assert c["distance"] < 1.0  # borrowed pool channels only
+
         print("SELF-TEST OK: emitted items load in PreGeneratedRoomBank; "
               "near/far split + DRR/distance metadata round-trip correctly.")
 
@@ -353,6 +409,9 @@ def main() -> None:
     b.add_argument("--target-sr", type=int, default=16000)
     b.add_argument("--items-per-room", type=int, default=4)
     b.add_argument("--seed", type=int, default=0)
+    b.add_argument("--near-pool", default=None,
+                   help="manifest.jsonl of real <d0 RIRs; rooms with far but "
+                        "no near entries borrow their near channels from it")
 
     t = sub.add_parser("but", help="Stage A+B: scan BUT ReverbDB -> bank")
     t.add_argument("--input", required=True, help="BUT ReverbDB root")
@@ -370,7 +429,8 @@ def main() -> None:
         self_test()
     elif args.cmd == "from-manifest":
         manifest_to_bank(args.manifest, args.output, args.d0, args.target_sr,
-                         args.items_per_room, args.seed)
+                         args.items_per_room, args.seed,
+                         near_pool_manifest=args.near_pool)
     elif args.cmd == "but":
         manifest = args.manifest or str(Path(args.output) / "manifest.jsonl")
         Path(args.output).mkdir(parents=True, exist_ok=True)
