@@ -1,9 +1,16 @@
+import sys
 from pathlib import Path
 
 import pytest
 import torch
 
-from puresound.audio.io import AudioIO
+# Tests import repo-level namespace packages (e.g. egs.rir_generation); make the
+# repo root importable regardless of the pytest invocation cwd.
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from puresound.audio.io import AudioIO  # noqa: E402
 
 
 @pytest.fixture

@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import numpy as np
 import torch
 
@@ -8,8 +10,9 @@ from puresound.streaming import (
 )
 from puresound.utils import load_hparam
 
-CAUSAL_CONFIG = "egs/voice_isolate/config/train_dpcrn_wide_causal.yaml"
-LOOKAHEAD_CONFIG = "egs/voice_isolate/config/train_dpcrn_wide_antisup.yaml"
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+CAUSAL_CONFIG = str(_REPO_ROOT / "egs/voice_isolate/config/train_dpcrn_wide_causal.yaml")
+LOOKAHEAD_CONFIG = str(_REPO_ROOT / "egs/voice_isolate/config/train_dpcrn_wide_antisup.yaml")
 
 
 def test_dpcrn_streaming_config_validates_causal_recipe():

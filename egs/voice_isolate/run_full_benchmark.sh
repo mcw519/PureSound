@@ -19,7 +19,7 @@ uv run python scripts/eval_realcase_faronly.py config/infer_dpcrn.yaml \
   --ckpt "$CKPT" --cases-dir data_report/qvf22_real_cases --device cpu > "$OUT/1_scorecard.log" 2>&1
 
 say "2/9 in-domain SI-SDRi + buckets + solo-leakage (phase1 bank)"
-uv run python scripts/indomain_sisdri.py config/backup/train_dpcrn_boundary.yaml \
+uv run python scripts/indomain_sisdri.py config/eval_indomain_phase1.yaml \
   --ckpt "$CKPT" --device "$DEV" --n-batches 80 --by-bucket --dump-distribution > "$OUT/2_indomain.log" 2>&1
 
 say "3/9 synthetic far-only probe (expand bank, seen distances)"
@@ -27,11 +27,11 @@ uv run python scripts/indomain_sisdri.py config/eval_targetabsent_probe.yaml \
   --ckpt "$CKPT" --device "$DEV" --n-batches 60 --by-bucket > "$OUT/3_probe_expand.log" 2>&1
 
 say "4/9 synthetic far-only probe (high bank rt60 0.85-1.5, UNSEEN reverb)"
-uv run python scripts/indomain_sisdri.py config/backup/eval_targetabsent_probe_high.yaml \
+uv run python scripts/indomain_sisdri.py config/eval_targetabsent_probe_high.yaml \
   --ckpt "$CKPT" --device "$DEV" --n-batches 60 --by-bucket > "$OUT/4_probe_high.log" 2>&1
 
 say "5/9 synthetic far-only probe (boundary held-out, UNSEEN boundary distances)"
-uv run python scripts/indomain_sisdri.py config/backup/eval_targetabsent_probe_boundary.yaml \
+uv run python scripts/indomain_sisdri.py config/eval_targetabsent_probe_boundary.yaml \
   --ckpt "$CKPT" --device "$DEV" --n-batches 60 --by-bucket > "$OUT/5_probe_boundary.log" 2>&1
 
 say "6/9 Dawn Chorus real WER (over-suppression deletion guardrail; $ASR/$ASR_MODEL)"

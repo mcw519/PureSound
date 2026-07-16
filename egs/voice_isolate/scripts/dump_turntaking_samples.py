@@ -13,11 +13,11 @@ duration, mix/target RMS, target-active ratio) so the set can be scored / filter
 Usage (from repo root):
     # small listening dump (original behaviour)
     uv run python egs/voice_isolate/scripts/dump_turntaking_samples.py \
-        egs/voice_isolate/config/train_dpcrn_boundary.yaml \
+        egs/voice_isolate/config/eval_indomain_phase1.yaml \
         --out-dir data_report/turntaking_samples --n 6
     # frozen 100-item, ~10 s test set
     uv run python egs/voice_isolate/scripts/dump_turntaking_samples.py \
-        egs/voice_isolate/config/train_dpcrn_boundary.yaml \
+        egs/voice_isolate/config/eval_indomain_phase1.yaml \
         --out-dir /data/audio/eval_noisy_data/turntaking_set \
         --n 100 --length-seconds 10 --seed 2026
 """
