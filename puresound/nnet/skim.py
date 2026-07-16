@@ -5,7 +5,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.autograd import Variable
 
-from .dparn import DistanceEmbeddingGenerator
 from .lobe.trivial import FiLM, Gate
 
 
@@ -272,10 +271,7 @@ class SkiM(nn.Module):
         embed_norm (bool): applies 2-norm for input embedding.
         causal (bool): padding by causal scenario, others padding to same length between input and output.
         block_with_embed (list): which layer insert embedding.
-        distance_embedding_dim (int): if not zero, a scalar query distance (m) is mapped
-            to an embedding of this size and fused per-block through the same FiLM/Gate
-            machinery as ``embed``. Mutually exclusive with a non-zero ``embed_dim``.
-    
+
     References:
         [1]: https://arxiv.org/abs/2201.10800
         [2]: https://github.com/espnet/espnet/blob/master/espnet2/enh/layers/skim.py
@@ -294,7 +290,6 @@ class SkiM(nn.Module):
         embed_norm: bool = False,
         embed_fusion: Optional[str] = None,
         block_with_embed: Optional[List] = None,
-        distance_embedding_dim: int = 0,
         dropout: float = 0.0,
     ):
         super().__init__()
@@ -310,21 +305,7 @@ class SkiM(nn.Module):
         self.embed_norm = embed_norm
         self.block_with_embed = block_with_embed
 
-        # Distance conditioning: a scalar metres value is turned into a learned
-        # embedding and fused per-block via the same FiLM/Gate path as a speaker
-        # embedding. When enabled it drives the fusion width in place of embed_dim.
-        if distance_embedding_dim > 0:
-            if embed_dim != 0:
-                raise ValueError(
-                    "SkiM: distance_embedding_dim and embed_dim are mutually exclusive"
-                )
-            self.distance_embedding = DistanceEmbeddingGenerator(
-                out_dim=distance_embedding_dim
-            )
-        else:
-            self.distance_embedding = None
-
-        fusion_dim = distance_embedding_dim if distance_embedding_dim > 0 else embed_dim
+        fusion_dim = embed_dim
 
         self.seg_lstm = nn.ModuleList()
         if fusion_dim == 0:
@@ -432,14 +413,11 @@ class SkiM(nn.Module):
         self,
         x: torch.Tensor,
         embed: Optional[torch.Tensor] = None,
-        query_distance: Optional[torch.Tensor] = None,
     ):
         """
         Args:
             input tensor shape is [N, C, T]
             Conditional embedding vector has shape [N, C]
-            query_distance: optional scalar distance [N] or [N, 1]; turned into
-                an embedding when distance conditioning is enabled at init.
 
         Returns:
             output tensor shape is [N, C, T]
@@ -457,9 +435,6 @@ class SkiM(nn.Module):
             n4, c4, f4, t4 = x.shape
             x = x.reshape(n4, c4 * f4, t4)
             reshaped_from_4d = True
-
-        if self.distance_embedding is not None and query_distance is not None:
-            embed = self.distance_embedding(query_distance).to(x.dtype)
 
         if self.embed_norm and embed is not None:
             embed = F.normalize(embed, p=2, dim=1)

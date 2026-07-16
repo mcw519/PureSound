@@ -6,7 +6,7 @@ from puresound.system.siso import EncDecMaskBase
 
 
 class EchoSystem(EncDecMaskBase):
-    def forward(self, noisy, query_distance=None):
+    def forward(self, noisy):
         return noisy
 
 

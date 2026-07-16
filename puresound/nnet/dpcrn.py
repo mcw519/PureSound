@@ -2,11 +2,31 @@ from typing import Dict, Optional, Tuple
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 from .lobe.rnn import SingleRNN
 from .lobe.trivial import FiLM, spectral_compression
-from .conformer import VADHead
 from .unet import Unet
+
+
+class VADHead(nn.Module):
+    """Frame-level speech-activity logits from the bottleneck. Causal in time."""
+
+    def __init__(self, enc_channels: int, hidden: int, kernel_t: int):
+        super().__init__()
+        self.kernel_t = kernel_t
+        self.proj = nn.Linear(enc_channels, hidden)
+        self.dwconv = nn.Conv1d(hidden, hidden, kernel_t, padding=0, groups=1)
+        self.act = nn.SiLU()
+        self.out = nn.Conv1d(hidden, 1, 1)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        # x: [N, C, F, T] -> pool over F -> [N, C, T]
+        h = x.mean(dim=2)  # [N, C, T]
+        h = self.proj(h.transpose(1, 2)).transpose(1, 2)  # [N, hidden, T]
+        h = F.pad(h, (self.kernel_t - 1, 0))  # causal
+        h = self.act(self.dwconv(h))
+        return self.out(h).squeeze(1)  # [N, T]
 
 
 class DPRNNblock2D(nn.Module):

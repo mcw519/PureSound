@@ -3,28 +3,22 @@ import torch.nn as nn
 
 from .sdr import SDRLoss
 from .spk import AAMsoftmax, SphereFace2
-from .spk_consistency import SpeakerConsistencyLoss
 from .residual import ResidualReferenceLoss
-from .far_parent import FarReconstructionLoss, MixtureConsistencyLoss
 from .asr_feature import ASRFeatureLoss
 from .stft_loss import MultiResolutionSTFTLoss, OverSuppressionLoss, SpectralLoss
-from .vad import BackgroundVADHeadBCELoss, ScalarAuxiliaryLoss, VADActivityLoss, VADHeadBCELoss
+from .vad import BackgroundVADHeadBCELoss, VADActivityLoss, VADHeadBCELoss
 
 __all__ = [
     "AAMsoftmax",
     "ASRFeatureLoss",
-    "FarReconstructionLoss",
-    "MixtureConsistencyLoss",
     "MultiResolutionSTFTLoss",
     "OverSuppressionLoss",
     "ResidualReferenceLoss",
     "SDRLoss",
-    "SpeakerConsistencyLoss",
     "SpectralLoss",
     "SphereFace2",
     "TimeDomainBasicLoss",
     "BackgroundVADHeadBCELoss",
-    "ScalarAuxiliaryLoss",
     "VADActivityLoss",
     "VADHeadBCELoss",
 ]

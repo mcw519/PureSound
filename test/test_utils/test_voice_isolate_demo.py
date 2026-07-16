@@ -301,7 +301,6 @@ def test_enhance_audio_can_use_ort_streaming_backend(
     class FakeRuntime:
         sample_rate = 16000
         providers = ["CPUExecutionProvider"]
-        uses_distance = False
 
         def process_samples(self, samples):
             return samples

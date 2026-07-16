@@ -69,11 +69,6 @@ def load_wav_bytes(blob: bytes, target_sr: int) -> np.ndarray:
     return wav
 
 
-def model_uses_distance(model_dict: dict) -> bool:
-    backbone_args = model_dict.get("backbone", {}).get("backbone_args", {}) or {}
-    return int(backbone_args.get("distance_embedding_dim", 0) or 0) > 0
-
-
 def load_model(config_path: str, ckpt_path: str, device: str):
     config_tuple = load_siso_recipe_config(config_path)
     model_dict = config_tuple[5]
@@ -82,7 +77,7 @@ def load_model(config_path: str, ckpt_path: str, device: str):
     model.reload_checkpoint(state, load_loss_func=False)
     model.eval()
     model.to(device)
-    return model, model_uses_distance(model_dict)
+    return model
 
 
 @torch.no_grad()
@@ -90,14 +85,9 @@ def run_inference(
     model: torch.nn.Module,
     noisy: np.ndarray,
     device: str,
-    query_distance: float | None = None,
 ) -> tuple[np.ndarray, np.ndarray | None]:
     x = torch.from_numpy(noisy.astype(np.float32)).view(1, -1).to(device)
-    if query_distance is not None:
-        qd = torch.tensor([float(query_distance)], dtype=torch.float32, device=device)
-        y = model(x, query_distance=qd)
-    else:
-        y = model(x)
+    y = model(x)
     if isinstance(y, (list, tuple)):
         y = y[0]
     # The VAD head writes its frame logits onto the backbone as a side output of
@@ -237,8 +227,6 @@ def main():
     p.add_argument("config_path")
     p.add_argument("--ckpt", required=True)
     p.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
-    p.add_argument("--query-distance", type=float, default=1.0,
-                   help="conditioning distance in metres for distance-aware models")
     p.add_argument("--sr", type=int, default=16000)
     p.add_argument("--limit", type=int, default=None, help="evaluate first N samples only")
     p.add_argument("--asr", default="auto",
@@ -260,9 +248,8 @@ def main():
     n_eval = min(args.limit, n_total) if args.limit else n_total
     print(f"Dawn Chorus: {n_total} samples, evaluating {n_eval}")
 
-    model, uses_distance = load_model(args.config_path, args.ckpt, args.device)
-    qd = args.query_distance if uses_distance else None
-    print(f"model loaded from {args.ckpt} (distance-conditioned: {uses_distance})")
+    model = load_model(args.config_path, args.ckpt, args.device)
+    print(f"model loaded from {args.ckpt}")
 
     asr_name, transcribe = (None, None)
     if args.asr != "none":
@@ -284,7 +271,7 @@ def main():
         length = min(len(mix), len(ref))
         mix, ref = mix[:length], ref[:length]
 
-        enh, vad_prob = run_inference(model, mix, args.device, query_distance=qd)
+        enh, vad_prob = run_inference(model, mix, args.device)
         enh = enh[:length]
         if len(enh) < length:
             enh = np.pad(enh, (0, length - len(enh)))
@@ -323,7 +310,6 @@ def main():
         "dataset": DATASET_REPO,
         "n_eval": n_eval,
         "ckpt": args.ckpt,
-        "query_distance": qd,
         "asr": asr_name,
         "si_sdr_mix_mean": float(np.mean([r["si_sdr_mix"] for r in rows])),
         "si_sdr_enh_mean": float(np.mean([r["si_sdr_enh"] for r in rows])),

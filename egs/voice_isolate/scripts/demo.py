@@ -92,13 +92,6 @@ def resolve_config_relative_path(path: str | Path | None, recipe_root: Path) -> 
     return resolve_path(path, base_dir=recipe_root)
 
 
-def model_uses_distance(config: dict[str, Any]) -> bool:
-    backbone_args = (
-        config.get("model", {}).get("backbone", {}).get("backbone_args", {}) or {}
-    )
-    return int(backbone_args.get("distance_embedding_dim", 0) or 0) > 0
-
-
 def backend_checkpoint_extensions(backend: str) -> tuple[str, ...]:
     if backend.lower().startswith("ort"):
         return ONNX_CHECKPOINT_EXTENSIONS
@@ -493,7 +486,6 @@ def enhance_audio(
     input_audio_path: str | Path,
     backend: str = "PyTorch offline",
     ort_provider: str = "auto",
-    query_distance: float | None = None,
     dry_blend: float = 1.0,
     spec_floor: float = 0.0,
     gate_mode: str = "Off",
@@ -531,47 +523,14 @@ def enhance_audio(
         )
     validate_backend_artifact(backend, checkpoint_path)
     report_progress("Loading checkpoint/model", log_messages, progress, 0.18)
-    pytorch_uses_distance = False
     gate_probability = None
     gate_hop = 160
     if use_ort:
         runtime = get_cached_ort_runtime(checkpoint_path, provider=ort_provider)
         target_sample_rate = runtime.sample_rate
         device = f"onnxruntime:{','.join(runtime.providers)}"
-        if runtime.uses_distance:
-            d_value = float(query_distance) if query_distance is not None else 1.0
-            runtime.set_query_distance(d_value)
-            report_progress(
-                f"ORT model uses distance conditioning; query_distance = {d_value:.2f} m",
-                log_messages,
-                progress,
-                0.22,
-            )
-        elif query_distance is not None:
-            report_progress(
-                "ORT model has no distance conditioning; ignoring slider value",
-                log_messages,
-                progress,
-                0.22,
-            )
     else:
         model, device = get_cached_model(config_path, checkpoint_path)
-        pytorch_uses_distance = model_uses_distance(config)
-        if pytorch_uses_distance:
-            report_progress(
-                f"PyTorch model uses distance conditioning; query_distance = "
-                f"{float(query_distance) if query_distance is not None else 1.0:.2f} m",
-                log_messages,
-                progress,
-                0.22,
-            )
-        elif query_distance is not None:
-            report_progress(
-                "PyTorch model has no distance conditioning; ignoring slider value",
-                log_messages,
-                progress,
-                0.22,
-            )
     report_progress(f"Reading input audio: {input_audio_path}", log_messages, progress, 0.32)
     wav, sample_rate = AudioIO.open(
         f_path=str(input_audio_path),
@@ -609,18 +568,10 @@ def enhance_audio(
             0.50,
         )
         with torch.no_grad():
-            if pytorch_uses_distance:
-                d_value = float(query_distance) if query_distance is not None else 1.0
-                qd_tensor = torch.tensor([d_value], dtype=torch.float32, device=device)
-                enhanced = model(
-                    model_input.to(device), query_distance=qd_tensor,
-                    dry_blend=dry_blend, spec_floor=spec_floor,
-                ).detach().cpu()
-            else:
-                enhanced = model(
-                    model_input.to(device),
-                    dry_blend=dry_blend, spec_floor=spec_floor,
-                ).detach().cpu()
+            enhanced = model(
+                model_input.to(device),
+                dry_blend=dry_blend, spec_floor=spec_floor,
+            ).detach().cpu()
         enhanced = to_model_input(enhanced).clamp(min=-1.0, max=1.0)
         if gate_mode != "Off":
             gate_hop = int(
@@ -696,7 +647,6 @@ def run_demo_inference(
     input_audio_path: str,
     backend: str = "PyTorch offline",
     ort_provider: str = "auto",
-    query_distance: float = 1.0,
     dry_blend: float = 1.0,
     spec_floor: float = 0.0,
     gate_mode: str = "Off",
@@ -713,7 +663,6 @@ def run_demo_inference(
             input_audio_path,
             backend=backend,
             ort_provider=ort_provider,
-            query_distance=float(query_distance) if query_distance is not None else None,
             dry_blend=float(dry_blend),
             spec_floor=float(spec_floor),
             gate_mode=gate_mode,
@@ -802,7 +751,7 @@ def realtime_start():
     return _new_realtime_session(), "", "Recording... speak into the mic.", None, None
 
 
-def _ensure_runtime(session: dict[str, Any], onnx_path: str, provider: str, query_distance: float):
+def _ensure_runtime(session: dict[str, Any], onnx_path: str, provider: str):
     """Build the per-session ORT runtime on first use; returns (runtime, error_or_None)."""
     if session.get("runtime") is not None:
         return session["runtime"], None
@@ -813,8 +762,6 @@ def _ensure_runtime(session: dict[str, Any], onnx_path: str, provider: str, quer
 
         runtime = StreamingDparnOrt(onnx_path=resolve_path(onnx_path), provider=provider)
         runtime.reset()
-        if getattr(runtime, "uses_distance", False):
-            runtime.set_query_distance(float(query_distance) if query_distance is not None else 1.0)
         session["runtime"] = runtime
         session["key"] = (str(onnx_path), provider)
         return runtime, None
@@ -828,7 +775,6 @@ def realtime_stream(
     session: dict[str, Any] | None,
     onnx_path: str,
     provider: str,
-    query_distance: float,
     stt_enabled: bool,
     stt_backend: str,
     stt_model_size: str,
@@ -843,7 +789,7 @@ def realtime_stream(
     if new_chunk is None:
         return None, transcript, session
 
-    runtime, err = _ensure_runtime(session, onnx_path, provider, query_distance)
+    runtime, err = _ensure_runtime(session, onnx_path, provider)
     if runtime is None:
         return None, err or transcript, session
 
@@ -960,14 +906,6 @@ def build_realtime_tab(default_config_path: str) -> None:
         rt_refresh = gr.Button("Refresh model list")
         rt_provider = gr.Dropdown(label="ORT Provider", choices=["auto", "cpu", "cuda"], value="auto")
     rt_onnx = gr.Dropdown(label="ONNX Streaming Model", choices=[], value=None)
-    rt_query_distance = gr.Slider(
-        label="Query distance (m)",
-        minimum=0.3,
-        maximum=5.0,
-        step=0.1,
-        value=1.0,
-        info="Only honored when the ONNX model has distance conditioning. Applied when recording starts.",
-    )
     with gr.Group():
         stt_enabled = gr.Checkbox(label="Enable realtime STT", value=False)
         with gr.Row():
@@ -1025,7 +963,7 @@ def build_realtime_tab(default_config_path: str) -> None:
     rt_audio_in.stream(
         realtime_stream,
         inputs=[
-            rt_audio_in, session_state, rt_onnx, rt_provider, rt_query_distance,
+            rt_audio_in, session_state, rt_onnx, rt_provider,
             stt_enabled, stt_backend, stt_model_size, stt_interval,
         ],
         outputs=[rt_enhanced_out, rt_transcript, session_state],
@@ -1064,18 +1002,6 @@ def build_offline_tab(default_config_path: str) -> None:
             label="ORT Provider",
             choices=["auto", "cpu", "cuda"],
             value="auto",
-        )
-        query_distance = gr.Slider(
-            label="Query distance (m)",
-            minimum=0.3,
-            maximum=5.0,
-            step=0.1,
-            value=1.0,
-            info=(
-                "Only honored when the loaded model has distance conditioning "
-                "(backbone_args.distance_embedding_dim > 0). Matches the "
-                "augmentation_query_distance range used at training time."
-            ),
         )
         dry_blend = gr.Slider(
             label="Dry blend (over-suppression relief)",
@@ -1176,7 +1102,6 @@ def build_offline_tab(default_config_path: str) -> None:
                 input_audio,
                 backend,
                 ort_provider,
-                query_distance,
                 dry_blend,
                 spec_floor,
                 gate_mode,

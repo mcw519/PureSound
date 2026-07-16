@@ -120,13 +120,6 @@ class StreamingDparnFrameModel(nn.Module):
         self.n_up = len(self.backbone.cnn_up)
         self.n_blocks = len(self.backbone.dparn_block)
         self.streaming_delay = self.n_up
-        # Auto-detect distance conditioning. When enabled, callers must pass
-        # query_distance as an extra forward input; when disabled the wrapper
-        # keeps its historical (noisy_frame, *state) signature for v3 ckpts.
-        self.uses_distance = (
-            getattr(self.backbone, "distance_embedding", None) is not None
-            and getattr(self.backbone, "distance_projection", None) is not None
-        )
         self.eval()
 
     @property
@@ -243,7 +236,6 @@ class StreamingDparnFrameModel(nn.Module):
         self,
         features: torch.Tensor,
         state: DparnStreamingState,
-        query_distance: torch.Tensor | None = None,
     ) -> tuple[torch.Tensor, DparnStreamingState]:
         if self.backbone.spectral_compress:
             raise ValueError("streaming DPARN does not support spectral_compress=True")
@@ -255,18 +247,6 @@ class StreamingDparnFrameModel(nn.Module):
             x, cache = self._down_step(layer, x, state.down_caches[i])
             next_down.append(cache)
             skip.append(x)
-
-        # Mirror the non-streaming DPARN's bottleneck distance-bias injection so
-        # the per-frame path produces the same output as the full-utterance path
-        # when a distance is supplied.
-        if (
-            self.uses_distance
-            and query_distance is not None
-        ):
-            d_emb = self.backbone.distance_embedding(query_distance.to(x.dtype))
-            bias = self.backbone.distance_projection(d_emb)
-            bias = bias.view(bias.shape[0], bias.shape[1], 1, 1)
-            x = x + bias
 
         next_h = []
         next_c = []
@@ -287,15 +267,12 @@ class StreamingDparnFrameModel(nn.Module):
         self,
         noisy_frame: torch.Tensor,
         state: DparnStreamingState,
-        query_distance: torch.Tensor | None = None,
     ) -> tuple[torch.Tensor, DparnStreamingState]:
         if noisy_frame.dim() != 3 or noisy_frame.shape[-1] != 2:
             raise ValueError("noisy_frame must have shape [B, 257, 2]")
         tf_frame = noisy_frame.unsqueeze(2)
         features, features_for_enhanced = self.feats(tf_frame)
-        mask, next_state = self._forward_feature_frame(
-            features, state, query_distance=query_distance
-        )
+        mask, next_state = self._forward_feature_frame(features, state)
         enhanced = Masker.apply_complex_mask_on_reim(features_for_enhanced, mask)
         enhanced = self.feats.back_forward(enhanced)
         enhanced = enhanced.squeeze(-1).permute(0, 2, 1).contiguous()
@@ -303,21 +280,9 @@ class StreamingDparnFrameModel(nn.Module):
         return torch.cat([real, imag], dim=-1).reshape(noisy_frame.shape), next_state
 
     def forward(self, *inputs: torch.Tensor) -> tuple[torch.Tensor, ...]:
-        # Conditional input ordering: with distance conditioning the second
-        # positional input is the query distance, then state. Without it the
-        # signature matches the historical (noisy_frame, *state) layout used
-        # by exported v3 ONNX models.
-        if self.uses_distance:
-            noisy_frame = inputs[0]
-            query_distance = inputs[1]
-            state = self.state_from_tensors(inputs[2:])
-        else:
-            noisy_frame = inputs[0]
-            query_distance = None
-            state = self.state_from_tensors(inputs[1:])
-        enhanced, next_state = self.forward_frame(
-            noisy_frame, state, query_distance=query_distance
-        )
+        noisy_frame = inputs[0]
+        state = self.state_from_tensors(inputs[1:])
+        enhanced, next_state = self.forward_frame(noisy_frame, state)
         return tuple([enhanced] + next_state.down_caches + next_state.up_caches + next_state.h_states + next_state.c_states)
 
 
@@ -372,24 +337,13 @@ def export_streaming_dparn_onnx(
 
     noisy_frame = torch.randn(1, int(geometry["freq_bins"]), 2)
     state = frame_model.initial_state_tensors(batch_size=1)
-    distance_inputs: tuple[torch.Tensor, ...] = ()
-    distance_input_names: list[str] = []
-    if frame_model.uses_distance:
-        # 1-D scalar-per-batch input. Deployment passes a single value (e.g.
-        # 1.0 m for the default robot threshold); training varies it across
-        # batches so the model learns to attend to it.
-        query_distance = torch.full((1,), 1.0)
-        distance_inputs = (query_distance,)
-        distance_input_names = ["query_distance"]
 
-    input_names = ["noisy_frame"] + distance_input_names + frame_model.state_input_names
+    input_names = ["noisy_frame"] + frame_model.state_input_names
     output_names = ["enhanced_frame"] + frame_model.state_output_names
     dynamic_axes = {
         "noisy_frame": {0: "batch_size"},
         "enhanced_frame": {0: "batch_size"},
     }
-    if frame_model.uses_distance:
-        dynamic_axes["query_distance"] = {0: "batch_size"}
     for name in frame_model.state_input_names + frame_model.state_output_names:
         if name.startswith(("h_", "c_", "next_h_", "next_c_")):
             dynamic_axes[name] = {1: "batch_freq"}
@@ -398,7 +352,7 @@ def export_streaming_dparn_onnx(
 
     torch.onnx.export(
         frame_model,
-        (noisy_frame, *distance_inputs, *state),
+        (noisy_frame, *state),
         str(onnx_path),
         export_params=True,
         opset_version=opset_version,
@@ -414,13 +368,11 @@ def export_streaming_dparn_onnx(
     providers = [provider for provider in providers if provider in available]
     session = onnxruntime.InferenceSession(str(onnx_path), providers=providers or ["CPUExecutionProvider"])
     ort_inputs = {"noisy_frame": noisy_frame.numpy()}
-    if frame_model.uses_distance:
-        ort_inputs["query_distance"] = distance_inputs[0].numpy()
     for name, tensor in zip(frame_model.state_input_names, state):
         ort_inputs[name] = tensor.numpy()
     ort_out = session.run(None, ort_inputs)
     with torch.no_grad():
-        torch_out = frame_model(noisy_frame, *distance_inputs, *state)
+        torch_out = frame_model(noisy_frame, *state)
     if not np.allclose(torch_out[0].numpy(), ort_out[0], rtol=1e-4, atol=1e-4):
         raise AssertionError("exported ONNX frame output does not match PyTorch output")
 
@@ -471,22 +423,7 @@ class StreamingDparnOrt:
         self.hop_length = int(self.manifest["hop_length"])
         self.freq_bins = int(self.manifest["freq_bins"])
         self.window = np.hanning(self.win_length + 1)[:-1].astype(np.float32)
-        self.uses_distance = "query_distance" in self.manifest.get("input_names", [])
-        # Default distance matches the export-time placeholder (1.0 m) so a
-        # caller that never touches set_query_distance still gets a sensible
-        # inference value instead of a zero that the model never saw.
-        self._query_distance = (
-            np.asarray([1.0], dtype=np.float32) if self.uses_distance else None
-        )
         self.reset()
-
-    def set_query_distance(self, value: float | None) -> None:
-        if not self.uses_distance:
-            return
-        if value is None:
-            self._query_distance = np.asarray([1.0], dtype=np.float32)
-            return
-        self._query_distance = np.asarray([float(value)], dtype=np.float32)
 
     @staticmethod
     def _resolve_providers(provider: str, available: Sequence[str]) -> list[str]:
@@ -515,8 +452,6 @@ class StreamingDparnOrt:
         if noisy_frame.shape != (1, self.freq_bins, 2):
             raise ValueError(f"noisy_frame must have shape (1, {self.freq_bins}, 2)")
         ort_inputs = {"noisy_frame": noisy_frame}
-        if self.uses_distance:
-            ort_inputs["query_distance"] = self._query_distance
         ort_inputs.update(self.state)
         outputs = self.session.run(self.manifest["output_names"], ort_inputs)
         enhanced = outputs[0]

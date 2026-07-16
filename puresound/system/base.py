@@ -37,14 +37,6 @@ class BaseLightningModule(LightningModule):
         self.loss_func_list = loss_func_list
         self.loss_func_list_w = loss_func_list_weights
 
-    def register_qd_contrastive(self, cfg: Any):
-        """Register the optional query-distance contrastive loss config.
-
-        See ``siso.EncDecMaskBase._qd_contrastive_loss``. A ``None`` config or
-        ``used: false`` makes it a no-op, so registering is always safe.
-        """
-        self.qd_contrastive_cfg = cfg
-
     def register_gpu_vad_labeler(self, labeler: Any):
         """Attach a batched GPU VAD labeler used to build ``vad_target`` from
         the per-batch ``vad_reference`` waveform after device transfer.

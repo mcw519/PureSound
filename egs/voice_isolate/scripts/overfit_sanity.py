@@ -117,8 +117,6 @@ def main():
     batch = model.ensure_vad_targets(batch) if hasattr(model, "ensure_vad_targets") else batch
     noisy = batch["noisy_speech"].to(args.device)
     clean = batch["clean_speech"].to(args.device)
-    qd = batch.get("query_distance")
-    qd = qd.to(args.device) if qd is not None else None
     for k, v in list(batch.items()):
         if torch.is_tensor(v):
             batch[k] = v.to(args.device)
@@ -140,7 +138,7 @@ def main():
     model.train()
     for step in range(args.steps + 1):
         with amp:
-            enh = model(noisy, query_distance=qd)
+            enh = model(noisy)
             total_loss, _losses = model.compute_loss(
                 enhanced=enh, target=clean,
                 vad_target=batch.get("vad_target"), batch=batch)
@@ -151,7 +149,7 @@ def main():
         if step % args.print_every == 0:
             model.eval()
             with torch.no_grad(), amp:
-                enh_e = model(noisy, query_distance=qd)
+                enh_e = model(noisy)
                 sdr_t, _ = batch_sisdr(enh_e.float(), clean)
                 sdr_m, _ = batch_sisdr(enh_e.float(), noisy)
             model.train()

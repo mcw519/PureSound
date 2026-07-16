@@ -89,7 +89,7 @@ def main():
         for i,it in enumerate(items):
             mix,_=sf.read(sd/f"{it['id']}_mix.wav"); ref,_=sf.read(sd/f"{it['id']}_ref.wav")
             mt=torch.tensor(mix,dtype=torch.float32,device=args.device).reshape(1,-1)
-            enh=model(mt,query_distance=None,dry_blend=args.dry_blend,spec_floor=args.spec_floor).reshape(-1)
+            enh=model(mt,dry_blend=args.dry_blend,spec_floor=args.spec_floor).reshape(-1)
             T=min(enh.shape[-1],mt.shape[-1],len(ref))
             rt=torch.tensor(ref,dtype=torch.float32)
             ssi=si_sdr(enh[...,:T].cpu(),rt[...,:T])-si_sdr(mt[...,:T].cpu(),rt[...,:T])

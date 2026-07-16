@@ -1,21 +1,15 @@
 """
 Single Input Single Output (SISO) PL-Module
 
-"Single input" here counts *acoustic* observations: one noisy waveform in,
-one enhanced waveform out. This is orthogonal to *conditioning*. A SISO model
-may still be conditioned on an auxiliary control signal -- e.g. a scalar
-``query_distance`` injected as a FiLM bias inside the backbone -- without that
-turning it into a MISO model. MISO (see ``miso.EncDecCondMaskBase``) is
-reserved for the case where the second input is itself an *audio stream* that
-needs its own front-end (e.g. an enrollment utterance for target-speaker
-extraction). The distance query carries no acoustic observation, so it stays
-SISO: a *conditional* SISO.
+"Single input" counts *acoustic* observations: one noisy waveform in, one
+enhanced waveform out. MISO (see ``miso.EncDecCondMaskBase``) is reserved for
+the case where a second input is itself an *audio stream* that needs its own
+front-end (e.g. an enrollment utterance for target-speaker extraction).
 
 Use cases:
     EncDecMaskBase:
         - Mask based speech enhancement
         - Mapping based speech enhancement
-        - Optionally distance-conditioned enhancement (FiLM scalar query)
     EncPredClassBase:
         - Speaker embedding
 """
@@ -35,14 +29,6 @@ class EncDecMaskBase(BaseLightningModule):
     """
     Structure:
         Wav -> Encoder -> Features -> Backbone -> Apply Mask -> Restore Features -> Decoder -> Wav
-
-    Optionally conditional: when an ``query_distance`` scalar is supplied it is
-    forwarded into the backbone, which may inject it as a FiLM bias (see
-    ``puresound.nnet.dparn``). This is a control signal, not a second acoustic
-    input -- the module stays single-input single-output. Backbones without
-    distance support simply never receive the kwarg (it is only passed when
-    not ``None``), so the same SISO module serves both conditioned and
-    un-conditioned backbones.
 
     Args:
         encoder: STFT/Conv1D based encode/decode structure
@@ -71,9 +57,6 @@ class EncDecMaskBase(BaseLightningModule):
 
         # Feature
         self.mask_type = mask_type.lower()
-
-        # Far-parent decoder waveform, stashed each training forward (P1).
-        self.last_far_wav = None
 
         # Parameter
         self.encoder_lr_factor = encoder_lr_factor
@@ -118,20 +101,14 @@ class EncDecMaskBase(BaseLightningModule):
     def forward(
         self,
         wav: torch.Tensor,
-        query_distance: torch.Tensor | None = None,
         dry_blend: float = 1.0,
         spec_floor: float = 0.0,
     ):
-        """Run enhancement, optionally conditioned on a distance query.
+        """Run enhancement.
 
         Args:
             wav: noisy waveform, shape ``[N, T]`` (a leading singleton channel
                 is squeezed away).
-            query_distance: optional ``[N]`` / ``[N, 1]`` tensor of target
-                distances in metres. Passed to the backbone only when not
-                ``None`` so distance-agnostic backbones (e.g. SkiM) never see
-                the kwarg. The conditioning is a FiLM control signal, not a
-                second acoustic input.
             dry_blend: inference-only over-suppression relief in ``(0, 1]``.
                 Output becomes ``dry_blend * enh + (1 - dry_blend) * input``;
                 ``1.0`` (default) is a no-op. Values < 1 mix the original mix
@@ -152,13 +129,7 @@ class EncDecMaskBase(BaseLightningModule):
 
         features = self.encoder(wav)
         features, features_for_enhanced = self.feats(features)
-        # Optional distance conditioning; backbones that ignore the kwarg
-        # (e.g. SkiM) must accept **kwargs or this will TypeError -- handled
-        # by passing only when explicitly provided.
-        if query_distance is not None:
-            mask = self.backbone(features, query_distance=query_distance)
-        else:
-            mask = self.backbone(features)
+        mask = self.backbone(features)
 
         if self.mask_type in ["wiener", "mvdr"]:
             mask, ifc, cov = mask
@@ -212,13 +183,6 @@ class EncDecMaskBase(BaseLightningModule):
             enh = enh.clone()
             enh[..., :n] = torch.clamp(blended, min=-1.0, max=1.0)
 
-        # Far parent waveform (training-only; DISTANCE_PARENT P1). The backbone
-        # stashed its far spectrum during the forward above (None at eval / when
-        # disabled); run it through the same iSTFT so FarReconstructionLoss can
-        # compare it against far_target.
-        far_spec = getattr(self.backbone, "last_far_spec", None)
-        self.last_far_wav = self._spec_to_wav(far_spec) if far_spec is not None else None
-
         return enh
 
     def _spec_to_wav(self, enh: torch.Tensor) -> torch.Tensor:
@@ -231,18 +195,6 @@ class EncDecMaskBase(BaseLightningModule):
             enh = enh.squeeze(1)
         enh = self.encoder.inverse(enh)
         return torch.clamp_(enh, min=-1, max=1)
-
-    def _forward_batch(self, noisy_speech: torch.Tensor, batch: dict) -> torch.Tensor:
-        """Call ``forward``, passing ``query_distance`` only when the batch has
-        one. Mirrors the same "only pass when not None" guard ``forward``
-        itself uses for the backbone call, so a ``forward`` override that
-        does not declare ``query_distance`` (e.g. a distance-agnostic system
-        or a test double) is not broken by an explicit ``query_distance=None``
-        keyword it never asked for."""
-        query_distance = batch.get("query_distance")
-        if query_distance is not None:
-            return self.forward(noisy_speech, query_distance=query_distance)
-        return self.forward(noisy_speech)
 
     @staticmethod
     def _apply_spec_floor(
@@ -289,7 +241,6 @@ class EncDecMaskBase(BaseLightningModule):
             "last_background_vad_logits",
             None,
         )
-        aux_outputs = getattr(self.backbone, "last_aux_outputs", {})
 
         overall_loss = []
         losses = []
@@ -314,24 +265,6 @@ class EncDecMaskBase(BaseLightningModule):
                     background_vad_logits,
                     bg_target,
                 )
-            elif getattr(loss_func, "uses_aux_outputs", False):
-                weighted_loss = weighted * loss_func(aux_outputs, batch or {})
-            elif getattr(loss_func, "uses_far_output", False):
-                # Far-parent decoder loss (DISTANCE_PARENT P1). last_far_wav is
-                # None at eval / when the far decoder is disabled -> skip.
-                far_out = loss_func(getattr(self, "last_far_wav", None), batch or {})
-                if far_out is None:
-                    losses.append(0.0)
-                    continue
-                weighted_loss = weighted * far_out
-            elif getattr(loss_func, "uses_mixture_consistency", False):
-                mc_out = loss_func(
-                    enhanced, getattr(self, "last_far_wav", None), batch or {}
-                )
-                if mc_out is None:
-                    losses.append(0.0)
-                    continue
-                weighted_loss = weighted * mc_out
             elif getattr(loss_func, "uses_batch", False):
                 weighted_loss = weighted * loss_func(enhanced, target, batch or {})
             elif getattr(loss_func, "uses_vad_target", False):
@@ -352,78 +285,17 @@ class EncDecMaskBase(BaseLightningModule):
 
         return overall_loss, losses
 
-    def _qd_contrastive_loss(self, batch: dict):
-        """Counterfactual query-distance loss (③): same mixture, two queries.
-
-        For each sample whose foreground is actually in the mixture (non-silent
-        ``clean_speech`` -- excludes target-absent and distance-gated rows), run
-        the SAME noisy mixture twice: once with a query that COVERS the
-        foreground (``fgd + margin`` -> keep -> supervise toward the foreground)
-        and once BELOW it (``fgd - margin`` -> drop -> supervise toward silence).
-        The only difference between the two forwards is the query distance, so
-        the loss cannot drop without the model actually reading the query --
-        this directly attacks the qd-invariance / miscalibrated-FiLM failure
-        mode the qd-sweep probe revealed. No-op unless a config with
-        ``used: true`` was registered via ``register_qd_contrastive``.
-        """
-        cfg = getattr(self, "qd_contrastive_cfg", None)
-        if not cfg or not cfg.get("used", False):
-            return None
-        fgd = batch.get("foreground_distance")
-        if fgd is None or "clean_speech" not in batch:
-            return None
-        noisy = batch["noisy_speech"]
-        target = batch["clean_speech"]
-        present = torch.isfinite(fgd) & (target.abs().amax(dim=-1) > 0)
-        apply_prob = float(cfg.get("apply_prob", 1.0))
-        if apply_prob < 1.0:
-            present = present & (torch.rand_like(fgd) < apply_prob)
-        if not bool(present.any()):
-            return None
-
-        idx = present.nonzero(as_tuple=True)[0]
-        margin = float(cfg.get("margin", 0.15))
-        near_floor = float(cfg.get("near_floor", 0.3))
-        qd_keep = fgd[idx].clamp(min=near_floor) + margin
-        qd_drop = (fgd[idx] - margin).clamp(min=near_floor)
-
-        out_keep = self.forward(noisy[idx], query_distance=qd_keep)
-        out_drop = self.forward(noisy[idx], query_distance=qd_drop)
-
-        t = min(out_keep.shape[-1], out_drop.shape[-1], target.shape[-1])
-        sdr = self.loss_func_list[0]  # primary reconstruction loss (SDRLoss)
-        keep_loss = sdr(out_keep[:, :t], target[idx, :t])
-        zeros = torch.zeros_like(out_drop[:, :t])
-        if getattr(sdr, "uses_inactive_labels", False):
-            inactive = torch.ones(
-                out_drop.shape[0], dtype=torch.bool, device=out_drop.device
-            )
-            drop_loss = sdr(out_drop[:, :t], zeros, inactive_labels=inactive)
-        else:
-            drop_loss = out_drop[:, :t].pow(2).mean()
-        return float(cfg.get("weight", 1.0)) * (keep_loss + drop_loss)
-
     def training_step(self, batch, batch_idx):
         batch = self.ensure_vad_targets(batch)
         noisy_speech = batch["noisy_speech"]
         clean_speech = batch["clean_speech"]
-        enhanced_speech = self._forward_batch(noisy_speech, batch)
+        enhanced_speech = self.forward(noisy_speech)
         total_loss, losses = self.compute_loss(
             enhanced=enhanced_speech,
             target=clean_speech,
             vad_target=batch.get("vad_target"),
             batch=batch,
         )
-        qd_contrastive = self._qd_contrastive_loss(batch)
-        if qd_contrastive is not None:
-            total_loss = total_loss + qd_contrastive
-            self.log(
-                "train_qd_contrastive",
-                qd_contrastive,
-                prog_bar=False,
-                sync_dist=False,
-                on_step=True,
-            )
         # sync_dist stays False for the progress-bar metric on purpose: a
         # synced (all-reduced) metric read by the progress bar deadlocks DDP,
         # because the bar's refresh -- and thus the metric access that triggers
@@ -448,7 +320,7 @@ class EncDecMaskBase(BaseLightningModule):
         batch = self.ensure_vad_targets(batch)
         noisy_speech = batch["noisy_speech"]
         clean_speech = batch["clean_speech"]
-        enhanced_speech = self._forward_batch(noisy_speech, batch)
+        enhanced_speech = self.forward(noisy_speech)
         total_loss, losses = self.compute_loss(
             enhanced=enhanced_speech,
             target=clean_speech,
@@ -481,7 +353,7 @@ class EncDecMaskBase(BaseLightningModule):
         noisy_speech = batch["noisy_speech"]
         clean_speech = batch["clean_speech"]
         input_sr = batch["sr"]
-        enhanced_speech = self._forward_batch(noisy_speech, batch)
+        enhanced_speech = self.forward(noisy_speech)
 
         # Move tensor to cpu
         clean_speech = clean_speech.cpu()
@@ -521,7 +393,7 @@ class EncDecMaskBase(BaseLightningModule):
         batch = self.ensure_vad_targets(batch)
         noisy_speech = batch["noisy_speech"]
         input_sr = batch["sr"]
-        enhanced_speech = self._forward_batch(noisy_speech, batch)
+        enhanced_speech = self.forward(noisy_speech)
         AudioIO.save(
             wav=enhanced_speech.detach().cpu(),
             f_path=f"{self.eval_output_folder_path}/{batch['name'][0]}.wav",
