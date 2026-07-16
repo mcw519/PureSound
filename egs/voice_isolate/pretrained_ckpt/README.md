@@ -15,10 +15,13 @@ All 6 share the **same architecture** — load any of them with `../config/infer
 | `dpcrn_antisup_w3_ep19.ckpt`        | 5/6 anti-sup weight 3.0 | stage 4 | in-domain +8.45; **best in deployment-reverb domain**, worst in extreme-OOD (BUT) — the "domain split point" (see `../README.md`) |
 | `dpcrn_wide_antisup_ep19.ckpt`      | 6/6 wide-domain deployment (**current best deployment candidate**) | stage 5 | widened RIR domain (rt60 0.20–0.85) + realism augs (media_voice/hpf); 4/5 judge gates passed; **streaming-verified** (see below) |
 
-All post-wide synthetic rungs (boundary, realfar, gate-only `dpcrn_gate_synth_ep7.ckpt`, joint
-sepgate `exp/dpcrn_v2_sepgate` ep19) were judged **negative on real end-to-end recordings** and are
-closed — wide-ep19 stays the deployment candidate. Their artifacts are kept here / under `exp/` only
-for reproducibility of the negative results (details: `EXPERIMENT_LOG.md` 2026-07-04 → 2026-07-16).
+All post-wide synthetic rungs (boundary, realfar, gate-only, joint sepgate `exp/dpcrn_v2_sepgate`
+ep19) were judged **negative on real end-to-end recordings** and are closed — wide-ep19 stays the
+deployment candidate (details: `EXPERIMENT_LOG.md` 2026-07-04 → 2026-07-16). The VAD gate
+infrastructure itself is kept for the future real-data rung: `dpcrn_gate_synth_ep7.ckpt` here is the
+gate-only engineering-validation artifact (synthetic-only evidence), and the gate/sepgate training
+configs remain under `../config/`. The closed rungs' streaming exports were removed from the tree
+(git history keeps them).
 
 ## `streaming/` — ONNX streaming export
 

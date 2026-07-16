@@ -21,10 +21,13 @@ augmentation, and loss weights change stage to stage.
 `train_dpcrn_wide_causal.yaml` — untrained alternative (fully-causal, `delay=[0,0,0]`), kept only as a
 documented fallback; not needed since streaming export solved look-ahead via future-buffering instead.
 
-`train_dpcrn_gate.yaml` — gate-only synthetic pretraining / engineering validation. It must warm-start
-from `dpcrn_wide_antisup_ep19.ckpt`; the encoder, features, DPCRN separator, BatchNorm state, and mask
-decoder remain frozen, while a causal frame-level VAD head learns near-active vs inactive/far-only
-labels. Its synthetic score is not evidence of real-recording transfer.
+`train_dpcrn_gate.yaml` / `train_dpcrn_v2_sepgate.yaml` — the VAD gate recipes, kept for the future
+real-data rung. Both warm-start from `dpcrn_wide_antisup_ep19.ckpt` and add a causal frame-level VAD
+head (near-active vs inactive/far-only labels). `gate`: separator frozen, head-only (engineering
+validation). `v2_sepgate`: separator+gate trained jointly on the obstacle-rich `hybrid_rir_16k_v2`
+bank with turn-taking label-0 frames. **Both were judged negative on real end-to-end recordings**
+(gate never closes on real clips; joint training also blows up real-acoustic deletion — see
+`EXPERIMENT_LOG.md` 2026-07-10/16); synthetic scores are not evidence of real-recording transfer.
 
 Run (from repo root):
 ```bash
@@ -47,6 +50,15 @@ reconstruct the exact augmentation pipeline so any checkpoint in `pretrained_ckp
 | `eval_but_real.yaml` | real BUT ReverbDB RIR benchmark (rt60 1.15–1.84, extreme OOD) | `but_real_rir_16k` |
 | `eval_heldout.yaml` | unseen-room generalization (same distribution as expand, disjoint rooms) | `hybrid_rir_16k_levels_test/expand` |
 | `eval_targetabsent_probe.yaml` | far-only/noise-only leakage probe | `augmentation_target_absent` forced ON |
+
+**Frozen benchmark fixtures** (byte-frozen — do not edit; they define the eval distributions every
+historical judgment in `EXPERIMENT_LOG.md` used, via `../run_full_benchmark.sh`):
+
+| config | benchmark station | bank |
+|---|---|---|
+| `eval_indomain_phase1.yaml` | 2 (in-domain SI-SDRi + solo-leakage + turn-taking buckets) | `hybrid_rir_16k_phase1` (wide+boundary merge) |
+| `eval_targetabsent_probe_high.yaml` | 4 (unseen high-reverb far-only probe) | `hybrid_rir_16k_high_levels/all` |
+| `eval_targetabsent_probe_boundary.yaml` | 5 (unseen boundary-distance far-only probe) | `hybrid_rir_16k_boundary_heldout_levels/all` |
 
 Tools: `../scripts/README.md`.
 
@@ -76,6 +88,8 @@ pretrained_ckpt` automatically). Used by `scripts/demo.py` and `scripts/streamin
 ## `backup/`
 
 Superseded configs kept only for reproducibility (dead-end runs: conformer/mixmode/P1, pre-DPCRN
-query/FiLM/VAD variants, the failed all-RIR cold-start, ASR-loss ablations, and the never-run
-`dpcrn_curriculum_stress.yaml` — STAGE-3 stress was superseded by the wide-domain direction before it
-ran). Not part of the active pipeline.
+query/FiLM/VAD variants, the failed all-RIR cold-start, ASR-loss ablations, the closed
+boundary/realfar rungs, the never-run `dpcrn_curriculum_stress.yaml`, and the never-wired
+`eval_targetabsent_probe_wide.yaml`). Not part of the active pipeline. Note: the corresponding
+library code for the conformer/distance-query axis was removed from `puresound/` in the 2026-07-16
+refactor, so these configs document history rather than runnable recipes.
