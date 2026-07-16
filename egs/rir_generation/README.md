@@ -410,3 +410,23 @@ scanner for the [**BUT Speech@FIT Reverb Database**](https://speech.fit.vut.cz/s
 repo; only the scanner and the manifest→bank converter live here. The
 docstring's "BUT, UPV, ..." notes other one-loudspeaker/many-microphone corpora
 that the same Stage-A→Stage-B path can target once a `scan_*` is added.
+
+## Rebuilding the frozen benchmark banks (stations 2/5)
+
+The voice_isolate benchmark's in-domain bank (`hybrid_rir_16k_phase1`, station 2
+via `config/eval_indomain_phase1.yaml`) is a merged view of the wide level view
+plus the boundary-distance bank; the station-5 probe uses the boundary held-out
+bank (seed 1618, built by `run_boundary_gen.sh`). Both live under
+`/work/any_exp_link/puresound_exp/` and are frozen — rebuild only after data
+loss:
+
+```bash
+# boundary main + held-out banks (see run_boundary_gen.sh for the full recipe)
+bash egs/rir_generation/run_boundary_gen.sh
+
+# merged phase1 view (wide + boundary; refuses to overwrite an existing output)
+uv run python egs/rir_generation/merge_rir_views.py \
+  --source wide=/work/any_exp_link/puresound_exp/hybrid_rir_16k_levels/wide \
+  --source bnd=/work/any_exp_link/puresound_exp/hybrid_rir_16k_boundary_levels/all \
+  --output /work/any_exp_link/puresound_exp/hybrid_rir_16k_phase1
+```
