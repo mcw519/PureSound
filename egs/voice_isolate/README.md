@@ -13,8 +13,14 @@ hard near/far cases while DPCRN/DPARN could — see "Pre-DPCRN history" below.
 Wide-domain deployment recipe (widened RIR + realism augs), stage 6 of the pipeline below. Also the
 first checkpoint **verified for real-time streaming deployment** — a bit-exact per-frame ONNX export
 exists at `pretrained_ckpt/streaming/dpcrn_wide_antisup_ep19.{onnx,json}` (30 ms algorithmic latency,
-CPU RTF 0.43). Training is currently **paused at ep19** pending a decision to true-resume to ep39 or
-wait for the in-progress high-reverb RIR bank.
+CPU RTF 0.43). Every post-wide synthetic rung has since been judged and **closed negative on real
+end-to-end recordings** (boundary distances, real measured RIRs in training, gate-only VAD head, and
+the joint separator+gate `train_dpcrn_v2_sepgate.yaml` fine-tune on the obstacle-rich
+`hybrid_rir_16k_v2` bank): each learns arbitrarily well inside the RIR-convolution domain but does not
+transfer to real recordings, and pushing far-suppression harder in that domain blows up real-acoustic
+deletion (BUT-OFFICE WER 0.663 vs wide's 0.529). wide-ep19 therefore remains the deployment candidate;
+the open lever is real end-to-end training data (plus a capture-chain augmentation ablation —
+AGC/compressor/limiter are the most obvious unmodeled dimension).
 
 ## The pipeline (6 stages, each warm-started from the previous)
 
