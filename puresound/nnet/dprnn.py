@@ -120,7 +120,7 @@ class DPRNN(nn.Module):
         if self.embedding_free_tse:
             assert (
                 embed.dim() == 3
-            ), f"embedding free tse need enrollment waveform as input."
+            ), "embedding free tse need enrollment waveform as input."
             inter_hidd_init_states = self._get_hidden_states(embed)
         else:
             inter_hidd_init_states = [None for _ in range(self.n_blocks)]

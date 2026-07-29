@@ -33,7 +33,7 @@ from puresound.utils import load_hparam
 # The ORT runtime is fully manifest-driven (dispatched by processor
 # "stft_frame_ort", state read from JSON), so the DPARN runtime handles a DPCRN
 # manifest unchanged. Re-exported under a DPCRN name for callers/CLIs.
-from puresound.streaming.dparn import StreamingDparnOrt as StreamingDpcrnOrt
+from puresound.streaming.dparn import StreamingDparnOrt as StreamingDpcrnOrt  # noqa: F401
 
 
 @dataclass

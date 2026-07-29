@@ -1,6 +1,19 @@
 # puresound/* Refactor Plan
 
-Status: **ACTIVE**（2026-07-29 盤點完成；同日決策定案，見 §9）
+Status: **COMPLETED**（2026-07-29 盤點、決策、執行同日完成）
+
+| 階段 | commit | 結果 |
+|---|---|---|
+| P1 backbone 一等公民化＋改名 | `a5812f3` | 全 backbone 匯出＋可達性測試；4 個 typo 識別字改正、GE2E/Triplet/F1 歸位 |
+| P2 死碼移除 | `ddf2b52` | base_nn.py(992 行) 刪除；test/ 根腳本歸位 |
+| P3 schema 拼字硬換 | `7cf7e02` | lightning_*/normalized 全面換新，40 檔 |
+| P4a 通用/專用分層 | `7805e50` | ns.py 骨架＋hooks，VI 機制歸 VoiceIsolationDataset；雙指紋 bit-identical |
+| P4b heads 搬家＋siso 分區 | `1f83685` | heads → lobe/heads.py（ckpt key 0 缺）；siso 分區 |
+| P5 docs 同步 | `fd2662f` | 6 新頁、3 重寫、狀態欄、0 斷鏈 |
+| P6 測試理性化 | 本 commit | ruff 政策入 pyproject（F/E9 全 repo 綠）、白名單移除、+5 tests（171 綠） |
+
+最終閘（全過）：171 tests、ruff 全 repo、22 config parse+build、v7 bit-identical、
+資料集雙指紋 bit-identical、streaming parity 63dB。
 Scope: `puresound/`（25,251 行，其中 vendored `third_party/pytARD` ~3,600 行不動）、
 `docs/`、`test/`。`egs/` 只做被動同步（import 路徑、config key 拼字），不重構。
 

@@ -89,7 +89,7 @@ def wav_apply_rir(
             out.append(tmp_wav)
 
     else:
-        assert wav.shape[0] == 1, f"when rir chaneels not equal to 1 (ex: mic array inpaulse), wav must be single channel case."
+        assert wav.shape[0] == 1, "when rir chaneels not equal to 1 (ex: mic array inpaulse), wav must be single channel case."
         for i in range(rir_ch):
             tmp_wav = fftconvolve(wav, impaulse[i].view(1, -1), mode="full")
             propagation_delays = impaulse.abs().argmax(dim=-1, keepdim=False)[0]

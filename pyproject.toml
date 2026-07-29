@@ -90,3 +90,13 @@ filterwarnings = [
   "ignore:`np.bool` is a deprecated alias for the builtin `bool`",
   "ignore::DeprecationWarning",
 ]
+
+[tool.ruff]
+# Vendored code is not ours to lint.
+extend-exclude = ["puresound/third_party"]
+
+[tool.ruff.lint]
+# F/E9 are the correctness rules the repo enforces everywhere; the wider style
+# families stay advisory. E402 is excluded because scripts under egs/ use the
+# sys.path-then-import pattern by design.
+select = ["F", "E9"]

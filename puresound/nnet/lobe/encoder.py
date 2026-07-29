@@ -153,7 +153,7 @@ class ConvEncDec(nn.Module):
         elif type.lower() == "blackman":
             win = torch.blackman_window(self.win_length)
         else:
-            raise NotImplementedError(f"window type not support")
+            raise NotImplementedError("window type not support")
         return win
 
     def get_encoder(self, **kwargs) -> nn.Module:
@@ -251,7 +251,7 @@ class ConvSTFT(nn.Module):
         # Applying window functions to the Fourier kernels
 
         if len(window_mask) != self.n_fft:
-            raise TypeError(f"only support window length == n_fft")
+            raise TypeError("only support window length == n_fft")
 
         wsin = kernel_sin * window_mask
         wcos = kernel_cos * window_mask
@@ -457,7 +457,7 @@ class UnifiedConvEncDec(nn.Module):
         elif type.lower() == "blackman":
             win = torch.blackman_window
         else:
-            raise NotImplementedError(f"window type not support")
+            raise NotImplementedError("window type not support")
         return win
 
     def forward(self, x: torch.Tensor, sr: Union[torch.Tensor, int]):

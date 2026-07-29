@@ -2,8 +2,6 @@
 
 import argparse
 import sys
-from collections import defaultdict
-from pathlib import Path
 
 try:
     from tensorboard.backend.event_processing.event_accumulator import EventAccumulator

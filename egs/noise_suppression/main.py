@@ -14,7 +14,7 @@ from puresound.system.optim import create_optimizer_and_scheduler
 from puresound.task.ns import NoiseSuppressionCollateFunc, NoiseSuppressionDataset
 from puresound.task.voice_isolation import VoiceIsolationCollateFunc, VoiceIsolationDataset
 from puresound.task.sampler import SpeakerSampler
-from puresound.utils import create_folder, load_hparam
+from puresound.utils import create_folder
 
 
 # Training uses a fixed sample length, so input tensor shapes are constant

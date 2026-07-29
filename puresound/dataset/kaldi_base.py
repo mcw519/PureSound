@@ -141,7 +141,7 @@ class KaldiFormBaseDataset(torch.utils.data.Dataset):
             for f in load_dct.keys():
                 if not os.path.isfile(f"{folder}/{load_dct[f]}"):
                     # raise FileNotFoundError(f"{load_dct[f]} is not found")
-                    print(f"Only incerece mode doesn't need wav2ref file")
+                    print("Only incerece mode doesn't need wav2ref file")
                 else:
                     _temp = load_text_as_dict(f"{folder}/{load_dct[f]}")
                     for key in sorted(_temp.keys()):
