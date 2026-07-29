@@ -2,7 +2,7 @@
   "model_type": "dpcrn_streaming_frame",
   "processor": "stft_frame_ort",
   "created_at": 1783041417,
-  "onnx_path": "pretrained_ckpt/streaming/dpcrn_wide_antisup_ep19.onnx",
+  "onnx_path": "pretrained_ckpt/streaming/dpcrn_v6.onnx",
   "sample_rate": 16000,
   "fft_length": 512,
   "win_length": 512,
