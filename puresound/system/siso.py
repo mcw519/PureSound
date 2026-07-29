@@ -28,14 +28,34 @@ from .base import BaseLightningModule
 
 
 class EncDecMaskBase(BaseLightningModule):
-    """
+    """Mask-based (or mapping-based) enhancement trainer.
+
     Structure:
         Wav -> Encoder -> Features -> Backbone -> Apply Mask -> Restore Features -> Decoder -> Wav
 
-    Args:
+    Core args:
         encoder: STFT/Conv1D based encode/decode structure
-        backbone: model backbone to predict mask
-        mask_type: mask type choose
+        feats: feature transform between encoder and backbone
+        backbone: model backbone that predicts the mask
+        mask_type: mask domain (``real`` / ``complex`` / ``polar`` / ``mapping``...)
+        *_lr_factor: per-module learning-rate multipliers for the optimizer's
+            parameter groups
+
+    Optional training features (all off by default, each a config knob):
+        train_vad_head_only + gate_head_lr_factor:
+            freeze encoder/features/backbone (kept in eval so BatchNorm
+            statistics and dropout stay fixed) and train only the backbone's
+            frame-level VAD gate head.
+        channel_consistency:
+            with prob ``prob`` per training step, re-run the forward on a
+            channel-perturbed copy of the mixture (smooth random EQ + gain =
+            the physical form of a device recording chain, applied to the WHOLE
+            signal so the near/far level contrast is preserved and the ideal
+            complex ratio mask is invariant) and penalize the mask for changing
+            -- the recording chain must not change the keep/suppress decision.
+
+    Optional inference knobs (forward() args, no effect on training):
+        dry_blend, spec_floor -- over-suppression relief; see forward().
     """
 
     def __init__(
@@ -53,33 +73,18 @@ class EncDecMaskBase(BaseLightningModule):
         verbose: bool = False,
     ):
         super().__init__(verbose=verbose)
-        # Model
+        # --- core enhancement pipeline -------------------------------------
         self.encoder = encoder
         self.feats = feats
         self.backbone = backbone
-
-        # Feature
         self.mask_type = mask_type.lower()
-
-        # Parameter
         self.encoder_lr_factor = encoder_lr_factor
         self.feats_lr_factor = feats_lr_factor
         self.backbone_lr_factor = backbone_lr_factor
+
+        # --- optional: gate-head-only training -----------------------------
         self.train_vad_head_only = bool(train_vad_head_only)
         self.gate_head_lr_factor = float(gate_head_lr_factor)
-        # Channel-perturbation mask consistency: with prob `prob` per training
-        # step, re-run the forward on a channel-perturbed copy of the mixture
-        # (smooth random EQ + gain = the physical form of a device recording
-        # chain, applied to the WHOLE signal so the near/far level contrast is
-        # preserved and the ideal complex ratio mask is invariant) and penalize
-        # the mask for changing, i.e. the recording chain must not change the
-        # keep/suppress decision. Training-only; None/disabled = no-op.
-        self.channel_consistency = (
-            dict(channel_consistency)
-            if channel_consistency and channel_consistency.get("enabled", False)
-            else None
-        )
-
         if self.train_vad_head_only:
             vad_head = getattr(self.backbone, "vad_head", None)
             if vad_head is None:
@@ -95,7 +100,12 @@ class EncDecMaskBase(BaseLightningModule):
             for parameter in vad_head.parameters():
                 parameter.requires_grad_(True)
 
-        # Loss
+        # --- optional: channel-perturbation mask consistency ----------------
+        self.channel_consistency = (
+            dict(channel_consistency)
+            if channel_consistency and channel_consistency.get("enabled", False)
+            else None
+        )
 
     def train(self, mode: bool = True):
         """Keep the frozen separator deterministic during gate-only training.
