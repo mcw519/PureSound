@@ -1,10 +1,20 @@
-from typing import Dict, List, Optional
+import json
+import random
+from dataclasses import dataclass
+from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 import torch
 from torch.nn.utils.rnn import pad_sequence
 
-from puresound.task.ns import NoiseSuppressionCollateFunc, NoiseSuppressionDataset
+from puresound.audio.io import AudioIO
+from puresound.audio.noise import add_bg_noise
+from puresound.task.ns import (
+    NoiseSuppressionCollateFunc,
+    NoiseSuppressionDataset,
+    RowPlan,
+    if_none_else,
+)
 
 
 VOICE_ISOLATION_SCALAR_KEYS = (
@@ -41,14 +51,296 @@ MIX_MODE_CODES = {
 }
 
 
-class VoiceIsolationDataset(NoiseSuppressionDataset):
-    """Distance-cued foreground voice isolation dataset.
+@dataclass
+class VoiceIsolationRowPlan(RowPlan):
+    """RowPlan extended with the near/far row types this task trains on."""
 
-    This task reuses the dynamic speech/noise/reverb machinery from
-    NoiseSuppressionDataset, but exposes the extra labels that are specific to
-    foreground voice isolation: DRR separability, target-present flags, and
-    background-speech activity.
+    use_realnear: bool = False
+    use_realfar: bool = False
+    realnear_room: Optional[str] = None
+    realnear_speaker: Optional[str] = None
+    realnear_fg_metadata: Optional[dict] = None
+
+
+class VoiceIsolationDataset(NoiseSuppressionDataset):
+    """Near-field foreground voice isolation dataset.
+
+    Reuses the synthesis skeleton from NoiseSuppressionDataset and adds, via the
+    row-type hooks, everything specific to the near/far decision:
+
+    * **real-far interferer rows** -- the far channel is a finished
+      loudspeaker->air->mic recording drawn from a pool manifest and inserted
+      with no RIR applied. A convolved far channel only carries the linear
+      time-invariant part of a capture chain; a real recording also carries its
+      level, spectral tilt, transducer non-linearity and noise floor.
+    * **real-near keep rows** -- the foreground is a genuine close-mic recording
+      (target = itself), mixed with the same interferers and noise as any other
+      row, so real captured speech sits on the KEEP side of the same mixtures
+      whose far side is real and the keep/suppress boundary stays on proximity
+      cues instead of capture-chain identity.
+    * **row-level turn-taking rates** -- real rows may carry their own
+      turn-taking probability, so far-solo stretches supervise the absolute
+      "lone far voice = suppress" decision while near speech stays elsewhere in
+      the row.
+    * **mix_mode** -- explicit foreground/interferer level relationships
+      ('physical' preserves the natural post-RIR ratio so the DRR/proximity cue
+      survives; rescale modes draw a mode-specific SIR range).
+
+    It also emits the task's scalar labels (DRR separability, distances,
+    target-present flags, background-speech activity) for auxiliary heads.
+
+    Every block is knob-gated and absent/disabled blocks never touch the RNG
+    stream, so plain noise-suppression recipes regenerate bit-identically.
     """
+
+    def __init__(
+        self,
+        *args,
+        augmentation_realfar_args: Optional[Dict] = None,
+        augmentation_realnear_args: Optional[Dict] = None,
+        **kwargs,
+    ):
+        super().__init__(*args, **kwargs)
+        self.augmentation_realfar_args = augmentation_realfar_args
+        self._realfar_pool = self._load_real_pool(augmentation_realfar_args)
+        self.augmentation_realnear_args = augmentation_realnear_args
+        self._realnear_pool = self._load_real_pool(augmentation_realnear_args)
+
+    # ------------------------------------------------------------------ #
+    # real-recording pools
+    # ------------------------------------------------------------------ #
+    def _load_real_pool(self, cfg: Optional[Dict]) -> List[Dict]:
+        """Load a real-recording pool manifest (one JSON object per line; see
+        egs/voice_isolate/scripts/build_real_recording_pool.py). Returns [] when
+        the block is absent/disabled so the row hooks are no-ops."""
+        if not (cfg and cfg.get("used")):
+            return []
+        manifest = cfg["pool_manifest"]
+        pool: List[Dict] = []
+        with open(manifest, encoding="utf-8") as fh:
+            for line in fh:
+                line = line.strip()
+                if line:
+                    e = json.loads(line)
+                    pool.append(
+                        {
+                            "wav_path": e["wav_path"],
+                            "distance_m": e.get("distance_m"),
+                            "room": e.get("room"),
+                            "speaker": e.get("speaker"),
+                        }
+                    )
+        if not pool:
+            raise ValueError(f"real pool manifest has no entries: {manifest}")
+        return pool
+
+    def _sample_realfar_interferers(
+        self,
+        n: int,
+        sr: int,
+        prefer_room: Optional[str] = None,
+        exclude_speaker: Optional[str] = None,
+    ) -> Tuple[List[torch.Tensor], List[dict]]:
+        """Draw ``n`` finished far-field recordings from the real-far pool.
+
+        No RIR is applied -- these already carry the full recording chain.
+        Loudness is normalized like every other source (the SIR mixing downstream
+        sets the level anyway); the measured distance rides along as metadata so
+        eval can bucket by it, tagged origin=real.
+
+        ``prefer_room``: draw from the same room as the near foreground when it
+        has enough entries, so near and far differ mainly in distance.
+        ``exclude_speaker`` keeps the far interferer from being the same speaker
+        as the near foreground."""
+        candidates = self._realfar_pool
+        if exclude_speaker is not None:
+            filtered = [p for p in candidates if p.get("speaker") != exclude_speaker]
+            if filtered:
+                candidates = filtered
+        if prefer_room is not None:
+            same_room = [p for p in candidates if p.get("room") == prefer_room]
+            if len(same_room) >= n:
+                candidates = same_room
+        n = max(1, min(int(n), len(candidates)))
+        picks = random.sample(candidates, k=n)
+        wavs: List[torch.Tensor] = []
+        metas: List[dict] = []
+        for p in picks:
+            wav, _ = AudioIO.open(
+                f_path=p["wav_path"],
+                target_lvl=self.audio_gain_normalized_to,
+                resample_to=sr,
+            )
+            wavs.append(wav[0].reshape(1, -1))
+            metas.append(
+                {"source_receiver_distance": p.get("distance_m"), "origin": "real"}
+            )
+        return wavs, metas
+
+    # ------------------------------------------------------------------ #
+    # row-type hooks (see NoiseSuppressionDataset for the contract)
+    # ------------------------------------------------------------------ #
+    def _plan_row(
+        self, target_speech: torch.Tensor
+    ) -> Tuple[VoiceIsolationRowPlan, torch.Tensor]:
+        plan = VoiceIsolationRowPlan()
+
+        # Real-NEAR keep row? Decide FIRST (guarded: an absent/disabled block
+        # never touches the RNG stream). On these rows the foreground becomes a
+        # genuine close-mic recording and the target is that recording itself.
+        # The corpus utterance drawn upstream is discarded; batching/speaker
+        # semantics stay untouched.
+        realnear_cfg = self.augmentation_realnear_args
+        if realnear_cfg is not None and realnear_cfg.get("used", False) and self._realnear_pool:
+            plan.use_realnear = torch.rand(1).item() < float(realnear_cfg.get("prob", 0.0))
+        if plan.use_realnear:
+            near_pick = random.choice(self._realnear_pool)
+            plan.realnear_room = near_pick.get("room")
+            plan.realnear_speaker = near_pick.get("speaker")
+            near_wav, _ = AudioIO.open(
+                f_path=near_pick["wav_path"],
+                target_lvl=self.audio_gain_normalized_to,
+                resample_to=if_none_else(self.target_sr, self.ori_audio_sr),
+            )
+            target_speech = self.align_audio_list(
+                wav_list=[near_wav[0].reshape(1, -1)],
+                length=if_none_else(
+                    self.training_sample_length,
+                    int(self.ori_audio_sr * self.training_sample_length_in_seconds),
+                ),
+            )[0]
+            plan.realnear_fg_metadata = {
+                "source_receiver_distance": near_pick.get("distance_m"),
+                "origin": "real",
+            }
+            plan.skip_whole_mix_reverb = True
+
+        # Real-far row? Decide next so it can own the target-absent draw.
+        # Guarded so an absent/disabled block never touches the RNG stream.
+        realfar_cfg = self.augmentation_realfar_args
+        if plan.use_realnear:
+            # Keep row: interferers (when the speech-aug gate fires) come from
+            # the real-far pool; the target is always present -- lone-far never
+            # applies.
+            plan.use_realfar = bool(self._realfar_pool)
+        else:
+            if realfar_cfg is not None and realfar_cfg.get("used", False) and self._realfar_pool:
+                plan.use_realfar = torch.rand(1).item() < float(realfar_cfg.get("prob", 0.0))
+            if plan.use_realfar:
+                # Real-far rows decide lone-far (target-absent) by their OWN
+                # prob, independently of the synthetic target-absent rate: the
+                # two far-field sources need separate pressure to be tuned
+                # separately.
+                plan.target_absent = (
+                    torch.rand(1).item() < float(realfar_cfg.get("lone_far_prob", 0.0))
+                )
+                plan.force_interferer = plan.target_absent
+            else:
+                base_plan, target_speech = super()._plan_row(target_speech)
+                plan.target_absent = base_plan.target_absent
+                plan.force_interferer = base_plan.force_interferer
+        plan.force_speech_interferers = plan.use_realfar
+        return plan, target_speech
+
+    def _prepare_foreground(self, target_speech, plan):
+        if plan.use_realnear:
+            # The real near recording already carries its full end-to-end
+            # channel; no synthetic room is simulated on these rows.
+            return False, None, plan.realnear_fg_metadata, target_speech.clone(), target_speech
+        return super()._prepare_foreground(target_speech, plan)
+
+    def _sample_interferers(
+        self, target_speaker, target_speech, room_scene, source_level_reverb, plan
+    ):
+        if not plan.use_realfar:
+            return super()._sample_interferers(
+                target_speaker, target_speech, room_scene, source_level_reverb, plan
+            )
+        # Real far interferers: finished loudspeaker->air->mic recordings
+        # inserted directly, with no RIR applied. The near foreground still
+        # carries its channel from the foreground-preparation step.
+        add_n_cases_cfg = self.augmentation_speech_args["add_n_cases"]
+        if isinstance(add_n_cases_cfg, (list, tuple)):
+            n_interferers = random.randint(int(add_n_cases_cfg[0]), int(add_n_cases_cfg[1]))
+        else:
+            n_interferers = int(add_n_cases_cfg)
+        interfered_speech, realfar_meta = self._sample_realfar_interferers(
+            n_interferers,
+            if_none_else(self.target_sr, self.ori_audio_sr),
+            prefer_room=plan.realnear_room,
+            exclude_speaker=plan.realnear_speaker,
+        )
+        interfered_speech = self.align_audio_list(
+            wav_list=interfered_speech,
+            length=if_none_else(
+                self.training_sample_length,
+                int(self.ori_audio_sr * self.training_sample_length_in_seconds),
+            ),
+            padding_type="zero",
+        )
+        return target_speech, interfered_speech, realfar_meta
+
+    def _turn_taking_override(self, plan) -> Optional[float]:
+        # Real rows may carry their own turn-taking rate: their far-solo
+        # stretches supply absolute-suppress supervision for real far voices
+        # while the near foreground stays present elsewhere in the row.
+        if plan.use_realnear and self.augmentation_realnear_args is not None:
+            return self.augmentation_realnear_args.get("turn_taking_prob")
+        if plan.use_realfar and self.augmentation_realfar_args is not None:
+            return self.augmentation_realfar_args.get("turn_taking_prob")
+        return None
+
+    def _mix_foreground_with_interferers(self, fg_wav, interfered_speech, plan):
+        # mix_mode replaces the single hard SIR draw with explicit level
+        # relationships: 'physical' keeps the natural post-RIR ratio so the
+        # real DRR/proximity cue survives; the rescale modes draw a
+        # mode-specific SIR range. Real-far rows skip it -- the synthetic-near
+        # vs real-recorded-far level ratio is not physically meaningful, so
+        # they use the controlled hard SIR draw instead.
+        mm_cfg = (self.augmentation_speech_args or {}).get("mix_mode")
+        if not (mm_cfg and mm_cfg.get("used", False) and not plan.use_realfar):
+            return super()._mix_foreground_with_interferers(fg_wav, interfered_speech, plan)
+        mode = self._sample_mix_mode(mm_cfg)
+        mix_mode_name = mode.get("name", "physical")
+        if mode.get("physical", False):
+            # No relative rescale: sum at natural post-RIR levels.
+            noisy_speech = fg_wav + interfered_speech
+            background_speech_reference = interfered_speech
+            fg_p = float(fg_wav.pow(2).sum())
+            itf_p = float(interfered_speech.pow(2).sum())
+            realized_speech_sir = float(10.0 * np.log10((fg_p + 1e-8) / (itf_p + 1e-8)))
+        else:
+            lo, hi = mode["sir_range"]
+            sir = float(torch.empty(1).uniform_(float(lo), float(hi)).item())
+            noisy_speech, interfered_speech = add_bg_noise(
+                wav=fg_wav, noise=[interfered_speech], snr_list=[sir],
+            )
+            noisy_speech = noisy_speech[0]
+            background_speech_reference = interfered_speech[0]
+            realized_speech_sir = sir
+        return noisy_speech, background_speech_reference, mix_mode_name, realized_speech_sir
+
+    def _sample_mix_mode(self, mm_cfg: Dict) -> Dict:
+        """Pick one foreground/interferer mixing mode by its prob weight.
+
+        Modes come from ``augmentation_speech.mix_mode.modes``: a ``physical``
+        mode keeps the natural post-RIR level ratio, the others carry an
+        explicit ``sir_range``. Probs need not sum to 1.
+        """
+        modes = mm_cfg.get("modes") or []
+        if not modes:
+            return {"name": "physical", "physical": True}
+        probs = [max(0.0, float(m.get("prob", 0.0))) for m in modes]
+        total = sum(probs)
+        if total <= 0.0:
+            return dict(modes[0])
+        r = float(torch.empty(1).uniform_(0.0, total).item())
+        acc = 0.0
+        for m, pr in zip(modes, probs):
+            acc += pr
+            if r <= acc:
+                return dict(m)
+        return dict(modes[-1])
 
     def _emit_task_metadata(
         self,

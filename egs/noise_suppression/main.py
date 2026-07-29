@@ -48,10 +48,23 @@ def init_dataloader(
     aug_realnear_dict: Dict = None,
 ):
     task_name = corpus_dict.get("task", "noise_suppression")
+    # The real-recording row types (realfar/realnear pools) belong to the
+    # voice-isolation dataset only; the generic dataset does not take them.
+    task_kwargs = {}
     if task_name == "voice_isolation":
         dataset_cls = VoiceIsolationDataset
         collate_fn = VoiceIsolationCollateFunc()
+        task_kwargs = {
+            "augmentation_realfar_args": aug_realfar_dict,
+            "augmentation_realnear_args": aug_realnear_dict,
+        }
     elif task_name == "noise_suppression":
+        if (aug_realfar_dict and aug_realfar_dict.get("used")) or (
+            aug_realnear_dict and aug_realnear_dict.get("used")
+        ):
+            raise ValueError(
+                "augmentation_realfar/realnear need dataset.task: voice_isolation"
+            )
         dataset_cls = NoiseSuppressionDataset
         collate_fn = NoiseSuppressionCollateFunc()
     else:
@@ -75,9 +88,8 @@ def init_dataloader(
         augmentation_codec_args=aug_codec_dict,
         augmentation_packet_loss_args=aug_packet_loss_dict,
         augmentation_target_absent_args=aug_target_absent_dict,
-        augmentation_realfar_args=aug_realfar_dict,
-        augmentation_realnear_args=aug_realnear_dict,
         vad_label_args=vad_label_dict,
+        **task_kwargs,
     )
 
     train_sampler = SpeakerSampler(
@@ -114,9 +126,8 @@ def init_dataloader(
         augmentation_codec_args=aug_codec_dict,
         augmentation_packet_loss_args=aug_packet_loss_dict,
         augmentation_target_absent_args=aug_target_absent_dict,
-        augmentation_realfar_args=aug_realfar_dict,
-        augmentation_realnear_args=aug_realnear_dict,
         vad_label_args=vad_label_dict,
+        **task_kwargs,
     )
 
     # Seeded sampler -> same valid batches every epoch, and per-item seeds make

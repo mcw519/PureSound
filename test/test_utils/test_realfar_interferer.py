@@ -9,6 +9,7 @@ bit-identical to before (the branch never touches the RNG stream).
 
 import json
 
+import pytest
 import torch
 
 from puresound.task.ns import NoiseSuppressionDataset
@@ -56,7 +57,7 @@ def test_realfar_interferer_produces_valid_sample(
 ):
     metafile = write_puresound_metafile(tmp_path / "meta.csv", speakers=3)
     pool = _write_realfar_pool(tmp_path, write_tone_wav)
-    dataset = NoiseSuppressionDataset(
+    dataset = VoiceIsolationDataset(
         **_dataset_args(metafile),
         augmentation_speech_args=_SPEECH_ARGS,
         augmentation_realfar_args={"used": True, "prob": 1.0, "lone_far_prob": 0.0,
@@ -79,7 +80,7 @@ def test_realfar_lone_far_zeros_the_target(
 ):
     metafile = write_puresound_metafile(tmp_path / "meta.csv", speakers=3)
     pool = _write_realfar_pool(tmp_path, write_tone_wav)
-    dataset = NoiseSuppressionDataset(
+    dataset = VoiceIsolationDataset(
         **_dataset_args(metafile),
         augmentation_speech_args=_SPEECH_ARGS,
         augmentation_realfar_args={"used": True, "prob": 1.0, "lone_far_prob": 1.0,
@@ -103,7 +104,7 @@ def test_realfar_disabled_is_bit_identical(
     pool = _write_realfar_pool(tmp_path, write_tone_wav)
 
     def _sample(realfar_args):
-        ds = NoiseSuppressionDataset(
+        ds = VoiceIsolationDataset(
             **_dataset_args(metafile),
             augmentation_speech_args=_SPEECH_ARGS,
             augmentation_realfar_args=realfar_args,
@@ -245,7 +246,7 @@ def test_realnear_disabled_is_bit_identical(
     near_pool = _write_realnear_pool(tmp_path, write_tone_wav)
 
     def _sample(realnear_args):
-        ds = NoiseSuppressionDataset(
+        ds = VoiceIsolationDataset(
             **_dataset_args(metafile),
             augmentation_speech_args=_SPEECH_ARGS,
             augmentation_realnear_args=realnear_args,
@@ -258,3 +259,18 @@ def test_realnear_disabled_is_bit_identical(
 
     assert torch.allclose(baseline["noisy_speech"], disabled["noisy_speech"])
     assert torch.allclose(baseline["clean_speech"], disabled["clean_speech"])
+
+
+def test_ns_dataset_rejects_voice_isolation_blocks(tmp_path, write_puresound_metafile):
+    """The generic dataset fails fast on task-specific blocks instead of silently
+    ignoring them: mix_mode (and the real pools, rejected at the recipe level)
+    belong to VoiceIsolationDataset."""
+    metafile = write_puresound_metafile(tmp_path / "meta.csv", speakers=3)
+    speech_args = dict(_SPEECH_ARGS)
+    speech_args["mix_mode"] = {"used": True, "modes": [{"name": "physical", "prob": 1.0, "physical": True}]}
+    with pytest.raises(ValueError, match="voice_isolation"):
+        NoiseSuppressionDataset(
+            **_dataset_args(metafile),
+            augmentation_speech_args=speech_args,
+            vad_label_args={"used": False},
+        )
