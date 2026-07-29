@@ -2,7 +2,7 @@
 # Base = train_dpcrn_wide_antisup.yaml (full separation-loss stack, trainable separator);
 # merged with the gate head + VADHeadBCELoss (equal weight) from train_dpcrn_gate.yaml.
 # This time the separator is NOT frozen: separator and gate are trained jointly.
-#   warm-start: pretrained_ckpt/dpcrn_wide_antisup_ep19.ckpt  (gate head COLD -> missing keys kept at init)
+#   warm-start: pretrained_ckpt/dpcrn_v6.ckpt  (gate head COLD -> missing keys kept at init)
 # DESIGN (2026-07-10 milowu): target_absent stays OFF (whole-row silence retrains the separator toward
 #   global over-suppression -- the Azure-STT deletion blow-up wide_antisup avoided). The gate gets its
 #   label-0 frames from turn-taking far-only turns instead (bounded, correct-to-silence within mixed rows).

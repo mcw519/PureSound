@@ -1,9 +1,8 @@
-# voice_isolate -- DPCRN. EVAL-ONLY far-only/noise-only LEAKAGE PROBE. DO NOT TRAIN with this config.
-# Same `model:` block as all pipeline stages 2-6 -- only difference is augmentation_target_absent
-# forced ON below, so it works as an eval-only overlay for ANY checkpoint in pretrained_ckpt/:
-#   uv run python scripts/indomain_sisdri.py config/eval_targetabsent_probe.yaml \
-#     --ckpt pretrained_ckpt/<name>.ckpt --device cuda --n-batches 40 --by-bucket
-# Usage and results: see ../README.md and ../NEXT_STEPS.md ("far-only / noise-only 洩漏測試").
+# voice_isolate -- gate-only synthetic pretraining / engineering validation.
+# REQUIRED warm-start: pretrained_ckpt/dpcrn_v6.ckpt.
+# The wide-ep19 separator (including BatchNorm state) is frozen; only the causal
+# near-field VAD gate head is optimized. Synthetic results are a pipeline smoke
+# test, not evidence of transfer to end-to-end real recordings.
 dataset:
   task: voice_isolation
   train_metafile: data/dns5-read.train.list
@@ -28,8 +27,8 @@ augmentation_speech:
   snr_range:          # HARD SIR: foreground may be up to 10 dB QUIETER than the
     - -10             # interferer, so loudness alone cannot solve it and the
     - 10              # in-domain SI-SDRi metric stays sensitive (no passthrough rows).
-  media_voice:        # TV/loudspeaker-style band-limited interferer (OFF for now)
-    used: False
+  media_voice:        # TV/loudspeaker-style band-limited interferer -- ON for the deployment
+    used: True        # recipe: the most common non-human interferer in real near-field rooms.
     prob: 0.30
     hp_cutoff_range: [200, 400]
     lp_cutoff_range: [3500, 7000]
@@ -41,6 +40,13 @@ augmentation_speech:
     erle_db_range: [20, 35]
   overlap_control:    # spread the foreground/interferer temporal overlap across
     used: True        # no/mid/high regimes (else >80% overlap dominates training)
+    # Gate-only negatives: long far-only turns are safe because the separator is frozen.
+    turn_taking_prob: 0.50
+    turn_near_seconds: [1.5, 3.0]
+    turn_far_seconds: [2.5, 5.0]
+    turn_gap_seconds: [0.0, 0.4]
+    turn_overlap_seconds: [0.0, 0.3]
+    far_first_prob: 0.5
     no_overlap_prob: 0.20
     high_overlap_prob: 0.35
     mid_overlap_range:
@@ -63,17 +69,11 @@ augmentation_speech:
       # counter_level: near deliberately quieter -> forces a non-energy cue (hardest).
       - {name: counter_level, prob: 0.2, sir_range: [-10, 0]}
 
-# EVAL-ONLY PROBE (NOT for training): every model in the escalation chain (ep59/w1/w2/w3) was trained
-# with this OFF -- see FAILED_NOTE.md, training with target_absent ON caused a catastrophic over-suppression
-# blow-up (Dawn deletion 0.286 / SI-SDRi -9.53). This copy forces prob=1.0 so EVERY eval row has no near
-# speaker (foreground removed, force_interferer keeps a FAR speaker in the mix) -- the "far-only leakage"
-# test: what does a model that has NEVER seen this situation output when nobody is actually near?
-# indomain_sisdri.py --by-bucket reports this as "F-only (silent-target) suppression": median
-# power_reduction_db (more negative = better suppression) + false-near rate (reduction > -6dB = leak).
-# Use with any ep59/w1/w2/w3 checkpoint (identical model architecture across all four).
+# Gate-only negative rows. This was unsafe for separator loss, but cannot alter
+# the frozen mask path here; it only supplies explicit far-only label-0 frames.
 augmentation_target_absent:
   used: True
-  prob: 1.0
+  prob: 0.25
   force_interferer: True
 
 augmentation_noise:
@@ -105,7 +105,7 @@ augmentation_reverb:
       used: True
       # CURRICULUM STAGE 2 = EXPAND: RT60 0.20-0.65, near/far DRR gap >=3dB, 62361 items (superset of
       # core, adds weak-contrast / more-reverberant rooms). Flat .wav/.json under <folder>/items/.
-      folder: /work/any_exp_link/puresound_exp/hybrid_rir_16k_levels/expand
+      folder: /work/any_exp_link/puresound_exp/hybrid_rir_16k_levels/wide
       near_labels: [near_0, near_1]
       far_labels: [far_0, far_1, far_2]
       drr_window_ms: 2.5
@@ -132,8 +132,9 @@ augmentation_src:        # random down/up-sample (bandwidth variation)
     - 0.2
     - 0.8
 
+# ON for the deployment recipe: real device mic front-ends commonly high-pass at 100-300 Hz.
 augmentation_hpf:
-  used: False
+  used: True
   prob: 0.25
   cutoff:
     - 100
@@ -195,19 +196,19 @@ vad_label:
 
 trainer:
   lighting_trainer_args:
-    max_epochs: 100
+    max_epochs: 20
     gradient_clip_val: 5.
     accumulate_grad_batches: 2
     precision: bf16-mixed
-  train_iter_per_epoch: 1000
-  valid_iter_per_epoch: 100
+  train_iter_per_epoch: 500
+  valid_iter_per_epoch: 50
   valid_seed: 1234
   n_spk_per_batch: 12
   n_utt_per_speaker: 1
   num_workers: 20
   num_gpus: 2
   find_unused_parameters: true
-  work_folder: exp/dpcrn_curriculum/expand
+  work_folder: exp/dpcrn_gate_synth
 
 optimizer:
   type: AdamW
@@ -229,71 +230,12 @@ scheduler:
     eta_min: 0.00001
 
 loss_func:
-  - type: SDRLoss
-    weighted: 1.
-    args:
-      scaled: False
-      scale_dependent: True
-      zero_mean: True
-      source_aggregated: False
-      sdr_max: 50
-      threshold: -50
-
-  - type: MultiResolutionSTFTLoss
-    weighted: 0.5
-    args:
-      fft_sizes:
-        - 512
-        - 1024
-        - 256
-      hop_sizes:
-        - 128
-        - 256
-        - 64
-      win_lengths:
-        - 512
-        - 1024
-        - 256
-      window: hann_window
-      factor_sc: 0.5
-      factor_mag: 0.5
-
-  # Training-only background accounting: residual = noisy - enhanced is supervised
-  # against consistency_noise (= noisy - clean). Deployment stays single-output.
-  - type: ResidualReferenceLoss
-    weighted: 0.2
-    args:
-      reference_key: consistency_noise
-      loss: l1
-      target_present_only: True
-
-  # ASR-aware perceptual loss (TODO_NEXT_STAGE.md): match enhanced features to the clean
-  # target's features inside frozen 16k SSL encoders, penalising destroyed intelligibility
-  # (counters real-domain over-suppression). DUAL-SSL = two stacked ASRFeatureLoss terms:
-  #   term 1  HuBERT_BASE  -- kept exactly at the w1 best (l1 @1.0), the current strongest
-  #                           synthetic-WER config (Dawn ep19 0.457 < w0.3 0.497).
-  #   term 2  WavLM_Base+  -- WavLM is pretrained with denoising / simulated overlapped speech,
-  #                           so its features are noise/overlap robust -> directly targets the
-  #                           deletion (over-suppression) fingerprint HuBERT alone did NOT fix
-  #                           (w1 ep19 deletion 0.196 -> 0.238).
-  # CAVEAT: HuBERT vs WavLM L1 feature magnitudes differ, so weights are NOT equal-influence;
-  #   term-2 `weighted` below is the knob to tune. If the two scales fight, switch BOTH terms to
-  #   `loss: cosine` (scale-invariant) so equal weights mean equal influence.
-  # Judge at the ep19 cosine trough: Dawn Chorus WER + deletion vs floor 0.157; in-domain
-  # by-bucket (counter_level / 1N+0F) must not drop below the w1 plateau.
-  - type: ASRFeatureLoss          # term 1: HuBERT (unchanged from w1 -- the current best)
+  - type: VADHeadBCELoss
     weighted: 1.0
     args:
-      bundle: HUBERT_BASE
-      layers: [6, 9]
-      loss: cosine
-  
-  - type: ASRFeatureLoss          # term 2: WavLM-Base+ (noise/overlap-robust SSL, the new lever)
-    weighted: 1.0                 # KNOB: WavLM's marginal pressure on top of HuBERT
-    args:
-      bundle: WAVLM_BASE_PLUS
-      layers: [6, 9]
-      loss: cosine
+      false_positive_weight: 1.0
+      false_negative_weight: 1.0
+      balance_per_batch: True
 
 model:
   lighting_module:
@@ -302,7 +244,9 @@ model:
       mask_type: complex   # DPCRN emits a complex ratio mask applied to the noisy STFT
       encoder_lr_factor: 0.1
       feats_lr_factor: 0.1
-      backbone_lr_factor: 1.
+      backbone_lr_factor: 0.0
+      train_vad_head_only: True
+      gate_head_lr_factor: 1.0
   encoder:
     type: ConvEncDec
     encoder_args:
@@ -341,3 +285,7 @@ model:
       delay: [1, 1, 1]      # 3-frame (~30ms) look-ahead (was [0,0,0]); inter-RNN stays unidirectional
       rnn_hidden: 96       # 1.5x DPRNN (was 64)
       spectral_compress: False
+      vad_head:
+        enabled: True
+        hidden: 128
+        kernel_t: 5

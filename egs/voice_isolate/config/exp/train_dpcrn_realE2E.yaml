@@ -1,7 +1,11 @@
-# voice_isolate -- DPCRN. Pipeline stage 3/6: anti-suppression finetune, OverSuppressionLoss weight 1.0.
-# Warm-start from pretrained_ckpt/dpcrn_curriculum_expand_ep59.ckpt (--pretrained_ckpt_path).
-# Pipeline position, warm-start lineage, and judged results: see ../README.md.
-# Full rationale and per-epoch history: see ../EXPERIMENT_LOG.md.
+# voice_isolate -- DPCRN. REAL-E2E RUNG: the wide deployment recipe + real end-to-end
+# far-field interferers (VOiCES distant recordings, no RIR). First round attacking the
+# synthetic->real wall directly (all RIR-convolution axes are closed; see NEXT_STEPS
+# 2026-07-20). Diff vs train_dpcrn_wide_antisup.yaml = the augmentation_realfar block below.
+# Warm-start from pretrained_ckpt/dpcrn_v6.ckpt (--pretrained_ckpt_path);
+# judge at the ep19 cosine trough. Gate: QVF2.2 scorecard clip2/3 + VOiCES held-out probe
+# AND Dawn/BUT deletion must NOT rise (sepgate lesson).
+# Full rationale, judge protocol, and per-epoch history: see ../EXPERIMENT_LOG.md / NEXT_STEPS.md.
 dataset:
   task: voice_isolation
   train_metafile: data/dns5-read.train.list
@@ -26,8 +30,8 @@ augmentation_speech:
   snr_range:          # HARD SIR: foreground may be up to 10 dB QUIETER than the
     - -10             # interferer, so loudness alone cannot solve it and the
     - 10              # in-domain SI-SDRi metric stays sensitive (no passthrough rows).
-  media_voice:        # TV/loudspeaker-style band-limited interferer (OFF for now)
-    used: False
+  media_voice:        # TV/loudspeaker-style band-limited interferer -- ON for the deployment
+    used: True        # recipe: the most common non-human interferer in real near-field rooms.
     prob: 0.30
     hp_cutoff_range: [200, 400]
     lp_cutoff_range: [3500, 7000]
@@ -71,21 +75,23 @@ augmentation_target_absent:
   prob: 0.20
   force_interferer: True
 
-# OFF: runtime distance query. This is a fixed near-field task (keep the bank
-# near channel, suppress far); the scalar-query / FiLM mechanism is not used.
-augmentation_query_distance:
-  used: False
-  derive_from_bank: True
-  bank_margin: 0.2
-  range: [0.8, 1.2]
-  peak_distance: 1.0
-  peak_prob: 0.3
-  peak_half_width: 0.2
-  near_floor: 0.3
-  far_ceiling: 5.0
-  gate_silence:
-    prob: 0.2
-    margin: 0.15
+# REAL end-to-end far-field interferers (the real-e2e rung; see NEXT_STEPS 2026-07-20).
+# The far channel becomes a genuine loudspeaker->air->mic recording drawn from the pool
+# manifest -- dropped in WITHOUT RIR convolution -- because the RIR axis is closed (even
+# real measured RIRs did not transfer to real recordings, 2026-07-08). The near foreground
+# still uses the synthetic near-field RIR above. When a row is real-far the interferer count
+# comes from augmentation_speech.add_n_cases and the level from its snr_range (hard SIR);
+# 'physical' mix_mode is skipped (synthetic-near vs real-far level ratio is meaningless).
+augmentation_realfar:
+  used: True
+  prob: 0.25            # fraction of ALL items whose far interferer is a real recording
+  lone_far_prob: 0.08   # within real-far rows: fraction that are lone-far (target-absent).
+                        # The clean test of whether REAL far suppression transfers WITHOUT
+                        # the deletion blow-up synthetic lone-far caused (NEXT_STEPS 07-07);
+                        # guarded by the Dawn/BUT deletion hard gate downstream.
+  # VOiCES train pool: 149,814 real distant recordings, 200 speakers, 4 rooms, 1.47-10.34m,
+  # distractor=none (clean lone far voice). Built by scripts/build_realfar_pool.py.
+  pool_manifest: data/realfar_pool/voices.train.jsonl
 
 augmentation_noise:
   used: True
@@ -116,7 +122,7 @@ augmentation_reverb:
       used: True
       # CURRICULUM STAGE 2 = EXPAND: RT60 0.20-0.65, near/far DRR gap >=3dB, 62361 items (superset of
       # core, adds weak-contrast / more-reverberant rooms). Flat .wav/.json under <folder>/items/.
-      folder: /work/any_exp_link/puresound_exp/hybrid_rir_16k_levels/expand
+      folder: /work/any_exp_link/puresound_exp/hybrid_rir_16k_levels/wide
       near_labels: [near_0, near_1]
       far_labels: [far_0, far_1, far_2]
       drr_window_ms: 2.5
@@ -143,8 +149,9 @@ augmentation_src:        # random down/up-sample (bandwidth variation)
     - 0.2
     - 0.8
 
+# ON for the deployment recipe: real device mic front-ends commonly high-pass at 100-300 Hz.
 augmentation_hpf:
-  used: False
+  used: True
   prob: 0.25
   cutoff:
     - 100
@@ -218,7 +225,7 @@ trainer:
   num_workers: 20
   num_gpus: 2
   find_unused_parameters: true
-  work_folder: exp/dpcrn_antisup_0630
+  work_folder: exp/dpcrn_realE2E_0720
 
 optimizer:
   type: AdamW
@@ -238,15 +245,6 @@ scheduler:
     T_0: 20
     T_mult: 1
     eta_min: 0.00001
-
-# OFF: counterfactual query-distance loss (only relevant to the abandoned
-# runtime-distance-query task).
-qd_contrastive:
-  used: False
-  weight: 1.0
-  margin: 0.15
-  near_floor: 0.3
-  apply_prob: 1.0
 
 loss_func:
   - type: SDRLoss
@@ -284,7 +282,7 @@ loss_func:
   # preservation. `weighted` is the del<->sub knob (start 1.0; raw ~0.07). Added to fight the
   # over-suppression Azure STT revealed (enh deletion 0.264 -> 0.444). Judge with a STRONG ASR.
   - type: OverSuppressionLoss
-    weighted: 1.0
+    weighted: 3.0
     args:
       p: 0.5
       fft_size: 512

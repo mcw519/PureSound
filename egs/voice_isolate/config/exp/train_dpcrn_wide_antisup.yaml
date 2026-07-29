@@ -1,5 +1,5 @@
 # voice_isolate -- DPCRN. Pipeline stage 6/6: wide-domain deployment recipe (widened RIR + realism augs).
-# Warm-start from pretrained_ckpt/dpcrn_antisup_w3_ep19.ckpt (--pretrained_ckpt_path).
+# Warm-start from pretrained_ckpt/dpcrn_v5.ckpt (--pretrained_ckpt_path).
 # Pipeline position, warm-start lineage, and judged results: see ../README.md.
 # Full rationale, judge protocol, and per-epoch history: see ../EXPERIMENT_LOG.md.
 dataset:

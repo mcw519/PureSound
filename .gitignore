@@ -50,6 +50,11 @@ eval_set*/
 data_report/
 backup/
 anna_test.wav
+
+# Recipe configs stay in version control even when their directory name matches one
+# of the output patterns above: egs/*/config/exp holds experiment recipes, not runs.
+!egs/*/config/exp/
+!egs/*/config/exp/*.yaml
 EXPERIMENT_LOG.md
 FAILED_NOTE.md
 NEXT_STEPS.md

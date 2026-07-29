@@ -1,5 +1,5 @@
-# voice_isolate -- DPCRN. Pipeline stage 2/6: curriculum STAGE 2 = expand RIR.
-# Warm-start from pretrained_ckpt/dpcrn_curriculum_core_ep39.ckpt (--pretrained_ckpt_path).
+# voice_isolate -- DPCRN. Pipeline stage 5/6: anti-suppression finetune, OverSuppressionLoss weight 3.0.
+# Warm-start from pretrained_ckpt/dpcrn_v4.ckpt (--pretrained_ckpt_path).
 # Pipeline position, warm-start lineage, and judged results: see ../README.md.
 # Full rationale and per-epoch history: see ../EXPERIMENT_LOG.md.
 dataset:
@@ -218,7 +218,7 @@ trainer:
   num_workers: 20
   num_gpus: 2
   find_unused_parameters: true
-  work_folder: exp/dpcrn_curriculum/expand
+  work_folder: exp/dpcrn_antisup_w3_0701
 
 optimizer:
   type: AdamW
@@ -277,6 +277,19 @@ loss_func:
       window: hann_window
       factor_sc: 0.5
       factor_mag: 0.5
+
+  # TIER-1 ANTI-SUPPRESSION: pure-magnitude one-sided loss = mean(ReLU(|T|^p - |E|^p)^2).
+  # Penalises enhanced magnitude falling BELOW target (deletion); the residual/over-estimation
+  # side is already covered by SD-SDR + STFT above, so this adds net asymmetric pressure toward
+  # preservation. `weighted` is the del<->sub knob (start 1.0; raw ~0.07). Added to fight the
+  # over-suppression Azure STT revealed (enh deletion 0.264 -> 0.444). Judge with a STRONG ASR.
+  - type: OverSuppressionLoss
+    weighted: 3.0
+    args:
+      p: 0.5
+      fft_size: 512
+      hop_size: 128
+      win_length: 512
 
   # Training-only background accounting: residual = noisy - enhanced is supervised
   # against consistency_noise (= noisy - clean). Deployment stays single-output.

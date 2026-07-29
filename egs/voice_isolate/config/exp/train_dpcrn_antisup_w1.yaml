@@ -1,5 +1,5 @@
-# voice_isolate -- DPCRN. Pipeline stage 4/6: anti-suppression finetune, OverSuppressionLoss weight 2.0.
-# Warm-start from pretrained_ckpt/dpcrn_antisup_w1_ep19.ckpt (--pretrained_ckpt_path).
+# voice_isolate -- DPCRN. Pipeline stage 3/6: anti-suppression finetune, OverSuppressionLoss weight 1.0.
+# Warm-start from pretrained_ckpt/dpcrn_v2.ckpt (--pretrained_ckpt_path).
 # Pipeline position, warm-start lineage, and judged results: see ../README.md.
 # Full rationale and per-epoch history: see ../EXPERIMENT_LOG.md.
 dataset:
@@ -218,7 +218,7 @@ trainer:
   num_workers: 20
   num_gpus: 2
   find_unused_parameters: true
-  work_folder: exp/dpcrn_antisup_w2_0701
+  work_folder: exp/dpcrn_antisup_0630
 
 optimizer:
   type: AdamW
@@ -284,7 +284,7 @@ loss_func:
   # preservation. `weighted` is the del<->sub knob (start 1.0; raw ~0.07). Added to fight the
   # over-suppression Azure STT revealed (enh deletion 0.264 -> 0.444). Judge with a STRONG ASR.
   - type: OverSuppressionLoss
-    weighted: 2.0
+    weighted: 1.0
     args:
       p: 0.5
       fft_size: 512

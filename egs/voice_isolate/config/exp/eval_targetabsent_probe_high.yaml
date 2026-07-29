@@ -1,17 +1,10 @@
-# voice_isolate -- DPCRN. Phase-1 boundary experiment: robust near-field (<1m) isolation.
-# Warm-start from pretrained_ckpt/dpcrn_wide_antisup_ep19.ckpt (--pretrained_ckpt_path).
-# Diffs vs train_dpcrn_wide_antisup.yaml (see ../NEXT_STEPS.md "2026-07-03" Phase 1):
-#   1. RIR bank -> phase1 merged view (wide 62k + boundary-distance fill 20k: far
-#      sources at 1.10-3.5 m filling the 0.95-2.05 m hole, unfiltered DRR gap, dry
-#      rooms included).
-#   2. overlap_control.turn_taking_prob 0.25: conversational alternating near/far
-#      turns with multi-second far-solo stretches (incl. row-initial) -- the regime
-#      where real far speech passed through untouched (QVF2.2 clip2/clip3).
-#   3. augmentation_target_absent ON at prob 0.10 (lone-far rows = suppress): the
-#      product keeps <1m only, so an isolated far voice must be silenced. Warm-start
-#      + low prob + OverSuppressionLoss/ResidualReference guard against the cold-start
-#      deletion blow-up documented in FAILED_NOTE §5. Judge gate: Dawn deletion must
-#      NOT rise at ep19.
+# [E0c] far-only probe on the high-reverb bank (rt60 0.85-1.5) -- reverb-extrapolation test. See NEXT_STEPS.md Phase 1.
+# voice_isolate -- DPCRN. EVAL-ONLY far-only/noise-only LEAKAGE PROBE. DO NOT TRAIN with this config.
+# Same `model:` block as all pipeline stages 2-6 -- only difference is augmentation_target_absent
+# forced ON below, so it works as an eval-only overlay for ANY checkpoint in pretrained_ckpt/:
+#   uv run python scripts/indomain_sisdri.py config/exp/eval_targetabsent_probe.yaml \
+#     --ckpt pretrained_ckpt/<name>.ckpt --device cuda --n-batches 40 --by-bucket
+# Usage and results: see ../README.md and ../NEXT_STEPS.md ("far-only / noise-only 洩漏測試").
 dataset:
   task: voice_isolation
   train_metafile: data/dns5-read.train.list
@@ -36,8 +29,8 @@ augmentation_speech:
   snr_range:          # HARD SIR: foreground may be up to 10 dB QUIETER than the
     - -10             # interferer, so loudness alone cannot solve it and the
     - 10              # in-domain SI-SDRi metric stays sensitive (no passthrough rows).
-  media_voice:        # TV/loudspeaker-style band-limited interferer -- ON for the deployment
-    used: True        # recipe: the most common non-human interferer in real near-field rooms.
+  media_voice:        # TV/loudspeaker-style band-limited interferer (OFF for now)
+    used: False
     prob: 0.30
     hp_cutoff_range: [200, 400]
     lp_cutoff_range: [3500, 7000]
@@ -49,17 +42,6 @@ augmentation_speech:
     erle_db_range: [20, 35]
   overlap_control:    # spread the foreground/interferer temporal overlap across
     used: True        # no/mid/high regimes (else >80% overlap dominates training)
-    # Row-level conversational turn-taking (Phase 1): near and far alternate in
-    # long turns (far gets continuous multi-second solos, 50% row-initial) --
-    # the structure per-frame Bernoulli gating never produces and the regime
-    # where real far speech leaked straight through. Remaining 75% of rows use
-    # the per-interferer regimes below unchanged.
-    turn_taking_prob: 0.25
-    turn_near_seconds: [1.5, 3.0]
-    turn_far_seconds: [2.5, 5.0]   # long far solos; clip3's was 4.6 s
-    turn_gap_seconds: [0.0, 0.4]
-    turn_overlap_seconds: [0.0, 0.3]
-    far_first_prob: 0.5
     no_overlap_prob: 0.20
     high_overlap_prob: 0.35
     mid_overlap_range:
@@ -82,18 +64,17 @@ augmentation_speech:
       # counter_level: near deliberately quieter -> forces a non-energy cue (hardest).
       - {name: counter_level, prob: 0.2, sir_range: [-10, 0]}
 
-# ON at LOW prob (Phase 1): lone-far rows -- interferer-only mixture with a silence
-# target. The product decision (2026-07-03) is "user is always <1m": an isolated far
-# voice is a bystander/TV, never the user, and real clips showed it passing through
-# untouched (QVF2.2 clip2 -1.46 dB). This is exactly the "insertion/leakage became the
-# actual problem" condition the old OFF-comment reserved re-enabling for. The historical
-# blow-up (Dawn deletion 0.286, FAILED_NOTE §5) was COLD-start on the hardest RIR set
-# with many variables moving; here: warm-start from a healthy separator, prob 0.10,
-# OverSuppressionLoss w3 + ResidualReference(target_present_only) active. Judge gate:
-# Dawn deletion must NOT rise at the ep19 trough -- if it does, drop to 0.05 or OFF.
+# EVAL-ONLY PROBE (NOT for training): every model in the escalation chain (ep59/w1/w2/w3) was trained
+# with this OFF -- see FAILED_NOTE.md, training with target_absent ON caused a catastrophic over-suppression
+# blow-up (Dawn deletion 0.286 / SI-SDRi -9.53). This copy forces prob=1.0 so EVERY eval row has no near
+# speaker (foreground removed, force_interferer keeps a FAR speaker in the mix) -- the "far-only leakage"
+# test: what does a model that has NEVER seen this situation output when nobody is actually near?
+# indomain_sisdri.py --by-bucket reports this as "F-only (silent-target) suppression": median
+# power_reduction_db (more negative = better suppression) + false-near rate (reduction > -6dB = leak).
+# Use with any ep59/w1/w2/w3 checkpoint (identical model architecture across all four).
 augmentation_target_absent:
   used: True
-  prob: 0.10
+  prob: 1.0
   force_interferer: True
 
 # OFF: runtime distance query. This is a fixed near-field task (keep the bank
@@ -139,10 +120,9 @@ augmentation_reverb:
     source_level: True
     pregenerated:
       used: True
-      # PHASE-1 MERGED VIEW (merge_rir_views.py): wide (RT60 0.20-0.85, gap>=3, 62k)
-      # + boundary-distance fill (far 1.10-3.5 m, unfiltered DRR gap, 20k). Flat
-      # renamed symlinks (wide_*/bnd_*) under <folder>/items/.
-      folder: /work/any_exp_link/puresound_exp/hybrid_rir_16k_phase1
+      # HIGH-REVERB BANK (rt60 0.85-1.5, UNSEEN in training): does far-suppression extrapolate above the rt60 0.85 training cap?
+      # core, adds weak-contrast / more-reverberant rooms). Flat .wav/.json under <folder>/items/.
+      folder: /work/any_exp_link/puresound_exp/hybrid_rir_16k_high_levels/all
       near_labels: [near_0, near_1]
       far_labels: [far_0, far_1, far_2]
       drr_window_ms: 2.5
@@ -169,9 +149,8 @@ augmentation_src:        # random down/up-sample (bandwidth variation)
     - 0.2
     - 0.8
 
-# ON for the deployment recipe: real device mic front-ends commonly high-pass at 100-300 Hz.
 augmentation_hpf:
-  used: True
+  used: False
   prob: 0.25
   cutoff:
     - 100
@@ -245,7 +224,7 @@ trainer:
   num_workers: 20
   num_gpus: 2
   find_unused_parameters: true
-  work_folder: exp/dpcrn_boundary_0703
+  work_folder: exp/dpcrn_curriculum/expand
 
 optimizer:
   type: AdamW
@@ -304,19 +283,6 @@ loss_func:
       window: hann_window
       factor_sc: 0.5
       factor_mag: 0.5
-
-  # TIER-1 ANTI-SUPPRESSION: pure-magnitude one-sided loss = mean(ReLU(|T|^p - |E|^p)^2).
-  # Penalises enhanced magnitude falling BELOW target (deletion); the residual/over-estimation
-  # side is already covered by SD-SDR + STFT above, so this adds net asymmetric pressure toward
-  # preservation. `weighted` is the del<->sub knob (start 1.0; raw ~0.07). Added to fight the
-  # over-suppression Azure STT revealed (enh deletion 0.264 -> 0.444). Judge with a STRONG ASR.
-  - type: OverSuppressionLoss
-    weighted: 3.0
-    args:
-      p: 0.5
-      fft_size: 512
-      hop_size: 128
-      win_length: 512
 
   # Training-only background accounting: residual = noisy - enhanced is supervised
   # against consistency_noise (= noisy - clean). Deployment stays single-output.

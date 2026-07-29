@@ -1,95 +1,87 @@
 # voice_isolate configs
 
-Full pipeline narrative + results: `../README.md`.
+Two files here are the **defaults**: the tuned settings to use as-is. Everything under
+`exp/` is the recipe history — earlier pipeline stages, ablations and eval-only fixtures.
 
-## Training configs (`train_*.yaml`) — the 6-stage pipeline
+| config | use |
+|---|---|
+| `train_dpcrn.yaml` | default training recipe (produced the released `dpcrn_v7` checkpoint) |
+| `infer_dpcrn.yaml` | default inference config; loads any checkpoint in `../pretrained_ckpt/` |
 
-Each stage warm-starts from the previous stage's judged checkpoint (`pretrained_ckpt/`, see
-`../pretrained_ckpt/README.md`). All six share the **same DPCRN architecture** (complex ratio mask,
-`channels [2,32,64,128]`, `rnn_hidden 96`, 30 ms look-ahead `delay=[1,1,1]`) — only the RIR bank,
-augmentation, and loss weights change stage to stage.
-
-| # | config | warm-start from | judged ckpt |
-|---|---|---|---|
-| 1 | `train_dpcrn_curriculum_core.yaml`   | cold | `dpcrn_curriculum_core_ep39.ckpt` |
-| 2 | `train_dpcrn_curriculum_expand.yaml` | stage 1 ep39 | `dpcrn_curriculum_expand_ep59.ckpt` |
-| 3 | `train_dpcrn_antisup_w1.yaml`        | stage 2 ep59 | `dpcrn_antisup_w1_ep19.ckpt` |
-| 4 | `train_dpcrn_antisup_w2.yaml`        | stage 3 ep19 | `dpcrn_antisup_w2_ep19.ckpt` |
-| 5 | `train_dpcrn_antisup_w3.yaml`        | stage 4 ep19 | `dpcrn_antisup_w3_ep19.ckpt` |
-| 6 | `train_dpcrn_wide_antisup.yaml`      | stage 5 ep19 | `dpcrn_wide_antisup_ep19.ckpt` (current best, streaming-verified) |
-
-`train_dpcrn_wide_causal.yaml` — untrained alternative (fully-causal, `delay=[0,0,0]`), kept only as a
-documented fallback; not needed since streaming export solved look-ahead via future-buffering instead.
-
-`train_dpcrn_gate.yaml` / `train_dpcrn_v2_sepgate.yaml` — the VAD gate recipes, kept for the future
-real-data rung. Both warm-start from `dpcrn_wide_antisup_ep19.ckpt` and add a causal frame-level VAD
-head (near-active vs inactive/far-only labels). `gate`: separator frozen, head-only (engineering
-validation). `v2_sepgate`: separator+gate trained jointly on the obstacle-rich `hybrid_rir_16k_v2`
-bank with turn-taking label-0 frames. **Both were judged negative on real end-to-end recordings**
-(gate never closes on real clips; joint training also blows up real-acoustic deletion — see
-`EXPERIMENT_LOG.md` 2026-07-10/16); synthetic scores are not evidence of real-recording transfer.
-
-Run (from repo root):
 ```bash
-uv run python egs/voice_isolate/main.py egs/voice_isolate/config/train_dpcrn_curriculum_core.yaml --training
-uv run python egs/voice_isolate/main.py egs/voice_isolate/config/train_dpcrn_curriculum_expand.yaml --training \
-    --pretrained_ckpt_path egs/voice_isolate/pretrained_ckpt/dpcrn_curriculum_core_ep39.ckpt
-uv run python egs/voice_isolate/main.py egs/voice_isolate/config/train_dpcrn_gate.yaml --training \
-    --pretrained_ckpt_path egs/voice_isolate/pretrained_ckpt/dpcrn_wide_antisup_ep19.ckpt
+# train (from repo root), warm-starting from the previous release
+uv run python egs/voice_isolate/main.py egs/voice_isolate/config/train_dpcrn.yaml --training \
+    --pretrained_ckpt_path egs/voice_isolate/pretrained_ckpt/dpcrn_v6.ckpt
+
+# inference / demo
+uv run python egs/voice_isolate/scripts/demo.py \
+    --config_path egs/voice_isolate/config/infer_dpcrn.yaml
 ```
-`--ckpt_path <ckpt>` instead of `--pretrained_ckpt_path` = true resume (restores optimizer/scheduler/epoch).
 
-## Eval-only configs (`eval_*.yaml`)
+`--ckpt_path <ckpt>` instead of `--pretrained_ckpt_path` is a true resume (restores
+optimizer/scheduler/epoch). The released inference setting includes `dry_blend 0.9` — see
+`../pretrained_ckpt/README.md`.
 
-Same recipe body as the matching training stage, with only the RIR bank / augmentation flag swapped —
-reconstruct the exact augmentation pipeline so any checkpoint in `pretrained_ckpt/` can be benchmarked.
-**Never used for training.**
+## Shared design (all configs here)
 
-| config | purpose | RIR / flag |
-|---|---|---|
-| `eval_but_real.yaml` | real BUT ReverbDB RIR benchmark (rt60 1.15–1.84, extreme OOD) | `but_real_rir_16k` |
-| `eval_heldout.yaml` | unseen-room generalization (same distribution as expand, disjoint rooms) | `hybrid_rir_16k_levels_test/expand` |
-| `eval_targetabsent_probe.yaml` | far-only/noise-only leakage probe | `augmentation_target_absent` forced ON |
+- **Backbone DPCRN**, complex ratio mask, `channels [2,32,64,128]`, `rnn_hidden 96`, ~0.8 M
+  params, 16 kHz native.
+- **30 ms look-ahead**: `backbone.delay=[1,1,1]` (3 frames), inter-RNN unidirectional, so the
+  look-ahead is bounded. The streaming ONNX export handles it with future-buffering baked into
+  the graph (`../scripts/streaming_onnx.py`).
+- **Early target** (`target_rir_type: early`): the target is the de-reverberated near speech, so
+  passthrough cannot match it and separation stays a real objective.
+- **Hard SIR** `[-10, 10]` plus `mix_mode`: the foreground may be up to 10 dB *quieter* than the
+  interferer, so loudness alone cannot solve the task.
+- **Synthetic `target_absent`: OFF.** Forced-silent rows teach "emit silence when unsure", which
+  mis-fires outside the training domain. Absolute-suppress supervision comes from real-recording
+  rows instead (`augmentation_realfar.lone_far_prob`, turn-taking).
+- **Anti-deletion losses**: `OverSuppressionLoss` + two `ASRFeatureLoss` terms (HuBERT + WavLM,
+  cosine) + `SDRLoss` + `MultiResolutionSTFTLoss` + `ResidualReferenceLoss`.
+- **Scheduler `CosineAnnealingWarmRestarts T_0=20`** — restarts every 20 epochs, so compare
+  checkpoints only at the cosine troughs (ep19/ep39/ep59). The optimizer trains the backbone;
+  encoder/features stay frozen.
 
-**Frozen benchmark fixtures** (byte-frozen — do not edit; they define the eval distributions every
-historical judgment in `EXPERIMENT_LOG.md` used, via `../run_full_benchmark.sh`):
+## `exp/`
 
-| config | benchmark station | bank |
-|---|---|---|
-| `eval_indomain_phase1.yaml` | 2 (in-domain SI-SDRi + solo-leakage + turn-taking buckets) | `hybrid_rir_16k_phase1` (wide+boundary merge) |
-| `eval_targetabsent_probe_high.yaml` | 4 (unseen high-reverb far-only probe) | `hybrid_rir_16k_high_levels/all` |
-| `eval_targetabsent_probe_boundary.yaml` | 5 (unseen boundary-distance far-only probe) | `hybrid_rir_16k_boundary_heldout_levels/all` |
+Recipe history, kept so any stage can be reproduced, re-judged or re-warm-started. Not needed
+to train or run the default model.
 
-Tools: `../scripts/README.md`.
+**Pipeline stages** (each warm-starts from the previous stage's checkpoint; the version table in
+`../pretrained_ckpt/README.md` maps recipe → checkpoint → result):
+`train_dpcrn_curriculum_core.yaml` → `train_dpcrn_curriculum_expand.yaml` →
+`train_dpcrn_antisup_w1.yaml` → `_w2` → `_w3` → `train_dpcrn_wide_antisup.yaml`, then the
+real-recording rounds `train_dpcrn_realE2E.yaml` → `_v2` → `_v2b`, whose final round was
+promoted to `../train_dpcrn.yaml`.
 
-## Inference config (`infer_dpcrn.yaml`)
+**Alternatives and side branches:**
 
-**One shared config for all 6 pipeline checkpoints** — the `model:` block never changed across the
-whole pipeline, so there is nothing stage-specific to configure at inference time; pick the checkpoint
-via `--ckpt` / `--checkpoint_path` (or the `scripts/demo.py` dropdown, which scans `trainer.work_folder:
-pretrained_ckpt` automatically). Used by `scripts/demo.py` and `scripts/streaming_onnx.py`.
+| config | what it is |
+|---|---|
+| `train_dpcrn_wide_causal.yaml` | fully-causal variant (`delay=[0,0,0]`), zero look-ahead; untrained, kept as a documented fallback since future-buffering solved streaming without it |
+| `train_dpcrn_gate.yaml` | separator frozen, trains only the causal frame-level VAD gate head |
+| `train_dpcrn_v2_sepgate.yaml` | separator + gate head trained jointly on an obstacle-rich RIR bank |
 
-## Shared design (all `train_*`/`eval_*`/`infer_*` configs)
+The gate recipes learn the gate well on simulated data, but the gate does not close on real
+recordings and pushing far-suppression through joint training raises deletion on real audio;
+treat simulated gate scores as engineering signal only.
 
-- **Backbone DPCRN** (complex ratio mask). TS-Conformer was dropped (couldn't separate hard near/far
-  cases).
-- **30 ms look-ahead**: `backbone.delay=[1,1,1]` (3 frames), inter-RNN unidirectional → bounded
-  look-ahead. Streaming ONNX export handles this via future-buffering (see `../scripts/streaming_onnx.py`).
-- **Wider net**: `channels [2,32,64,128]`, `rnn_hidden 96`.
-- **Dual-SSL ASR loss** (stages 1–2): two `ASRFeatureLoss` (HuBERT + WavLM, cosine) + `SDRLoss` (SD-SDR)
-  + `MultiResolutionSTFTLoss` + `ResidualReferenceLoss`. **Anti-suppression** (stages 3–6): adds
-  `OverSuppressionLoss` (pure-magnitude, one-sided; weight escalates 1.0→2.0→3.0 across stages 3–5).
-- **Early target** (`target_rir_type: early`), **hard SIR [-10,10]** + `mix_mode`.
-- **`target_absent: OFF`** — forced-silent rows drive real-domain over-suppression.
-- Fixed near-field: no distance query, no FiLM, no `gate_silence`.
-- **Scheduler `CosineAnnealingWarmRestarts T_0=20`** — restarts ~ep20/40/…; **compare only at the
-  cosine troughs (ep19/ep39/ep59)**. Optimizer trains the backbone only (encoder/features frozen).
+**Eval-only configs** (`eval_*.yaml`) rebuild the exact augmentation pipeline with the RIR bank
+or a single flag swapped, so any checkpoint can be benchmarked. Never used for training.
 
-## `backup/`
+| config | purpose |
+|---|---|
+| `eval_but_real.yaml` | measured-RIR benchmark, RT60 1.15–1.84 (far beyond the training domain) |
+| `eval_heldout.yaml` | unseen-room generalization, same distribution as the expand stage |
+| `eval_targetabsent_probe.yaml` | far-only / noise-only leakage probe (`augmentation_target_absent` forced ON) |
+| `eval_indomain_phase1.yaml` | in-domain SI-SDRi + solo-leakage + turn-taking buckets |
+| `eval_targetabsent_probe_high.yaml` | far-only probe on unseen high-reverb rooms |
+| `eval_targetabsent_probe_boundary.yaml` | far-only probe on unseen boundary distances |
 
-Superseded configs kept only for reproducibility (dead-end runs: conformer/mixmode/P1, pre-DPCRN
-query/FiLM/VAD variants, the failed all-RIR cold-start, ASR-loss ablations, the closed
-boundary/realfar rungs, the never-run `dpcrn_curriculum_stress.yaml`, and the never-wired
-`eval_targetabsent_probe_wide.yaml`). Not part of the active pipeline. Note: the corresponding
-library code for the conformer/distance-query axis was removed from `puresound/` in the 2026-07-16
-refactor, so these configs document history rather than runnable recipes.
+The last three are **byte-frozen fixtures**: they define the distributions every recorded
+judgment used, via `../run_full_benchmark.sh`. Do not edit them. Tools: `../scripts/README.md`.
+
+`exp/backup/` — superseded configs kept only for reproducibility (dead-end runs, pre-DPCRN
+query/FiLM/VAD variants, ASR-loss ablations, closed rounds). The library code for the
+conformer/distance-query axis has since been removed from `puresound/`, so those files document
+history rather than runnable recipes.

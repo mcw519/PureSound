@@ -1,11 +1,27 @@
-# voice_isolate -- DPCRN inference config. Shared by ALL 6 pipeline checkpoints in ../pretrained_ckpt/
-# (curriculum_core/expand, antisup_w1/w2/w3, wide_antisup): the `model:` block never changed across the
-# whole pipeline, so one inference config covers every stage -- pick the checkpoint via --ckpt /
-# --checkpoint_path, or via the demo.py dropdown (scans trainer.work_folder below).
-# Used by: scripts/demo.py (gradio), scripts/streaming_onnx.py (ONNX export), and any one-off enhance
-# script that only needs to build the model (no augmentation/dataset needed for inference).
-# trainer/optimizer/scheduler/loss_func below are unused placeholders, present only because the config
-# loader (puresound.recipes.load_siso_recipe_config) requires the keys to exist.
+# voice_isolate -- DPCRN inference config (default).
+#
+# Shared by EVERY checkpoint in ../pretrained_ckpt/: the `model:` block is the same
+# for all of them, so pick the checkpoint with --ckpt / --checkpoint_path, or from
+# the demo.py dropdown (it scans trainer.work_folder below). Default checkpoint =
+# `dpcrn_v7.ckpt`; see ../pretrained_ckpt/README.md for what each version is.
+#
+# RECOMMENDED RUNTIME SETTING for dpcrn_v7: `dry_blend = 0.9`, i.e.
+#   out = 0.9 * enhanced + 0.1 * input
+# It bounds attenuation at any point to -20 dB, which trades a little residual
+# interferer for a large drop in deletions on unmatched capture chains -- with it
+# the model lowers ASR error on real recordings instead of raising it. Offline:
+# `model(wav, dry_blend=0.9)`; eval scripts take `--dry-blend`; streaming blends
+# the enhanced frame with the latency-aligned input frame (the exported manifest
+# carries the value under `recommended_inference`).
+#
+# Training-only heads (e.g. the distance/DRR aux head) are deliberately absent
+# here: their weights are skipped on load and the output is bit-identical.
+#
+# Used by: scripts/demo.py (gradio), scripts/streaming_onnx.py (ONNX export) and any
+# one-off enhance script that only has to build the model (no dataset/augmentation).
+# trainer/optimizer/scheduler/loss_func below are unused placeholders, present only
+# because the config loader (puresound.recipes.load_siso_recipe_config) requires the
+# keys to exist.
 dataset:
   target_sample_rate: 16000
 
