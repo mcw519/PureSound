@@ -34,11 +34,14 @@ RIRs → **Apply / Inspect** them → **Bank** them for training.
 | Script | Purpose |
 |--------|---------|
 | `generate_hybrid_rir.py` | **Generate** — sample rooms and write 5-channel RIR WAV + metadata JSON. |
+| `generate_bank_boundary.sh` | **Generate** — one-shot recipe for the boundary-distance bank (far sources 1.10–3.5 m + a held-out twin). |
+| `generate_bank_high_reverb.sh` | **Generate** — one-shot recipe for the high-reverb bank (RT60 0.85–1.5, beyond the training domain). |
 | `apply_rir_to_wav.py` | **Apply** — convolve a dry WAV with a generated RIR WAV. |
-| `rir_viz.py` | **Inspect** — visualize one RIR: room geometry, reflection paths, or a 2D wave-field animation. |
-| `rir_stats.py` | **Inspect** — print distribution stats for a folder of RIRs (room dims, RT60, distances, obstacles) to the terminal. |
-| `filter_rir_levels.py` | **Bank** — slice a generated bank into cumulative curriculum levels (core/expand/stress) by RT60 + DRR; symlink-only views. |
-| `real_rir_to_bank.py` | **Bank** — convert a real measured RIR dataset (e.g. BUT ReverbDB) into a `PreGeneratedRoomBank` folder. |
+| `plot_rir.py` | **Inspect** — visualize one RIR: room geometry, reflection paths, or a 2D wave-field animation. |
+| `inspect_bank.py` | **Inspect** — print distribution stats for a folder of RIRs (room dims, RT60, distances, obstacles) to the terminal. |
+| `build_bank_view.py` | **Bank** — symlink-only views: `levels` slices one bank into cumulative difficulty levels by RT60 + DRR, `merge` unions several views into one training view. |
+| `real_rir_to_bank.py` | **Bank** — measured RIRs → a `PreGeneratedRoomBank` folder: `scan` a public corpus into a manifest, `from-manifest` assemble the bank, `but` do both for BUT ReverbDB, `self-test` verify the emission. |
+| `classify_but_rirs.py` | **Bank** — index a BUT ReverbDB tree by reverb tier and room type (browse trees + per-RIR index + per-room CSV) to pick rooms worth banking. |
 
 ## Install
 
@@ -183,22 +186,26 @@ Both bank scripts emit folders that
 [`PreGeneratedRoomBank`](../../puresound/audio/rir_bank.py) indexes directly:
 same-stem `.wav`/`.json` pairs whose JSON carries a `scene.channel_map` giving a
 near/far label and a distance per channel. Training recipes point at one of
-these folders. `filter_rir_levels.py` reshapes a bank you generated above;
+these folders. `build_bank_view.py` reshapes banks you already have;
 `real_rir_to_bank.py` builds one from RIRs measured in real rooms.
 
-### Curriculum levels from a generated bank — `filter_rir_levels.py`
+### Difficulty levels from a generated bank — `build_bank_view.py levels`
 
-Slices an existing hybrid RIR bank into three **cumulative** difficulty levels
-for curriculum training, judged by RT60 and the measured near/far DRR
-(direct-to-reverberant ratio) separation. The conservative gap per item is
-`min(DRR over near channels) − max(DRR over far channels)`, so every near/far
-pair in a level clears the printed bound.
+Slices an existing hybrid RIR bank into **cumulative** difficulty levels, judged by
+RT60 and the measured near/far DRR (direct-to-reverberant ratio) separation. The
+conservative gap per item is `min(DRR over near channels) − max(DRR over far
+channels)`, so every near/far pair in a level clears the printed bound.
 
 | Level | RT60 | Worst-case near/far DRR gap |
 |-------|------|------------------------------|
 | `core`   | 0.20–0.45 s | ≥ 6 dB |
 | `expand` | 0.20–0.65 s | ≥ 3 dB |
-| `stress` | all remaining valid items | — |
+| `wide`   | 0.20–0.85 s | ≥ 3 dB |
+| `stress` | valid items in none of the above | — |
+| `all`    | every valid item, unfiltered | — |
+
+Use `all` for banks whose whole point is unfiltered coverage — a boundary-distance
+fill (where a low DRR gap is the intent) or a bank probed above RT60 0.85.
 
 Output folders hold **relative symlinks only** (no RIR audio is copied), each
 under an `items/` child, plus a per-level `manifest.json` (RT60, near/far DRR,
@@ -207,17 +214,34 @@ RT60/gap percentiles.
 
 ```bash
 # Measure and report only; nothing is written to disk
-python filter_rir_levels.py \
+python build_bank_view.py levels \
   exp/hybrid_rir_16k exp/hybrid_rir_16k_levels --dry-run
 
-# Build the core/expand/stress views
-python filter_rir_levels.py \
+# Cut the level views
+python build_bank_view.py levels \
   exp/hybrid_rir_16k exp/hybrid_rir_16k_levels \
   --drr-window-ms 2.5 --workers 16
 ```
 
 Set `--drr-window-ms` to match the direct-path window your recipe config uses.
 The output path must not already exist — there is no overwrite option by design.
+
+### Union several views into one — `build_bank_view.py merge`
+
+Training on more than one bank means indexing one folder, but every generation run
+numbers its rooms from zero, so stems collide across banks. `merge` prefixes each
+symlink with a per-source tag (wav and json renamed together) and records the
+provenance in `merged.json`:
+
+```bash
+python build_bank_view.py merge \
+  --source wide=exp/hybrid_rir_16k_levels/wide \
+  --source real=exp/real_rir_16k_train_view/all \
+  --output exp/hybrid_rir_16k_merged
+```
+
+Symlinks are resolved one hop, so the merged view points straight at the bank files
+rather than chaining through the source views.
 
 ### Real measured RIRs → a bank — `real_rir_to_bank.py`
 
@@ -239,7 +263,12 @@ onto the bank's "one receiver, many sources at various distances" item — the
 distance is just `‖loudspeaker − microphone‖`.
 
 ```bash
-# Stage B only — you supply the manifest
+# Stage A — scan a public corpus into a manifest
+python real_rir_to_bank.py scan dechorate \
+  --input /path/to/dEchorate_sofa --staging exp/staging/dechorate \
+  --manifest exp/manifests/dechorate.jsonl
+
+# Stage B — assemble any manifest into a bank
 python real_rir_to_bank.py from-manifest \
   --manifest manifest.jsonl --output exp/real_rir_bank \
   --d0 1.0 --target-sr 16000
@@ -252,12 +281,21 @@ python real_rir_to_bank.py but \
 python real_rir_to_bank.py self-test
 ```
 
-Only the BUT ReverbDB scanner ships today. To add another dataset, write a
-`scan_*` that emits the manifest schema above, then reuse Stage B unchanged.
+`scan` ships scanners for **dEchorate, BRUDEX, openSLR-28, ACE and DIFFRIR**; each
+corpus states its geometry differently (calibrated coordinates, direct-path TOA, a
+table in the tech report, per-config npy), and the script's docstring records the
+quirk per corpus — a wrong distance silently poisons the near/far labels. To add a
+corpus, write a `scan_*` that emits the manifest schema above and register it in
+`SCANNERS`; Stage B is reused unchanged.
+
+Rooms that have far RIRs but no near ones can borrow near channels from another
+corpus with `--near-pool <manifest>`: a near channel is direct-path dominated, so
+the cross-room error is small, and it keeps the whole item real rather than mixing
+in a simulated near channel.
 
 ## Visualize a RIR
 
-`rir_viz.py` is one CLI with three subcommands. Each reads a RIR WAV and its
+`plot_rir.py` is one CLI with three subcommands. Each reads a RIR WAV and its
 `.json` sidecar, and writes its output next to the RIR by default (override with
 `--output`). Common flags: `--rir` (required), `--json`, `--output`, `--dpi`.
 
@@ -271,13 +309,13 @@ Only the BUT ReverbDB scanner ships today. To add another dataset, write a
 RIR=exp/hybrid_rir/room_000000/room_000000_000000.wav
 
 # Geometry + waveforms + energy decay
-python rir_viz.py overview --rir "$RIR"
+python plot_rir.py overview --rir "$RIR"
 
 # Reflection paths for source channel 2 (far_0), up to 2nd order
-python rir_viz.py paths --rir "$RIR" --channel 2 --order 2
+python plot_rir.py paths --rir "$RIR" --channel 2 --order 2
 
 # 2D wave-field animation for channel 2 (MP4 + GIF + contact sheet)
-python rir_viz.py field --rir "$RIR" --channel 2 --nx 340 --t-ms 40 --gif
+python plot_rir.py field --rir "$RIR" --channel 2 --nx 340 --t-ms 40 --gif
 ```
 
 `paths`/`field` take `--channel` (0–4, see the channel table above); `paths`
@@ -293,18 +331,18 @@ All three are rendered from the same item (`room_000000_000000`, a
 **`overview`** — floor plan + 3D scene + per-channel RIR waveforms + Schroeder
 energy decay:
 
-![rir_viz overview output](assets/overview.png)
+![plot_rir overview output](assets/overview.png)
 
 **`paths`** — image-source reflection paths to the mic (solid = direct,
 dashed = 1st-order, dotted = 2nd-order wall reflections):
 
-![rir_viz paths output for far_0](assets/paths_ch2.png)
+![plot_rir paths output for far_0](assets/paths_ch2.png)
 
 **`field`** — 2D FDTD wave-field animation (red = compression, blue =
 rarefaction); note the wave reflecting off the walls and bending around the
 furniture footprints:
 
-![rir_viz field animation for far_0](assets/field_ch2.gif)
+![plot_rir field animation for far_0](assets/field_ch2.gif)
 
 > The GIF here is downsized (`--nx 190`, sparse frames) to keep the repo light;
 > the default `--nx 340` render is sharper. `field` also writes an MP4 and a
@@ -382,7 +420,7 @@ ones are called out here with their role and which script pulls them in.
 | [Pyroomacoustics](https://github.com/LCAV/pyroomacoustics) | High-band **geometric (image-source)** room simulation | `generate_hybrid_rir.py` (via `puresound.audio.hybrid_rir`) |
 | [CuPy](https://cupy.dev/) (`cupy-cuda12x`) | Optional **GPU** acceleration of the low-band modal solve (`--low-backend pytard-cupy`) | `generate_hybrid_rir.py` |
 | [PyTorch / torchaudio](https://pytorch.org/audio/) | Tensors, WAV I/O, resampling, FFT convolution | `generate_hybrid_rir.py`, `apply_rir_to_wav.py`, `real_rir_to_bank.py` |
-| [SciPy](https://scipy.org/) | Modal DCT/IDCT transforms; WAV-read fallback | low-band solver, `rir_viz.py` |
+| [SciPy](https://scipy.org/) | Modal DCT/IDCT transforms; WAV-read fallback | low-band solver, `plot_rir.py` |
 
 `pyroomacoustics` and `cupy-cuda12x` are **optional extras**, not installed by
 default — see [Install](#install) (the `hybrid-rir` / `hybrid-rir-gpu` extras in
@@ -416,17 +454,29 @@ that the same Stage-A→Stage-B path can target once a `scan_*` is added.
 The voice_isolate benchmark's in-domain bank (`hybrid_rir_16k_phase1`, station 2
 via `config/exp/eval_indomain_phase1.yaml`) is a merged view of the wide level view
 plus the boundary-distance bank; the station-5 probe uses the boundary held-out
-bank (seed 1618, built by `run_boundary_gen.sh`). Both live under
+bank (seed 1618, built by `generate_bank_boundary.sh`). Both live under
 `/work/any_exp_link/puresound_exp/` and are frozen — rebuild only after data
 loss:
 
 ```bash
-# boundary main + held-out banks (see run_boundary_gen.sh for the full recipe)
-bash egs/rir_generation/run_boundary_gen.sh
+# boundary main + held-out banks (see generate_bank_boundary.sh for the full recipe)
+bash egs/rir_generation/generate_bank_boundary.sh
 
 # merged phase1 view (wide + boundary; refuses to overwrite an existing output)
-uv run python egs/rir_generation/merge_rir_views.py \
+uv run python egs/rir_generation/build_bank_view.py merge \
   --source wide=/work/any_exp_link/puresound_exp/hybrid_rir_16k_levels/wide \
   --source bnd=/work/any_exp_link/puresound_exp/hybrid_rir_16k_boundary_levels/all \
   --output /work/any_exp_link/puresound_exp/hybrid_rir_16k_phase1
 ```
+
+## Renamed / merged (older logs use the old names)
+
+| old | now |
+|---|---|
+| `filter_rir_levels.py` | `build_bank_view.py levels` |
+| `merge_rir_views.py` | `build_bank_view.py merge` |
+| `rir_stats.py` | `inspect_bank.py` |
+| `rir_viz.py` | `plot_rir.py` |
+| `run_boundary_gen.sh` | `generate_bank_boundary.sh` |
+| `run_high_gen.sh` | `generate_bank_high_reverb.sh` |
+| `scan_public_rir_corpora.py` | `real_rir_to_bank.py scan <corpus>` (Stage A now lives with Stage B) |

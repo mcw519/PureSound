@@ -1,8 +1,21 @@
-"""Classify every BUT ReverbDB RIR by reverb tier + room type and build an
-organized symlink view (no data duplication) plus a per-RIR index and per-room
-summary. Reverb tier is set on median RT30 (RT60 in BUT is the inflated
-(-5,-65)dB projection; RT30/RT20 are the perceptually relevant early decay)."""
+"""Index a BUT ReverbDB tree by reverb tier and room type.
+
+Emits, without copying any audio:
+  * ``by_reverb/<tier>/<room>/{near,far}/`` and ``by_type/<env_type>/<room>/{near,far}/``
+    symlink trees for browsing and for picking rooms to build a bank from
+  * ``but_rir_index.jsonl`` -- one row per RIR (room, tier, distance, RT20/30/60, path)
+  * ``but_rir_rooms.csv``   -- one row per room, sorted by median RT30
+
+The tier is set on median RT30, not RT60: BUT's RT60 column is the inflated
+(-5,-65) dB projection, while RT30/RT20 describe the early decay a near/far
+decision actually depends on.
+
+Usage:
+  uv run python egs/rir_generation/classify_but_rirs.py \
+      --but-root exp/BUT_ReverbDB --out exp/BUT_ReverbDB_classified
+"""
 from __future__ import annotations
+import argparse
 import csv
 import json
 import os
@@ -11,9 +24,7 @@ import shutil
 import statistics as st
 from pathlib import Path
 
-BUT = Path("/home/milowu/A4Audio/PureSound/egs/voice_isolate/exp/BUT_ReverbDB")
-OUT = Path("/home/milowu/A4Audio/PureSound/egs/voice_isolate/exp/BUT_ReverbDB_classified")
-D0 = 1.0  # near/far split (product premise: user < 1 m)
+RECIPE_DIR = Path(__file__).resolve().parent
 
 
 def tier_of(rt30_med: float) -> str:
@@ -52,6 +63,19 @@ def parse_meta(mp: Path):
 
 
 def main():
+    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0],
+                                 formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--but-root", type=Path, default=RECIPE_DIR / "exp/BUT_ReverbDB",
+                    help="extracted BUT ReverbDB root (default: exp/BUT_ReverbDB)")
+    ap.add_argument("--out", type=Path, default=RECIPE_DIR / "exp/BUT_ReverbDB_classified",
+                    help="output index + symlink trees (re-runs replace the trees)")
+    ap.add_argument("--near-far-split-m", type=float, default=1.0,
+                    help="distance that separates near from far (default: 1.0)")
+    args = ap.parse_args()
+    BUT, OUT, D0 = args.but_root.resolve(), args.out.resolve(), args.near_far_split_m
+    if not BUT.is_dir():
+        raise SystemExit(f"BUT ReverbDB root not found: {BUT}")
+
     rows = []
     for mp in sorted(BUT.glob("*/MicID*/SpkID*/*/mic_meta.txt")):
         room = mp.relative_to(BUT).parts[0]
@@ -148,7 +172,7 @@ def main():
             n_links += 1
 
     print(f"indexed {len(rows)} RIRs across {len(room_summ)} rooms; {n_links} symlinks")
-    print(f"tiers: " + ", ".join(
+    print("tiers: " + ", ".join(
         f"{t}={sum(1 for s in room_summ.values() if s['tier']==t)} rooms"
         for t in ("office", "high", "extreme")))
     print("output ->", OUT)

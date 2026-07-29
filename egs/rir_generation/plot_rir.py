@@ -6,9 +6,9 @@
   field      illustrative 2D wave-field animation (reflection + diffraction)
 
 Examples:
-  python rir_viz.py overview --rir exp/hybrid_rir_16k/room_000000/room_000000_000000.wav
-  python rir_viz.py paths    --rir <rir.wav> --channel 2 --order 2
-  python rir_viz.py field    --rir <rir.wav> --channel 2 --nx 340 --t-ms 40 --gif
+  python plot_rir.py overview --rir exp/hybrid_rir_16k/room_000000/room_000000_000000.wav
+  python plot_rir.py paths    --rir <rir.wav> --channel 2 --order 2
+  python plot_rir.py field    --rir <rir.wav> --channel 2 --nx 340 --t-ms 40 --gif
 
 Notes:
   * Room acoustics has no *refraction* (that needs a medium gradient the

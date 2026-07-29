@@ -1,34 +1,45 @@
 #!/usr/bin/env python
-"""Build curriculum-ready RIR-bank views using RT60 and measured DRR separation.
+"""Build symlink-only RIR-bank views that ``PreGeneratedRoomBank`` can index.
 
-The generated folders contain relative symlinks only: no RIR audio is copied.
-Each output has an ``items/`` child holding same-stem ``.wav`` and ``.json``
-pairs, which ``PreGeneratedRoomBank`` already indexes.
+A view is a directory with an ``items/`` child holding same-stem ``.wav``/``.json``
+pairs. Nothing is copied -- every entry is a relative symlink into the source bank --
+so views are cheap to create and to keep around.
 
-Levels are cumulative for curriculum training:
+Two ways to build one:
 
-* ``core``: RT60 0.20--0.45 s and worst-case near/far DRR gap >= 6 dB.
-* ``expand``: RT60 0.20--0.65 s and worst-case near/far DRR gap >= 3 dB.
-* ``wide``: RT60 0.20--0.85 s and worst-case near/far DRR gap >= 3 dB (the
-  dpcrn_wide_antisup deployment domain; re-added here after originally being
-  built from an uncommitted variant of this script).
-* ``stress``: valid items in none of core/expand/wide (extreme RT60 and/or
-  weak DRR gap).
-* ``all``: every valid item, no filtering -- the view to use for banks whose
-  whole point is unfiltered coverage (e.g. the boundary-distance bank, where
-  low DRR gap is desired, or the high-reverb bank probed above rt60 0.85).
+  levels  Slice ONE generated bank into difficulty levels by RT60 and measured
+          near/far DRR separation. Levels are cumulative, so a curriculum can walk
+          them in order:
+            core    RT60 0.20-0.45 s, worst-case near/far DRR gap >= 6 dB
+            expand  RT60 0.20-0.65 s, worst-case near/far DRR gap >= 3 dB
+            wide    RT60 0.20-0.85 s, worst-case near/far DRR gap >= 3 dB
+            stress  valid items in none of the above (extreme RT60 / weak gap)
+            all     every valid item, no filtering -- for banks whose whole point
+                    is unfiltered coverage (e.g. a boundary-distance fill, where a
+                    low DRR gap is the intent, or a high-reverb bank)
+          The DRR gap is conservative: ``min(DRR_near) - max(DRR_far)``, so every
+          near/far channel pair in an item meets the printed bound.
 
-The conservative DRR gap is ``min(DRR_near) - max(DRR_far)``. Thus every
-near/far channel pair in a core item meets the printed lower bound.
+  merge   Union SEVERAL existing views into one training view. Banks reuse the same
+          ``room_XXXXXX_YYYYYY`` stems (each generation run counts rooms from zero),
+          so a naive union would collide; every symlink gets a per-source tag
+          prefix (wav and json renamed together) and ``merged.json`` records where
+          each group came from.
 
 Examples:
-  uv run python egs/rir_generation/filter_rir_levels.py \
-      egs/rir_generation/exp/hybrid_rir_16k \
-      egs/rir_generation/exp/hybrid_rir_16k_levels --dry-run
+  # measure only, no symlinks written
+  uv run python egs/rir_generation/build_bank_view.py levels \\
+      exp/hybrid_rir_16k exp/hybrid_rir_16k_levels --dry-run
 
-  uv run python egs/rir_generation/filter_rir_levels.py \
-      egs/rir_generation/exp/hybrid_rir_16k \
-      egs/rir_generation/exp/hybrid_rir_16k_levels
+  # cut the level views
+  uv run python egs/rir_generation/build_bank_view.py levels \\
+      exp/hybrid_rir_16k exp/hybrid_rir_16k_levels
+
+  # union a base view with a boundary-distance fill
+  uv run python egs/rir_generation/build_bank_view.py merge \\
+      --source wide=exp/hybrid_rir_16k_levels/wide \\
+      --source bnd=exp/hybrid_rir_16k_boundary_levels/all \\
+      --output exp/hybrid_rir_16k_merged
 """
 from __future__ import annotations
 
@@ -45,6 +56,15 @@ import numpy as np
 import soundfile as sf
 
 
+def relative_symlink(source: Path, destination: Path) -> None:
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    target = os.path.relpath(source.resolve(), destination.parent.resolve())
+    destination.symlink_to(target)
+
+
+# --------------------------------------------------------------------------- #
+# levels
+# --------------------------------------------------------------------------- #
 @dataclass(frozen=True)
 class Item:
     wav: Path
@@ -131,12 +151,6 @@ def memberships(item: Item) -> tuple[str, ...]:
     return tuple(labels)
 
 
-def relative_symlink(source: Path, destination: Path) -> None:
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    target = os.path.relpath(source.resolve(), destination.parent.resolve())
-    destination.symlink_to(target)
-
-
 def build_level(root: Path, name: str, items: list[Item]) -> None:
     level = root / name
     item_dir = level / "items"
@@ -156,19 +170,7 @@ def build_level(root: Path, name: str, items: list[Item]) -> None:
     (level / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("source", type=Path, help="existing hybrid RIR bank")
-    parser.add_argument("output", type=Path, help="new parent directory for level folders")
-    parser.add_argument("--drr-window-ms", type=float, default=2.5,
-                        help="direct-path DRR window; match recipe config (default: 2.5)")
-    parser.add_argument("--workers", type=int, default=8,
-                        help="parallel WAV readers (default: 8)")
-    parser.add_argument("--limit", type=int, default=None,
-                        help="inspect only the first N items (diagnostic/testing only)")
-    parser.add_argument("--dry-run", action="store_true", help="measure and report without creating symlinks")
-    args = parser.parse_args()
-
+def cmd_levels(args) -> None:
     source = args.source.resolve()
     output = args.output.resolve()
     if not source.is_dir():
@@ -193,7 +195,7 @@ def main() -> None:
     if not items:
         raise SystemExit("no valid RIR items with both near_* and far_* channels")
 
-    levels = {name: [] for name in ("core", "expand", "wide", "stress", "all")}
+    levels: dict[str, list[Item]] = {name: [] for name in ("core", "expand", "wide", "stress", "all")}
     for item in items:
         for name in memberships(item):
             levels[name].append(item)
@@ -231,6 +233,81 @@ def main() -> None:
         build_level(output, name, level_items)
     (output / "summary.json").write_text(json.dumps(summary, indent=2) + "\n")
     print(f"\ncreated symlink-only RIR views under {output}")
+
+
+# --------------------------------------------------------------------------- #
+# merge
+# --------------------------------------------------------------------------- #
+def cmd_merge(args) -> None:
+    sources: list[tuple[str, Path]] = []
+    for spec in args.source:
+        tag, _, path = spec.partition("=")
+        if not tag or not path:
+            raise SystemExit(f"bad --source spec (want TAG=PATH): {spec}")
+        view = Path(path).resolve()
+        if not (view / "items").is_dir():
+            raise SystemExit(f"source view has no items/: {view}")
+        sources.append((tag, view))
+
+    output = args.output.resolve()
+    if output.exists():
+        raise SystemExit(f"output already exists: {output} (no overwrite by design)")
+    item_dir = output / "items"
+    item_dir.mkdir(parents=True)
+
+    provenance = {}
+    total = 0
+    for tag, view in sources:
+        count = 0
+        for wav in sorted((view / "items").glob("*.wav")):
+            meta = wav.with_suffix(".json")
+            if not meta.exists():
+                continue
+            # resolve() follows the source view's own symlinks so the merged view
+            # points straight at the bank files (one hop, not chains).
+            relative_symlink(wav.resolve(), item_dir / f"{tag}_{wav.name}")
+            relative_symlink(meta.resolve(), item_dir / f"{tag}_{meta.name}")
+            count += 1
+        provenance[tag] = {"view": str(view), "items": count}
+        total += count
+        print(f"  {tag}: {count} items from {view}")
+
+    (output / "merged.json").write_text(json.dumps(provenance, indent=2) + "\n")
+    print(f"merged {total} items -> {item_dir}")
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    sub = parser.add_subparsers(dest="command", required=True)
+
+    sp = sub.add_parser("levels", help="slice one bank into cumulative difficulty levels",
+                        formatter_class=argparse.RawDescriptionHelpFormatter)
+    sp.add_argument("source", type=Path, help="existing generated RIR bank")
+    sp.add_argument("output", type=Path, help="new parent directory for the level folders")
+    sp.add_argument("--drr-window-ms", type=float, default=2.5,
+                    help="direct-path DRR window; match the recipe config (default: 2.5)")
+    sp.add_argument("--workers", type=int, default=8, help="parallel WAV readers (default: 8)")
+    sp.add_argument("--limit", type=int, default=None,
+                    help="inspect only the first N items (diagnostic/testing only)")
+    sp.add_argument("--dry-run", action="store_true",
+                    help="measure and report without creating symlinks")
+    sp.set_defaults(func=cmd_levels)
+
+    sp = sub.add_parser("merge", help="union several views into one training view",
+                        formatter_class=argparse.RawDescriptionHelpFormatter)
+    sp.add_argument("--source", action="append", required=True, metavar="TAG=PATH",
+                    help="view to merge, as tag=path (tag becomes the symlink prefix); "
+                         "repeat per view")
+    sp.add_argument("--output", type=Path, required=True,
+                    help="new merged view directory (must not exist)")
+    sp.set_defaults(func=cmd_merge)
+    return parser
+
+
+def main() -> None:
+    args = build_parser().parse_args()
+    args.func(args)
 
 
 if __name__ == "__main__":

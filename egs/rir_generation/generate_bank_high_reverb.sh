@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # High-reverb (meeting-room grade) RIR bank: rt60 0.85-1.5, bigger rooms, longer tails.
-# See egs/voice_isolate/NEXT_STEPS.md ④. seed 3141 (!= 1337 train bank, != 2026 held-out bank).
+# Reverb beyond the training domain, so a model can be probed outside what it saw.
+# seed 3141, deliberately disjoint from the train (1337) and held-out (2026) banks.
 cd "$(dirname "$0")"
 exec uv run python generate_hybrid_rir.py \
   --output-dir exp/hybrid_rir_16k_high \

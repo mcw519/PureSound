@@ -139,7 +139,7 @@ augmentation_reverb:
     source_level: True
     pregenerated:
       used: True
-      # PHASE-1 MERGED VIEW (merge_rir_views.py): wide (RT60 0.20-0.85, gap>=3, 62k)
+      # PHASE-1 MERGED VIEW (build_bank_view.py merge): wide (RT60 0.20-0.85, gap>=3, 62k)
       # + boundary-distance fill (far 1.10-3.5 m, unfiltered DRR gap, 20k). Flat
       # renamed symlinks (wide_*/bnd_*) under <folder>/items/.
       folder: /work/any_exp_link/puresound_exp/hybrid_rir_16k_phase1
