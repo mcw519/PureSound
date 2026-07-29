@@ -14,6 +14,8 @@ Use cases:
         - Speaker embedding
 """
 
+from typing import Optional
+
 import numpy as np
 import torch
 import torch.nn as nn
@@ -47,6 +49,7 @@ class EncDecMaskBase(BaseLightningModule):
         backbone_lr_factor: float = 1.0,
         train_vad_head_only: bool = False,
         gate_head_lr_factor: float = 1.0,
+        channel_consistency: Optional[dict] = None,
         verbose: bool = False,
     ):
         super().__init__(verbose=verbose)
@@ -64,6 +67,18 @@ class EncDecMaskBase(BaseLightningModule):
         self.backbone_lr_factor = backbone_lr_factor
         self.train_vad_head_only = bool(train_vad_head_only)
         self.gate_head_lr_factor = float(gate_head_lr_factor)
+        # Channel-perturbation mask consistency: with prob `prob` per training
+        # step, re-run the forward on a channel-perturbed copy of the mixture
+        # (smooth random EQ + gain = the physical form of a device recording
+        # chain, applied to the WHOLE signal so the near/far level contrast is
+        # preserved and the ideal complex ratio mask is invariant) and penalize
+        # the mask for changing, i.e. the recording chain must not change the
+        # keep/suppress decision. Training-only; None/disabled = no-op.
+        self.channel_consistency = (
+            dict(channel_consistency)
+            if channel_consistency and channel_consistency.get("enabled", False)
+            else None
+        )
 
         if self.train_vad_head_only:
             vad_head = getattr(self.backbone, "vad_head", None)
@@ -133,6 +148,10 @@ class EncDecMaskBase(BaseLightningModule):
 
         if self.mask_type in ["wiener", "mvdr"]:
             mask, ifc, cov = mask
+
+        # Side output for the channel-consistency regularizer (training only;
+        # overwritten by every forward, so read it right after the call).
+        self.last_mask = mask
 
         if self.mask_type == "complex":
             enh = Masker.apply_complex_mask_on_reim(
@@ -213,6 +232,34 @@ class EncDecMaskBase(BaseLightningModule):
         scale = target_mag / enh_mag
         return torch.cat([er * scale, ei * scale], dim=1)
 
+    def _random_channel_perturb(self, wav: torch.Tensor) -> torch.Tensor:
+        """A random plausible recording chain applied to the whole mixture.
+
+        Zero-phase smooth EQ (low-order random cosine series over frequency,
+        larger swing at lower orders => tilt-like coloration) plus a per-row
+        gain. Real positive H(f) scales every source in the mixture equally, so
+        the ideal complex ratio mask is unchanged -- any mask change under this
+        perturbation is channel sensitivity, which the consistency loss
+        penalizes. No gradient flows through the perturbation itself."""
+        cc = self.channel_consistency or {}
+        eq_db = float(cc.get("eq_db", 6.0))
+        gain_db = float(cc.get("gain_db", 4.0))
+        n_orders = int(cc.get("eq_orders", 4))
+        with torch.no_grad():
+            n, t = wav.shape[0], wav.shape[-1]
+            spec = torch.fft.rfft(wav.view(n, -1), dim=-1)
+            n_bins = spec.shape[-1]
+            grid = torch.linspace(0.0, np.pi, n_bins, device=wav.device)
+            curve = torch.zeros(n, n_bins, device=wav.device)
+            for k in range(1, n_orders + 1):
+                amp = (torch.rand(n, 1, device=wav.device) * 2.0 - 1.0) * (eq_db / k)
+                curve = curve + amp * torch.cos(k * grid).unsqueeze(0)
+            h = 10.0 ** (curve / 20.0)
+            out = torch.fft.irfft(spec * h, n=t, dim=-1)
+            g = (torch.rand(n, 1, device=wav.device) * 2.0 - 1.0) * gain_db
+            out = out * 10.0 ** (g / 20.0)
+            return out.clamp(-1.0, 1.0).view_as(wav)
+
     def compute_loss(
         self,
         enhanced: torch.Tensor,
@@ -241,6 +288,9 @@ class EncDecMaskBase(BaseLightningModule):
             "last_background_vad_logits",
             None,
         )
+        # Utterance-level distance/DRR predictions (DistHead side output);
+        # routed to losses that opt in via uses_dist_preds.
+        dist_preds = getattr(self.backbone, "last_dist_preds", None)
 
         overall_loss = []
         losses = []
@@ -265,6 +315,8 @@ class EncDecMaskBase(BaseLightningModule):
                     background_vad_logits,
                     bg_target,
                 )
+            elif getattr(loss_func, "uses_dist_preds", False):
+                weighted_loss = weighted * loss_func(dist_preds, batch or {})
             elif getattr(loss_func, "uses_batch", False):
                 weighted_loss = weighted * loss_func(enhanced, target, batch or {})
             elif getattr(loss_func, "uses_vad_target", False):
@@ -296,6 +348,40 @@ class EncDecMaskBase(BaseLightningModule):
             vad_target=batch.get("vad_target"),
             batch=batch,
         )
+
+        # Channel-perturbation mask consistency (see __init__): the clean-view
+        # mask is the (detached) teacher; the perturbed view learns to produce
+        # the same mask despite the different "recording chain".
+        #
+        # The firing schedule MUST be rank-synchronized: the extra forward runs
+        # SyncBatchNorm all-gathers, so a per-rank random draw here desyncs the
+        # ranks' collective sequences and deadlocks DDP until the NCCL watchdog
+        # kills the job. batch_idx is in lockstep across ranks -> deterministic
+        # modulo schedule with the same average rate as `prob`.
+        cc = self.channel_consistency
+        if cc is not None:
+            period = max(1, int(cc.get("period", 10)))
+            fire = (batch_idx % period) < int(round(float(cc.get("prob", 0.0)) * period))
+        else:
+            fire = False
+        if fire:
+            mask_ref = getattr(self, "last_mask", None)
+            if mask_ref is not None and torch.is_tensor(mask_ref):
+                # Sub-batch: the perturbed-view forward keeps its activations
+                # alive until backward ON TOP of the main forward's, so a
+                # full-batch second pass can double peak memory. max_rows caps
+                # the extra activation cost; a regularizer does not need the
+                # full batch. Same rows on every rank (rank-synced schedule +
+                # leading slice), so collectives stay aligned.
+                k = int(cc.get("max_rows", 0)) or noisy_speech.shape[0]
+                k = min(k, noisy_speech.shape[0])
+                mask_ref = mask_ref[:k].detach()
+                self.forward(self._random_channel_perturb(noisy_speech[:k]))
+                cons_loss = nn.functional.l1_loss(self.last_mask, mask_ref)
+                total_loss = total_loss + float(cc.get("weight", 1.0)) * cons_loss
+                self.log("train_step_cons_loss", cons_loss, prog_bar=False,
+                         sync_dist=False, on_step=True)
+
         # sync_dist stays False for the progress-bar metric on purpose: a
         # synced (all-reduced) metric read by the progress bar deadlocks DDP,
         # because the bar's refresh -- and thus the metric access that triggers

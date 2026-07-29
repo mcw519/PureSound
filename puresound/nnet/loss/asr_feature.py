@@ -1,8 +1,8 @@
-"""ASR-aware perceptual loss (TODO_NEXT_STAGE.md).
+"""ASR-aware perceptual loss.
 
 Signal losses (SI-SDR / MR-STFT) reward suppressing interference but do NOT
-penalise destroying intelligibility, so the model over-suppresses real speech
-(Dawn Chorus: enhancement RAISES WER 0.392 -> ~0.49). This loss matches the
+penalise destroying intelligibility, so a model tuned on them alone can
+over-suppress real speech and raise WER. This loss matches the
 enhanced output's features to the clean target's features inside a FROZEN,
 self-supervised speech encoder (torchaudio wav2vec2 / HuBERT, 16 kHz,
 differentiable). Those encoders are trained on large amounts of REAL speech, so

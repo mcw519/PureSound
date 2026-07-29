@@ -5,12 +5,14 @@ from .sdr import SDRLoss
 from .spk import AAMsoftmax, SphereFace2
 from .residual import ResidualReferenceLoss
 from .asr_feature import ASRFeatureLoss
+from .dist import DistHeadRegressionLoss
 from .stft_loss import MultiResolutionSTFTLoss, OverSuppressionLoss, SpectralLoss
 from .vad import BackgroundVADHeadBCELoss, VADActivityLoss, VADHeadBCELoss
 
 __all__ = [
     "AAMsoftmax",
     "ASRFeatureLoss",
+    "DistHeadRegressionLoss",
     "MultiResolutionSTFTLoss",
     "OverSuppressionLoss",
     "ResidualReferenceLoss",

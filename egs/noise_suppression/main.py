@@ -44,6 +44,8 @@ def init_dataloader(
     aug_packet_loss_dict: Dict,
     aug_target_absent_dict: Dict,
     vad_label_dict: Dict,
+    aug_realfar_dict: Dict = None,
+    aug_realnear_dict: Dict = None,
 ):
     task_name = corpus_dict.get("task", "noise_suppression")
     if task_name == "voice_isolation":
@@ -73,6 +75,8 @@ def init_dataloader(
         augmentation_codec_args=aug_codec_dict,
         augmentation_packet_loss_args=aug_packet_loss_dict,
         augmentation_target_absent_args=aug_target_absent_dict,
+        augmentation_realfar_args=aug_realfar_dict,
+        augmentation_realnear_args=aug_realnear_dict,
         vad_label_args=vad_label_dict,
     )
 
@@ -110,6 +114,8 @@ def init_dataloader(
         augmentation_codec_args=aug_codec_dict,
         augmentation_packet_loss_args=aug_packet_loss_dict,
         augmentation_target_absent_args=aug_target_absent_dict,
+        augmentation_realfar_args=aug_realfar_dict,
+        augmentation_realnear_args=aug_realnear_dict,
         vad_label_args=vad_label_dict,
     )
 
@@ -202,6 +208,8 @@ if __name__ == "__main__":
         aug_packet_loss_dict,
         aug_target_absent_dict,
         vad_label_dict,
+        aug_realfar_dict,
+        aug_realnear_dict,
     ) = load_siso_recipe_config(args.config_path)
 
     if args.training or args.dump_training_samples:
@@ -220,6 +228,8 @@ if __name__ == "__main__":
             aug_packet_loss_dict,
             aug_target_absent_dict,
             vad_label_dict,
+            aug_realfar_dict,
+            aug_realnear_dict,
         )
 
     # Stage of dump the training samples

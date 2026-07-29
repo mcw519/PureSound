@@ -29,6 +29,30 @@ class VADHead(nn.Module):
         return self.out(h).squeeze(1)  # [N, T]
 
 
+class DistHead(nn.Module):
+    """Utterance-level distance/DRR regression from the bottleneck.
+
+    Auxiliary multi-task pressure that makes the bottleneck encode the physical
+    proximity cues (DRR / source distance) rather than the capture-chain
+    signature of the training near-field rows. Predicts
+    ``[fg_drr_db / drr_scale, log10(fg_dist_m), log10(nearest_itf_dist_m)]``;
+    supervision comes from the dataset's free scalar labels and is NaN-masked
+    (see DistHeadRegressionLoss). Training-only: inference never reads it and
+    the streaming export is untouched."""
+
+    def __init__(self, enc_channels: int, hidden: int = 128, n_out: int = 3):
+        super().__init__()
+        self.net = nn.Sequential(
+            nn.Linear(enc_channels, hidden),
+            nn.SiLU(),
+            nn.Linear(hidden, n_out),
+        )
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        # x: [N, C, F, T] -> global pool -> [N, C] -> [N, n_out]
+        return self.net(x.mean(dim=(2, 3)))
+
+
 class DPRNNblock2D(nn.Module):
     """
     DPRNN-2D modul which be parts of DPCRN.
@@ -159,6 +183,7 @@ class DPCRN(Unet):
         rnn_hidden: int = 128,
         spectral_compress: bool = False,
         vad_head: Optional[Dict] = None,
+        dist_head: Optional[Dict] = None,
     ):
         super().__init__(
             input_dim,
@@ -209,6 +234,15 @@ class DPCRN(Unet):
             self.vad_head = None
         self.last_vad_logits: Optional[torch.Tensor] = None
 
+        if dist_head is not None and dist_head.get("enabled", False):
+            self.dist_head = DistHead(
+                enc_channels=channels[-1],
+                hidden=dist_head.get("hidden", 128),
+            )
+        else:
+            self.dist_head = None
+        self.last_dist_preds: Optional[torch.Tensor] = None
+
     def forward(
         self, x: torch.Tensor, dvec: Optional[torch.Tensor] = None
     ) -> torch.Tensor:
@@ -245,6 +279,11 @@ class DPCRN(Unet):
             self.last_vad_logits = self.vad_head(x)
         else:
             self.last_vad_logits = None
+
+        if self.dist_head is not None:
+            self.last_dist_preds = self.dist_head(x)
+        else:
+            self.last_dist_preds = None
 
         # forward CNN-up layers
         for i, cnn_layer in enumerate(self.cnn_up):

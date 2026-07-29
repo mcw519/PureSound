@@ -36,6 +36,8 @@ def load_siso_recipe_config(f_path: str) -> Tuple:
         _enabled_config(config, "augmentation_packet_loss"),
         _enabled_config(config, "augmentation_target_absent"),
         config.get("vad_label"),
+        _enabled_config(config, "augmentation_realfar"),
+        _enabled_config(config, "augmentation_realnear"),
     )
 
 

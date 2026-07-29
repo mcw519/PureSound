@@ -18,7 +18,7 @@ VOICE_ISOLATION_SCALAR_KEYS = (
     "target_absent",
     "target_present",
     "has_background_speech",
-    # DISTANCE_PARENT proposal §7: parent composition + mixing diagnostics.
+    # Parent composition + mixing diagnostics.
     "near_count",
     "far_count",
     "mix_mode",
