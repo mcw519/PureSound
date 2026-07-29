@@ -1,9 +1,9 @@
 """Convert a REAL measured RIR dataset into a PreGeneratedRoomBank folder.
 
-Motivation (see egs/voice_isolate/EXPERIMENT_LOG.md): in-domain near/far
-separation is solved (DPCRN) but real-domain WER is stuck (synthetic->real gap).
-Real RIRs with known source-receiver DISTANCE let us build bank items whose
-near/far structure matches the training task, narrowing the RIR part of the gap.
+Simulated RIRs leave a gap between in-domain separation and real-recording
+performance. Measured RIRs with a known source-receiver DISTANCE let a bank be
+built whose near/far structure matches the training task while its acoustics come
+from real rooms, which closes the RIR part of that gap.
 
 Two stages, decoupled by a manifest so the (definitive, self-tested) bank-format
 emission is independent of any one dataset's on-disk layout:

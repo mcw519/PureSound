@@ -414,7 +414,7 @@ that the same Stage-A→Stage-B path can target once a `scan_*` is added.
 ## Rebuilding the frozen benchmark banks (stations 2/5)
 
 The voice_isolate benchmark's in-domain bank (`hybrid_rir_16k_phase1`, station 2
-via `config/eval_indomain_phase1.yaml`) is a merged view of the wide level view
+via `config/exp/eval_indomain_phase1.yaml`) is a merged view of the wide level view
 plus the boundary-distance bank; the station-5 probe uses the boundary held-out
 bank (seed 1618, built by `run_boundary_gen.sh`). Both live under
 `/work/any_exp_link/puresound_exp/` and are frozen — rebuild only after data

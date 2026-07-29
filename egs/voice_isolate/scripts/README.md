@@ -16,7 +16,7 @@ uv run python egs/voice_isolate/scripts/split_by_speaker.py egs/voice_isolate/da
     --train-out egs/voice_isolate/data/dns5-read.train.list --dev-out egs/voice_isolate/data/dns5-read.dev.list \
     --dev-speaker-frac 0.05 --seed 0
 
-uv run python egs/voice_isolate/scripts/validate_data.py egs/voice_isolate/config/train_dpcrn_wide_antisup.yaml
+uv run python egs/voice_isolate/scripts/validate_data.py egs/voice_isolate/config/exp/train_dpcrn_wide_antisup.yaml
 ```
 
 ## 2. Training-time validation
@@ -30,7 +30,7 @@ Run during/after training to check the model is actually separating.
 | `dump_tb.py` | Prints tensorboard scalar curves as compact ASCII. |
 
 ```bash
-bash egs/voice_isolate/scripts/run_valid.sh config/train_dpcrn_wide_antisup.yaml [device] [n_batches] [ckpt]
+bash egs/voice_isolate/scripts/run_valid.sh config/exp/train_dpcrn_wide_antisup.yaml [device] [n_batches] [ckpt]
 uv run python egs/voice_isolate/scripts/indomain_sisdri.py <config> --ckpt <ckpt> --device cpu --n-batches 40 --by-bucket --dump-distribution
 ```
 
@@ -44,8 +44,8 @@ checkpoint against it.
 uv run python egs/voice_isolate/scripts/build_but_wer_set.py --n-items 200 --out data_report/but_wer_set --seed 1234
 
 # 3b. eval a checkpoint (repeat per checkpoint)
-uv run python egs/voice_isolate/scripts/eval_but_wer.py config/eval_but_real.yaml \
-    --ckpt egs/voice_isolate/pretrained_ckpt/dpcrn_wide_antisup_ep19.ckpt \
+uv run python egs/voice_isolate/scripts/eval_but_wer.py config/exp/eval_but_real.yaml \
+    --ckpt egs/voice_isolate/pretrained_ckpt/dpcrn_v6.ckpt \
     --set-dir data_report/but_wer_set --device cuda
 # stronger recognizer (lowers the reverb floor, reveals over-suppression whisper-small hides):
 ... --asr faster-whisper --asr-model large-v3
@@ -66,23 +66,51 @@ models only). Implemented in `siso.forward` (no-op by default, zero effect on tr
 distance-defined, so it's cue-mismatched to this near/far task** — kept as a do-no-harm reference, not
 the primary judge. Also exports `init_asr`/`wer_breakdown`, reused by `eval_but_wer.py`.
 
-## 5. General diagnostics
+## 5. Real-recording pools and probes
+
+Simulated far-only probes systematically over-estimate suppression of real far-field speech, so these
+measure it directly on recordings.
+
+| script | purpose |
+|---|---|
+| `build_realfar_pool.py` | Index real distant recordings (VOiCES) into pool manifests the training pipeline draws from: far interferers (`--min-distance 1.0`) and real near-field keep rows (`--min-distance 0 --max-distance 1.0`). Emits finished waveforms, not RIRs, and splits train/held-out by speaker. |
+| `probe_retransmitted_farfield.py` | Suppression of real far-field speech vs mic distance, bucketed by room, on a retransmitted corpus (VOiCES). Speech spans come from an energy gate on the raw input, so no source alignment is needed. |
+| `probe_realman_farfield.py` | Same measurement on RealMAN, whose annotated distances and sample-aligned direct-path reference give clean spans in scene noise (48 kHz, per-channel flac). |
+| `probe_channel_keep.py` | Keep-side counterpart: how much near speech survives as its capture chain moves away from the training one (dry → simulated RIR → measured RIR → real recording), with and without noise. A steep ladder means the keep decision is anchored on the capture chain rather than on distance. |
+
+```bash
+uv run python egs/voice_isolate/scripts/build_realfar_pool.py \
+    --voices-root /path/to/VOiCES --split train --min-distance 1.0 \
+    --out egs/voice_isolate/data/realfar_pool/voices.train.jsonl
+
+uv run python egs/voice_isolate/scripts/probe_retransmitted_farfield.py \
+    egs/voice_isolate/config/infer_dpcrn.yaml \
+    --ckpt egs/voice_isolate/pretrained_ckpt/dpcrn_v7.ckpt --voices-root /path/to/VOiCES \
+    --device cuda --per-bucket 40
+
+uv run python egs/voice_isolate/scripts/probe_channel_keep.py \
+    egs/voice_isolate/config/infer_dpcrn.yaml \
+    --ckpt v6=egs/voice_isolate/pretrained_ckpt/dpcrn_v6.ckpt \
+    --ckpt v7=egs/voice_isolate/pretrained_ckpt/dpcrn_v7.ckpt --device cuda
+```
+
+## 6. General diagnostics
 
 `overfit_sanity.py` — small-batch memorization test: can the model learn to separate at all? Config-driven,
 architecture-agnostic (use before trusting a new backbone/loss on a full run).
 
-`overfit_gate_sanity.py` — gate-only integration smoke: loads the real synthetic dataloader and
-`wide-ep19`, captures one frozen DPCRN bottleneck batch, and verifies that only the causal gate head can
-overfit its near-activity BCE. This validates plumbing only, not real-domain transfer.
+`overfit_gate_sanity.py` — gate-only integration smoke: loads the real synthetic dataloader and a
+separator checkpoint, captures one frozen DPCRN bottleneck batch, and verifies that only the causal gate
+head can overfit its near-activity BCE. This validates plumbing only, not real-domain transfer.
 
 ```bash
 uv run python egs/voice_isolate/scripts/overfit_gate_sanity.py \
-    egs/voice_isolate/config/train_dpcrn_gate.yaml \
-    --ckpt egs/voice_isolate/pretrained_ckpt/dpcrn_wide_antisup_ep19.ckpt \
+    egs/voice_isolate/config/exp/train_dpcrn_gate.yaml \
+    --ckpt egs/voice_isolate/pretrained_ckpt/dpcrn_v6.ckpt \
     --device cpu --steps 50
 ```
 
-## 6. Inference / deployment
+## 7. Inference / deployment
 
 | script | purpose |
 |---|---|
@@ -94,8 +122,8 @@ uv run python egs/voice_isolate/scripts/demo.py --config_path egs/voice_isolate/
 
 uv run python egs/voice_isolate/scripts/streaming_onnx.py verify \
     egs/voice_isolate/config/infer_dpcrn.yaml \
-    egs/voice_isolate/pretrained_ckpt/dpcrn_wide_antisup_ep19.ckpt \
-    egs/voice_isolate/pretrained_ckpt/streaming/dpcrn_wide_antisup_ep19.onnx
+    egs/voice_isolate/pretrained_ckpt/dpcrn_v6.ckpt \
+    egs/voice_isolate/pretrained_ckpt/streaming/dpcrn_v6.onnx
 ```
 
 For the joint separator+gate checkpoint, use the gate training config so the demo
@@ -107,7 +135,7 @@ Gate application is currently supported by the PyTorch offline backend only.
 
 ```bash
 uv run python egs/voice_isolate/scripts/demo.py \
-    --config_path egs/voice_isolate/config/train_dpcrn_v2_sepgate.yaml
+    --config_path egs/voice_isolate/config/exp/train_dpcrn_v2_sepgate.yaml
 ```
 
 **Realtime Mic tab notes.** ORT `.onnx` models only (the PyTorch backend does a whole-utterance

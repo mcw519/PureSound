@@ -127,7 +127,7 @@ and a pretrained checkpoint:
 ```bash
 uv run python egs/voice_isolate/scripts/streaming_onnx.py export \
   egs/voice_isolate/config/infer_dpcrn.yaml \
-  egs/voice_isolate/pretrained_ckpt/dpcrn_wide_antisup_ep19.ckpt \
+  egs/voice_isolate/pretrained_ckpt/dpcrn_v7.ckpt \
   /path/to/model.onnx
 ```
 

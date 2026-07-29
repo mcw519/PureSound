@@ -12,7 +12,7 @@ SI-SDR/WER benchmark like eval_but_wer.py / eval_dawn_chorus.py.
 Usage (from repo root):
     uv run python egs/voice_isolate/scripts/bench_qvf22_realcases.py \
         egs/voice_isolate/config/infer_dpcrn.yaml \
-        --ckpt egs/voice_isolate/pretrained_ckpt/dpcrn_wide_antisup_ep19.ckpt \
+        --ckpt egs/voice_isolate/pretrained_ckpt/dpcrn_v6.ckpt \
         --cases-dir egs/voice_isolate/data_report/qvf22_real_cases \
         --out-dir egs/voice_isolate/data_report/qvf22_real_cases_bench \
         --device cpu

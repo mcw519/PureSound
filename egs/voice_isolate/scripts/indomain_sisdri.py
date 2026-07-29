@@ -16,7 +16,7 @@ Auto-adapts to query-conditioned vs fixed models: it passes whatever
 
 Usage (from anywhere; CPU by default so it never touches the training GPUs):
     uv run python egs/voice_isolate/scripts/indomain_sisdri.py \
-        egs/voice_isolate/config/train_dpcrn_wide_antisup.yaml \
+        egs/voice_isolate/config/exp/train_dpcrn_wide_antisup.yaml \
         --ckpt <ckpt> --n-batches 40 --device cpu
 """
 from __future__ import annotations
@@ -170,8 +170,10 @@ def main():
     torch.manual_seed(0)
 
     cfg = load_siso_recipe_config(config_path)
+    # *_rest: the recipe tuple grows as new augmentation blocks are appended;
+    # eval only needs the first 18 fields.
     (corpus, trainer, _opt, _sch, _loss, model_dict, a_sp, a_no, a_rv, a_spd,
-     a_ir, a_src, a_hpf, a_vol, a_cod, a_pl, a_ta, a_vad) = cfg
+     a_ir, a_src, a_hpf, a_vol, a_cod, a_pl, a_ta, a_vad, *_rest) = cfg
     trainer["num_workers"] = args.num_workers
 
     _train_dl, valid_dl = M.init_dataloader(

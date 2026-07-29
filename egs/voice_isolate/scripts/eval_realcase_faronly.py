@@ -1,15 +1,12 @@
-"""Voicebot-correctness scorecard on the ai-coustics Voice Focus 2.2 real cases.
+"""Two-sided keep/suppress scorecard on real recordings.
 
-The criterion is the VOICEBOT EXPERIENCE, not "near=keep / far=suppress":
-  * KEEP the conversational user -- even when they are far / reverberant / briefly
-    quiet. Killing them = the bot goes deaf (dropped turns, deletions).
-  * SUPPRESS anything that would corrupt ASR / turn-taking -- a bystander, a TV,
-    echo. Leaking them = stray inserted words, broken turn-taking, polluted LLM
-    context.
+Both failure directions matter and a single number hides one of them:
+  * killing speech that must be kept produces deletions -- for a voice agent, a
+    dropped turn;
+  * leaking speech that must be suppressed (a bystander, a TV, echo) produces
+    stray words and broken turn-taking.
 
-So a lone far-field user must be KEPT (not suppressed just for being far), while a
-far competitor next to a near user must be SUPPRESSED. Distance alone cannot decide
-it -- the same "far voice" is keep in one scene and suppress in another.
+So each clip is annotated span by span and scored on both sides separately.
 
 windows.json marks, per clip:
   * ``keep``     spans -> target output ~= input. ``preservation_db`` should be ~0;
@@ -20,13 +17,13 @@ windows.json marks, per clip:
                  leaked into the transcript).
 
 No clean reference / transcript needed -- this is a segment-energy scorecard that
-runs on any harvested real clip. Reports our model and QVF2.2 (reference ceiling)
-side by side.
+runs on any harvested real clip. When a case directory also ships a reference
+system's output (``<clip>_qvf22.wav``), both are scored side by side.
 
 Usage (from repo root):
     uv run python egs/voice_isolate/scripts/eval_realcase_faronly.py \
         egs/voice_isolate/config/infer_dpcrn.yaml \
-        --ckpt egs/voice_isolate/pretrained_ckpt/dpcrn_wide_antisup_ep19.ckpt \
+        --ckpt egs/voice_isolate/pretrained_ckpt/dpcrn_v6.ckpt \
         --cases-dir egs/voice_isolate/data_report/qvf22_real_cases --device cpu
 """
 
@@ -92,6 +89,10 @@ def main() -> None:
     parser.add_argument("--cases-dir", default="data_report/qvf22_real_cases")
     parser.add_argument("--windows", default=None, help="windows.json (default: <cases-dir>/windows.json)")
     parser.add_argument("--device", default="cpu")
+    parser.add_argument("--dry-blend", type=float, default=1.0,
+                        help="inference over-suppression relief: enh*b + mix*(1-b)")
+    parser.add_argument("--spec-floor", type=float, default=0.0,
+                        help="clamp enhanced |bin| to >= floor * |mix bin|")
     args = parser.parse_args()
 
     device = torch.device(args.device)
@@ -114,7 +115,8 @@ def main() -> None:
         raw_wav, sr = AudioIO.open(f_path=str(raw_path), target_lvl=None, resample_to=16000)
         raw_wav = raw_wav.view(1, -1)
         with torch.no_grad():
-            ours = model(raw_wav.to(device)).detach().cpu().view(1, -1).clamp(min=-1.0, max=1.0)
+            ours = model(raw_wav.to(device), dry_blend=args.dry_blend,
+                         spec_floor=args.spec_floor).detach().cpu().view(1, -1).clamp(min=-1.0, max=1.0)
 
         systems = {"ours": ours}
         if qvf22_path.is_file():

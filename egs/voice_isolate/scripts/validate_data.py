@@ -24,7 +24,7 @@ Complementary checks, all driven by the same config the training run uses:
 
 Usage (from repo root):
     uv run python egs/voice_isolate/scripts/validate_data.py \
-        egs/voice_isolate/config/conformer_nearfield_rirbank.yaml --n 128 --dump 8
+        egs/voice_isolate/config/train_dpcrn.yaml --n 128 --dump 8
 """
 
 from __future__ import annotations

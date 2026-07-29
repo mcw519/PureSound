@@ -1,11 +1,10 @@
 """Real-case voicebot scorecard WITH the near-field gate applied to the output.
 
-eval_realcase_faronly.py scores `model(raw)` -- the frozen wide-ep19 mask path only.
-Because gate training freezes the separator, that scorecard is identical for every
-gate epoch (the gate head never touches the audio). This script instead APPLIES the
-trained gate as a per-frame multiplicative gain on the enhanced output, so we can see
-whether the learned near-field gate closes the far-only passthrough gap on the QVF2.2
-real recordings:
+eval_realcase_faronly.py scores `model(raw)`, i.e. the mask path only. Because gate
+training freezes the separator, that scorecard is identical for every gate epoch (the
+gate head never touches the audio). This script instead APPLIES the trained gate as a
+per-frame multiplicative gain on the enhanced output, so the scorecard reflects
+whether the learned near-field gate closes the far-only passthrough gap:
 
   gated[t] = enhanced[t] * sigmoid(gate_logit[frame(t)])          (soft gate)
   gated[t] = enhanced[t] * (sigmoid(gate_logit[frame(t)]) >= thr) (hard gate)

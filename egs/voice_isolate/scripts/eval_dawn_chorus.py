@@ -14,10 +14,10 @@ ASR backends are auto-detected: ``faster-whisper`` preferred, then
 ``openai-whisper``; without either, the script still reports signal metrics.
 
 Usage (from repo root):
-    uv run python egs/voice_isolate/eval_dawn_chorus.py \
-        egs/voice_isolate/config/conformer_nearfield_rirbank.yaml \
-        --ckpt egs/voice_isolate/exp/conformer_16k_distance_vad/lightning_logs/version_0/checkpoints/<ckpt> \
-        --query-distance 1.0 --device cuda
+    uv run python egs/voice_isolate/scripts/eval_dawn_chorus.py \
+        egs/voice_isolate/config/infer_dpcrn.yaml \
+        --ckpt egs/voice_isolate/pretrained_ckpt/dpcrn_v7.ckpt \
+        --dry-blend 0.9 --device cuda
 """
 
 from __future__ import annotations
@@ -85,9 +85,11 @@ def run_inference(
     model: torch.nn.Module,
     noisy: np.ndarray,
     device: str,
+    dry_blend: float = 1.0,
+    spec_floor: float = 0.0,
 ) -> tuple[np.ndarray, np.ndarray | None]:
     x = torch.from_numpy(noisy.astype(np.float32)).view(1, -1).to(device)
-    y = model(x)
+    y = model(x, dry_blend=dry_blend, spec_floor=spec_floor)
     if isinstance(y, (list, tuple)):
         y = y[0]
     # The VAD head writes its frame logits onto the backbone as a side output of
@@ -232,6 +234,10 @@ def main():
     p.add_argument("--asr", default="auto",
                    choices=["auto", "none", "faster-whisper", "openai-whisper", "azure"])
     p.add_argument("--asr-model", default="small")
+    p.add_argument("--dry-blend", type=float, default=1.0,
+                   help="inference over-suppression relief: enh*b + mix*(1-b)")
+    p.add_argument("--spec-floor", type=float, default=0.0,
+                   help="clamp enhanced |bin| to >= floor * |mix bin| (deletion cap)")
     p.add_argument("--save-audio", type=int, default=0,
                    help="save mix/enhanced/ref/vad wavs for the first N samples")
     p.add_argument("--vad-threshold", type=float, default=0.5,
@@ -271,7 +277,9 @@ def main():
         length = min(len(mix), len(ref))
         mix, ref = mix[:length], ref[:length]
 
-        enh, vad_prob = run_inference(model, mix, args.device)
+        enh, vad_prob = run_inference(model, mix, args.device,
+                                      dry_blend=args.dry_blend,
+                                      spec_floor=args.spec_floor)
         enh = enh[:length]
         if len(enh) < length:
             enh = np.pad(enh, (0, length - len(enh)))

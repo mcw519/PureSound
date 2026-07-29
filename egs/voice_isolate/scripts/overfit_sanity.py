@@ -15,7 +15,7 @@ Interpretation:
 
 Usage (GPU, from anywhere):
     uv run python egs/voice_isolate/scripts/overfit_sanity.py \
-        egs/voice_isolate/config/train_dpcrn_wide_antisup.yaml \
+        egs/voice_isolate/config/exp/train_dpcrn_wide_antisup.yaml \
         --steps 800 --device cuda
 """
 from __future__ import annotations

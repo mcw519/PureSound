@@ -19,19 +19,19 @@ uv run python scripts/eval_realcase_faronly.py config/infer_dpcrn.yaml \
   --ckpt "$CKPT" --cases-dir data_report/qvf22_real_cases --device cpu > "$OUT/1_scorecard.log" 2>&1
 
 say "2/9 in-domain SI-SDRi + buckets + solo-leakage (phase1 bank)"
-uv run python scripts/indomain_sisdri.py config/eval_indomain_phase1.yaml \
+uv run python scripts/indomain_sisdri.py config/exp/eval_indomain_phase1.yaml \
   --ckpt "$CKPT" --device "$DEV" --n-batches 80 --by-bucket --dump-distribution > "$OUT/2_indomain.log" 2>&1
 
 say "3/9 synthetic far-only probe (expand bank, seen distances)"
-uv run python scripts/indomain_sisdri.py config/eval_targetabsent_probe.yaml \
+uv run python scripts/indomain_sisdri.py config/exp/eval_targetabsent_probe.yaml \
   --ckpt "$CKPT" --device "$DEV" --n-batches 60 --by-bucket > "$OUT/3_probe_expand.log" 2>&1
 
 say "4/9 synthetic far-only probe (high bank rt60 0.85-1.5, UNSEEN reverb)"
-uv run python scripts/indomain_sisdri.py config/eval_targetabsent_probe_high.yaml \
+uv run python scripts/indomain_sisdri.py config/exp/eval_targetabsent_probe_high.yaml \
   --ckpt "$CKPT" --device "$DEV" --n-batches 60 --by-bucket > "$OUT/4_probe_high.log" 2>&1
 
 say "5/9 synthetic far-only probe (boundary held-out, UNSEEN boundary distances)"
-uv run python scripts/indomain_sisdri.py config/eval_targetabsent_probe_boundary.yaml \
+uv run python scripts/indomain_sisdri.py config/exp/eval_targetabsent_probe_boundary.yaml \
   --ckpt "$CKPT" --device "$DEV" --n-batches 60 --by-bucket > "$OUT/5_probe_boundary.log" 2>&1
 
 say "6/9 Dawn Chorus real WER (over-suppression deletion guardrail; $ASR/$ASR_MODEL)"
@@ -39,12 +39,12 @@ uv run python scripts/eval_dawn_chorus.py config/infer_dpcrn.yaml \
   --ckpt "$CKPT" --device "$DEV" --asr "$ASR" --asr-model "$ASR_MODEL" > "$OUT/6_dawn_wer.log" 2>&1
 
 say "7/9 BUT-OFFICE real-RIR WER (PRIMARY deployment gate, RT30 0.56-0.69; $ASR/$ASR_MODEL)"
-uv run python scripts/eval_but_wer.py config/eval_but_real.yaml \
+uv run python scripts/eval_but_wer.py config/exp/eval_but_real.yaml \
   --ckpt "$CKPT" --set-dir data_report/but_wer_set_office --device "$DEV" \
   --asr "$ASR" --asr-model "$ASR_MODEL" > "$OUT/7_but_office_wer.log" 2>&1
 
 say "8/9 BUT high/extreme-reverb WER (secondary extreme-OOD do-no-harm MONITOR, RT30 1.15-1.84; $ASR/$ASR_MODEL)"
-uv run python scripts/eval_but_wer.py config/eval_but_real.yaml \
+uv run python scripts/eval_but_wer.py config/exp/eval_but_real.yaml \
   --ckpt "$CKPT" --set-dir data_report/but_wer_set --device "$DEV" \
   --asr "$ASR" --asr-model "$ASR_MODEL" > "$OUT/8_but_reverb_wer.log" 2>&1
 

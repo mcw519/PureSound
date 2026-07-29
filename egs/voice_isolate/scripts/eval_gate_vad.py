@@ -1,7 +1,7 @@
 """Frame-level gate-head scorecard on a held-out synthetic validation set.
 
-The gate training (config/train_dpcrn_gate.yaml) freezes the wide-ep19 separator
-and optimizes ONLY the causal near-field VAD gate head with VADHeadBCELoss. The
+The gate recipe freezes a pretrained separator and optimizes ONLY the causal
+near-field VAD gate head with VADHeadBCELoss. The
 mask path never changes, so enhanced-energy scorecards (eval_turntaking_set.py /
 eval_realcase_faronly.py) cannot show gate progress. This script instead reads the
 gate logits (backbone.last_vad_logits) directly and scores them against vad_target:
@@ -18,7 +18,7 @@ This is a SYNTHETIC in-domain smoke test (pipeline validation), not evidence of
 transfer to end-to-end real recordings.
 
 Usage (from the recipe dir egs/voice_isolate):
-    uv run python scripts/eval_gate_vad.py config/train_dpcrn_gate.yaml \
+    uv run python scripts/eval_gate_vad.py config/exp/train_dpcrn_gate.yaml \
         --ckpt exp/dpcrn_gate_synth/lightning_logs/version_0/checkpoints/epoch=1-step=500.ckpt \
         --device cuda --n-batches 40
 """

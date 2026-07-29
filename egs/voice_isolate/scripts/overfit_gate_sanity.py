@@ -1,15 +1,15 @@
 """Overfit the DPCRN gate head on one fixed synthetic batch.
 
 This is an engineering smoke test only. It verifies that the configured data
-produces foreground-activity labels, wide-ep19 warm-starts with only the new
-head missing, and the frozen-bottleneck gate can reduce BCE. It does not test
-transfer to end-to-end real recordings.
+produces foreground-activity labels, that a separator checkpoint warm-starts
+with only the new head missing, and that the frozen-bottleneck gate can reduce
+BCE. It does not test transfer to real recordings.
 
 Run from the repository root::
 
     uv run python egs/voice_isolate/scripts/overfit_gate_sanity.py \
-      egs/voice_isolate/config/train_dpcrn_gate.yaml \
-      --ckpt egs/voice_isolate/pretrained_ckpt/dpcrn_wide_antisup_ep19.ckpt \
+      egs/voice_isolate/config/exp/train_dpcrn_gate.yaml \
+      --ckpt egs/voice_isolate/pretrained_ckpt/dpcrn_v6.ckpt \
       --device cpu --steps 50
 """
 
@@ -68,6 +68,7 @@ def main() -> None:
         aug_packet_loss,
         aug_target_absent,
         vad_label,
+        *_rest,  # tolerate recipe-tuple growth (new augmentation blocks append)
     ) = load_siso_recipe_config(config_path)
 
     corpus["training_length_seconds"] = args.sample_seconds

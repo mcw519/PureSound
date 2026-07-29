@@ -19,7 +19,7 @@ office bank) rather than synthetic reverb.
 Usage (from repo root):
     uv run python egs/voice_isolate/scripts/eval_turntaking_set.py \
         egs/voice_isolate/config/infer_dpcrn.yaml \
-        --ckpt egs/voice_isolate/pretrained_ckpt/dpcrn_wide_antisup_ep19.ckpt \
+        --ckpt egs/voice_isolate/pretrained_ckpt/dpcrn_v6.ckpt \
         --set-dir /data/audio/eval_noisy_data/turntaking_set_realrir --device cuda
 """
 from __future__ import annotations

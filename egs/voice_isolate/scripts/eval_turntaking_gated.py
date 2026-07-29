@@ -16,7 +16,7 @@ killed). SUPPRESS spans (target silent, mix active = far competitor solo) want r
 test of whether the gate suppresses far-only stretches.
 
 Usage (from egs/voice_isolate):
-    uv run python scripts/eval_turntaking_gated.py config/train_dpcrn_gate.yaml \
+    uv run python scripts/eval_turntaking_gated.py config/exp/train_dpcrn_gate.yaml \
         --ckpt exp/dpcrn_gate_synth/lightning_logs/version_0/checkpoints/epoch=5-step=1500.ckpt \
         --set-dir /data/audio/eval_noisy_data/turntaking_set_realrir --device cpu
 """
