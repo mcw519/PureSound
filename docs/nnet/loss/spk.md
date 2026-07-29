@@ -87,3 +87,22 @@ from puresound.nnet.loss.spk import AAMsoftmax
 aam = AAMsoftmax(in_dim=192, num_classes=5994, margin=0.2, scale=30.0)
 loss, acc = aam(embeddings, speaker_labels)
 ```
+
+## Class: `GE2ELoss`
+
+Generalized end-to-end speaker-verification loss (softmax or contrast variant)
+over an `[nspks, putts, D]` embedding batch; centroids are recomputed excluding
+the current utterance. Ported from `cvqluu/GE2E-Loss`.
+
+```python
+GE2ELoss(nspks: int, putts: int, init_w: float = 10.0, init_b: float = -5.0, loss_method: str = "softmax")
+```
+
+## Class: `TripletLoss`
+
+Cosine or Euclidean triplet loss on `[N, 3, D]` (anchor, positive, negative)
+embeddings with margin.
+
+```python
+TripletLoss(margin: float = 0.0, add_norm: bool = True, distance: str = "Euclidean")
+```

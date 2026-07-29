@@ -1,5 +1,7 @@
 # puresound.task.sv
 
+> **Status: legacy** — kept working and frozen: no new features, no rewrites.
+
 Speaker Verification and Speaker Embedding dataset with dynamic augmentation.
 
 ## Class: `SpeakerEmbeddingDataset`

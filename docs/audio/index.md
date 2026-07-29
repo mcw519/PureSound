@@ -13,5 +13,6 @@ Audio processing sub-package providing primitives for I/O, digital signal proces
 | [audio.noise](noise.md) | Background noise mixing |
 | [audio.augmentation](augmentation.md) | Composable audio augmentation pipeline |
 | [audio.impulse_response](impulse_response.md) | RIR convolution and IIR filtering |
+| [audio.rir_bank](rir_bank.md) | Pre-generated RIR bank serving (rooms, near/far channels, origin tags) |
 | [audio.room_simulator](room_simulator.md) | Physics-based shoebox room simulator |
 | [audio.hybrid_rir](hybrid_rir.md) | Hybrid wave/geometric 5-channel RIR dataset generation |

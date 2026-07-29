@@ -1,5 +1,7 @@
 # puresound.system.miso
 
+> **Status: legacy** — kept working and frozen: no new features, no rewrites.
+
 Multi-Input Single-Output (MISO) PyTorch Lightning training module for speaker-conditional speech enhancement and target speaker extraction.
 
 ## Class: `EncDecCondMaskBase`

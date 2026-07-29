@@ -4,20 +4,27 @@ Neural network models and building blocks for speech enhancement, speaker verifi
 
 ## Sub-modules
 
+puresound.nnet is a **model library**: every backbone stays available and
+config-reachable (`getattr(nnet, type)`) even when no current recipe uses it.
+Status: *active* = used by a maintained recipe today; *library* = kept as a
+selectable asset with a forward smoke test.
+For *library* pages the prose describes the architecture; the authoritative
+constructor signature is always the class docstring in the source file.
+
 ### Model Architectures
 
-| Module | Description |
-|--------|-------------|
-| [nnet.features](features.md) | Feature processing layers (Mel-filterbank, weighted sum) |
-| [nnet.masker](masker.md) | Mask application utilities |
-| [algorithms/conv_tasnet](algorithms/conv_tasnet.md) | Conv-TasNet temporal convolution blocks |
-| [algorithms/dparn](algorithms/dparn.md) | Dual-Path Attention RNN (DPARN) |
-| [algorithms/dpcrn](algorithms/dpcrn.md) | Dual-Path Conditional RNN (DPCRN) |
-| [algorithms/dprnn](algorithms/dprnn.md) | Dual-Path RNN (DPRNN) |
-| [algorithms/ecapa_tdnn](algorithms/ecapa_tdnn.md) | ECAPA-TDNN speaker embedder |
-| [algorithms/skim](algorithms/skim.md) | Speech-aware Memory LSTM (SkiM) |
-| [algorithms/tfgridnet](algorithms/tfgridnet.md) | TF-GridNet context module |
-| [algorithms/unet](algorithms/unet.md) | U-Net time-frequency model |
+| Module | Status | Description |
+|--------|--------|-------------|
+| [algorithms/dpcrn](algorithms/dpcrn.md) | active | Dual-Path Convolutional RNN (DPCRN) — the released voice-isolate backbone |
+| [algorithms/dparn](algorithms/dparn.md) | active | Dual-Path Attention RNN (DPARN) |
+| [algorithms/ecapa_tdnn](algorithms/ecapa_tdnn.md) | active | ECAPA-TDNN speaker embedder |
+| [algorithms/conv_tasnet](algorithms/conv_tasnet.md) | library | Conv-TasNet |
+| [algorithms/dprnn](algorithms/dprnn.md) | library | Dual-Path RNN (DPRNN) |
+| [algorithms/skim](algorithms/skim.md) | library | Skipping Memory LSTM (SkiM) |
+| [algorithms/tfgridnet](algorithms/tfgridnet.md) | library | TF-GridNet |
+| [algorithms/unet](algorithms/unet.md) | library | U-Net time-frequency models (`Unet` is also the DPCRN/DPARN chassis) |
+| [nnet.features](features.md) | active | Feature processing layers |
+| [nnet.masker](masker.md) | active | Mask application utilities |
 
 ### Building Blocks (`nnet.lobe`)
 
@@ -29,6 +36,7 @@ Neural network models and building blocks for speech enhancement, speaker verifi
 | [lobe/dsp](lobe/dsp.md) | Learnable DSP layers (parametric EQ) |
 | [lobe/encoder](lobe/encoder.md) | Audio encoder/decoder modules |
 | [lobe/group_op](lobe/group_op.md) | Group operations (TAC, grouped GRU) |
+| [lobe/heads](lobe/heads.md) | Auxiliary bottleneck heads (frame VAD gate, distance/DRR regression) |
 | [lobe/multiframe](lobe/multiframe.md) | Multi-frame speech enhancement filters |
 | [lobe/norm](lobe/norm.md) | Normalization layers |
 | [lobe/pooling](lobe/pooling.md) | Pooling layers for speaker embeddings |
@@ -40,11 +48,13 @@ Neural network models and building blocks for speech enhancement, speaker verifi
 
 | Module | Description |
 |--------|-------------|
-| [loss/metrics](loss/metrics.md) | GE2E and time-domain losses |
 | [loss/sdr](loss/sdr.md) | SDR-family losses (SI-SNR, t-SDR, SA-SDR) |
-| [loss/spk](loss/spk.md) | Speaker classification losses (AAM-softmax, SphereFace2) |
-| [loss/stft_loss](loss/stft_loss.md) | STFT-domain losses (multi-resolution, spectral) |
-| [loss/vad](loss/vad.md) | Voice activity detection loss |
+| [loss/stft_loss](loss/stft_loss.md) | STFT-domain losses (multi-resolution, spectral, over-suppression) |
+| [loss/asr_feature](loss/asr_feature.md) | frozen-SSL feature matching (differentiable WER proxy) |
+| [loss/residual](loss/residual.md) | residual (`noisy - enhanced`) supervision |
+| [loss/dist](loss/dist.md) | distance/DRR regression for the DistHead auxiliary |
+| [loss/vad](loss/vad.md) | frame-activity losses (VAD gate training) |
+| [loss/spk](loss/spk.md) | speaker-embedding losses (AAM-softmax, SphereFace2, GE2E, Triplet) |
 
 ## Top-level Exports
 

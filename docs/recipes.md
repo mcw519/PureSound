@@ -1,84 +1,63 @@
 # puresound.recipes
 
-High-level recipes for constructing models and loss functions from YAML configuration files.
+Config-driven construction: a YAML recipe in, a ready model / loss list out.
+Model and loss types are resolved by name with `getattr` on `puresound.nnet` and
+`puresound.nnet.loss`, so **everything exported from those packages is reachable
+from a config** (the model library keeps all backbones exported for exactly this
+reason).
 
-## Functions
+## `load_siso_recipe_config(f_path) -> Tuple`
 
-### `_enabled_config(config: Dict, key: str) -> Dict`
+Parses a recipe YAML into a positional 20-tuple. Consumers should unpack the
+fields they need and absorb growth with a star target — the tuple grows by
+appending:
 
-Internal helper that extracts a sub-configuration block identified by `key`, only if that block is marked as enabled.
+| index | field | yaml section |
+|---|---|---|
+| 0 | corpus | `dataset` |
+| 1 | trainer | `trainer` (incl. `lightning_trainer_args`) |
+| 2 | optimizer | `optimizer` |
+| 3 | scheduler | `scheduler` |
+| 4 | loss | `loss_func` (list) |
+| 5 | model | `model` (incl. `lightning_module`) |
+| 6–13 | augmentation blocks | `augmentation_speech`, `_noise`, `_reverb`, `_speed`, `_ir_response`, `_src`, `_hpf`, `_volume` |
+| 14–16 | more blocks | `augmentation_codec`, `_packet_loss`, `_target_absent` |
+| 17 | vad label | `vad_label` |
+| 18–19 | real-recording blocks | `augmentation_realfar`, `augmentation_realnear` (voice-isolation only) |
 
-**Parameters:**
-- `config` – Full configuration dictionary
-- `key` – Section key to extract
+Blocks gated by `used: False` (or absent) come back as `None`.
 
-**Returns:** Sub-configuration dictionary, or empty dict if not enabled.
+```python
+(corpus, trainer, _opt, _sch, _loss, model_dict, *rest) = load_siso_recipe_config(path)
+```
 
----
+## `init_siso_model(model_dict) -> LightningModule`
 
-### `load_siso_recipe_config(f_path: str) -> Tuple`
-
-Loads a SISO (Single-Input Single-Output) training configuration from a YAML file.
-
-**Parameters:**
-- `f_path` – Path to the YAML config file
-
-**Returns:** `Tuple` of configuration sections:
-- `model_dict` – Encoder, feature, and backbone configurations
-- `loss_conf` – Loss function configurations
-- `optim_conf` – Optimizer/scheduler configuration
-- `dataset_conf` – Dataset configuration
-
----
-
-### `init_siso_model(model_dict: Dict) -> Tuple`
-
-Constructs the encoder–feature–backbone model pipeline from a configuration dictionary.
-
-Expected `model_dict` keys:
-- `encoder` – Encoder module config (e.g., `FreeEncDec` or `ConvEncDec`)
-- `feature` – Feature processing module config (e.g., `MelBank`)
-- `backbone` – Main network backbone config (e.g., `DPRNN`, `UNet`)
-
-**Returns:** `Tuple(encoder, feature_encoder, backbone)`
-
----
-
-### `init_loss_func(hparam_conf: List) -> List`
-
-Initializes a list of loss functions from configuration, each with an associated weight.
-
-**Parameters:**
-- `hparam_conf` – List of loss function configuration dictionaries. Each entry should contain:
-  - `name` – Loss function class name
-  - `weight` – Scalar weight for this loss term
-  - Additional kwargs passed to the loss constructor
-
-**Returns:** List of `(loss_fn, weight)` tuples.
-
-## Example YAML Config (SISO)
+Builds `encoder -> features -> backbone` and wraps them in the configured
+Lightning module:
 
 ```yaml
-encoder:
-  enabled: true
-  type: FreeEncDec
-  params:
-    win: 16
-    stride: 8
-    out_channel: 512
-
-feature:
-  enabled: false
-
-backbone:
-  type: DPRNN
-  params:
-    in_channel: 512
-    hid_channel: 128
-    num_layers: 6
-
-loss:
-  - name: SDRLoss
-    weight: 1.0
-    mode: sisnr
+model:
+  lightning_module: {type: EncDecMaskBase, module_args: {mask_type: complex, ...}}
+  encoder:          {type: ConvEncDec,     encoder_args: {...}}
+  features:         {feats_type: complex, drop_stft_first_bin: True, ...}
+  freq_eq:          {type: FrequencyEQLayer, ...}    # optional
+  backbone:         {type: DPCRN,          backbone_args: {...}}
 ```
+
+`type` strings are resolved on `puresound.system` (lightning module) and
+`puresound.nnet` (encoder / freq_eq / backbone).
+
+## `init_loss_func(hparam_conf) -> (loss_list, weight_list)`
+
+Each entry of the `loss_func` yaml list:
+
+```yaml
+loss_func:
+  - type: SDRLoss          # resolved on puresound.nnet.loss
+    weighted: 1.0          # scalar weight
+    args: {scaled: False}  # constructor kwargs
+```
+
+The training system's loss registry consumes both lists
+(`model.register_loss_func(loss_list, weight_list)`).

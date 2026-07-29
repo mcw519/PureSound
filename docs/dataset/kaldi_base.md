@@ -1,5 +1,7 @@
 # puresound.dataset.kaldi_base
 
+> **Status: legacy** — kept working and frozen: no new features, no rewrites.
+
 Kaldi-format dataset reader using `.scp` manifest files.
 
 ## Class: `KaldiFormBaseDataset`

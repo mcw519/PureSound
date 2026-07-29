@@ -1,33 +1,16 @@
-# Neural Network (NNET)
+# puresound.nnet
 
-In this PureSound project we tried to provide flexible adjustment for each tasks.
-
+Model library for speech tasks. Every backbone stays available and reachable
+from a recipe config (`getattr(nnet, backbone["type"])`), whether or not a
+current recipe uses it; `nnet/__init__.py` is the authoritative export list.
 
     puresound/nnet/
-    ├── conv_tasnet.py
-    ├── dparn.py
-    ├── dpcrn.py
-    ├── dprnn.py
-    ├── ecapa_tdnn.py
-    ├── features.py
-    ├── masker.py
-    ├── skim.py
-    ├── unet.py
-    ├── lobe
-    │   ├── activation.py
-    │   ├── attention.py
-    │   ├── cnn.py
-    │   ├── dsp.py
-    │   ├── encoder.py
-    │   ├── group_op.py
-    │   ├── multiframe.py
-    │   ├── norm.py
-    │   ├── pooling.py
-    │   ├── rnn.py
-    │   ├── stft.py
-    │   └── trivial.py
-    └── loss
-        ├── metrics.py
-        ├── sdr.py
-        ├── spk.py
-        └── stft_loss.py
+    ├── dpcrn.py / dparn.py / dprnn.py / skim.py / conv_tasnet.py /
+    │   tfgridnet.py / unet.py / ecapa_tdnn.py     # backbones
+    ├── features.py                                # encoder-to-backbone features
+    ├── masker.py                                  # mask application utilities
+    ├── lobe/                                      # building blocks (rnn/cnn/attention/
+    │                                              #  norm/heads/...)
+    └── loss/                                      # loss library (same config-reachable rule)
+
+Full API reference: `docs/nnet/`.

@@ -1,5 +1,7 @@
 # DPARN Streaming ONNX Runtime
 
+> **Status: legacy** — kept working and frozen: no new features, no rewrites.
+
 DPARN streaming inference uses a feature-frame ONNX model. Python owns audio
 buffering, fixed Hann STFT, overlap-add iSTFT, and ONNX Runtime state
 management. ONNX Runtime runs one DPARN feature frame at a time.

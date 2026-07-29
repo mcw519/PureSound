@@ -1,68 +1,77 @@
 # puresound.task.ns
 
-Noise Suppression (NS) dataset with dynamic augmentation.
+Generic noise-suppression dataset: on-the-fly synthesis of (noisy, clean) pairs
+from a clean-speech metafile. This is also the **synthesis skeleton** that the
+voice-isolation task specializes -- see [task.voice_isolation](voice_isolation.md).
 
 ## Class: `NoiseSuppressionDataset`
 
-Extends `DynamicBaseDataset`. Constructs noisy speech samples on-the-fly by augmenting clean speech with background noise, reverberation, and other effects.
+Extends `DynamicBaseDataset`. Per item: pick a clean utterance for the sampled
+speaker, optionally give it a room channel (source-level RIR from the on-the-fly
+simulator or a pre-generated bank), optionally add interfering speakers /
+playback echo / noise, then run the device chain (speed, whole-mix RIR, SRC,
+IIR, HPF, codec, packet loss, volume) with the clean target warped consistently.
 
-### Constructor
+### Constructor (all blocks optional; absent/disabled blocks never consume RNG)
 
 ```python
 NoiseSuppressionDataset(
-    metafile: str,
-    min_utt_length: int = 0,
-    target_sr: int = 16000,
-    utt_length: int = 32000,
-    source_rir: bool = False,
-    **augment_kwargs,
+    metafile_path: str,
+    min_utt_length_in_seconds: float = 3.0,
+    min_utts_in_each_speaker: int = 5,
+    target_sr: Optional[int] = None,
+    training_sample_length_in_seconds: float = 6.0,
+    audio_gain_normalized_to: Optional[int] = None,
+    augmentation_speech_args=None,        # interferers: prob/add_n_cases/snr_range/
+                                          #   media_voice/echo_playback/overlap_control
+    augmentation_noise_args=None,         # background + white noise, SNR ranges
+    augmentation_reverb_args=None,        # simulator / pre-generated bank / whole-mix RIR
+    augmentation_speed_args=None,
+    augmentation_ir_response_args=None,
+    augmentation_src_args=None,
+    augmentation_hpf_args=None,
+    augmentation_volume_args=None,
+    augmentation_codec_args=None,
+    augmentation_packet_loss_args=None,
+    augmentation_target_absent_args=None, # silence-injection rows (target = zeros)
+    vad_label_args=None,                  # frame labels: energy backend or deferred Silero
 )
 ```
 
-**Parameters:**
-- `metafile` – Path to the CSV metafile describing the clean speech corpus
-- `min_utt_length` – Minimum utterance length in samples; shorter utterances are filtered
-- `target_sr` – All audio is resampled to this sample rate
-- `utt_length` – Fixed output utterance length in samples (shorter utterances are padded)
-- `source_rir` – If `True`, applies a source RIR to the clean speech before mixing noise (simulates recording at a distance)
-- `**augment_kwargs` – Augmentation configuration forwarded to `init_augmentor()`
+Task-specific blocks are rejected here (`mix_mode` raises; the recipe main
+rejects `augmentation_realfar/realnear` without `dataset.task: voice_isolation`).
 
-### `__getitem__(idx: int) -> Dict`
+### `__getitem__((speaker, sr) | (speaker, sr, item_seed)) -> Dict`
 
-Returns a sample dict:
+The 3-tuple form carries a per-item seed (deterministic validation): every RNG
+the synthesis uses is reseeded so the same item regenerates bit-exact across
+epochs, runs, and worker layouts.
 
-| Key | Type | Description |
-|-----|------|-------------|
-| `noisy_speech` | `Tensor [1, T]` | Augmented (noisy) waveform |
-| `clean_speech` | `Tensor [1, T]` | Original clean waveform |
-| `sr` | `int` | Sample rate |
+Returns `noisy_speech`, `clean_speech`, `consistency_noise`
+(`noisy - clean`), `sr`, VAD labels (or a deferred `vad_reference`), and the
+scalar metadata hooks' output.
 
-### Augmentation Pipeline
+### Row-type hooks
 
-The augmentation is applied dynamically each epoch:
+The skeleton delegates every point where a task may substitute its own row
+types; each base implementation *is* the generic behaviour and draws nothing
+extra from the RNG stream:
 
-1. Load clean utterance (random crop to `utt_length`)
-2. (Optional) Apply source RIR via `apply_rir(mode="direct")`
-3. Mix background noise at random SNR
-4. Apply room reverberation via room simulator or pre-loaded RIRs
-5. Apply random volume perturbation
-6. Apply additional effects: speed perturbation, IIR coloring, HPF, SRC, clipping
+| hook | decides |
+|---|---|
+| `_plan_row(target_speech)` | row type (`RowPlan`); may replace the foreground |
+| `_prepare_foreground(target_speech, plan)` | the foreground's channel (room sim or verbatim) |
+| `_sample_interferers(...)` | where interfering speech comes from |
+| `_turn_taking_override(plan)` | row-level turn-taking rate |
+| `_mix_foreground_with_interferers(...)` | foreground/interferer level relationship |
+| `_emit_task_metadata(...)` | extra per-sample labels |
 
-## Example
+## Class: `RowPlan`
 
-```python
-from puresound.task.ns import NoiseSuppressionDataset
-from torch.utils.data import DataLoader
+Dataclass of per-item decisions: `target_absent`, `force_interferer`,
+`force_speech_interferers`, `skip_whole_mix_reverb`. Task subclasses extend it.
 
-dataset = NoiseSuppressionDataset(
-    metafile="data/train_meta.csv",
-    target_sr=16000,
-    utt_length=48000,
-    noise_folder="/data/musan",
-    rir_folder="/data/rirs",
-    snr_range=(-5, 20),
-    source_rir=False,
-)
+## Class: `NoiseSuppressionCollateFunc`
 
-loader = DataLoader(dataset, batch_size=16, shuffle=True, num_workers=4)
-```
+Pads and stacks the waveform keys (plus VAD labels/references) into batch
+tensors.

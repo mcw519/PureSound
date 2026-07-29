@@ -1,5 +1,7 @@
 # puresound.task.tse
 
+> **Status: legacy** — kept working and frozen: no new features, no rewrites.
+
 Target Speaker Extraction (TSE) dataset with dynamic, multi-source augmentation.
 
 ## Class: `TargetSpeakerExtractDataset`

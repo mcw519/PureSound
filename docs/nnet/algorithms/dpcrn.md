@@ -1,104 +1,52 @@
 # puresound.nnet.dpcrn
 
-Dual-Path Conditional RNN (DPCRN) — a U-Net architecture with dual-path LSTM processing and optional speaker or content conditioning via FiLM modulation.
-
-## Class: `DPRNNblock2D`
-
-> **Deprecated**: Use `DPCRN` directly. This class is kept for backwards compatibility.
-
-A dual-path RNN block with bidirectional intra-chunk LSTM and unidirectional inter-chunk LSTM, with optional FiLM conditioning.
-
-### Constructor
-
-```python
-DPRNNblock2D(
-    in_channel: int,
-    hid_channel: int,
-    embed_dim: Optional[int] = None,
-    bidirectional: bool = True,
-)
-```
-
-**Parameters:**
-- `in_channel` – Input feature dimension
-- `hid_channel` – LSTM hidden dimension
-- `embed_dim` – If provided, enables FiLM conditioning with this embedding dimension
-- `bidirectional` – If `True`, intra-chunk LSTM is bidirectional
-
-### `forward(x: Tensor, embed: Optional[Tensor] = None) -> Tensor`
-
-**Parameters:**
-- `x` – Input tensor `[batch, channel, freq, time]`
-- `embed` – Optional conditioning embedding `[batch, embed_dim]`
-
-**Returns:** Processed tensor `[batch, channel, freq, time]`.
-
----
+DPCRN — dual-path convolutional recurrent network on a `Unet` chassis: CNN
+down/up stacks over frequency with two `DPRNNblock2D` blocks at the bottleneck
+(bidirectional intra-frequency LSTM, unidirectional inter-time LSTM, optional
+FiLM conditioning). The released voice-isolate backbone.
 
 ## Class: `DPCRN`
-
-Full Dual-Path Conditional RNN model extending the `Unet` architecture.
-
-### Architecture
-
-```
-Input Spectrum
-  └─ U-Net Encoder (CNN downsampling with skip connections)
-       └─ DPCRN Bottleneck (stack of DPRNNblock2D with conditioning)
-            └─ U-Net Decoder (CNN upsampling + skip connections)
-                 └─ Output Spectrum (mask or enhanced features)
-```
 
 ### Constructor
 
 ```python
 DPCRN(
-    # U-Net parameters
-    in_channel: int,
-    out_channel: int,
-    encoder_kernel: List[int],
-    encoder_stride: List[int],
-    encoder_channel: List[int],
-    # DPCRN bottleneck parameters
-    num_blocks: int,
-    hid_channel: int,
-    embed_dim: Optional[int] = None,
-    bidirectional: bool = True,
+    input_dim: int = 512,
+    dvec_dim: Optional[int] = None,        # speaker-embedding FiLM conditioning
+    activation_type: str = "PReLU",
+    norm_type: str = "bN2d",
+    dropout: float = 0.05,
+    channels: Tuple = (1, 32, 32, 32, 64, 128),   # CNN stack; channels[-1] = bottleneck C
+    transpose_t_size: int = 2,
+    transpose_delay: bool = False,
+    skip_conv: bool = False,
+    kernel_t / stride_t / dilation_t: Tuple,      # per down-layer, time axis
+    kernel_f / stride_f / dilation_f: Tuple,      # per down-layer, frequency axis
+    delay: Tuple = (0, 0, ...),            # per-layer look-ahead; sum(delay) frames of
+                                           # algorithmic latency when streaming
+    rnn_hidden: int = 128,
+    spectral_compress: bool = False,
+    vad_head:  Optional[Dict] = None,      # {enabled, hidden, kernel_t} -> lobe.heads.VADHead
+    dist_head: Optional[Dict] = None,      # {enabled, hidden}           -> lobe.heads.DistHead
 )
 ```
 
-**Parameters:**
-- `in_channel` – Input spectrum channels (e.g., 2 for stacked real/imag)
-- `out_channel` – Output channels
-- `encoder_kernel/stride/channel` – U-Net encoder configuration
-- `num_blocks` – Number of DPCRN blocks in the bottleneck
-- `hid_channel` – LSTM hidden dimension per block
-- `embed_dim` – Speaker/content embedding dimension for FiLM conditioning (optional)
-- `bidirectional` – If `True`, intra-chunk LSTM is bidirectional (non-causal)
+`forward(x [N, CH, C, T], dvec=None) -> [N, CH, C, T]` predicts a mask in the
+feature domain (`EncDecMaskBase` applies it). When the heads are enabled the
+backbone exposes side outputs after each forward: `last_vad_logits [N, T]` and
+`last_dist_preds [N, 3]` (see [nnet.lobe.heads](../lobe/heads.md)); both default
+to disabled and add no cost otherwise.
 
-### `forward(x: Tensor, embed: Optional[Tensor] = None) -> Tensor`
+**Streaming**: `delay=[0,...]` streams bit-exact with zero latency;
+`delay > 0` (the released recipes use `[1,1,1]` = 30 ms at hop 160) is exported
+with future-buffering baked into the ONNX graph — see
+[streaming/dpcrn_onnx](../../streaming/dpcrn_onnx.md).
 
-**Parameters:**
-- `x` – Input spectrum `[batch, channel, freq, time]`
-- `embed` – Optional conditioning embedding `[batch, embed_dim]`
+## Class: `DPRNNblock2D`
 
-**Returns:** Output tensor of the same shape as input.
-
-## Example
+The bottleneck block (intra-frequency BiLSTM + inter-time LSTM + optional FiLM).
 
 ```python
-from puresound.nnet.dpcrn import DPCRN
-
-model = DPCRN(
-    in_channel=2, out_channel=2,
-    encoder_kernel=[3, 3, 3],
-    encoder_stride=[2, 2, 1],
-    encoder_channel=[16, 32, 64],
-    num_blocks=4,
-    hid_channel=64,
-    embed_dim=256,   # Enable conditioning with 256-dim speaker embedding
-)
-
-# Inference with speaker embedding
-enhanced = model(noisy_spec, embed=spk_embedding)
+DPRNNblock2D(input_size: int, hidden_size: int, dropout: float = 0.0,
+             embedding_size: Optional[int] = None, fused_type: Optional[str] = None)
 ```
