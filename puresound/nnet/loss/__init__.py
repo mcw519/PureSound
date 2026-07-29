@@ -1,18 +1,24 @@
 import torch
 import torch.nn as nn
 
-from .sdr import SDRLoss
-from .spk import AAMsoftmax, SphereFace2
-from .residual import ResidualReferenceLoss
 from .asr_feature import ASRFeatureLoss
 from .dist import DistHeadRegressionLoss
+from .residual import ResidualReferenceLoss
+from .sdr import SDRLoss
+from .spk import AAMsoftmax, GE2ELoss, SphereFace2, TripletLoss
 from .stft_loss import MultiResolutionSTFTLoss, OverSuppressionLoss, SpectralLoss
-from .vad import BackgroundVADHeadBCELoss, VADActivityLoss, VADHeadBCELoss
+from .vad import BackgroundVADHeadBCELoss, F1_loss, VADActivityLoss, VADHeadBCELoss
 
+# Every loss the config loader can name via ``loss_func[].type`` (resolved with
+# ``getattr(loss, type)`` in recipes.py and the egs mains). Keep in sync with the
+# imports above so each loss in the library stays reachable from a recipe config.
 __all__ = [
     "AAMsoftmax",
     "ASRFeatureLoss",
+    "BackgroundVADHeadBCELoss",
     "DistHeadRegressionLoss",
+    "F1_loss",
+    "GE2ELoss",
     "MultiResolutionSTFTLoss",
     "OverSuppressionLoss",
     "ResidualReferenceLoss",
@@ -20,7 +26,7 @@ __all__ = [
     "SpectralLoss",
     "SphereFace2",
     "TimeDomainBasicLoss",
-    "BackgroundVADHeadBCELoss",
+    "TripletLoss",
     "VADActivityLoss",
     "VADHeadBCELoss",
 ]

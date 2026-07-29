@@ -6,7 +6,7 @@ from pathlib import Path
 import numpy as np
 import torch
 
-from puresound.audio.augmentaion import AudioEffectAugmentor
+from puresound.audio.augmentation import AudioEffectAugmentor
 from puresound.audio.io import AudioIO
 from puresound.audio.volume import calculate_rms, normalize_waveform
 from puresound.utils import create_folder

@@ -129,7 +129,7 @@ class ChnAttnStatPooling(nn.Module):
         return x
 
 
-class EcapaTdnnExtracotr(nn.Module):
+class EcapaTdnnExtractor(nn.Module):
     """
     ECAPA-TDNN, extracts frame-level ECAPA-TDNN embeddings
 

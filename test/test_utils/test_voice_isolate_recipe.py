@@ -1,7 +1,7 @@
 import torch
 
-from puresound.audio import augmentaion as aug_mod
-from puresound.audio.augmentaion import AudioEffectAugmentor
+from puresound.audio import augmentation as aug_mod
+from puresound.audio.augmentation import AudioEffectAugmentor
 from puresound.task.sampler import SpeakerSampler
 
 

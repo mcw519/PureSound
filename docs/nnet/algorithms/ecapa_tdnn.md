@@ -53,14 +53,14 @@ Processes input through multi-scale conv → SE attention → residual connectio
 
 ---
 
-## Class: `EcapaTdnnExtracotr`
+## Class: `EcapaTdnnExtractor`
 
 Full ECAPA-TDNN speaker embedding extractor model.
 
 ### Constructor
 
 ```python
-EcapaTdnnExtracotr(
+EcapaTdnnExtractor(
     in_channel: int,
     channel: int = 512,
     embd_dim: int = 192,
@@ -94,9 +94,9 @@ Input Features [B, F, T]
 ## Example
 
 ```python
-from puresound.nnet.ecapa_tdnn import EcapaTdnnExtracotr
+from puresound.nnet.ecapa_tdnn import EcapaTdnnExtractor
 
-model = EcapaTdnnExtracotr(in_channel=80, channel=512, embd_dim=192)
+model = EcapaTdnnExtractor(in_channel=80, channel=512, embd_dim=192)
 
 mel_feat = mel_bank(stft_mag)          # [B, 80, T]
 embedding = model(mel_feat)             # [B, 192]

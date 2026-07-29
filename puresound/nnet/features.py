@@ -3,7 +3,7 @@ from typing import Dict, Optional
 import torch
 import torch.nn as nn
 
-from .lobe.dsp import FrequecyEQLayer
+from .lobe.dsp import FrequencyEQLayer
 from .lobe.stft import mel_filterbank
 from .lobe.trivial import LambdaLayer, Magnitude, SpecAugment
 
@@ -91,7 +91,7 @@ class FeatureEncoder(nn.Module):
         drop_stft_first_bin: bool = True,
         include_specaug: bool = False,
         specaug_args: Optional[Dict] = None,
-        peq_module: Optional[FrequecyEQLayer] = None,
+        peq_module: Optional[FrequencyEQLayer] = None,
         normalized_mode: Optional[str] = None,
         trainable: bool = False,
     ):

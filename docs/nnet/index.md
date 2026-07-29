@@ -55,9 +55,9 @@ The following classes are directly importable from `puresound.nnet`:
 from puresound.nnet import (
     DPARN,
     DPCRN,
-    EcapaTdnnExtracotr,
+    EcapaTdnnExtractor,
     FeatureEncoder,
-    FrequecyEQLayer,
+    FrequencyEQLayer,
     ConvEncDec,
     FreeEncDec,
     SkiM,

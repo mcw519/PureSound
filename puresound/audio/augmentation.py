@@ -6,7 +6,7 @@ import torch
 import torchaudio
 
 from puresound.audio.dsp import wav_resampling
-from puresound.audio.impluse_response import rand_add_2nd_filter_response, wav_apply_rir
+from puresound.audio.impulse_response import rand_add_2nd_filter_response, wav_apply_rir
 from puresound.audio.io import AudioIO
 from puresound.audio.noise import add_bg_noise, add_bg_white_noise
 from puresound.audio.room_simulator import RoomImpulseResponseSimulator

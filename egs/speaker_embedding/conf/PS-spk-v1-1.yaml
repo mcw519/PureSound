@@ -166,7 +166,7 @@ model:
       n_time_mask: 5
       prob: 0.5
   backbone:
-    type: EcapaTdnnExtracotr
+    type: EcapaTdnnExtractor
     backbone_args:
       input_size: 80
       embedding_size: 192

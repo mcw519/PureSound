@@ -6,7 +6,7 @@ from typing import Dict, List, Optional
 import numpy as np
 import torch
 
-from puresound.audio.augmentaion import AudioEffectAugmentor
+from puresound.audio.augmentation import AudioEffectAugmentor
 from puresound.audio.io import AudioIO
 from puresound.audio.noise import add_bg_white_noise
 from puresound.audio.vad import EnergyVADLabeler, create_vad_labeler, frame_count

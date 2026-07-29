@@ -4,7 +4,7 @@ import numpy as np
 import torch
 import torchaudio
 
-from puresound.audio.augmentaion import AudioEffectAugmentor
+from puresound.audio.augmentation import AudioEffectAugmentor
 from puresound.audio.rir_bank import PreGeneratedRoomBank
 
 

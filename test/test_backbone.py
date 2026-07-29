@@ -3,7 +3,9 @@ import sys
 import pytest
 import torch
 
+import puresound.nnet as nnet
 from puresound.nnet.conv_tasnet import ConvTasNet
+from puresound.nnet.dparn import DPARN
 from puresound.nnet.dpcrn import DPCRN
 from puresound.nnet.dprnn import DPRNN
 from puresound.nnet.skim import SkiM
@@ -204,3 +206,28 @@ def test_tfgrid_backbone():
     input_x = torch.rand(1, 2, 256, 1000)
     y = model(input_x)
     assert input_x.shape == y.shape
+
+
+@pytest.mark.backbone
+def test_dparn_backbone():
+    model = DPARN(
+        input_dim=256,
+        norm_type="cLN",
+        channels=(2, 32, 32, 32, 64, 128),
+    )
+    input_x = torch.rand(1, 2, 256, 200)
+    y = model(input_x)
+    assert input_x.shape == y.shape
+
+
+@pytest.mark.backbone
+@pytest.mark.parametrize(
+    "type_name",
+    ["ConvTasNet", "DPARN", "DPCRN", "DPRNN", "SkiM", "TFGridNet", "Unet", "UnetTcn",
+     "EcapaTdnnExtractor"],
+)
+def test_backbone_reachable_from_config(type_name):
+    """Every model in the library must be resolvable the way recipe configs do it:
+    ``getattr(nnet, backbone["type"])``. A model missing from ``nnet/__init__``
+    exists on disk but cannot be named by any config."""
+    assert callable(getattr(nnet, type_name))

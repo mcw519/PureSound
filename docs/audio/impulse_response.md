@@ -2,7 +2,7 @@
 
 Room Impulse Response (RIR) convolution and random IIR filtering utilities.
 
-> **Note:** The source file is named `impluse_response.py` (typo preserved for backwards compatibility).
+> **Note:** The source file is named `impulse_response.py` (typo preserved for backwards compatibility).
 
 ## Functions
 
@@ -44,7 +44,7 @@ Applies a random second-order IIR (biquad) filter to simulate microphone or chan
 ## Example
 
 ```python
-from puresound.audio.impluse_response import wav_apply_rir, rand_add_2nd_filter_response
+from puresound.audio.impulse_response import wav_apply_rir, rand_add_2nd_filter_response
 from puresound.audio.io import AudioIO
 
 rir, _ = AudioIO.open("rir.wav")

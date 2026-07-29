@@ -6,7 +6,7 @@ import torch.nn as nn
 from puresound.audio.dsp import get_biquad_params
 
 
-class FrequecyEQLayer(nn.Module):
+class FrequencyEQLayer(nn.Module):
     """Defined trainable Parametric EQ"""
 
     def __init__(

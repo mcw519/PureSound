@@ -22,7 +22,7 @@ from typing import Optional
 
 import torch
 
-from puresound.audio.impluse_response import compute_drr_db
+from puresound.audio.impulse_response import compute_drr_db
 from puresound.audio.io import AudioIO
 
 

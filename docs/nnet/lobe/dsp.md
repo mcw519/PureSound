@@ -2,16 +2,16 @@
 
 Learnable DSP-inspired layers for differentiable signal processing.
 
-## Class: `FrequecyEQLayer`
+## Class: `FrequencyEQLayer`
 
 A trainable parametric equalizer implemented as a learnable biquad filter chain. Applies frequency-domain shaping as a differentiable neural network layer.
 
-> **Note:** Exported from `puresound.nnet` as `FrequecyEQLayer` (spelling preserved for compatibility).
+> **Note:** Exported from `puresound.nnet` as `FrequencyEQLayer` (spelling preserved for compatibility).
 
 ### Constructor
 
 ```python
-FrequecyEQLayer(
+FrequencyEQLayer(
     num_bands: int,
     sr: int,
     trainable: bool = True,
@@ -51,8 +51,8 @@ When `trainable=True`, the following are learned:
 ## Example
 
 ```python
-from puresound.nnet.lobe.dsp import FrequecyEQLayer
+from puresound.nnet.lobe.dsp import FrequencyEQLayer
 
-eq_layer = FrequecyEQLayer(num_bands=8, sr=16000, trainable=True)
+eq_layer = FrequencyEQLayer(num_bands=8, sr=16000, trainable=True)
 wav_eq = eq_layer(enhanced_wav)
 ```

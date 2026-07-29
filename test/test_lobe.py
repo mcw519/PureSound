@@ -6,7 +6,7 @@ import pytest
 import torch
 
 from puresound.audio.io import AudioIO
-from puresound.nnet.lobe.dsp import FrequecyEQLayer
+from puresound.nnet.lobe.dsp import FrequencyEQLayer
 from puresound.nnet.lobe.encoder import ConvEncDec, UnifiedConvEncDec
 from puresound.nnet.lobe.rnn import FSMN, ConditionFSMN
 from puresound.nnet.lobe.trivial import SplitMerge
@@ -78,7 +78,7 @@ def test_split_and_merge():
 
 @pytest.mark.nnet
 def test_freq_peq_layer():
-    Fpeq = FrequecyEQLayer()
+    Fpeq = FrequencyEQLayer()
     input_x = torch.rand(1, 2, 257, 100)
     output_x = Fpeq(input_x)
     output_x.sum().backward()

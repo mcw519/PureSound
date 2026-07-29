@@ -368,7 +368,7 @@ model:
       rnn_hidden: 128
       spectral_compress: False
   c_backbone:
-    type: EcapaTdnnExtracotr
+    type: EcapaTdnnExtractor
     pretrained_ckpt:
     backbone_args:
       input_size: 80

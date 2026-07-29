@@ -82,11 +82,11 @@ optim:
 from puresound.system.miso import EncDecCondMaskBase
 from puresound.nnet.lobe.encoder import FreeEncDec
 from puresound.nnet.dpcrn import DPCRN
-from puresound.nnet.ecapa_tdnn import EcapaTdnnExtracotr
+from puresound.nnet.ecapa_tdnn import EcapaTdnnExtractor
 
 encoder  = FreeEncDec(win=16, stride=8, out_channel=512)
 backbone = DPCRN(in_channel=2, out_channel=2, ..., embed_dim=192)
-spk_model = EcapaTdnnExtracotr(in_channel=80, embd_dim=192)
+spk_model = EcapaTdnnExtractor(in_channel=80, embd_dim=192)
 
 model = EncDecCondMaskBase(
     encoder=encoder,

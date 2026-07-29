@@ -4,14 +4,14 @@ from pathlib import Path
 import pytest
 import torch
 
-from puresound.audio.augmentaion import AudioEffectAugmentor
+from puresound.audio.augmentation import AudioEffectAugmentor
 from puresound.audio.dsp import (
     ParametricEQ,
     get_biquad_params,
     wav_apply_biquad_filter,
     wav_resampling,
 )
-from puresound.audio.impluse_response import rand_add_2nd_filter_response, wav_apply_rir
+from puresound.audio.impulse_response import rand_add_2nd_filter_response, wav_apply_rir
 from puresound.audio.io import AudioIO
 from puresound.audio.noise import add_bg_noise, add_bg_white_noise
 from puresound.audio.spectrum import (

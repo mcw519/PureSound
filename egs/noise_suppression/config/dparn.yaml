@@ -208,7 +208,7 @@ model:
       sr: 16000
       trainable: True
   freq_eq:
-    type: FrequecyEQLayer
+    type: FrequencyEQLayer
     eq_args:
       n_fft: 512
       sample_rate: 16000

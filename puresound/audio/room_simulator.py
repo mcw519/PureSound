@@ -5,7 +5,7 @@ import numpy as np
 import rir_generator
 import torch
 
-from puresound.audio.impluse_response import compute_drr_db
+from puresound.audio.impulse_response import compute_drr_db
 
 
 def _sample_range(bounds: list[float]) -> float:

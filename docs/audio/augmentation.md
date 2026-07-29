@@ -2,7 +2,7 @@
 
 Composable audio augmentation pipeline supporting noise, reverb, speed, pitch, distortion, and filtering effects.
 
-> **Note:** The source file is named `augmentaion.py` (typo preserved for backwards compatibility).
+> **Note:** The source file is named `augmentation.py` (typo preserved for backwards compatibility).
 
 ## Class: `AudioEffectAugmentor`
 
@@ -126,7 +126,7 @@ Applies a high-pass filter with a randomly chosen cutoff frequency from `fc_rang
 ## Example
 
 ```python
-from puresound.audio.augmentaion import AudioEffectAugmentor
+from puresound.audio.augmentation import AudioEffectAugmentor
 
 aug = AudioEffectAugmentor()
 aug.load_bg_noise_from_folder("/data/musan/noise")

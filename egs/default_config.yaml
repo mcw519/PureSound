@@ -158,7 +158,7 @@ model:
     type: ConvEncDec
     encoder_args:
   freq_eq:
-    type: FrequecyEQLayer
+    type: FrequencyEQLayer
     eq_args:
       n_fft: 1024
       sample_rate: 32000

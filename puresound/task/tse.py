@@ -5,7 +5,7 @@ from typing import Dict, Optional, Tuple
 import torch
 from torch.nn.utils.rnn import pad_sequence
 
-from puresound.audio.augmentaion import AudioEffectAugmentor
+from puresound.audio.augmentation import AudioEffectAugmentor
 from puresound.audio.dsp import wav_resampling
 from puresound.audio.noise import add_bg_noise
 from puresound.audio.volume import rescale_waveform
