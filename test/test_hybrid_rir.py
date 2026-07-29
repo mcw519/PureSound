@@ -323,3 +323,27 @@ def test_high_band_reverberation_follows_requested_rt60():
     long = tail_decay_db(0.8)
     # A longer RT60 must leave more energy in the tail (less negative dB).
     assert long > short + 6.0
+
+
+def test_scene_sampling_constrains_3d_distance_and_feasible_rt60():
+    """near/far membership is decided on the true 3D source-receiver distance
+    (the value written to channel_map distance_m), and the sampled rt60 is
+    always Sabine-feasible so the metadata matches the realized reverberation."""
+    import numpy as np
+
+    from puresound.audio.hybrid_rir import (
+        HybridRIRConfig,
+        _min_feasible_rt60,
+        sample_hybrid_rir_scene,
+    )
+
+    cfg = HybridRIRConfig()
+    for seed in range(60):
+        scene = sample_hybrid_rir_scene(cfg, seed=seed)
+        assert scene.rt60 >= _min_feasible_rt60(np.asarray(scene.room_dim)) - 1e-9
+        for d3, label in zip(scene.source_distances(), scene.source_labels):
+            if label.startswith("near"):
+                lo, hi = cfg.near_distance_range
+                assert lo - 1e-6 <= d3 <= hi + 1e-6, (label, d3)
+            else:
+                assert d3 <= cfg.far_distance_range[1] + 1e-6, (label, d3)

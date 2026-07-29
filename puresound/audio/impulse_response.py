@@ -74,6 +74,13 @@ def wav_apply_rir(
     # rir_modes get the same scale factor for the same source RIR — keeping
     # clean_target (early) and noisy_speech (full) at the same direct-path
     # level (only late-reverb energy differs).
+    #
+    # SIDE EFFECT (level-cue removal): bank RIRs carry a 1/r distance gain on
+    # disk with inter-channel ratios intact, but this per-channel normalization
+    # discards them — mixtures do NOT inherit a distance level law; only DRR /
+    # decay shape / spectral tilt distinguish near from far. The recipes' SIR
+    # handling assumes this. Change it and every level-related assumption
+    # (mix_mode 'physical', hard-SIR ranges) changes with it.
     peak = impaulse.abs().max()
     if peak > 1e-12:
         impaulse = impaulse / peak

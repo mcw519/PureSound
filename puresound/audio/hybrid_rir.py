@@ -16,6 +16,8 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Optional, Protocol
 
+import warnings
+
 import numpy as np
 import torch
 import torchaudio
@@ -540,6 +542,17 @@ class PyroomacousticsHighFrequencyBackend:
                 float(scene.rt60), list(scene.room_dim)
             )
         except Exception:
+            # Scene rt60s are clamped to the Sabine-feasible minimum at sampling
+            # time (_min_feasible_rt60), so this is a safety net for externally
+            # constructed scenes. It changes the realized reverberation away
+            # from scene.rt60 -- say so instead of diverging silently.
+            warnings.warn(
+                f"inverse_sabine failed for rt60={scene.rt60:.3f}s in room "
+                f"{np.round(scene.room_dim, 2).tolist()}; falling back to "
+                f"absorption={self.absorption} (metadata rt60 no longer matches)",
+                RuntimeWarning,
+                stacklevel=2,
+            )
             return float(self.absorption), int(self.max_order)
         e_absorption = float(np.clip(e_absorption, 1e-3, 1.0))
         order = int(min(int(needed_order), int(self.max_order)))
@@ -601,6 +614,22 @@ class PyroomacousticsHighFrequencyBackend:
         return apply_obstacle_high_frequency_effects(rir, scene, config)
 
 
+def _min_feasible_rt60(room_dim: np.ndarray, sound_speed: float = 343.0) -> float:
+    """Shortest RT60 Sabine allows for this room (absorption capped at 0.99).
+
+    Below this value ``pra.inverse_sabine`` needs an absorption coefficient
+    above 1 and raises; the high band would silently fall back to a fixed
+    absorption while the metadata kept the impossible request. Clamping at
+    sampling time keeps the recorded rt60 equal to the realized one for both
+    bands (the low band imposes whatever envelope it is told).
+    """
+    lx, ly, lz = (float(v) for v in room_dim)
+    volume = lx * ly * lz
+    surface = 2.0 * (lx * ly + lx * lz + ly * lz)
+    sabine_coeff = 24.0 * np.log(10.0) / sound_speed
+    return float(sabine_coeff * volume / (surface * 0.99))
+
+
 def sample_hybrid_rir_scene(
     config: HybridRIRConfig,
     seed: Optional[int] = None,
@@ -611,7 +640,10 @@ def sample_hybrid_rir_scene(
         [rng.uniform(low, high) for low, high in config.room_dim_range],
         dtype=np.float64,
     )
-    rt60 = float(rng.uniform(*config.rt60_range))
+    rt60 = max(
+        float(rng.uniform(*config.rt60_range)),
+        _min_feasible_rt60(room_dim, config.sound_speed),
+    )
     mic_pos = _sample_point(
         room_dim,
         config.mic_margin,
@@ -1186,20 +1218,49 @@ def _sample_source_in_horizontal_shell(
     height_range: tuple[float, float],
     rng: np.random.Generator,
 ) -> np.ndarray:
+    """Place a source whose 3D mic distance falls in [min_dist, max_dist].
+
+    The distance constrained here is the same quantity written to the bank's
+    ``channel_map["distance_m"]`` and consumed by training labels and the
+    real-bank d0 split, so near/far membership is decided on the true
+    source-receiver distance. (Historically only the floor projection was
+    constrained, which let a "near" source at 0.35 m horizontal sit > 1 m away
+    in 3D once the height offset was counted.)
+
+    Per attempt: draw the target 3D distance, then a height whose vertical
+    offset does not exceed it, then derive the horizontal radius. When room
+    margins or the height ranges make the shell unreachable, fall back to the
+    closest achievable placement toward the farthest corner (mirroring the
+    documented room-size clamping of the far shell).
+    """
     lower = np.full(3, float(margin), dtype=np.float64)
     upper = np.maximum(room_dim - float(margin), lower + 0.01)
+    z_lo = max(float(margin), float(min(height_range)))
+    z_hi = max(z_lo, min(float(room_dim[2]) - float(margin), float(max(height_range))))
+    mic_z = float(mic_pos[2])
     for _ in range(512):
-        radius = float(rng.uniform(min_dist, max_dist))
+        target = float(rng.uniform(min_dist, max_dist))
+        # height compatible with the target 3D distance
+        zc_lo = max(z_lo, mic_z - target)
+        zc_hi = min(z_hi, mic_z + target)
+        if zc_lo > zc_hi:
+            continue
+        z = float(rng.uniform(zc_lo, zc_hi))
+        dz = z - mic_z
+        radius = float(np.sqrt(max(target * target - dz * dz, 0.0)))
         direction = rng.normal(size=2)
         norm = float(np.linalg.norm(direction))
         if norm < 1e-12:
             continue
         point = np.asarray(mic_pos, dtype=np.float64).copy()
         point[:2] = mic_pos[:2] + direction / norm * radius
-        point[2] = _sample_height(room_dim, margin, height_range, rng)
+        point[2] = z
         if np.all(point >= lower) and np.all(point <= upper):
             return point
 
+    # Fallback: closest achievable 3D distance, walking toward the farthest corner.
+    z = float(np.clip(mic_z, z_lo, z_hi))
+    dz = z - mic_z
     corners = np.array(
         [
             [x, y]
@@ -1211,10 +1272,11 @@ def _sample_source_in_horizontal_shell(
     spans = np.linalg.norm(corners - mic_pos[None, :2], axis=1)
     corner_xy = corners[int(np.argmax(spans))]
     span = max(float(spans.max()), 1e-9)
-    radius = float(np.clip(rng.uniform(min_dist, max_dist), 0.0, span))
+    target = float(np.clip(rng.uniform(min_dist, max_dist), abs(dz), None))
+    radius = float(np.clip(np.sqrt(max(target * target - dz * dz, 0.0)), 0.0, span))
     point = np.asarray(mic_pos, dtype=np.float64).copy()
     point[:2] = mic_pos[:2] + (corner_xy - mic_pos[:2]) / span * radius
-    point[2] = _sample_height(room_dim, margin, height_range, rng)
+    point[2] = z
     return point
 
 

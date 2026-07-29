@@ -35,6 +35,7 @@ from puresound.audio.hybrid_rir import (
     PyroomacousticsHighFrequencyBackend,
     _distance_point_to_polygon,
     _max_room_horizontal_distance_from_point,
+    _min_feasible_rt60,
     _sample_point,
     _sample_source_in_horizontal_shell,
     generate_hybrid_rir,
@@ -319,7 +320,10 @@ def _sample_room_geometry(config, rng):
         [rng.uniform(low, high) for low, high in config.room_dim_range],
         dtype=np.float64,
     )
-    rt60 = float(rng.uniform(*config.rt60_range))
+    rt60 = max(
+        float(rng.uniform(*config.rt60_range)),
+        _min_feasible_rt60(room_dim, config.sound_speed),
+    )
     obstacles = sample_polygon_obstacles(
         room_dim=room_dim,
         protected_points=[],

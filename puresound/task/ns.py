@@ -151,8 +151,10 @@ class NoiseSuppressionDataset(DynamicBaseDataset):
             interfered_speech.append(_speech)
 
         # Some interferers become "media-device" speech (TV / loudspeaker
-        # playback): band-limited + lightly compressed before its RIR, and
-        # placed wall-adjacent by the room simulator (source_role="media").
+        # playback): band-limited + lightly compressed before its RIR. With a
+        # pre-generated bank the "media" role draws from the same far pool as a
+        # plain interferer; only the on-the-fly room simulator places media
+        # sources wall-adjacent.
         media_cfg = self.augmentation_speech_args.get("media_voice")
         media_flags = [
             bool(
@@ -415,11 +417,15 @@ class NoiseSuppressionDataset(DynamicBaseDataset):
             noisy_speech = noisy_speech - target_in_mix
             target_speech = torch.zeros_like(target_speech)
 
-        # Residual TTS-playback echo (plan section 9.5 stage 5): the robot's own
-        # loudspeaker leaks into the mic. Modeled as another utterance through a
-        # near-field RIR from the same room, added at the residual level an
-        # upstream AEC would leave (erle_db_range below the mixture). Never in
-        # the target; requires source-level reverb for its own RIR.
+        # Residual playback echo: the device's own loudspeaker leaks into the
+        # mic. Modeled as another utterance through a channel of the same room,
+        # added at the residual level an upstream AEC would leave
+        # (erle_db_range below the mixture). Never in the target; requires
+        # source-level reverb for its own RIR. NOTE: with a pre-generated bank
+        # the channel comes from the FAR pool (distance_range_override cannot
+        # be honored there; the bank picks the far channel closest to the
+        # requested band); a true near-field echo channel needs the on-the-fly
+        # simulator.
         echo_cfg = (
             self.augmentation_speech_args.get("echo_playback")
             if self.augmentation_speech_args
@@ -474,9 +480,11 @@ class NoiseSuppressionDataset(DynamicBaseDataset):
             and self.augmentation_speed_args["used"]
             and torch.rand(1) < self.augmentation_speed_args["prob"]
         ):
+            # include the range top: a bare arange(lo, hi, step) excludes hi,
+            # which silently removed the speed-up half of the perturbation
             speed = torch.arange(
                 self.augmentation_speed_args["speed_range"][0],
-                self.augmentation_speed_args["speed_range"][1],
+                self.augmentation_speed_args["speed_range"][1] + 0.025,
                 0.05,
             )
             speed = random.choice(speed)
@@ -691,17 +699,17 @@ class NoiseSuppressionDataset(DynamicBaseDataset):
             min_quantile = None
             max_quantile = None
             if torch.rand(1) < self.augmentation_volume_args["clipping_prob"]:
-                min = torch.FloatTensor(1).uniform_(
+                min_q = torch.FloatTensor(1).uniform_(
                     self.augmentation_volume_args["clipping_range"]["min"][0],
                     self.augmentation_volume_args["clipping_range"]["min"][1],
                 )
-                max = torch.FloatTensor(1).uniform_(
+                max_q = torch.FloatTensor(1).uniform_(
                     self.augmentation_volume_args["clipping_range"]["max"][0],
                     self.augmentation_volume_args["clipping_range"]["max"][1],
                 )
                 noisy_speech, (min_quantile, max_quantile) = (
                     self.augmentor.apply_clipping_distortion(
-                        wav=noisy_speech, min_quantile=min, max_quantile=max
+                        wav=noisy_speech, min_quantile=min_q, max_quantile=max_q
                     )
                 )
                 target_speech, (_, _) = self.augmentor.apply_clipping_distortion(
@@ -775,6 +783,20 @@ class NoiseSuppressionDataset(DynamicBaseDataset):
                 packet_ms=int(packet_ms),
                 loss_rate=loss_rate,
             )
+
+        # Final overload guard. The earlier avoid_audio_clipping runs before
+        # noise / volume / IIR, any of which can push the mixture past +-1
+        # while the model's output is clamped to [-1, 1] -- rescale noisy and
+        # target together (and the noise bookkeeping) so the pair stays
+        # consistent and inside the representable range.
+        peak = float(
+            torch.maximum(noisy_speech.abs().amax(), target_speech.abs().amax())
+        )
+        if peak > 1.0:
+            noisy_speech = noisy_speech / peak
+            target_speech = target_speech / peak
+            if added_noise is not None:
+                added_noise = added_noise / peak
 
         # Snipts to training target sample length
         noisy_speech = noisy_speech[

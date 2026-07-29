@@ -14,7 +14,7 @@ RNG, so plain noise-suppression recipes regenerate bit-identically):
 |---|---|
 | `augmentation_realfar` | far interferers are **finished loudspeaker→air→mic recordings** from a pool manifest, inserted with no RIR applied (a convolved far channel only carries the LTI part of a capture chain). `prob` = share of items; `lone_far_prob` = share with no near speaker (target = silence, the absolute "lone far voice = suppress" example); `turn_taking_prob` = row-level rate. |
 | `augmentation_realnear` | foreground is a **genuine close-mic recording** (target = itself), interferers preferentially from the same room and never the same speaker — real speech on the KEEP side of the same mixtures whose far side is real, so the boundary stays on proximity cues instead of capture-chain identity. |
-| `augmentation_speech.mix_mode` | explicit foreground/interferer level relationships: `physical` sums at natural post-RIR levels (the DRR/proximity cue survives); rescale modes draw a mode-specific SIR range. Real-far rows skip it (a simulated-near vs real-far level ratio is not physical). |
+| `augmentation_speech.mix_mode` | explicit foreground/interferer level relationships: `physical` sums without rescaling — in practice a near-0 dB ratio, because sources are RMS-normalized and RIRs peak-normalized per channel, so the surviving distance cues are DRR / tail shape / tilt, not level; rescale modes draw a mode-specific SIR range. Real-far rows skip it (a simulated-near vs real-far level ratio is not physical). |
 
 Pool manifests are one JSON object per line
 (`wav_path` / `distance_m` / `room` / `speaker`), built by

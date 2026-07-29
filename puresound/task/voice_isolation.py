@@ -83,8 +83,10 @@ class VoiceIsolationDataset(NoiseSuppressionDataset):
       "lone far voice = suppress" decision while near speech stays elsewhere in
       the row.
     * **mix_mode** -- explicit foreground/interferer level relationships
-      ('physical' preserves the natural post-RIR ratio so the DRR/proximity cue
-      survives; rescale modes draw a mode-specific SIR range).
+      ('physical' sums without rescaling -- a near-0 dB ratio in practice, since
+      per-channel RIR peak normalization removes the 1/r level cue; the distance
+      information that survives is DRR / tail shape / tilt. Rescale modes draw a
+      mode-specific SIR range).
 
     It also emits the task's scalar labels (DRR separability, distances,
     target-present flags, background-speech activity) for auxiliary heads.
@@ -292,11 +294,14 @@ class VoiceIsolationDataset(NoiseSuppressionDataset):
 
     def _mix_foreground_with_interferers(self, fg_wav, interfered_speech, plan):
         # mix_mode replaces the single hard SIR draw with explicit level
-        # relationships: 'physical' keeps the natural post-RIR ratio so the
-        # real DRR/proximity cue survives; the rescale modes draw a
-        # mode-specific SIR range. Real-far rows skip it -- the synthetic-near
-        # vs real-recorded-far level ratio is not physically meaningful, so
-        # they use the controlled hard SIR draw instead.
+        # relationships. NOTE on 'physical': it applies no additional rescale,
+        # but it does NOT deliver a 1/r level law -- sources are RMS-normalized
+        # at load and every RIR is peak-normalized per channel at convolution
+        # time (wav_apply_rir), so the summed ratio lands near 0 dB and the
+        # surviving distance cues are DRR / tail shape / spectral tilt, not
+        # level. The rescale modes draw a mode-specific SIR range. Real-far
+        # rows skip mix_mode -- the simulated-near vs real-recorded-far level
+        # ratio is not physically meaningful -- and use the hard SIR draw.
         mm_cfg = (self.augmentation_speech_args or {}).get("mix_mode")
         if not (mm_cfg and mm_cfg.get("used", False) and not plan.use_realfar):
             return super()._mix_foreground_with_interferers(fg_wav, interfered_speech, plan)
@@ -324,8 +329,10 @@ class VoiceIsolationDataset(NoiseSuppressionDataset):
         """Pick one foreground/interferer mixing mode by its prob weight.
 
         Modes come from ``augmentation_speech.mix_mode.modes``: a ``physical``
-        mode keeps the natural post-RIR level ratio, the others carry an
-        explicit ``sir_range``. Probs need not sum to 1.
+        mode sums the post-RIR signals without rescaling (which, given the
+        per-source RMS normalization and per-channel RIR peak normalization,
+        yields a near-0 dB ratio -- see _mix_foreground_with_interferers); the
+        others carry an explicit ``sir_range``. Probs need not sum to 1.
         """
         modes = mm_cfg.get("modes") or []
         if not modes:

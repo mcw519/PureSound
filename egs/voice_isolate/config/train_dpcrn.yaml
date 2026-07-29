@@ -82,10 +82,11 @@ augmentation_speech:
       - 0.50
       - 0.80
     fade_samples: 400
-  mix_mode:           # foreground/interferer level relationship (N+F rows only):
-    used: True        # keep the natural physical cue most of the time, stress the rest.
-    modes:
-      # physical: sum at natural post-RIR levels -> real DRR/proximity cue survives.
+  mix_mode:           # foreground/interferer level relationship (N+F rows only).
+    used: True        # NOTE: level is NOT a distance cue anywhere in this pipeline --
+    modes:            # sources are RMS-normalized and RIRs peak-normalized per channel,
+                      # so 'physical' = "no extra rescale" (a near-0 dB ratio); the cues
+                      # that survive are DRR / tail shape / tilt.
       - {name: physical,      prob: 0.5, physical: True}
       # moderate: mild rescale, keeps difficulty without routinely inverting levels.
       - {name: moderate,      prob: 0.3, sir_range: [-3, 6]}
@@ -184,9 +185,9 @@ augmentation_ir_response:
   used: True
   prob: 0.3
 
-augmentation_src:        # random down/up-sample (bandwidth variation)
-  used: True
-  prob: 0.5
+augmentation_src:        # random down/up-sample (bandwidth variation). The 16000
+  used: True             # entry is a no-op at target_sr 16k, so the effective
+  prob: 0.5              # band-limiting rate is prob * P(8000) = 0.5 * 0.2 = 10%.
   src_range:
     - 8000
     - 16000
