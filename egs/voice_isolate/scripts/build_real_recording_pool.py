@@ -25,7 +25,7 @@ Manifest line schema (one JSON object per line):
     }
 
 Usage (from repo root):
-    uv run python egs/voice_isolate/scripts/build_realfar_pool.py \
+    uv run python egs/voice_isolate/scripts/build_real_recording_pool.py \
         --voices-root /work/any_exp_link/puresound_exp/real_e2e_corpora/voices/VOiCES_rebuilt \
         --split train --min-distance 1.0 \
         --out egs/voice_isolate/data/realfar_pool/voices.train.jsonl
@@ -46,7 +46,7 @@ from pathlib import Path
 # Reuse the probe's filename parser (room / speaker / mic / loc) so the parsing
 # can never drift between the measurement (probe) and the training pool.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from probe_retransmitted_farfield import FNAME_RE  # noqa: E402
+from eval_far_suppression import VOICES_FNAME_RE as FNAME_RE  # noqa: E402
 
 DIST_BUCKETS = [(0.0, 1.0), (1.0, 2.0), (2.0, 3.0), (3.0, 5.0), (5.0, 99.0)]
 INCHES_TO_M = 0.0254

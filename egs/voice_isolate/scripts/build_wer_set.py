@@ -6,10 +6,10 @@ convolved with the same room's FAR channels (>1.5m). Plus DNS5 noise. All real a
 
 Freezes per item: <id>_mix.wav, <id>_ref.wav (near-reverbed foreground = the speaker we
 want to keep), and manifest.jsonl with the REAL transcript + scene metadata. WER ground
-truth is the LibriTTS transcript (NOT whisper) -> reliable. eval_but_wer.py scores a model.
+truth is the LibriTTS transcript (NOT whisper) -> reliable. eval_wer.py scores a model.
 
 Usage:
-    uv run python scripts/build_but_wer_set.py --n-items 200 \
+    uv run python scripts/build_wer_set.py --n-items 200 \
         --out data_report/but_wer_set --seed 1234
 """
 from __future__ import annotations

@@ -90,7 +90,7 @@ augmentation_realfar:
                         # the deletion blow-up synthetic lone-far caused (NEXT_STEPS 07-07);
                         # guarded by the Dawn/BUT deletion hard gate downstream.
   # VOiCES train pool: 149,814 real distant recordings, 200 speakers, 4 rooms, 1.47-10.34m,
-  # distractor=none (clean lone far voice). Built by scripts/build_realfar_pool.py.
+  # distractor=none (clean lone far voice). Built by scripts/build_real_recording_pool.py.
   pool_manifest: data/realfar_pool/voices.train.jsonl
 
 augmentation_noise:

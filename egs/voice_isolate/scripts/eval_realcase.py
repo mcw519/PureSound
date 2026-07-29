@@ -17,14 +17,26 @@ windows.json marks, per clip:
                  leaked into the transcript).
 
 No clean reference / transcript needed -- this is a segment-energy scorecard that
-runs on any harvested real clip. When a case directory also ships a reference
-system's output (``<clip>_qvf22.wav``), both are scored side by side.
+runs on any harvested real clip. When a case directory also ships another system's
+output (``<clip>_qvf22.wav``), it is scored alongside as ``reference``.
+
+With ``--gate`` the model's frame-level gate head is applied to the output as a
+multiplicative gain, adding two more systems (the separator is unchanged by gate
+training, so the mask-only row alone cannot show a gate's effect):
+
+    gate_soft[t] = enhanced[t] * sigmoid(gate_logit[frame(t)])
+    gate_hard[t] = enhanced[t] * (sigmoid(gate_logit[frame(t)]) >= threshold)
 
 Usage (from repo root):
-    uv run python egs/voice_isolate/scripts/eval_realcase_faronly.py \
+    uv run python egs/voice_isolate/scripts/eval_realcase.py \
         egs/voice_isolate/config/infer_dpcrn.yaml \
-        --ckpt egs/voice_isolate/pretrained_ckpt/dpcrn_v6.ckpt \
+        --ckpt egs/voice_isolate/pretrained_ckpt/dpcrn_v7.ckpt --dry-blend 0.9 \
         --cases-dir egs/voice_isolate/data_report/qvf22_real_cases --device cpu
+
+    # gate checkpoint: pass a config whose backbone has vad_head enabled
+    uv run python egs/voice_isolate/scripts/eval_realcase.py \
+        egs/voice_isolate/config/exp/train_dpcrn_gate.yaml \
+        --ckpt <gate ckpt> --gate --gate-threshold 0.5
 """
 
 from __future__ import annotations
@@ -48,23 +60,25 @@ KEEP_VIOLATION_DB = -3.0    # keep-span preservation below this = user/foregroun
 
 
 def load_model(config_path: str, ckpt_path: str, device: torch.device) -> torch.nn.Module:
-    (
-        _corpus_dict,
-        _trainer_dict,
-        _optim_dict,
-        _scheduler_dict,
-        _loss_dict,
-        model_dict,
-        *_rest,
-    ) = load_siso_recipe_config(config_path)
-    model = init_siso_model(model_dict)
+    model = init_siso_model(load_siso_recipe_config(config_path)[5])
     checkpoint = torch.load(ckpt_path, map_location=device)
     state_dict = checkpoint["state_dict"] if isinstance(checkpoint, dict) and "state_dict" in checkpoint else checkpoint
     if hasattr(model, "reload_checkpoint"):
-        model.reload_checkpoint(state_dict)
+        model.reload_checkpoint(state_dict, load_loss_func=False)
     else:
         model.load_state_dict(state_dict)
     return model.to(device).eval()
+
+
+def gate_gain(logits: torch.Tensor, n_samples: int, hop: int, threshold: float | None) -> torch.Tensor:
+    """Upsample per-frame gate logits to a sample-rate multiplicative gain in [0,1]."""
+    prob = torch.sigmoid(logits.reshape(-1).float())
+    if threshold is not None:
+        prob = (prob >= threshold).float()
+    gain = prob.repeat_interleave(hop)
+    if gain.shape[-1] < n_samples:
+        gain = torch.cat([gain, gain[-1:].expand(n_samples - gain.shape[-1])])
+    return gain[:n_samples].view(1, -1)
 
 
 def window_power_db(processed: torch.Tensor, raw: torch.Tensor, spans, sr: int) -> float:
@@ -93,6 +107,11 @@ def main() -> None:
                         help="inference over-suppression relief: enh*b + mix*(1-b)")
     parser.add_argument("--spec-floor", type=float, default=0.0,
                         help="clamp enhanced |bin| to >= floor * |mix bin|")
+    parser.add_argument("--gate", action="store_true",
+                        help="also score the output multiplied by the frame-level gate head")
+    parser.add_argument("--gate-threshold", type=float, default=0.5,
+                        help="hard-gate threshold on the gate probability")
+    parser.add_argument("--hop", type=int, default=160, help="gate frame hop in samples")
     args = parser.parse_args()
 
     device = torch.device(args.device)
@@ -104,10 +123,10 @@ def main() -> None:
 
     header = ["clip", "role", "system", "keep_preserv_dB", "suppress_reduc_dB", "verdict"]
     print("\t".join(header))
-    fails = {"ours": [], "qvf22": []}
+    fails: dict[str, list[str]] = {}
     for clip, spec in windows.items():
         raw_path = cases_dir / f"{clip}_raw.wav"
-        qvf22_path = cases_dir / f"{clip}_qvf22.wav"
+        reference_path = cases_dir / f"{clip}_qvf22.wav"
         if not raw_path.is_file():
             print(f"# skip {clip}: missing {raw_path.name}")
             continue
@@ -117,11 +136,19 @@ def main() -> None:
         with torch.no_grad():
             ours = model(raw_wav.to(device), dry_blend=args.dry_blend,
                          spec_floor=args.spec_floor).detach().cpu().view(1, -1).clamp(min=-1.0, max=1.0)
+            logits = getattr(model.backbone, "last_vad_logits", None)
 
         systems = {"ours": ours}
-        if qvf22_path.is_file():
-            qvf22_wav, _ = AudioIO.open(f_path=str(qvf22_path), target_lvl=None, resample_to=16000)
-            systems["qvf22"] = qvf22_wav.view(1, -1)
+        if args.gate:
+            if logits is None:
+                raise RuntimeError("--gate needs a backbone with vad_head enabled (see config/exp/train_dpcrn_gate.yaml)")
+            logits = logits.detach().cpu()
+            n = ours.shape[-1]
+            systems["gate_soft"] = (ours * gate_gain(logits, n, args.hop, None)).clamp(-1.0, 1.0)
+            systems["gate_hard"] = (ours * gate_gain(logits, n, args.hop, args.gate_threshold)).clamp(-1.0, 1.0)
+        if reference_path.is_file():
+            reference_wav, _ = AudioIO.open(f_path=str(reference_path), target_lvl=None, resample_to=16000)
+            systems["reference"] = reference_wav.view(1, -1)
 
         keep_spans = spec.get("keep", [])
         supp_spans = spec.get("suppress", [])
@@ -132,10 +159,11 @@ def main() -> None:
             flags = []
             if keep == keep and keep < KEEP_VIOLATION_DB:  # not NaN and too suppressed
                 flags.append("KEEP-VIOLATION")
-                fails[sysname].append(f"{clip}:keep")
+                fails.setdefault(sysname, []).append(f"{clip}:keep")
             if supp == supp and supp > SUPPRESS_FAIL_DB:
                 flags.append("SUPPRESS-FAIL")
-                fails[sysname].append(f"{clip}:suppress")
+                fails.setdefault(sysname, []).append(f"{clip}:suppress")
+            fails.setdefault(sysname, [])
             verdict = ",".join(flags) if flags else "ok"
             ks = f"{keep:8.2f}" if keep == keep else "     n/a"
             ss = f"{supp:8.2f}" if supp == supp else "     n/a"
@@ -144,10 +172,8 @@ def main() -> None:
     print()
     print(f"# keep-span preservation should be ~0 dB; < {KEEP_VIOLATION_DB} dB = KEEP-VIOLATION (bot goes deaf to a user)")
     print(f"# suppress-span reduction should be very negative; > {SUPPRESS_FAIL_DB} dB = SUPPRESS-FAIL (non-user voice leaks)")
-    for sysname in ("ours", "qvf22"):
-        if sysname in fails:
-            f = fails[sysname]
-            print(f"# {sysname}: {'PASS (all clips voicebot-correct)' if not f else 'FAIL -> ' + ', '.join(f)}")
+    for sysname, f in fails.items():
+        print(f"# {sysname}: {'PASS (all clips correct)' if not f else 'FAIL -> ' + ', '.join(f)}")
 
 
 if __name__ == "__main__":

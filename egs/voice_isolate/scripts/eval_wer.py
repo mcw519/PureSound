@@ -7,7 +7,7 @@ mix transcripts are cached (model-independent) so re-runs only transcribe enhanc
 
 Usage (ASR backend is switchable via --asr):
     # local whisper (default): faster-whisper > openai-whisper
-    uv run python scripts/eval_but_wer.py config/exp/train_dpcrn_curriculum_expand.yaml \
+    uv run python scripts/eval_wer.py config/exp/train_dpcrn_curriculum_expand.yaml \
         --ckpt <ckpt> --set-dir data_report/but_wer_set --device cuda --asr-model small
     # stronger local recognizer (lowers the reverb floor; GPU recommended)
     ... --asr faster-whisper --asr-model large-v3

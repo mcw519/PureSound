@@ -81,7 +81,7 @@ class NoiseSuppressionDataset(DynamicBaseDataset):
 
     def _load_real_pool(self, cfg: Optional[Dict]) -> List[Dict]:
         """Load a real-recording pool manifest (one JSON object per line; see
-        egs/voice_isolate/scripts/build_realfar_pool.py). Returns [] when the
+        egs/voice_isolate/scripts/build_real_recording_pool.py). Returns [] when the
         block is absent/disabled so the __getitem__ branches are no-ops and
         existing recipes stay bit-identical."""
         if not (cfg and cfg.get("used")):

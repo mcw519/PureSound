@@ -2,8 +2,8 @@
 
 The gate recipe freezes a pretrained separator and optimizes ONLY the causal
 near-field VAD gate head with VADHeadBCELoss. The
-mask path never changes, so enhanced-energy scorecards (eval_turntaking_set.py /
-eval_realcase_faronly.py) cannot show gate progress. This script instead reads the
+mask path never changes, so enhanced-energy scorecards (eval_turntaking.py /
+eval_realcase.py) cannot show gate progress. This script instead reads the
 gate logits (backbone.last_vad_logits) directly and scores them against vad_target:
 
   * KEEP recall (TPR on near-active frames)   -- gate should stay ON for the user.
@@ -18,7 +18,7 @@ This is a SYNTHETIC in-domain smoke test (pipeline validation), not evidence of
 transfer to end-to-end real recordings.
 
 Usage (from the recipe dir egs/voice_isolate):
-    uv run python scripts/eval_gate_vad.py config/exp/train_dpcrn_gate.yaml \
+    uv run python scripts/eval_gate.py config/exp/train_dpcrn_gate.yaml \
         --ckpt exp/dpcrn_gate_synth/lightning_logs/version_0/checkpoints/epoch=1-step=500.ckpt \
         --device cuda --n-batches 40
 """
@@ -79,7 +79,10 @@ def main() -> None:
         aug_packet_loss,
         aug_target_absent,
         vad_label,
+        *rest,  # absorb recipe-tuple growth (new augmentation blocks append)
     ) = load_siso_recipe_config(config_path)
+    aug_realfar = rest[0] if len(rest) > 0 else None
+    aug_realnear = rest[1] if len(rest) > 1 else None
 
     corpus["training_length_seconds"] = args.seconds
     trainer.update(
@@ -106,6 +109,8 @@ def main() -> None:
         aug_packet_loss,
         aug_target_absent,
         vad_label,
+        aug_realfar,
+        aug_realnear,
     )
 
     model = init_siso_model(model_dict)

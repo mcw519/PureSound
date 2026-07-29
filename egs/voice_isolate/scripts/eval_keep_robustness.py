@@ -14,7 +14,7 @@ spans of the input; keep-correct behaviour is ~0 dB everywhere. A steep ladder =
 channel-signature anchoring; a channel-robust model keeps the ladder flat.
 
 Usage (from repo root):
-    uv run python egs/voice_isolate/scripts/probe_channel_keep.py \
+    uv run python egs/voice_isolate/scripts/eval_keep_robustness.py \
         egs/voice_isolate/config/infer_dpcrn.yaml \
         --ckpt wide-ep19=egs/voice_isolate/pretrained_ckpt/dpcrn_v6.ckpt \
         --ckpt realE2E-ep19=... [--ckpt tag=path ...] \
@@ -37,7 +37,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from probe_retransmitted_farfield import (  # noqa: E402
+from eval_far_suppression import (  # noqa: E402
     active_spans,
     load_model,
     quantiles,

@@ -85,7 +85,7 @@ enhanced frame with the input frame delayed by `streaming_delay_frames`; it adds
 
 Before the pipeline above: TS-Conformer (mapping-head) runs plateaued near passthrough on hard
 near/far cases (`mix_mode` curriculum helped but couldn't break through; an explicit far-decoder branch
-(P1) didn't help either). An `overfit_sanity.py` capacity test isolated the cause to the backbone, not
+(P1) didn't help either). An `overfit_check.py` capacity test isolated the cause to the backbone, not
 the data/loss — TS-Conformer couldn't overfit the hardest batches (enh→target stuck at −2.2 dB) while
 DPARN/DPCRN could (+4–5 dB). Switching to DPCRN (complex ratio mask) immediately cleared every
 in-domain bucket. A subsequent cold-start-on-full-RIR-bank + `target_absent` combination caused a real-domain
@@ -97,14 +97,14 @@ graded RIR curriculum with `target_absent: OFF`. Superseded configs for all of t
 
 Tools + usage: `scripts/README.md`.
 
-- **Primary (synthetic, in-domain):** `scripts/indomain_sisdri.py --by-bucket` (or `run_valid.sh`).
+- **Primary (synthetic, in-domain):** `scripts/eval_indomain.py --by-bucket` (or `check_training_run.sh`).
   SI-SDRi vs the early-reverb target; read the hard buckets (counter_level / 1N+0F / overlap), not the
   aggregate.
 - **Real acoustics, deployment-reverb (rt60 0.44):** `config/exp/eval_but_real.yaml`'s sibling set built at
   a moderate RT60 — WER **0.723→0.487 (−32%)**, do-no-harm confirmed. This is the domain the product
   actually ships into.
-- **Real acoustics, extreme OOD (BUT real-RIR, rt60 1.15–1.84):** `scripts/build_but_wer_set.py` (build
-  once) → `scripts/eval_but_wer.py` (SI-SDRi + WER vs real LibriTTS transcripts), config
+- **Real acoustics, extreme OOD (BUT real-RIR, rt60 1.15–1.84):** `scripts/build_wer_set.py` (build
+  once) → `scripts/eval_wer.py` (SI-SDRi + WER vs real LibriTTS transcripts), config
   `config/exp/eval_but_real.yaml`. Deliberately harder than training; tracks how far over-suppression is an
   OOD-reverb phenomenon (it is — see above).
 - **Unseen-room generalization:** `config/exp/eval_heldout.yaml` (seed-2026 disjoint room bank, same

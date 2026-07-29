@@ -23,7 +23,7 @@
 #   * noise corpus .......... augmentation_noise.noise_folder
 #   * RIR bank .............. augmentation_reverb.simulator.pregenerated.folder
 #                             (built by egs/rir_generation)
-#   * real recording pools .. scripts/build_realfar_pool.py (far + near manifests)
+#   * real recording pools .. scripts/build_real_recording_pool.py (far + near manifests)
 #
 # Run from the repository root, warm-starting from an existing separator:
 #   uv run python egs/voice_isolate/main.py egs/voice_isolate/config/train_dpcrn.yaml \
@@ -119,7 +119,7 @@ augmentation_realfar:
                         # deepens far suppression roughly linearly but also pushes
                         # deletion up, so it is the main risk knob of this recipe.
   # Far pool: real distant single-speaker recordings, one JSON object per line, built
-  # by scripts/build_realfar_pool.py (the released model used ~150k VOiCES recordings,
+  # by scripts/build_real_recording_pool.py (the released model used ~150k VOiCES recordings,
   # 200 speakers, 4 rooms, 1.5-10.3 m, no competing distractor).
   pool_manifest: data/realfar_pool/voices.train.jsonl
   turn_taking_prob: 0.3   # far-solo stretches inside otherwise normal N+F rows

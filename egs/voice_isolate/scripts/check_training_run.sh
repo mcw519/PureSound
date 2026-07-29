@@ -6,7 +6,7 @@
 # actually separating?" metric) -- then prints a PASS / MARGINAL / FAIL verdict.
 #
 # Usage:
-#   bash scripts/run_valid.sh config/exp/train_dpcrn_wide_antisup.yaml [device] [n_batches] [ckpt]
+#   bash scripts/check_training_run.sh config/exp/train_dpcrn_wide_antisup.yaml [device] [n_batches] [ckpt]
 #     device     : cuda (default) | cpu
 #     n_batches  : in-domain eval batches (default 40)
 #     ckpt       : explicit checkpoint path (default = latest in the run's work_folder)
@@ -16,7 +16,7 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 RECIPE_DIR="$(dirname "$HERE")"            # .../egs/voice_isolate
 cd "$RECIPE_DIR"
 
-CONFIG="${1:?usage: run_valid.sh <config.yaml> [device] [n_batches] [ckpt]}"
+CONFIG="${1:?usage: check_training_run.sh <config.yaml> [device] [n_batches] [ckpt]}"
 DEVICE="${2:-cuda}"
 NB="${3:-40}"
 CKPT_OVERRIDE="${4:-}"
@@ -44,12 +44,12 @@ echo "checkpoint  : $CKPT"
 echo
 
 echo "=========== LOSS CURVES (tensorboard) ==========="
-uv run python scripts/dump_tb.py "$VDIR" --keep valid_step_loss epoch_train_loss --n_samples 12 2>/dev/null \
+uv run python scripts/dump_loss_curves.py "$VDIR" --keep valid_step_loss epoch_train_loss --n_samples 12 2>/dev/null \
   | grep -E "valid_step_loss \(N|epoch_train_loss \(N|step=" | awk '!seen[$0]++' || echo "(no tb scalars yet)"
 echo
 
 echo "=========== IN-DOMAIN SI-SDRi (real separation metric) ==========="
-uv run python scripts/indomain_sisdri.py "$CONFIG" --ckpt "$CKPT" \
+uv run python scripts/eval_indomain.py "$CONFIG" --ckpt "$CKPT" \
   --device "$DEVICE" --n-batches "$NB" --dump-distribution 2>&1 | tee /tmp/_run_valid_out.txt
 echo
 

@@ -96,7 +96,7 @@ augmentation_realfar:
   lone_far_prob: 0.05   # round-2a: 0.08 -> 0.05 (less bare far-suppression pressure;
                         # deletion blow-up lesson from round-1)
   # VOiCES train pool: 149,814 real distant recordings, 200 speakers, 4 rooms, 1.47-10.34m,
-  # distractor=none (clean lone far voice). Built by scripts/build_realfar_pool.py.
+  # distractor=none (clean lone far voice). Built by scripts/build_real_recording_pool.py.
   pool_manifest: data/realfar_pool/voices.train.jsonl
 
 # ROUND-2a CORE: real near-field KEEP rows. Foreground = a genuine VOiCES <1m recording

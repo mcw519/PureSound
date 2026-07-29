@@ -15,7 +15,7 @@ Auto-adapts to query-conditioned vs fixed models: it passes whatever
 ``query_distance`` the dataloader emits (None for the no-query nearfield config).
 
 Usage (from anywhere; CPU by default so it never touches the training GPUs):
-    uv run python egs/voice_isolate/scripts/indomain_sisdri.py \
+    uv run python egs/voice_isolate/scripts/eval_indomain.py \
         egs/voice_isolate/config/exp/train_dpcrn_wide_antisup.yaml \
         --ckpt <ckpt> --n-batches 40 --device cpu
 """

@@ -2,7 +2,7 @@
 # voice_isolate -- DPCRN. EVAL-ONLY far-only/noise-only LEAKAGE PROBE. DO NOT TRAIN with this config.
 # Same `model:` block as all pipeline stages 2-6 -- only difference is augmentation_target_absent
 # forced ON below, so it works as an eval-only overlay for ANY checkpoint in pretrained_ckpt/:
-#   uv run python scripts/indomain_sisdri.py config/exp/eval_targetabsent_probe.yaml \
+#   uv run python scripts/eval_indomain.py config/exp/eval_targetabsent_probe.yaml \
 #     --ckpt pretrained_ckpt/<name>.ckpt --device cuda --n-batches 40 --by-bucket
 # Usage and results: see ../README.md and ../NEXT_STEPS.md ("far-only / noise-only 洩漏測試").
 dataset:
@@ -69,7 +69,7 @@ augmentation_speech:
 # blow-up (Dawn deletion 0.286 / SI-SDRi -9.53). This copy forces prob=1.0 so EVERY eval row has no near
 # speaker (foreground removed, force_interferer keeps a FAR speaker in the mix) -- the "far-only leakage"
 # test: what does a model that has NEVER seen this situation output when nobody is actually near?
-# indomain_sisdri.py --by-bucket reports this as "F-only (silent-target) suppression": median
+# eval_indomain.py --by-bucket reports this as "F-only (silent-target) suppression": median
 # power_reduction_db (more negative = better suppression) + false-near rate (reduction > -6dB = leak).
 # Use with any ep59/w1/w2/w3 checkpoint (identical model architecture across all four).
 augmentation_target_absent:

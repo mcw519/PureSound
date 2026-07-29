@@ -1,4 +1,4 @@
-"""Dump a FROZEN conversational turn-taking (mix, target) test set as wav.
+"""Build a frozen conversational turn-taking (mix, target) test set as wav.
 
 Forces overlap_control.turn_taking_prob=1.0 on the given config so every row is
 a near/far alternating exchange, then saves (mix, target) pairs -- near and far
@@ -10,13 +10,15 @@ during their turns, SUPPRESS the far competitor during its solo stretches.
 A manifest.jsonl is written alongside the wavs (one row per item: turn_taking flag,
 duration, mix/target RMS, target-active ratio) so the set can be scored / filtered.
 
+Scored by eval_turntaking.py.
+
 Usage (from repo root):
-    # small listening dump (original behaviour)
-    uv run python egs/voice_isolate/scripts/dump_turntaking_samples.py \
+    # small listening dump
+    uv run python egs/voice_isolate/scripts/build_turntaking_set.py \
         egs/voice_isolate/config/exp/eval_indomain_phase1.yaml \
         --out-dir data_report/turntaking_samples --n 6
-    # frozen 100-item, ~10 s test set
-    uv run python egs/voice_isolate/scripts/dump_turntaking_samples.py \
+    # frozen 100-item, ~10 s test set (use --rir-folder for a measured-RIR bank)
+    uv run python egs/voice_isolate/scripts/build_turntaking_set.py \
         egs/voice_isolate/config/exp/eval_indomain_phase1.yaml \
         --out-dir /data/audio/eval_noisy_data/turntaking_set \
         --n 100 --length-seconds 10 --seed 2026
@@ -82,7 +84,9 @@ def main() -> None:
 
     cfg = load_siso_recipe_config(str(Path(args.config_path).resolve()))
     (corpus, trainer, _opt, _sch, _loss, _md, a_sp, a_no, a_rv, a_spd,
-     a_ir, a_src, a_hpf, a_vol, a_cod, a_pl, a_ta, a_vad) = cfg
+     a_ir, a_src, a_hpf, a_vol, a_cod, a_pl, a_ta, a_vad, *rest) = cfg
+    a_realfar = rest[0] if len(rest) > 0 else None
+    a_realnear = rest[1] if len(rest) > 1 else None
     trainer["num_workers"] = 0
     if args.length_seconds is not None:
         corpus["training_length_seconds"] = float(args.length_seconds)
@@ -96,7 +100,7 @@ def main() -> None:
     torch.manual_seed(args.seed)
     _tr, valid_dl = M.init_dataloader(
         corpus, trainer, a_sp, a_no, a_rv, a_spd, a_ir, a_src, a_hpf,
-        a_vol, a_cod, a_pl, a_ta, a_vad)
+        a_vol, a_cod, a_pl, a_ta, a_vad, a_realfar, a_realnear)
 
     sr = int(corpus.get("target_sample_rate", 16000))
     out = Path(args.out_dir)

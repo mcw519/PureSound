@@ -1,6 +1,6 @@
 # voice_isolate -- DPCRN. EVAL-ONLY: real BUT ReverbDB RIR benchmark (rt60 1.15-1.84, extreme OOD).
 # Same recipe body as train_dpcrn_curriculum_expand.yaml with the RIR bank swapped to the real BUT bank
-# (built by scripts/build_but_wer_set.py + scripts/eval_but_wer.py). Not for training -- eval-only,
+# (built by scripts/build_wer_set.py + scripts/eval_wer.py). Not for training -- eval-only,
 # reconstructs the augmentation pipeline so any checkpoint in pretrained_ckpt/ can be benchmarked here.
 # Usage and results: see ../README.md and ../EXPERIMENT_LOG.md.
 dataset:
