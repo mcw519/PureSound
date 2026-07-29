@@ -28,7 +28,7 @@ class NoiseSuppressionDataset(DynamicBaseDataset):
         min_utts_in_each_speaker: int = 5,
         target_sr: Optional[int] = None,
         training_sample_length_in_seconds: float = 6.0,
-        audio_gain_nomalized_to: Optional[int] = None,
+        audio_gain_normalized_to: Optional[int] = None,
         augmentation_speech_args: Optional[int] = None,
         augmentation_noise_args: Optional[Dict] = None,
         augmentation_reverb_args: Optional[Dict] = None,
@@ -50,7 +50,7 @@ class NoiseSuppressionDataset(DynamicBaseDataset):
             min_utts_in_each_speaker=min_utts_in_each_speaker,
             target_sr=target_sr,
             training_sample_length_in_seconds=training_sample_length_in_seconds,
-            audio_gain_nomalized_to=audio_gain_nomalized_to,
+            audio_gain_normalized_to=audio_gain_normalized_to,
             augmentation_speech_args=augmentation_speech_args,
             augmentation_noise_args=augmentation_noise_args,
             augmentation_reverb_args=augmentation_reverb_args,
@@ -139,7 +139,7 @@ class NoiseSuppressionDataset(DynamicBaseDataset):
         for p in picks:
             wav, _ = AudioIO.open(
                 f_path=p["wav_path"],
-                target_lvl=self.audio_gain_nomalized_to,
+                target_lvl=self.audio_gain_normalized_to,
                 resample_to=sr,
             )
             wavs.append(wav[0].reshape(1, -1))
@@ -323,7 +323,7 @@ class NoiseSuppressionDataset(DynamicBaseDataset):
             realnear_speaker = near_pick.get("speaker")
             near_wav, _ = AudioIO.open(
                 f_path=near_pick["wav_path"],
-                target_lvl=self.audio_gain_nomalized_to,
+                target_lvl=self.audio_gain_normalized_to,
                 resample_to=if_none_else(self.target_sr, self.ori_audio_sr),
             )
             target_speech = self.align_audio_list(

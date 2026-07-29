@@ -19,7 +19,7 @@ dataset:
   test_folder: data/test
   proc_output_folder: proc
   target_sample_rate: 16000
-  gain_nomalized_to: -28
+  gain_normalized_to: -28
   training_length_seconds: 6.
   filter_min_utterance_length: 2 # 4.
   filter_min_utterance_per_speaker: 1.
@@ -232,7 +232,7 @@ vad_label:
     hop_length: 160
 
 trainer:
-  lighting_trainer_args:
+  lightning_trainer_args:
     max_epochs: 100
     gradient_clip_val: 5.
     accumulate_grad_batches: 2
@@ -356,7 +356,7 @@ loss_func:
       loss: cosine
 
 model:
-  lighting_module:
+  lightning_module:
     type: EncDecMaskBase
     module_args:
       mask_type: complex   # DPCRN emits a complex ratio mask applied to the noisy STFT

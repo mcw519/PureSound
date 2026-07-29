@@ -63,7 +63,7 @@ def init_dataloader(
         min_utts_in_each_speaker=corpus_dict["filter_min_utterance_per_speaker"],
         target_sr=corpus_dict["target_sample_rate"],
         training_sample_length_in_seconds=corpus_dict["training_length_seconds"],
-        audio_gain_nomalized_to=corpus_dict["gain_nomalized_to"],
+        audio_gain_normalized_to=corpus_dict["gain_normalized_to"],
         augmentation_speech_args=aug_speech_dict,
         augmentation_noise_args=aug_noise_dict,
         augmentation_reverb_args=aug_reverb_dict,
@@ -102,7 +102,7 @@ def init_dataloader(
         min_utts_in_each_speaker=corpus_dict["filter_min_utterance_per_speaker"],
         target_sr=corpus_dict["target_sample_rate"],
         training_sample_length_in_seconds=corpus_dict["training_length_seconds"],
-        audio_gain_nomalized_to=corpus_dict["gain_nomalized_to"],
+        audio_gain_normalized_to=corpus_dict["gain_normalized_to"],
         augmentation_speech_args=aug_speech_dict,
         augmentation_noise_args=aug_noise_dict,
         augmentation_reverb_args=aug_reverb_dict,
@@ -257,8 +257,8 @@ if __name__ == "__main__":
         loss_func_list, loss_func_list_w = init_loss_func(hparam_conf=loss_dict)
 
         # PL-Model
-        lighting_model = init_siso_model(model_dict)
-        lighting_model.register_loss_func(loss_func_list, loss_func_list_w)
+        lightning_model = init_siso_model(model_dict)
+        lightning_model.register_loss_func(loss_func_list, loss_func_list_w)
 
         # Silero VAD labels are computed batched on GPU (lifted out of the
         # DataLoader workers); the dataset emits `vad_reference` and the module
@@ -270,18 +270,18 @@ if __name__ == "__main__":
         ):
             from puresound.audio.vad import BatchedSileroVADLabeler
 
-            lighting_model.register_gpu_vad_labeler(
+            lightning_model.register_gpu_vad_labeler(
                 BatchedSileroVADLabeler(**vad_label_dict.get("args", {}))
             )
-        param_groups = lighting_model.get_total_param_groups()
+        param_groups = lightning_model.get_total_param_groups()
         optimizer, scheduler = create_optimizer_and_scheduler(
             overall_params_and_lr_factor=param_groups,
             optimizer_args=optim_dict,
             scheduler_args=scheduler_dict,
         )
-        lighting_model.register_optimizer(optimizer)
-        lighting_model.register_scheduler(scheduler)
-        lighting_model.register_warmup_step(scheduler_dict["warmup_step"])
+        lightning_model.register_optimizer(optimizer)
+        lightning_model.register_scheduler(scheduler)
+        lightning_model.register_warmup_step(scheduler_dict["warmup_step"])
 
         # Loading exists state_dicts
         if args.pretrained_ckpt_path:
@@ -292,7 +292,7 @@ if __name__ == "__main__":
             # strict=False: warm-starting a model that ADDED params (e.g. new aux
             # heads for a curriculum stage) must keep those new params at init
             # rather than error on missing keys. Mismatches are reported.
-            missing, unexpected = lighting_model.load_state_dict(state_dict, strict=False)
+            missing, unexpected = lightning_model.load_state_dict(state_dict, strict=False)
             if missing:
                 print(f"  [pretrained] {len(missing)} new param(s) kept at init: {missing[:4]}{' ...' if len(missing) > 4 else ''}")
             if unexpected:
@@ -327,13 +327,13 @@ if __name__ == "__main__":
         )
         # Precision defaults to full precision (Lightning's 32-true) and is
         # config-driven: to trade a little accuracy for speed/memory, add
-        # `precision: bf16-mixed` under trainer.lighting_trainer_args -- it
+        # `precision: bf16-mixed` under trainer.lightning_trainer_args -- it
         # threads through the spread below. bf16 (not fp16) is preferred for the
         # complex-spectral magnitude/division ops (needs fp32 range, no
         # GradScaler); measured ~1.57x faster steps and ~40% less activation
         # memory on Ampere when enabled.
         trainer = L.Trainer(
-            **trainer_dict["lighting_trainer_args"],
+            **trainer_dict["lightning_trainer_args"],
             accelerator="gpu" if trainer_dict["num_gpus"] > 0 else "cpu",
             devices=trainer_dict["num_gpus"],
             strategy=strategy,
@@ -348,14 +348,14 @@ if __name__ == "__main__":
 
         if args.ckpt_path is not None:
             trainer.fit(
-                lighting_model,
+                lightning_model,
                 train_dataloaders=train_dataloader,
                 val_dataloaders=valid_dataloader,
                 ckpt_path=args.ckpt_path,
             )
         else:
             trainer.fit(
-                lighting_model,
+                lightning_model,
                 train_dataloaders=train_dataloader,
                 val_dataloaders=valid_dataloader,
             )
@@ -376,9 +376,9 @@ if __name__ == "__main__":
         )
         trainer = L.Trainer(inference_mode=True)
         state_dict = torch.load(args.ckpt_path, map_location="cpu")["state_dict"]
-        lighting_model = init_siso_model(model_dict)
-        lighting_model.reload_checkpoint(state_dict)
-        lighting_model.register_metrics_func(
+        lightning_model = init_siso_model(model_dict)
+        lightning_model.reload_checkpoint(state_dict)
+        lightning_model.register_metrics_func(
             {
                 "pesq_wb": {"func": Metrics.pesq_wb, "sr": 16000},
                 "pesq_nb": {"func": Metrics.pesq_nb, "sr": 8000},
@@ -389,7 +389,7 @@ if __name__ == "__main__":
                 "dnsmos_p835": {"func": Metrics.dnsmos_p835, "sr": 16000},
             }
         )
-        trainer.test(lighting_model, dataloaders=test_dataloader)
+        trainer.test(lightning_model, dataloaders=test_dataloader)
 
     # Stage of inferencing audio only
     if args.inference:
@@ -409,8 +409,8 @@ if __name__ == "__main__":
             inference_mode=True, default_root_dir=corpus_dict["proc_output_folder"]
         )
         state_dict = torch.load(args.ckpt_path, map_location="cpu")["state_dict"]
-        lighting_model = init_siso_model(model_dict)
-        lighting_model.reload_checkpoint(state_dict)
+        lightning_model = init_siso_model(model_dict)
+        lightning_model.reload_checkpoint(state_dict)
         create_folder(corpus_dict["proc_output_folder"])
-        lighting_model.register_proc_output_folder(corpus_dict["proc_output_folder"])
-        trainer.predict(lighting_model, dataloaders=test_dataloader)
+        lightning_model.register_proc_output_folder(corpus_dict["proc_output_folder"])
+        trainer.predict(lightning_model, dataloaders=test_dataloader)

@@ -58,7 +58,7 @@ class AudioIO:
         if normalized:
             if target_lvl is not None and verbose:
                 print(
-                    "You choosed the waveform nomalized, the target_lvl would not be used."
+                    "You choosed the waveform normalized, the target_lvl would not be used."
                 )
                 wav = normalize_waveform(wav=wav, amp_type="avg")
 

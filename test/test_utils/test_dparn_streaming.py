@@ -24,7 +24,7 @@ MINIMAL_DPARN_CONFIG = {
     "scheduler": {"type": "CosineAnnealingWarmRestarts", "args": {"T_0": 20}},
     "loss_func": [],
     "model": {
-        "lighting_module": {
+        "lightning_module": {
             "type": "EncDecMaskBase",
             "module_args": {"mask_type": "complex"},
         },

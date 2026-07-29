@@ -28,7 +28,7 @@ class TargetSpeakerExtractDataset(DynamicBaseDataset):
         target_sr: Optional[int] = None,
         training_sample_length_in_seconds: float = 6.0,
         enroll_speech_args: Optional[Dict] = None,
-        audio_gain_nomalized_to: Optional[int] = None,
+        audio_gain_normalized_to: Optional[int] = None,
         augmentation_speech_args: Optional[int] = None,
         augmentation_noise_args: Optional[Dict] = None,
         augmentation_reverb_args: Optional[Dict] = None,
@@ -45,7 +45,7 @@ class TargetSpeakerExtractDataset(DynamicBaseDataset):
             min_utts_in_each_speaker=min_utts_in_each_speaker,
             target_sr=target_sr,
             training_sample_length_in_seconds=training_sample_length_in_seconds,
-            audio_gain_nomalized_to=audio_gain_nomalized_to,
+            audio_gain_normalized_to=audio_gain_normalized_to,
             augmentation_speech_args=augmentation_speech_args,
             augmentation_noise_args=augmentation_noise_args,
             augmentation_reverb_args=augmentation_reverb_args,
@@ -104,10 +104,10 @@ class TargetSpeakerExtractDataset(DynamicBaseDataset):
             ),
         )[0]
 
-        if self.enroll_speech_args["gain_nomalized_to"]:
+        if self.enroll_speech_args["gain_normalized_to"]:
             enroll_speech = rescale_waveform(
                 enroll_speech,
-                target_lvl=self.enroll_speech_args["gain_nomalized_to"],
+                target_lvl=self.enroll_speech_args["gain_normalized_to"],
                 scale="dB",
             )
 

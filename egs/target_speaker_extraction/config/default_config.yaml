@@ -4,14 +4,14 @@ dataset:
   test_folder: ./eval
   proc_output_folder: ./proc
   target_sample_rate: 16000
-  gain_nomalized_to: -28
+  gain_normalized_to: -28
   training_length_seconds: 6.
   filter_min_utterance_length: 4.
   filter_min_utterance_per_speaker: 5.
 
 enroll_speech:
   enroll_length_seconds: 6
-  gain_nomalized_to: -28
+  gain_normalized_to: -28
   add_inactive_target:
     used: False
     prob: 0.1
@@ -179,7 +179,7 @@ vad_label:
     model_sample_rate: 16000
 
 trainer:
-  lighting_trainer_args:
+  lightning_trainer_args:
     max_epochs: 200
     gradient_clip_val: 1.
     accumulate_grad_batches: 1
@@ -241,7 +241,7 @@ class_loss_func:
       scale: 30
       
 model:
-  lighting_module:
+  lightning_module:
     type: EncDecCondMaskBase
     module_args:
       mask_type: complex

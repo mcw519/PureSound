@@ -12,7 +12,7 @@ def _dataset_args(metafile_path):
         "min_utts_in_each_speaker": 2,
         "target_sr": 16000,
         "training_sample_length_in_seconds": 0.1,
-        "audio_gain_nomalized_to": None,
+        "audio_gain_normalized_to": None,
     }
 
 

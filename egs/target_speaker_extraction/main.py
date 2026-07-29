@@ -104,7 +104,7 @@ def init_dataloader(
         target_sr=corpus_dict["target_sample_rate"],
         training_sample_length_in_seconds=corpus_dict["training_length_seconds"],
         enroll_speech_args=enroll_dict,
-        audio_gain_nomalized_to=corpus_dict["gain_nomalized_to"],
+        audio_gain_normalized_to=corpus_dict["gain_normalized_to"],
         augmentation_speech_args=aug_speech_dict,
         augmentation_noise_args=aug_noise_dict,
         augmentation_reverb_args=aug_reverb_dict,
@@ -139,7 +139,7 @@ def init_dataloader(
         target_sr=corpus_dict["target_sample_rate"],
         training_sample_length_in_seconds=corpus_dict["training_length_seconds"],
         enroll_speech_args=enroll_dict,
-        audio_gain_nomalized_to=corpus_dict["gain_nomalized_to"],
+        audio_gain_normalized_to=corpus_dict["gain_normalized_to"],
         augmentation_speech_args=aug_speech_dict,
         augmentation_noise_args=aug_noise_dict,
         augmentation_reverb_args=aug_reverb_dict,
@@ -171,12 +171,12 @@ def init_dataloader(
 
 
 def init_model(model_dict):
-    lighting_module = getattr(system, model_dict["lighting_module"]["type"])
+    lightning_module = getattr(system, model_dict["lightning_module"]["type"])
 
     encoder = getattr(nnet, model_dict["encoder"]["type"])(
         **model_dict["encoder"]["encoder_args"]
     )
-    if not model_dict["lighting_module"]["module_args"]["siamese_encoder"]:
+    if not model_dict["lightning_module"]["module_args"]["siamese_encoder"]:
         c_encoder = getattr(nnet, model_dict["c_encoder"]["type"])(
             **model_dict["c_encoder"]["encoder_args"]
         )
@@ -191,7 +191,7 @@ def init_model(model_dict):
         model_dict["features"]["peq_module"] = peq_module
 
     feature_encoder = nnet.FeatureEncoder(**model_dict["features"])
-    if not model_dict["lighting_module"]["module_args"]["siamese_encoder"]:
+    if not model_dict["lightning_module"]["module_args"]["siamese_encoder"]:
         c_feature_encoder = nnet.FeatureEncoder(**model_dict["c_features"])
     else:
         c_feature_encoder = None
@@ -203,14 +203,14 @@ def init_model(model_dict):
         **model_dict["c_backbone"]["backbone_args"]
     )
 
-    model = lighting_module(
+    model = lightning_module(
         encoder,
         feature_encoder,
         backbone,
         c_backbone,
         c_encoder=c_encoder,
         c_feats=c_feature_encoder,
-        **model_dict["lighting_module"]["module_args"],
+        **model_dict["lightning_module"]["module_args"],
     )
     return model
 
@@ -352,8 +352,8 @@ if __name__ == "__main__":
             class_loss_func_list, class_loss_func_list_w = None, None
 
         # PL-Model
-        lighting_model = init_model(model_dict)
-        lighting_model.register_loss_func(
+        lightning_model = init_model(model_dict)
+        lightning_model.register_loss_func(
             signal_loss_func_list,
             signal_loss_func_list_w,
             class_loss_func_list,
@@ -362,20 +362,20 @@ if __name__ == "__main__":
 
         # Load pretrained speaker model which trained by puresound framwork
         if model_dict["c_backbone"]["pretrained_ckpt"] is not None:
-            self_state = lighting_model.state_dict()
+            self_state = lightning_model.state_dict()
             loaded_spknet_state = torch.load(
                 model_dict["c_backbone"]["pretrained_ckpt"], map_location="cpu"
             )["state_dict"]
 
             for name, param in loaded_spknet_state.items():
                 if (
-                    not model_dict["lighting_module"]["module_args"]["siamese_encoder"]
+                    not model_dict["lightning_module"]["module_args"]["siamese_encoder"]
                     and "encoder.encoder" in name
                 ):
                     name = name.replace("encoder.encoder", "c_encoder.encoder")
 
                 if (
-                    not model_dict["lighting_module"]["module_args"]["siamese_feats"]
+                    not model_dict["lightning_module"]["module_args"]["siamese_feats"]
                     and "feats" in name
                 ):
                     name = name.replace("feats.", "c_feats.")
@@ -388,15 +388,15 @@ if __name__ == "__main__":
 
                 self_state[name].copy_(param)
 
-        param_groups = lighting_model.get_total_param_groups()
+        param_groups = lightning_model.get_total_param_groups()
         optimizer, scheduler = create_optimizer_and_scheduler(
             overall_params_and_lr_factor=param_groups,
             optimizer_args=optim_dict,
             scheduler_args=scheduler_dict,
         )
-        lighting_model.register_optimizer(optimizer)
-        lighting_model.register_scheduler(scheduler)
-        lighting_model.register_warmup_step(scheduler_dict["warmup_step"])
+        lightning_model.register_optimizer(optimizer)
+        lightning_model.register_scheduler(scheduler)
+        lightning_model.register_warmup_step(scheduler_dict["warmup_step"])
 
         # Loading exists state_dicts
         if args.pretrained_ckpt_path:
@@ -404,7 +404,7 @@ if __name__ == "__main__":
             state_dict = torch.load(args.pretrained_ckpt_path, map_location="cpu")[
                 "state_dict"
             ]
-            lighting_model.load_state_dict(state_dict)
+            lightning_model.load_state_dict(state_dict)
 
         # Callbacks
         lr_monitor = LearningRateMonitor(logging_interval="epoch")
@@ -413,7 +413,7 @@ if __name__ == "__main__":
         )
 
         trainer = L.Trainer(
-            **trainer_dict["lighting_trainer_args"],
+            **trainer_dict["lightning_trainer_args"],
             accelerator="gpu" if trainer_dict["num_gpus"] > 0 else "cpu",
             devices=trainer_dict["num_gpus"],
             limit_train_batches=trainer_dict["train_iter_per_epoch"],
@@ -427,14 +427,14 @@ if __name__ == "__main__":
 
         if args.ckpt_path is not None:
             trainer.fit(
-                lighting_model,
+                lightning_model,
                 train_dataloaders=train_dataloader,
                 val_dataloaders=valid_dataloader,
                 ckpt_path=args.ckpt_path,
             )
         else:
             trainer.fit(
-                lighting_model,
+                lightning_model,
                 train_dataloaders=train_dataloader,
                 val_dataloaders=valid_dataloader,
             )
@@ -456,9 +456,9 @@ if __name__ == "__main__":
         )
         trainer = L.Trainer(inference_mode=True)
         state_dict = torch.load(args.ckpt_path, map_location="cpu")["state_dict"]
-        lighting_model = init_model(model_dict)
-        lighting_model.reload_checkpoint(state_dict)
-        lighting_model.register_metrics_func(
+        lightning_model = init_model(model_dict)
+        lightning_model.reload_checkpoint(state_dict)
+        lightning_model.register_metrics_func(
             {
                 "pesq_wb": {"func": Metrics.pesq_wb, "sr": 16000},
                 "pesq_nb": {"func": Metrics.pesq_nb, "sr": 8000},
@@ -469,7 +469,7 @@ if __name__ == "__main__":
                 "dnsmos_p835": {"func": Metrics.dnsmos_p835, "sr": 16000},
             }
         )
-        trainer.test(lighting_model, dataloaders=test_dataloader)
+        trainer.test(lightning_model, dataloaders=test_dataloader)
 
     # Stage of inferencing audio only
     if args.inference:
@@ -490,8 +490,8 @@ if __name__ == "__main__":
             inference_mode=True, default_root_dir=corpus_dict["proc_output_folder"]
         )
         state_dict = torch.load(args.ckpt_path, map_location="cpu")["state_dict"]
-        lighting_model = init_model(model_dict)
-        lighting_model.reload_checkpoint(state_dict)
+        lightning_model = init_model(model_dict)
+        lightning_model.reload_checkpoint(state_dict)
         create_folder(corpus_dict["proc_output_folder"])
-        lighting_model.register_proc_output_folder(corpus_dict["proc_output_folder"])
-        trainer.predict(lighting_model, dataloaders=test_dataloader)
+        lightning_model.register_proc_output_folder(corpus_dict["proc_output_folder"])
+        trainer.predict(lightning_model, dataloaders=test_dataloader)

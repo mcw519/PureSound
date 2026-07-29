@@ -28,7 +28,7 @@ class KaldiFormBaseDataset(torch.utils.data.Dataset):
         folder,
         resample_to: Optional[int] = None,
         mode: str = "train",
-        audio_gain_nomalized_to: Optional[int] = None,
+        audio_gain_normalized_to: Optional[int] = None,
         split_to_chunks_with_size: Optional[float] = None,
     ):
         super().__init__()
@@ -36,7 +36,7 @@ class KaldiFormBaseDataset(torch.utils.data.Dataset):
         self.resample_to = resample_to
         assert mode.lower() in ["train", "dev", "eval"]
         self.mode = mode.lower()
-        self.audio_gain_nomalized_to = audio_gain_nomalized_to
+        self.audio_gain_normalized_to = audio_gain_normalized_to
         self.split_to_chunks_with_size = split_to_chunks_with_size
 
         # Basic contents
@@ -54,7 +54,7 @@ class KaldiFormBaseDataset(torch.utils.data.Dataset):
         noisy_speech, sr = AudioIO.open(
             f_path=self.df[key]["wav2scp"],
             resample_to=self.resample_to,
-            target_lvl=self.audio_gain_nomalized_to,
+            target_lvl=self.audio_gain_normalized_to,
         )
         noisy_speech = noisy_speech.squeeze()
 
@@ -62,7 +62,7 @@ class KaldiFormBaseDataset(torch.utils.data.Dataset):
             enroll_speech, sr = AudioIO.open(
                 f_path=self.df[key]["wav2enroll"],
                 resample_to=self.resample_to,
-                target_lvl=self.audio_gain_nomalized_to,
+                target_lvl=self.audio_gain_normalized_to,
             )
             enroll_speech = enroll_speech.squeeze()
 
@@ -84,7 +84,7 @@ class KaldiFormBaseDataset(torch.utils.data.Dataset):
             clean_speech, _sr = AudioIO.open(
                 f_path=self.df[key]["wav2ref"],
                 resample_to=self.resample_to,
-                target_lvl=self.audio_gain_nomalized_to,
+                target_lvl=self.audio_gain_normalized_to,
             )
             if _sr != sr:
                 print(

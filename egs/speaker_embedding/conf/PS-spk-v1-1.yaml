@@ -4,7 +4,7 @@ dataset:
   test_folder: ./data/eval_vox1o
   proc_output_folder: ./proc
   target_sample_rate: 16000
-  gain_nomalized_to: -22
+  gain_normalized_to: -22
   training_length_seconds: 4.
   filter_min_utterance_length: 4.
   filter_min_utterance_per_speaker: 10
@@ -91,7 +91,7 @@ augmentation_volume:
       - 1.0
 
 trainer:
-  lighting_trainer_args:
+  lightning_trainer_args:
     max_epochs: 200
     gradient_clip_val: 1.
     accumulate_grad_batches: 1
@@ -134,7 +134,7 @@ loss_func:
       mp: 0.06
 
 model:
-  lighting_module:
+  lightning_module:
     type: EncPredClassBase
     module_args:
       encoder_lr_factor: 1.

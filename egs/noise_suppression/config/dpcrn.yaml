@@ -4,7 +4,7 @@ dataset:
   test_folder: ./data/test
   proc_output_folder: ./proc
   target_sample_rate: 32000
-  gain_nomalized_to: # ex: -28
+  gain_normalized_to: # ex: -28
   training_length_seconds: 6.
   filter_min_utterance_length: 4.
   filter_min_utterance_per_speaker: 5.
@@ -123,7 +123,7 @@ vad_label:
     model_sample_rate: 16000
 
 trainer:
-  lighting_trainer_args:
+  lightning_trainer_args:
     max_epochs: 200
     gradient_clip_val: 5.
     accumulate_grad_batches: 1
@@ -227,7 +227,7 @@ loss_func:
       false_negative_weight: 1.0
 
 model:
-  lighting_module:
+  lightning_module:
     type: EncDecMaskBase
     module_args:
       mask_type: complex

@@ -38,7 +38,7 @@ def init_dataloader(
         min_utts_in_each_speaker=corpus_dict["filter_min_utterance_per_speaker"],
         target_sr=corpus_dict["target_sample_rate"],
         training_sample_length_in_seconds=corpus_dict["training_length_seconds"],
-        audio_gain_nomalized_to=corpus_dict["gain_nomalized_to"],
+        audio_gain_normalized_to=corpus_dict["gain_normalized_to"],
         augmentation_speech_args=aug_speech_dict,
         augmentation_noise_args=aug_noise_dict,
         augmentation_reverb_args=aug_reverb_dict,
@@ -71,7 +71,7 @@ def init_dataloader(
         min_utts_in_each_speaker=corpus_dict["filter_min_utterance_per_speaker"],
         target_sr=corpus_dict["target_sample_rate"],
         training_sample_length_in_seconds=corpus_dict["training_length_seconds"],
-        audio_gain_nomalized_to=corpus_dict["gain_nomalized_to"],
+        audio_gain_normalized_to=corpus_dict["gain_normalized_to"],
         augmentation_speech_args=aug_speech_dict,
         augmentation_noise_args=aug_noise_dict,
         augmentation_reverb_args=aug_reverb_dict,
@@ -211,17 +211,17 @@ if __name__ == "__main__":
         loss_func_list, loss_func_list_w = init_loss_func(hparam_conf=loss_dict)
 
         # PL-Model
-        lighting_model = init_siso_model(model_dict)
-        lighting_model.register_loss_func(loss_func_list, loss_func_list_w)
-        param_groups = lighting_model.get_total_param_groups()
+        lightning_model = init_siso_model(model_dict)
+        lightning_model.register_loss_func(loss_func_list, loss_func_list_w)
+        param_groups = lightning_model.get_total_param_groups()
         optimizer, scheduler = create_optimizer_and_scheduler(
             overall_params_and_lr_factor=param_groups,
             optimizer_args=optim_dict,
             scheduler_args=scheduler_dict,
         )
-        lighting_model.register_optimizer(optimizer)
-        lighting_model.register_scheduler(scheduler)
-        lighting_model.register_warmup_step(scheduler_dict["warmup_step"])
+        lightning_model.register_optimizer(optimizer)
+        lightning_model.register_scheduler(scheduler)
+        lightning_model.register_warmup_step(scheduler_dict["warmup_step"])
 
         # Loading exists state_dicts
         if args.pretrained_ckpt_path:
@@ -229,7 +229,7 @@ if __name__ == "__main__":
             state_dict = torch.load(args.pretrained_ckpt_path, map_location="cpu")[
                 "state_dict"
             ]
-            lighting_model.reload_checkpoint(
+            lightning_model.reload_checkpoint(
                 loaded_state=state_dict, load_loss_func=False
             )
 
@@ -240,7 +240,7 @@ if __name__ == "__main__":
         )
 
         trainer = L.Trainer(
-            **trainer_dict["lighting_trainer_args"],
+            **trainer_dict["lightning_trainer_args"],
             accelerator="gpu" if trainer_dict["num_gpus"] > 0 else "cpu",
             devices=trainer_dict["num_gpus"],
             limit_train_batches=trainer_dict["train_iter_per_epoch"],
@@ -254,14 +254,14 @@ if __name__ == "__main__":
 
         if args.ckpt_path is not None:
             trainer.fit(
-                lighting_model,
+                lightning_model,
                 train_dataloaders=train_dataloader,
                 val_dataloaders=valid_dataloader,
                 ckpt_path=args.ckpt_path,
             )
         else:
             trainer.fit(
-                lighting_model,
+                lightning_model,
                 train_dataloaders=train_dataloader,
                 val_dataloaders=valid_dataloader,
             )
@@ -281,7 +281,7 @@ if __name__ == "__main__":
             shuffle=False,
         )
         trainer = L.Trainer(inference_mode=True)
-        lighting_model = init_siso_model(model_dict)
+        lightning_model = init_siso_model(model_dict)
         # TODO
         raise NotImplementedError
 
@@ -304,11 +304,11 @@ if __name__ == "__main__":
             inference_mode=True, default_root_dir=corpus_dict["proc_output_folder"]
         )
         state_dict = torch.load(args.ckpt_path, map_location="cpu")["state_dict"]
-        lighting_model = init_siso_model(model_dict)
-        lighting_model.reload_checkpoint(state_dict)
+        lightning_model = init_siso_model(model_dict)
+        lightning_model.reload_checkpoint(state_dict)
         create_folder(corpus_dict["proc_output_folder"])
-        lighting_model.register_proc_output_folder(corpus_dict["proc_output_folder"])
-        trainer.predict(lighting_model, dataloaders=test_dataloader)
+        lightning_model.register_proc_output_folder(corpus_dict["proc_output_folder"])
+        trainer.predict(lightning_model, dataloaders=test_dataloader)
 
     # Stage of export model to ONNX
     if args.export_onnx and args.pretrained_ckpt_path:
@@ -319,16 +319,16 @@ if __name__ == "__main__":
 
         save_path = f"{args.pretrained_ckpt_path}.onnx"
 
-        lighting_model = init_siso_model(model_dict)
+        lightning_model = init_siso_model(model_dict)
         print("Loading the pretrained params only.")
         state_dict = torch.load(args.pretrained_ckpt_path, map_location="cpu")[
             "state_dict"
         ]
-        lighting_model.reload_checkpoint(loaded_state=state_dict, load_loss_func=False)
-        lighting_model.eval()
+        lightning_model.reload_checkpoint(loaded_state=state_dict, load_loss_func=False)
+        lightning_model.eval()
 
         torch.onnx.export(
-            lighting_model,
+            lightning_model,
             (sample_input,),
             save_path,
             export_params=True,
@@ -349,7 +349,7 @@ if __name__ == "__main__":
 
         # Test onnx model
         with torch.no_grad():
-            torch_out = lighting_model(sample_input)
+            torch_out = lightning_model(sample_input)
             torch_out = torch_out.numpy()
 
         ort_session = onnxruntime.InferenceSession(save_path)

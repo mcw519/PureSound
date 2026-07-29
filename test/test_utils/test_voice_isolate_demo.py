@@ -18,7 +18,7 @@ def _load_demo_module():
 
 
 def _write_demo_config(
-    root: Path, *, work_folder: str = "./exp/work", gain_nomalized_to: int | None = None
+    root: Path, *, work_folder: str = "./exp/work", gain_normalized_to: int | None = None
 ) -> Path:
     config_dir = root / "config"
     config_dir.mkdir(parents=True, exist_ok=True)
@@ -28,7 +28,7 @@ def _write_demo_config(
             [
                 "dataset:",
                 "  target_sample_rate: 16000",
-                f"  gain_nomalized_to: {'' if gain_nomalized_to is None else gain_nomalized_to}",
+                f"  gain_normalized_to: {'' if gain_normalized_to is None else gain_normalized_to}",
                 "  proc_output_folder: ./proc",
                 "trainer:",
                 f"  work_folder: {work_folder}",
@@ -186,7 +186,7 @@ def test_enhance_audio_writes_output_and_skips_dnsmos(
 
 def test_demo_keeps_uploaded_audio_gain_for_eval(tmp_path, monkeypatch, write_tone_wav):
     demo = _load_demo_module()
-    config_path = _write_demo_config(tmp_path, gain_nomalized_to=-28)
+    config_path = _write_demo_config(tmp_path, gain_normalized_to=-28)
     input_path = tmp_path / "input.wav"
     checkpoint_path = tmp_path / "exp" / "work" / "model.ckpt"
     checkpoint_path.parent.mkdir(parents=True)

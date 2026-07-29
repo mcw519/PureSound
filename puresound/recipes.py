@@ -42,7 +42,7 @@ def load_siso_recipe_config(f_path: str) -> Tuple:
 
 
 def init_siso_model(model_dict: Dict):
-    lightning_module = getattr(system, model_dict["lighting_module"]["type"])
+    lightning_module = getattr(system, model_dict["lightning_module"]["type"])
     encoder = getattr(nnet, model_dict["encoder"]["type"])(
         **model_dict["encoder"]["encoder_args"]
     )
@@ -61,7 +61,7 @@ def init_siso_model(model_dict: Dict):
         encoder,
         feature_encoder,
         backbone,
-        **model_dict["lighting_module"]["module_args"],
+        **model_dict["lightning_module"]["module_args"],
     )
 
 

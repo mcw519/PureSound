@@ -21,7 +21,7 @@ class DynamicBaseDataset(torch.utils.data.Dataset):
         min_utts_in_each_speaker: int = 5,
         target_sr: Optional[int] = None,
         training_sample_length_in_seconds: float = 6.0,
-        audio_gain_nomalized_to: Optional[int] = None,
+        audio_gain_normalized_to: Optional[int] = None,
         augmentation_speech_args: Optional[Dict] = None,
         augmentation_noise_args: Optional[Dict] = None,
         augmentation_reverb_args: Optional[Dict] = None,
@@ -40,7 +40,7 @@ class DynamicBaseDataset(torch.utils.data.Dataset):
 
         # Audio related
         self.target_sr = target_sr
-        self.audio_gain_nomalized_to = audio_gain_nomalized_to
+        self.audio_gain_normalized_to = audio_gain_normalized_to
         self.training_sample_length_in_seconds = training_sample_length_in_seconds
         if self.target_sr is not None:
             self.training_sample_length = int(
@@ -411,7 +411,7 @@ class DynamicBaseDataset(torch.utils.data.Dataset):
 
         target_speech, sr = AudioIO.open(
             f_path=self.meta[target_speaker_name]["utts"][tgt_key]["path"],
-            target_lvl=self.audio_gain_nomalized_to,
+            target_lvl=self.audio_gain_normalized_to,
             resample_to=self.target_sr,
         )
 

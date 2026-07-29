@@ -48,7 +48,7 @@ scheduler:
 loss_func: []
 
 model:
-  lighting_module:
+  lightning_module:
     type: EncDecMaskBase
     module_args:
       mask_type: complex   # DPCRN emits a complex ratio mask applied to the noisy STFT
