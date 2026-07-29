@@ -8,7 +8,6 @@ Neural network models and building blocks for speech enhancement, speaker verifi
 
 | Module | Description |
 |--------|-------------|
-| [nnet.base_nn](base_nn.md) | Base model classes for encoder-decoder pipelines |
 | [nnet.features](features.md) | Feature processing layers (Mel-filterbank, weighted sum) |
 | [nnet.masker](masker.md) | Mask application utilities |
 | [algorithms/conv_tasnet](algorithms/conv_tasnet.md) | Conv-TasNet temporal convolution blocks |

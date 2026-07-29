@@ -4,7 +4,6 @@ In this PureSound project we tried to provide flexible adjustment for each tasks
 
 
     puresound/nnet/
-    ├── base_nn.py
     ├── conv_tasnet.py
     ├── dparn.py
     ├── dpcrn.py

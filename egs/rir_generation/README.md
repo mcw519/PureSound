@@ -37,6 +37,7 @@ RIRs → **Apply / Inspect** them → **Bank** them for training.
 | `generate_bank_boundary.sh` | **Generate** — one-shot recipe for the boundary-distance bank (far sources 1.10–3.5 m + a held-out twin). |
 | `generate_bank_high_reverb.sh` | **Generate** — one-shot recipe for the high-reverb bank (RT60 0.85–1.5, beyond the training domain). |
 | `apply_rir_to_wav.py` | **Apply** — convolve a dry WAV with a generated RIR WAV. |
+| `simulate_room_scene.py` | **Apply** — build (mix, target) listening scenes with the on-the-fly shoebox room simulator (`puresound.audio.room_simulator`), the path recipes with a pre-generated bank do not exercise. |
 | `plot_rir.py` | **Inspect** — visualize one RIR: room geometry, reflection paths, or a 2D wave-field animation. |
 | `inspect_bank.py` | **Inspect** — print distribution stats for a folder of RIRs (room dims, RT60, distances, obstacles) to the terminal. |
 | `build_bank_view.py` | **Bank** — symlink-only views: `levels` slices one bank into cumulative difficulty levels by RT60 + DRR, `merge` unions several views into one training view. |

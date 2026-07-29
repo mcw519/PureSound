@@ -12,7 +12,8 @@ from puresound.audio.volume import calculate_rms, normalize_waveform
 from puresound.utils import create_folder
 
 
-TEST_CASE_DIR = Path(__file__).resolve().parent / "test_case"
+REPO_ROOT = Path(__file__).resolve().parents[2]
+TEST_CASE_DIR = REPO_ROOT / "test" / "test_case"
 DEFAULT_TARGET = TEST_CASE_DIR / "1272-141231-0008.flac"
 DEFAULT_INTERFERER = TEST_CASE_DIR / "noise" / "zzpQAtOmMhQ.wav"
 DEFAULT_OUTPUT_DIR = TEST_CASE_DIR / "outputs" / "room_scene_training_data"

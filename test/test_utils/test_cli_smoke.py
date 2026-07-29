@@ -19,8 +19,7 @@ def _assert_help(script: str) -> None:
 
 def test_manual_test_scripts_expose_help():
     _assert_help("test/run_repo_checks.py")
-    _assert_help("test/generate_simulated_training_data.py")
 
 
-def test_voice_isolate_data_scripts_expose_help():
-    _assert_help("test/simulate_room_scene.py")
+def test_room_scene_script_exposes_help():
+    _assert_help("egs/rir_generation/simulate_room_scene.py")
