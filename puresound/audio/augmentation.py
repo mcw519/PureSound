@@ -166,6 +166,7 @@ class AudioEffectAugmentor:
         sr: int,
         dynamic_type: bool = False,
         noise_id: Optional[List[str]] = None,
+        noise_transform=None,
     ):
         """
         Injected additive background noise with a SNR list.\n
@@ -177,6 +178,10 @@ class AudioEffectAugmentor:
             sr: speech sample rate
             dynamic_type: if true, cascade 2 or more noises
             noise_id: which noise id would be used
+            noise_transform: optional callable applied to each loaded noise
+                waveform BEFORE the SNR mixing (e.g. convolve it with a room
+                channel so the noise shares the speech's acoustic space).
+                None = the noise is mixed as loaded (dry).
 
         Returns:
             List of waveform has been add noise background
@@ -210,6 +215,9 @@ class AudioEffectAugmentor:
                     wav=bg_noise, origin_sr=noise_sr, target_sr=sr, backend="sox"
                 )
             noise.append(bg_noise)
+
+        if noise_transform is not None:
+            noise = [noise_transform(n) for n in noise]
 
         noisy_speech, added_noise = add_bg_noise(
             wav=wav, noise=noise, snr_list=snr_list

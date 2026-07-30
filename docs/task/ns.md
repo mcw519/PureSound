@@ -24,7 +24,11 @@ NoiseSuppressionDataset(
     audio_gain_normalized_to: Optional[int] = None,
     augmentation_speech_args=None,        # interferers: prob/add_n_cases/snr_range/
                                           #   media_voice/echo_playback/overlap_control
-    augmentation_noise_args=None,         # background + white noise, SNR ranges
+    augmentation_noise_args=None,         # background + white noise, SNR ranges;
+                                          #   optional room_coloring (noise gets a
+                                          #   channel of the speech's room) and
+                                          #   absolute_floor (dBFS-anchored capture
+                                          #   floor, mixture only)
     augmentation_reverb_args=None,        # simulator / pre-generated bank / whole-mix RIR
     augmentation_speed_args=None,
     augmentation_ir_response_args=None,

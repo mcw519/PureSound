@@ -48,6 +48,7 @@ MIX_MODE_CODES = {
     "physical": 2.0,
     "moderate": 3.0,
     "counter_level": 4.0,
+    "distance_level": 5.0,
 }
 
 
@@ -292,21 +293,37 @@ class VoiceIsolationDataset(NoiseSuppressionDataset):
             return self.augmentation_realfar_args.get("turn_taking_prob")
         return None
 
-    def _mix_foreground_with_interferers(self, fg_wav, interfered_speech, plan):
+    def _mix_foreground_with_interferers(
+        self, fg_wav, interfered_speech, plan, fg_metadata=None, interferer_metadata=None
+    ):
         # mix_mode replaces the single hard SIR draw with explicit level
         # relationships. NOTE on 'physical': it applies no additional rescale,
         # but it does NOT deliver a 1/r level law -- sources are RMS-normalized
         # at load and every RIR is peak-normalized per channel at convolution
         # time (wav_apply_rir), so the summed ratio lands near 0 dB and the
         # surviving distance cues are DRR / tail shape / spectral tilt, not
-        # level. The rescale modes draw a mode-specific SIR range. Real-far
-        # rows skip mix_mode -- the simulated-near vs real-recorded-far level
-        # ratio is not physically meaningful -- and use the hard SIR draw.
+        # level. The 'distance_level' mode reinstates the level cue explicitly
+        # (SIR from the inverse-distance law on the scene's actual geometry,
+        # plus jitter); the other rescale modes draw a mode-specific SIR range.
+        # Real-far rows skip mix_mode -- the simulated-near vs real-recorded-far
+        # level ratio is not physically meaningful -- and use the hard SIR draw.
         mm_cfg = (self.augmentation_speech_args or {}).get("mix_mode")
         if not (mm_cfg and mm_cfg.get("used", False) and not plan.use_realfar):
             return super()._mix_foreground_with_interferers(fg_wav, interfered_speech, plan)
         mode = self._sample_mix_mode(mm_cfg)
         mix_mode_name = mode.get("name", "physical")
+        if mode.get("distance_level", False):
+            sir = self._distance_level_sir(mode, fg_metadata, interferer_metadata)
+            if sir is None:
+                # geometry unavailable on this row -- fall back to the legacy
+                # hard-SIR draw so the row still trains
+                return super()._mix_foreground_with_interferers(
+                    fg_wav, interfered_speech, plan
+                )
+            noisy_speech, interfered_speech = add_bg_noise(
+                wav=fg_wav, noise=[interfered_speech], snr_list=[sir],
+            )
+            return noisy_speech[0], interfered_speech[0], "distance_level", sir
         if mode.get("physical", False):
             # No relative rescale: sum at natural post-RIR levels.
             noisy_speech = fg_wav + interfered_speech
@@ -348,6 +365,36 @@ class VoiceIsolationDataset(NoiseSuppressionDataset):
             if r <= acc:
                 return dict(m)
         return dict(modes[-1])
+
+    def _distance_level_sir(
+        self, mode: Dict, fg_metadata, interferer_metadata
+    ) -> Optional[float]:
+        """SIR implied by the scene's geometry: 20*log10(d_itf / d_fg) + jitter.
+
+        Reinstates the distance level cue the pipeline otherwise removes (see
+        _mix_foreground_with_interferers): a talker at 3 m really is ~15 dB
+        quieter at the mic than one at 0.5 m. Uses the NEAREST interferer (the
+        loudest under the 1/r law). Returns None when either distance is
+        unknown so the caller can fall back.
+        """
+
+        def _dist(meta) -> Optional[float]:
+            if not meta:
+                return None
+            value = meta.get("source_receiver_distance")
+            return float(value) if value is not None else None
+
+        d_fg = _dist(fg_metadata)
+        itf = [
+            _dist(m) for m in (interferer_metadata or []) if _dist(m) is not None
+        ]
+        if d_fg is None or d_fg <= 0 or not itf:
+            return None
+        d_itf = min(itf)
+        sir = 20.0 * float(np.log10(d_itf / max(d_fg, 1e-3)))
+        lo, hi = mode.get("jitter_db", [-3.0, 3.0])
+        sir += float(torch.empty(1).uniform_(float(lo), float(hi)).item())
+        return sir
 
     def _emit_task_metadata(
         self,

@@ -88,6 +88,11 @@ augmentation_speech:
                       # so 'physical' = "no extra rescale" (a near-0 dB ratio); the cues
                       # that survive are DRR / tail shape / tilt.
       - {name: physical,      prob: 0.5, physical: True}
+      # distance_level (OFF, available): reinstates the level cue -- SIR from
+      # the inverse-distance law on the scene's actual geometry (+jitter). A
+      # talker at 3 m really is ~15 dB quieter than one at 0.5 m; every other
+      # path in this pipeline strips that information.
+      # - {name: distance_level, prob: 0.2, distance_level: True, jitter_db: [-3, 3]}
       # moderate: mild rescale, keeps difficulty without routinely inverting levels.
       - {name: moderate,      prob: 0.3, sir_range: [-3, 6]}
       # counter_level: near deliberately quieter -> forces a non-energy cue (hardest).
@@ -149,6 +154,23 @@ augmentation_noise:
   white_noise_snr_range:
     - 10
     - 30
+  # OFF (available, unjudged): convolve the noise with a channel of the SAME
+  # room as the speech, so the floor is spatially coherent with the mixture
+  # instead of arriving dry from nowhere. Motivated by the domain-gap
+  # measurement: the model suppresses clean-convolution far speech far harder
+  # than real recordings, and the difference is the recording's non-LTI
+  # signature -- the noise floor chief among it.
+  room_coloring:
+    used: False
+    prob: 0.5
+  # OFF (available, unjudged): a capture floor anchored to digital full scale,
+  # not to the mixture -- a deployed mic's self-noise + room tone sit at a
+  # fixed level whoever is speaking. Real recordings measured -8..-21 dB
+  # floors (data_report/domain_gap_v7.jsonl); synthesis had none.
+  absolute_floor:
+    used: False
+    prob: 0.5
+    level_dbfs_range: [-55, -35]
 
 # Reverb from the pre-generated RIR bank (source-level: foreground = near channel,
 # interferers = far channels of the SAME room).

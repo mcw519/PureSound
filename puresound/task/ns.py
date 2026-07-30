@@ -286,6 +286,8 @@ class NoiseSuppressionDataset(DynamicBaseDataset):
         fg_wav: torch.Tensor,
         interfered_speech: torch.Tensor,
         plan: RowPlan,
+        fg_metadata: Optional[dict] = None,
+        interferer_metadata: Optional[List[dict]] = None,
     ) -> Tuple[torch.Tensor, torch.Tensor, str, float]:
         """Combine foreground and summed interferers; returns
         (noisy_speech, background_speech_reference, mix_mode_name, realized_sir)."""
@@ -402,7 +404,13 @@ class NoiseSuppressionDataset(DynamicBaseDataset):
             # augmentation_speech.snr_range).
             fg_wav = noisy_speech if source_level_reverb else target_speech
             noisy_speech, background_speech_reference, mix_mode_name, realized_speech_sir = (
-                self._mix_foreground_with_interferers(fg_wav, interfered_speech, plan)
+                self._mix_foreground_with_interferers(
+                    fg_wav,
+                    interfered_speech,
+                    plan,
+                    fg_metadata=fg_rir_metadata,
+                    interferer_metadata=interferer_rir_metadata,
+                )
             )
 
             # Treating all speech clips as target speech
@@ -551,11 +559,36 @@ class NoiseSuppressionDataset(DynamicBaseDataset):
             if torch.rand(1) < self.augmentation_noise_args["prob"] / 4:
                 dynamic_type = True
 
+            # Room coloring: give the noise a channel of the SAME room the
+            # speech was rendered in, so the noise floor is spatially coherent
+            # with the mixture instead of arriving dry from nowhere. Guarded:
+            # an absent/disabled block never touches the RNG stream.
+            noise_transform = None
+            room_cfg = self.augmentation_noise_args.get("room_coloring")
+            if (
+                room_cfg
+                and room_cfg.get("used", False)
+                and room_scene is not None
+                and torch.rand(1).item() < float(room_cfg.get("prob", 0.0))
+            ):
+                mix_sr = if_none_else(self.target_sr, self.ori_audio_sr)
+
+                def noise_transform(n, _sr=mix_sr, _scene=room_scene):
+                    reverbed, _ = self.augmentor.apply_rir(
+                        wav=n,
+                        rir_mode="full",
+                        sr=_sr,
+                        room_scene=_scene,
+                        source_role="interferer",
+                    )
+                    return reverbed
+
             noisy_speech, (added_noise, _, _) = self.augmentor.add_bg_noise(
                 wav=noisy_speech,
                 snr_list=[snr],
                 dynamic_type=dynamic_type,
                 sr=if_none_else(self.target_sr, self.ori_audio_sr),
+                noise_transform=noise_transform,
             )
             added_noise = added_noise[0]
 
@@ -584,6 +617,25 @@ class NoiseSuppressionDataset(DynamicBaseDataset):
 
         if isinstance(noisy_speech, list):
             noisy_speech = noisy_speech[0]
+
+        # Absolute capture floor: a noise floor anchored to digital full scale,
+        # NOT to the mixture level -- a deployed mic's self-noise + room tone
+        # sit at a fixed level whoever is speaking. The SNR-relative noise
+        # above cannot express this (it scales with the speech). Added to the
+        # mixture only, before the device chain, so it inherits the device
+        # response like real capsule noise. Guarded: absent/disabled block
+        # never touches the RNG stream.
+        floor_cfg = (self.augmentation_noise_args or {}).get("absolute_floor")
+        if (
+            floor_cfg
+            and floor_cfg.get("used", False)
+            and torch.rand(1).item() < float(floor_cfg.get("prob", 0.0))
+        ):
+            lo, hi = floor_cfg.get("level_dbfs_range", [-55.0, -35.0])
+            floor_dbfs = torch.empty(1).uniform_(float(lo), float(hi)).item()
+            floor = torch.randn_like(noisy_speech) * (10.0 ** (floor_dbfs / 20.0))
+            noisy_speech = noisy_speech + floor
+            added_noise = floor if added_noise is None else added_noise + floor
 
         # Snapshot the clean target for VAD labeling before the downstream
         # distortion chain (SRC / IIR / HPF / volume / clipping). Silero VAD
