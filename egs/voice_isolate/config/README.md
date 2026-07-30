@@ -58,6 +58,7 @@ promoted to `../train_dpcrn.yaml`.
 
 | config | what it is |
 |---|---|
+| `train_dpcrn_realism.yaml` | **next round (untrained)**: the v7 recipe + the three measured-gap realism knobs ON (room-colored noise, absolute capture floor, distance_level SIR); judgment plan in its header |
 | `train_dpcrn_wide_causal.yaml` | fully-causal variant (`delay=[0,0,0]`), zero look-ahead; untrained, kept as a documented fallback since future-buffering solved streaming without it |
 | `train_dpcrn_gate.yaml` | separator frozen, trains only the causal frame-level VAD gate head |
 | `train_dpcrn_v2_sepgate.yaml` | separator + gate head trained jointly on an obstacle-rich RIR bank |
