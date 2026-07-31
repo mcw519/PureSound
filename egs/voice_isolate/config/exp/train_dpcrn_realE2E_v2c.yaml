@@ -1,35 +1,38 @@
-# voice_isolate -- DPCRN, REALISM-KNOBS round: the v7 recipe with the three
-# synthesis-realism knobs from the domain-gap measurement turned ON.
+# voice_isolate -- DPCRN near-field voice isolation, default training recipe.
 #
-# What this round tests (numbers from data_report/domain_gap_v7.jsonl):
-#   1. room_coloring  -- noise convolved with a channel of the SAME room as the
-#      speech. Measured: the model suppresses clean-convolution far speech far
-#      harder than real recordings (rm1 mc05: -14.9 vs -4.9 dB) and the
-#      difference is the recording's non-LTI signature, noise floor chief
-#      among it. Hypothesis: a spatially coherent floor narrows that split.
-#   2. absolute_floor -- dBFS-anchored capture floor (-55..-35 dBFS ~= the
-#      measured -8..-21 dB speech-to-floor range at our -28 dBFS speech level).
-#      Synthesis had no absolute floor at all.
-#   3. mix_mode distance_level (0.2 of synthetic N+F rows) -- SIR from the
-#      scene's actual geometry (20*log10(d_itf/d_fg) + jitter). Reinstates the
-#      level cue the pipeline otherwise strips end-to-end; counter_level rows
-#      are kept so the model still cannot blindly trust level. Real rows keep
-#      the hard SIR draw (mix_mode never applies there).
+# Task: keep the speaker within ~1 m of the microphone, suppress everything
+# further away (other voices, TV/loudspeaker voices, noise). Single channel, no
+# enrollment, so the only usable cue is proximity (direct-to-reverberant ratio
+# and level). Three ideas shape the recipe:
 #
-# Everything else = config/train_dpcrn.yaml (the judged v7 recipe) verbatim.
-# Warm-start from the current default:
-#   uv run python egs/voice_isolate/main.py \
-#       egs/voice_isolate/config/exp/train_dpcrn_realism.yaml --training \
-#       --pretrained_ckpt_path egs/voice_isolate/pretrained_ckpt/dpcrn_v7.ckpt
+#   1. REAL recordings on BOTH sides of the decision. Far interferers are
+#      finished loudspeaker->air->mic recordings (augmentation_realfar) and part
+#      of the keep rows are genuine close-mic recordings (augmentation_realnear).
+#      Trained on RIR-convolved speech alone, a model keys on the capture chain
+#      instead of on distance and then deletes real near speech.
+#   2. Absolute and relative decisions are both supervised. Turn-taking rows put
+#      multi-second far-solo stretches (target silent) in the same clip as near
+#      speech, so "a lone far voice is still a suppress target" is learned
+#      without removing keep examples.
+#   3. Deletion is fought explicitly: OverSuppressionLoss, dual-SSL ASR feature
+#      losses, a distance/DRR auxiliary head, and target-absent silence
+#      injection left OFF.
 #
-# Judge at the ep19 cosine trough, standard hard gates:
-#   Dawn deletion <= 0.20; BUT-OFFICE WER must improve vs mix; turn-taking KEEP
-#   violations <= 10; held-out real lone-far no worse than v7 (-9.45 with
-#   blend); in-domain SI-SDRi healthy.
-# Mechanism gates (the new instruments, run per candidate):
-#   eval_domain_gap.py -- the sup_R vs sup_M split should NARROW vs v7
-#     (v7: rm1mc05 -4.9 vs -14.9; rm3mc01 -1.8 vs -9.4; rm4mc01 -0.1 vs -9.6);
-#   eval_far_suppression.py --corpus voices/realman -- distance grading kept.
+# Prerequisites (paths below are local -- point them at your own copies):
+#   * speech metafiles ...... dataset.train_metafile / valid_metafile
+#   * noise corpus .......... augmentation_noise.noise_folder
+#   * RIR bank .............. augmentation_reverb.simulator.pregenerated.folder
+#                             (built by egs/rir_generation)
+#   * real recording pools .. scripts/build_real_recording_pool.py (far + near manifests)
+#
+# Run from the repository root, warm-starting from an existing separator:
+#   uv run python egs/voice_isolate/main.py egs/voice_isolate/config/train_dpcrn.yaml \
+#       --training \
+#       --pretrained_ckpt_path egs/voice_isolate/pretrained_ckpt/dpcrn_v6.ckpt
+#
+# The scheduler does warm restarts every 20 epochs, so compare checkpoints only
+# at the cosine troughs (ep19/ep39/...). Inference-side settings that ship with
+# the released checkpoint: ../pretrained_ckpt/README.md.
 dataset:
   task: voice_isolation
   train_metafile: data/dns5-read.train.list
@@ -84,16 +87,16 @@ augmentation_speech:
     modes:            # sources are RMS-normalized and RIRs peak-normalized per channel,
                       # so 'physical' = "no extra rescale" (a near-0 dB ratio); the cues
                       # that survive are DRR / tail shape / tilt.
-      - {name: physical,      prob: 0.4, physical: True}
-      # ROUND KNOB 3: the true level cue -- SIR from the inverse-distance law
-      # on the scene's actual geometry (+jitter). A talker at 3 m really is
-      # ~15 dB quieter than one at 0.5 m.
-      - {name: distance_level, prob: 0.2, distance_level: True, jitter_db: [-3, 3]}
+      - {name: physical,      prob: 0.5, physical: True}
+      # distance_level (OFF, available): reinstates the level cue -- SIR from
+      # the inverse-distance law on the scene's actual geometry (+jitter). A
+      # talker at 3 m really is ~15 dB quieter than one at 0.5 m; every other
+      # path in this pipeline strips that information.
+      # - {name: distance_level, prob: 0.2, distance_level: True, jitter_db: [-3, 3]}
       # moderate: mild rescale, keeps difficulty without routinely inverting levels.
-      - {name: moderate,      prob: 0.25, sir_range: [-3, 6]}
-      # counter_level: near deliberately quieter -> forces a non-energy cue
-      # (kept so level never becomes a trusted-alone shortcut).
-      - {name: counter_level, prob: 0.15, sir_range: [-10, 0]}
+      - {name: moderate,      prob: 0.3, sir_range: [-3, 6]}
+      # counter_level: near deliberately quieter -> forces a non-energy cue (hardest).
+      - {name: counter_level, prob: 0.2, sir_range: [-10, 0]}
 
 # OFF: synthetic target-absent silence injection. It teaches the model to emit
 # SILENCE whenever it judges the foreground absent, which mis-fires on recordings
@@ -151,17 +154,21 @@ augmentation_noise:
   white_noise_snr_range:
     - 10
     - 30
-  # ROUND KNOB 1: noise shares the speech's room (spatially coherent floor).
-  # prob 0.5 keeps half the noise rows dry -- some real noise (hum, electrical)
-  # genuinely has no room, and the contrast preserves diversity.
+  # OFF (available, unjudged): convolve the noise with a channel of the SAME
+  # room as the speech, so the floor is spatially coherent with the mixture
+  # instead of arriving dry from nowhere. Motivated by the domain-gap
+  # measurement: the model suppresses clean-convolution far speech far harder
+  # than real recordings, and the difference is the recording's non-LTI
+  # signature -- the noise floor chief among it.
   room_coloring:
-    used: True
+    used: False
     prob: 0.5
-  # ROUND KNOB 2: dBFS-anchored capture floor; -55..-35 dBFS at our -28 dBFS
-  # speech level spans the measured -8..-21 dB speech-to-floor range plus a
-  # cleaner margin. Mixture only; inherits the device chain like capsule noise.
+  # OFF (available, unjudged): a capture floor anchored to digital full scale,
+  # not to the mixture -- a deployed mic's self-noise + room tone sit at a
+  # fixed level whoever is speaking. Real recordings measured -8..-21 dB
+  # floors (data_report/domain_gap_v7.jsonl); synthesis had none.
   absolute_floor:
-    used: True
+    used: False
     prob: 0.5
     level_dbfs_range: [-55, -35]
 
@@ -286,7 +293,7 @@ trainer:
   num_workers: 20
   num_gpus: 2
   find_unused_parameters: true
-  work_folder: exp/dpcrn_realism_0729
+  work_folder: exp/dpcrn_train
 
 optimizer:
   type: AdamW

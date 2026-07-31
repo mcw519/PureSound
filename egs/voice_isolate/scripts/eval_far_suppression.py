@@ -166,22 +166,32 @@ def collect_voices(args) -> list[dict]:
     if not by_mic:
         sys.exit(f"no files matching distractor={args.distractor} under {speech_root}")
 
+    # A mic with no documented distance cannot enter any distance statistic, so it is
+    # dropped before scoring rather than carried as an unusable bucket.
+    scorable = {k: v for k, v in by_mic.items() if k in VOICES_MIC_DISTANCE_M}
+    undocumented = sorted(k for k in by_mic if k not in VOICES_MIC_DISTANCE_M)
+
     print(f"# VOiCES buckets (distractor={args.distractor}):")
-    for key in sorted(by_mic):
-        d = VOICES_MIC_DISTANCE_M.get(key, float("nan"))
-        print(f"#   {key[0]} mc{key[1]:02d} d={d:.2f}m  n={len(by_mic[key])}")
+    for key in sorted(scorable):
+        print(f"#   {key[0]} mc{key[1]:02d} d={VOICES_MIC_DISTANCE_M[key]:.2f}m  n={len(scorable[key])}")
+    if undocumented:
+        dropped = sum(len(by_mic[k]) for k in undocumented)
+        print(f"# dropped {len(undocumented)} bucket(s) / {dropped} recording(s) with no documented "
+              f"mic distance: " + ", ".join(f"{r} mc{m:02d}" for r, m in undocumented))
+    if not scorable:
+        sys.exit("no bucket has a documented mic distance")
 
     rng = random.Random(args.seed)
     items = []
-    for key in sorted(by_mic):
-        files = by_mic[key]
+    for key in sorted(scorable):
+        files = scorable[key]
         picks = files if len(files) <= args.per_bucket else rng.sample(files, args.per_bucket)
         for wav_path in sorted(picks):
             m = VOICES_FNAME_RE.search(wav_path.name)
             items.append({
                 "wav": wav_path,
                 "span_ref": None,                       # spans from the recording itself
-                "distance_m": VOICES_MIC_DISTANCE_M.get(key),
+                "distance_m": VOICES_MIC_DISTANCE_M[key],
                 "bucket": f"{key[0]} mc{key[1]:02d}",
                 "info": m.group("loc"),
                 "min_active_sec": 1.0,
@@ -270,6 +280,9 @@ def main() -> None:
 
     rows: list[dict] = []
     seen_buckets: set[str] = set()
+    # Rows are streamed as they are scored: a run interrupted after an hour of
+    # inference still leaves everything it measured on disk.
+    sink = open(args.out_json, "w") if args.out_json else None
     for item in items:
         raw, sr = AudioIO.open(f_path=str(item["wav"]), target_lvl=None, resample_to=16000)
         raw = raw.view(1, -1)
@@ -284,20 +297,23 @@ def main() -> None:
         with torch.no_grad():
             enh = model(raw.to(device), dry_blend=args.dry_blend,
                         spec_floor=args.spec_floor).detach().cpu().view(1, -1).clamp(-1.0, 1.0)
-        rows.append({
+        row = {
             "file": item["wav"].name,
             "bucket": item["bucket"],
             "info": item["info"],
             "distance_m": item["distance_m"],
             "active_reduction_db": reduction_db(enh, raw, spans),
             "active_sec": sum(b - a for a, b in spans) / sr,
-        })
+        }
+        rows.append(row)
+        if sink is not None:
+            print(json.dumps(row), file=sink, flush=True)
         if item["bucket"] not in seen_buckets:
             seen_buckets.add(item["bucket"])
             print(f"# scoring {item['bucket']} ...", flush=True)
 
-    if args.out_json:
-        Path(args.out_json).write_text("\n".join(json.dumps(r) for r in rows) + "\n")
+    if sink is not None:
+        sink.close()
 
     by_bucket: dict[str, list[dict]] = defaultdict(list)
     for r in rows:
@@ -305,15 +321,15 @@ def main() -> None:
 
     print()
     print("bucket\t\tdist_m\tn\tp25_dB\tmedian_dB\tp75_dB\tinfo")
-    for bucket in sorted(by_bucket, key=lambda b: (by_bucket[b][0]["distance_m"] or 0.0)):
+    for bucket in sorted(by_bucket, key=lambda b: by_bucket[b][0]["distance_m"]):
         rs = by_bucket[bucket]
         p25, med, p75 = quantiles([r["active_reduction_db"] for r in rs])
         dist = rs[0]["distance_m"]
         info = rs[0]["info"] if args.corpus == "voices" else f"{len({r['info'] for r in rs})} scenes"
         print(f"{bucket:<15}\t{dist:.2f}\t{len(rs)}\t{p25:7.2f}\t{med:7.2f}\t{p75:7.2f}\t{info}")
 
-    far = [r for r in rows if (r["distance_m"] or 0) > 1.0]
-    near = [r for r in rows if (r["distance_m"] or 0) <= 1.0]
+    far = [r for r in rows if r["distance_m"] > 1.0]
+    near = [r for r in rows if r["distance_m"] <= 1.0]
     print()
     if far:
         p25, med, p75 = quantiles([r["active_reduction_db"] for r in far])
