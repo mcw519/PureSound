@@ -3,9 +3,9 @@
 # Shared by EVERY checkpoint in ../pretrained_ckpt/: the `model:` block is the same
 # for all of them, so pick the checkpoint with --ckpt / --checkpoint_path, or from
 # the demo.py dropdown (it scans trainer.work_folder below). Default checkpoint =
-# `dpcrn_v7.ckpt`; see ../pretrained_ckpt/README.md for what each version is.
+# `dpcrn_v8.ckpt`; see ../pretrained_ckpt/README.md for what each version is.
 #
-# RECOMMENDED RUNTIME SETTING for dpcrn_v7: `dry_blend = 0.9`, i.e.
+# RECOMMENDED RUNTIME SETTING for dpcrn_v7 and dpcrn_v8: `dry_blend = 0.9`, i.e.
 #   out = 0.9 * enhanced + 0.1 * input
 # It bounds attenuation at any point to -20 dB, which trades a little residual
 # interferer for a large drop in deletions on unmatched capture chains -- with it

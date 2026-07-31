@@ -16,7 +16,7 @@ ASR backends are auto-detected: ``faster-whisper`` preferred, then
 Usage (from repo root):
     uv run python egs/voice_isolate/scripts/eval_dawn_chorus.py \
         egs/voice_isolate/config/infer_dpcrn.yaml \
-        --ckpt egs/voice_isolate/pretrained_ckpt/dpcrn_v7.ckpt \
+        --ckpt egs/voice_isolate/pretrained_ckpt/dpcrn_v8.ckpt \
         --dry-blend 0.9 --device cuda
 """
 

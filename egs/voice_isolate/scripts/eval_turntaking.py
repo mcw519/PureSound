@@ -23,7 +23,7 @@ leaves the separator untouched, so the mask-only row cannot show a gate's effect
 Usage (from repo root):
     uv run python egs/voice_isolate/scripts/eval_turntaking.py \
         egs/voice_isolate/config/infer_dpcrn.yaml \
-        --ckpt egs/voice_isolate/pretrained_ckpt/dpcrn_v7.ckpt --dry-blend 0.9 \
+        --ckpt egs/voice_isolate/pretrained_ckpt/dpcrn_v8.ckpt --dry-blend 0.9 \
         --set-dir /data/audio/eval_noisy_data/turntaking_set_realrir --device cuda
 """
 from __future__ import annotations

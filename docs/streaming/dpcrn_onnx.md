@@ -33,14 +33,14 @@ this automatically.
 # export a checkpoint to per-frame ONNX + JSON manifest
 uv run python egs/voice_isolate/scripts/streaming_onnx.py export \
     egs/voice_isolate/config/infer_dpcrn.yaml \
-    egs/voice_isolate/pretrained_ckpt/dpcrn_v7.ckpt /path/to/model.onnx
+    egs/voice_isolate/pretrained_ckpt/dpcrn_v8.ckpt /path/to/model.onnx
 
 # offline vs ORT streaming parity (aligned + trimmed)
 uv run python egs/voice_isolate/scripts/streaming_onnx.py verify \
     egs/voice_isolate/config/infer_dpcrn.yaml \
-    egs/voice_isolate/pretrained_ckpt/dpcrn_v7.ckpt \
-    egs/voice_isolate/pretrained_ckpt/streaming/dpcrn_v7.onnx \
-    --manifest_path egs/voice_isolate/pretrained_ckpt/streaming/dpcrn_v7.json
+    egs/voice_isolate/pretrained_ckpt/dpcrn_v8.ckpt \
+    egs/voice_isolate/pretrained_ckpt/streaming/dpcrn_v8.onnx \
+    --manifest_path egs/voice_isolate/pretrained_ckpt/streaming/dpcrn_v8.json
 
 # file-to-file streaming inference / RTF benchmark
 uv run python egs/voice_isolate/scripts/streaming_onnx.py infer  <onnx> in.wav out.wav

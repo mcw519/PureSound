@@ -22,7 +22,7 @@ Reduction is energy on the model output over the same spans, relative to the inp
 Usage (from repo root):
     uv run python egs/voice_isolate/scripts/eval_far_suppression.py \
         egs/voice_isolate/config/infer_dpcrn.yaml \
-        --ckpt egs/voice_isolate/pretrained_ckpt/dpcrn_v7.ckpt --dry-blend 0.9 \
+        --ckpt egs/voice_isolate/pretrained_ckpt/dpcrn_v8.ckpt --dry-blend 0.9 \
         --corpus voices --voices-root /path/to/VOiCES --device cuda --per-bucket 40
 
     uv run python egs/voice_isolate/scripts/eval_far_suppression.py \

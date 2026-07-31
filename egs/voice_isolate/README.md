@@ -8,16 +8,20 @@ speaker, suppress far/competing speakers + noise. The only cue is the **near/far
 overfit + full-train comparison showed the original TS-Conformer (mapping head) could not separate
 hard near/far cases while DPCRN/DPARN could — see "Pre-DPCRN history" below.
 
-## Current default: `pretrained_ckpt/dpcrn_v7.ckpt` + `dry_blend 0.9`
+## Current default: `pretrained_ckpt/dpcrn_v8.ckpt` + `dry_blend 0.9`
 
-Trained with `config/train_dpcrn.yaml` (stage 7 below) and released **with the runtime blend as part
+Trained with `config/train_dpcrn.yaml` (stage 8 below) and released **with the runtime blend as part
 of the configuration** — `out = 0.9 * enhanced + 0.1 * input`, which bounds attenuation to −20 dB.
-It is the first version that suppresses far-field speech in *real recordings* while keeping near
-speech: held-out real far-field **−9.45 dB and graded by distance** (1–2 m −3 dB → 5 m+ −38 dB,
-i.e. a distance decision, not a channel decision), near-field keep flat, and — a first for this
-recipe line — it **lowers** ASR error on real recordings instead of raising it (Dawn Chorus WER
-0.174 vs 0.184 unprocessed, deletion 0.088 ≈ the unprocessed floor). Streaming export verified
-(`pretrained_ckpt/streaming/dpcrn_v7.{onnx,json}`, 30 ms latency).
+Stage 7 was the first version to suppress far-field speech in *real recordings* while keeping near
+speech; stage 8 deepens that suppression by **2 dB** on identical recordings (>1 m median −15.91 vs
+−13.72 dB) and removes a dip at 2–3 m that made stage 7's distance response non-monotone, while
+keeping near-field speech flat and **lowering** ASR error on real recordings rather than raising it
+(Dawn Chorus WER 0.180 vs 0.184 unprocessed, deletion 0.094). Streaming export verified
+(`pretrained_ckpt/streaming/dpcrn_v8.{onnx,json}`, 30 ms latency).
+
+One trade to know about: on reverberation far above the training domain (RT60 > 1 s) stage 8 raises
+WER by 0.020 where stage 7 was neutral, so `dpcrn_v7.ckpt` remains the better pick for
+very reverberant deployments.
 
 What made the difference was **real recordings on both sides of the decision** plus **turn-taking
 supervision**, not more or better RIRs. Every simulated far-field rung tried before it (boundary
@@ -43,7 +47,8 @@ look-ahead `delay=[1,1,1]`) — only the RIR bank, augmentation, and loss weight
 | 4 | anti-suppression weight 2.0 | `config/exp/train_dpcrn_antisup_w2.yaml` | stage 3 ep19 | `dpcrn_v4.ckpt` | in-domain **+8.32**; BUT deletion **→0.276**; safest across both domains |
 | 5 | anti-suppression weight 3.0 | `config/exp/train_dpcrn_antisup_w3.yaml` | stage 4 ep19 | `dpcrn_v5.ckpt` | in-domain **+8.45**; **best in deployment reverb** (moderate enh 0.372, best of all) but **worst in extreme OOD** (BUT enh 0.692, regressed vs w2's 0.676) — "domain split point" |
 | 6 | wide-domain deployment (RIR 0.20–0.85 + media_voice/hpf realism) | `config/exp/train_dpcrn_wide_antisup.yaml` | stage 5 ep19 | `dpcrn_v6.ckpt` **(fallback)** | held-out unseen-room **+8.06** (best ever); deployment hard-gate passed (moderate enh 0.373 ≈ w3); BUT still not beaten (0.680, target was <0.676) — 4/5 judge gates passed |
-| 7 | real recordings on both sides + turn-taking + distance aux head + channel consistency | `config/train_dpcrn.yaml` | stage 6 ep19 | `dpcrn_v7.ckpt` **(current default)** | held-out real far-field **−9.45 dB, distance-graded**; keep flat (−0.11); **Dawn WER 0.174 < 0.184 raw**, deletion 0.088; reverberant-office WER −0.024 vs mix; in-domain +8.18 — needs `dry_blend 0.9` |
+| 7 | real recordings on both sides + turn-taking + distance aux head + channel consistency | `config/exp/train_dpcrn_realE2E_v2c.yaml` | stage 6 ep19 | `dpcrn_v7.ckpt` | held-out real far-field **−9.45 dB, distance-graded**; keep flat (−0.11); **Dawn WER 0.174 < 0.184 raw**, deletion 0.088; reverberant-office WER −0.024 vs mix; in-domain +8.18 — needs `dry_blend 0.9` |
+| 8 | measured-capture realism in synthesis (room-colored noise, absolute dBFS floor, geometry-driven SIR) | `config/train_dpcrn.yaml` | stage 7 ep19 | `dpcrn_v8.ckpt` **(current default)** | real far-field **−15.91 dB** vs stage 7's −13.72 on identical files (leakage-free subset −17.74 vs −15.68); 2–3 m dip filled (−4.50 → −16.61) so grading is monotone; keep flat (0.00), worst case −5.45 → −1.06; **Dawn WER 0.180 < 0.184 raw**, deletion 0.094; reverberant-office WER −0.024 vs mix; in-domain +7.99 — costs +0.020 WER in extreme reverb; needs `dry_blend 0.9` |
 
 Run (from repo root):
 ```bash
@@ -71,7 +76,7 @@ loss weight further.
 
 ## Streaming deployment (ONNX, real-time)
 
-`pretrained_ckpt/streaming/dpcrn_v7.{onnx,json}` (and `dpcrn_v6` for the fallback) — per-frame
+`pretrained_ckpt/streaming/dpcrn_v8.{onnx,json}` (plus `dpcrn_v7`/`dpcrn_v6`) — per-frame
 streaming exports built with `scripts/streaming_onnx.py`. The look-ahead (`delay=[1,1,1]`, 30 ms)
 is handled by **future-buffering baked into the ONNX graph as extra state** (inter-LSTM warmup gate +
 U-Net skip delay lines + noisy-spectrum delay) — no runtime code changes were needed; the existing

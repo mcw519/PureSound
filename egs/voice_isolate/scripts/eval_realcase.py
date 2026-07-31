@@ -30,7 +30,7 @@ training, so the mask-only row alone cannot show a gate's effect):
 Usage (from repo root):
     uv run python egs/voice_isolate/scripts/eval_realcase.py \
         egs/voice_isolate/config/infer_dpcrn.yaml \
-        --ckpt egs/voice_isolate/pretrained_ckpt/dpcrn_v7.ckpt --dry-blend 0.9 \
+        --ckpt egs/voice_isolate/pretrained_ckpt/dpcrn_v8.ckpt --dry-blend 0.9 \
         --cases-dir egs/voice_isolate/data_report/qvf22_real_cases --device cpu
 
     # gate checkpoint: pass a config whose backbone has vad_head enabled

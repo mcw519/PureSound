@@ -13,7 +13,7 @@ Everything is invoked from the repo root unless noted. Eval scripts default to `
 never fight the training GPU, and all of them accept the released inference knobs where applicable:
 `--dry-blend a` (`out = a*enh + (1-a)*mix`, `1.0` = off) and `--spec-floor f` (`|enh| >= f*|mix|` per
 bin, phase preserved, `0.0` = off; complex-mask models only). Both are inference-only and implemented
-in `siso.forward`, so they have zero effect on training. The released `dpcrn_v7` checkpoint is scored
+in `siso.forward`, so they have zero effect on training. The released `dpcrn_v8` checkpoint is scored
 **with `--dry-blend 0.9`** — see `../pretrained_ckpt/README.md`.
 
 ## 1. Data prep
@@ -66,7 +66,7 @@ uv run python egs/voice_isolate/scripts/build_wer_set.py --n-items 200 \
 
 # 3b. score a checkpoint (repeat per checkpoint)
 uv run python egs/voice_isolate/scripts/eval_wer.py config/exp/eval_but_real.yaml \
-    --ckpt egs/voice_isolate/pretrained_ckpt/dpcrn_v7.ckpt --dry-blend 0.9 \
+    --ckpt egs/voice_isolate/pretrained_ckpt/dpcrn_v8.ckpt --dry-blend 0.9 \
     --set-dir data_report/but_wer_set --device cuda --asr faster-whisper --asr-model large-v3
 # Azure cloud STT (uv pip install azure-cognitiveservices-speech; SPEECH_KEY/SPEECH_REGION env):
 SPEECH_KEY=... SPEECH_REGION=eastus ... --asr azure
@@ -103,17 +103,18 @@ a per-frame gain, adding `gate_soft` / `gate_hard` rows next to the mask-only on
 ```bash
 uv run python egs/voice_isolate/scripts/eval_far_suppression.py \
     egs/voice_isolate/config/infer_dpcrn.yaml \
-    --ckpt egs/voice_isolate/pretrained_ckpt/dpcrn_v7.ckpt --dry-blend 0.9 \
+    --ckpt egs/voice_isolate/pretrained_ckpt/dpcrn_v8.ckpt --dry-blend 0.9 \
     --corpus voices --voices-root /path/to/VOiCES --device cuda --per-bucket 40
 
 uv run python egs/voice_isolate/scripts/eval_keep_robustness.py \
     egs/voice_isolate/config/infer_dpcrn.yaml \
     --ckpt v6=egs/voice_isolate/pretrained_ckpt/dpcrn_v6.ckpt \
-    --ckpt v7=egs/voice_isolate/pretrained_ckpt/dpcrn_v7.ckpt --device cuda
+    --ckpt v7=egs/voice_isolate/pretrained_ckpt/dpcrn_v7.ckpt \
+    --ckpt v8=egs/voice_isolate/pretrained_ckpt/dpcrn_v8.ckpt --device cuda
 
 uv run python egs/voice_isolate/scripts/eval_realcase.py \
     egs/voice_isolate/config/infer_dpcrn.yaml \
-    --ckpt egs/voice_isolate/pretrained_ckpt/dpcrn_v7.ckpt --dry-blend 0.9 \
+    --ckpt egs/voice_isolate/pretrained_ckpt/dpcrn_v8.ckpt --dry-blend 0.9 \
     --cases-dir egs/voice_isolate/data_report/qvf22_real_cases --device cpu
 ```
 
@@ -135,9 +136,9 @@ uv run python egs/voice_isolate/scripts/demo.py --config_path egs/voice_isolate/
 
 uv run python egs/voice_isolate/scripts/streaming_onnx.py verify \
     egs/voice_isolate/config/infer_dpcrn.yaml \
-    egs/voice_isolate/pretrained_ckpt/dpcrn_v7.ckpt \
-    egs/voice_isolate/pretrained_ckpt/streaming/dpcrn_v7.onnx \
-    --manifest_path egs/voice_isolate/pretrained_ckpt/streaming/dpcrn_v7.json --provider cpu
+    egs/voice_isolate/pretrained_ckpt/dpcrn_v8.ckpt \
+    egs/voice_isolate/pretrained_ckpt/streaming/dpcrn_v8.onnx \
+    --manifest_path egs/voice_isolate/pretrained_ckpt/streaming/dpcrn_v8.json --provider cpu
 ```
 
 ## Renamed / merged (older logs use the old names)

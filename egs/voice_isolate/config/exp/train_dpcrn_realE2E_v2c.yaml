@@ -1,4 +1,6 @@
-# voice_isolate -- DPCRN near-field voice isolation, default training recipe.
+# voice_isolate -- DPCRN, real-end-to-end round v2c: the recipe that produced
+# dpcrn_v7. Superseded as the default by ../train_dpcrn.yaml (which adds the
+# measured-capture realism settings); kept so this stage stays reproducible.
 #
 # Task: keep the speaker within ~1 m of the microphone, suppress everything
 # further away (other voices, TV/loudspeaker voices, noise). Single channel, no

@@ -31,7 +31,7 @@ Usage (from repo root):
         --voices-root /work/any_exp_link/puresound_exp/real_e2e_corpora/voices/VOiCES_rebuilt \\
         --bank /work/any_exp_link/puresound_exp/hybrid_rir_16k_levels/wide \\
         --config egs/voice_isolate/config/infer_dpcrn.yaml \\
-        --ckpt egs/voice_isolate/pretrained_ckpt/dpcrn_v7.ckpt --dry-blend 0.9 \\
+        --ckpt egs/voice_isolate/pretrained_ckpt/dpcrn_v8.ckpt --dry-blend 0.9 \\
         --per-mic 6 --out-json data_report/domain_gap.jsonl
 """
 

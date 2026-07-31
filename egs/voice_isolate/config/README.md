@@ -5,13 +5,13 @@ Two files here are the **defaults**: the tuned settings to use as-is. Everything
 
 | config | use |
 |---|---|
-| `train_dpcrn.yaml` | default training recipe (produced the released `dpcrn_v7` checkpoint) |
+| `train_dpcrn.yaml` | default training recipe (produced the released `dpcrn_v8` checkpoint) |
 | `infer_dpcrn.yaml` | default inference config; loads any checkpoint in `../pretrained_ckpt/` |
 
 ```bash
 # train (from repo root), warm-starting from the previous release
 uv run python egs/voice_isolate/main.py egs/voice_isolate/config/train_dpcrn.yaml --training \
-    --pretrained_ckpt_path egs/voice_isolate/pretrained_ckpt/dpcrn_v6.ckpt
+    --pretrained_ckpt_path egs/voice_isolate/pretrained_ckpt/dpcrn_v7.ckpt
 
 # inference / demo
 uv run python egs/voice_isolate/scripts/demo.py \
@@ -33,6 +33,10 @@ optimizer/scheduler/epoch). The released inference setting includes `dry_blend 0
   passthrough cannot match it and separation stays a real objective.
 - **Hard SIR** `[-10, 10]` plus `mix_mode`: the foreground may be up to 10 dB *quieter* than the
   interferer, so loudness alone cannot solve the task.
+- **Measured-capture realism ON** (default recipe only): noise convolved with the speech's own
+  room, an absolute dBFS microphone floor, and `mix_mode distance_level` drawing SIR from the
+  scene geometry. Synthesis without these is implausibly clean next to real recordings, which
+  teaches "clean means suppressible" instead of "far means suppressible".
 - **Synthetic `target_absent`: OFF.** Forced-silent rows teach "emit silence when unsure", which
   mis-fires outside the training domain. Absolute-suppress supervision comes from real-recording
   rows instead (`augmentation_realfar.lone_far_prob`, turn-taking).
@@ -51,14 +55,14 @@ to train or run the default model.
 `../pretrained_ckpt/README.md` maps recipe → checkpoint → result):
 `train_dpcrn_curriculum_core.yaml` → `train_dpcrn_curriculum_expand.yaml` →
 `train_dpcrn_antisup_w1.yaml` → `_w2` → `_w3` → `train_dpcrn_wide_antisup.yaml`, then the
-real-recording rounds `train_dpcrn_realE2E.yaml` → `_v2` → `_v2b`, whose final round was
-promoted to `../train_dpcrn.yaml`.
+real-recording rounds `train_dpcrn_realE2E.yaml` → `_v2` → `_v2b` → `_v2c` (which produced
+`dpcrn_v7`), and then the realism round promoted to `../train_dpcrn.yaml` (`dpcrn_v8`).
 
 **Alternatives and side branches:**
 
 | config | what it is |
 |---|---|
-| `train_dpcrn_realism.yaml` | **next round (untrained)**: the v7 recipe + the three measured-gap realism knobs ON (room-colored noise, absolute capture floor, distance_level SIR); judgment plan in its header |
+| `train_dpcrn_realE2E_v2c.yaml` | the recipe that produced `dpcrn_v7`; superseded as the default by the realism settings, kept reproducible |
 | `train_dpcrn_wide_causal.yaml` | fully-causal variant (`delay=[0,0,0]`), zero look-ahead; untrained, kept as a documented fallback since future-buffering solved streaming without it |
 | `train_dpcrn_gate.yaml` | separator frozen, trains only the causal frame-level VAD gate head |
 | `train_dpcrn_v2_sepgate.yaml` | separator + gate head trained jointly on an obstacle-rich RIR bank |
