@@ -38,6 +38,7 @@ immutable candidate + certificate 晉升模型、QC 三態（拒絕把「算不�
 | A11 | major | FOA per-channel 縫合破壞 diffuse isotropy | M4.5 spatial | 讀碼 |
 | A12 | major | `simulated_rir` dict 無界成長 | 訓練整合 | 讀碼 |
 | A13 | major | release/variant/split provenance 在 dataset 層被 drop | 訓練整合 | 讀碼 |
+| A14 | major | M5.3 收斂 gate 斷言 scipy `success`，新地貌下永遠達不到 | M5.3 validator | 實測 |
 
 **最重要的一句話**：M6 宣稱的「deterministic bank」在預設後端上不成立，而且每個
 item 都帶著同一個合成簽名凹口。
@@ -350,6 +351,40 @@ channel，其 diffuse 成分會被**整支歸零**——對稱場景的 Z 分量
   RT60(1k) > 2 s，尾端在 −30~−40 dB 處出現階梯，bank RT60 分佈右截尾。
 
 ---
+
+
+#### A14 — M5.3 runner 的收斂 gate 斷言 scipy 的 `success`，而非「擬合是否收斂」
+
+**位置**：`puresound/audio/rir/calibration/measured_runner.py:507`
+（`all_train_room_m4_profiles_converged`）、
+`puresound/audio/rir/calibration/inverse_m4.py:537-552`（`least_squares` 設定）
+
+`test_m5_3_runner_executes_complete_non_evidence_fixture` 目前失敗。追下去不是
+路徑問題，也不是重構造成的：
+
+- 凍結報告 `m5_measured_runner_validation_report.json`（commit e454c08）記錄
+  `success: true`、**6 次評估**、`ftol` 收斂、cost 0.040368；
+- 現在同一個 fixture 是 `success: false`、**40 次用盡**、cost 0.033323。
+
+成本**更低**了，代表擬合找到更好的解，只是不再滿足終止條件。實測佐證：
+
+| 預算 | 40 | 80 | 120 | 200 | 600 |
+|---|---|---|---|---|---|
+| cost | 0.033323 | 0.033323 | 0.033323 | 0.033323 | 0.033322 |
+| success | false | false | false | false | false |
+
+15 倍預算換來第 6 位小數的改善——**加預算無效**。另外驗證目標函數是決定性的
+（339 次呼叫、重複的 `(x, mixing_time)` 組合成本完全相同），成本序列也確實
+plateau（最後一次 == 最小值）。也就是說擬合**實質上收斂了**，只是
+`ftol=xtol=gtol=1e-9` 這組判準在新的地貌下達不到。
+
+最可能的成因是 C2 的激勵修正：低頻訊號改變 → M4 observation/target 改變 →
+最佳化地貌改變。這是正確修正的副作用，不是回歸。
+
+**為什麼沒有直接改掉**：把 gate 從 `result.success` 改成「成本已 plateau」會讓
+測試變綠，但那正是本文件 §6 批評的模式——調整判準以迎合結果。這需要一個明確
+決定：M5.3 的「converged」要定義成 scipy 宣告了終止條件，還是擬合達到穩定極小。
+兩者現在不等價，該由負責 M5 的人選一個並說明理由。在那之前，這個測試如實地紅著。
 
 ### C. 證據鏈與 fail-closed
 
