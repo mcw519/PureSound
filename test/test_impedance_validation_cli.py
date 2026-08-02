@@ -10,6 +10,8 @@ def test_impedance_validation_cli_writes_accepted_report(tmp_path):
         repo_root
         / "egs"
         / "rir_generation"
+        / "phases"
+        / "m2_impedance"
         / "measurements"
         / "zenodo_15195587"
     )
@@ -22,6 +24,9 @@ def test_impedance_validation_cli_writes_accepted_report(tmp_path):
                 repo_root
                 / "egs"
                 / "rir_generation"
+                / "phases"
+                / "m2_impedance"
+                / "scripts"
                 / "validate_impedance_measurement.py"
             ),
             "--csv",

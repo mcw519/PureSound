@@ -5,10 +5,15 @@ from pathlib import Path
 import pytest
 
 
+# The M2 phase scripts live under phases/m2_impedance/scripts/, not at the
+# flat egs/rir_generation/ root they used before the phase reorganization.
 SCRIPT = (
     Path(__file__).parents[1]
     / "egs"
     / "rir_generation"
+    / "phases"
+    / "m2_impedance"
+    / "scripts"
     / "calibrate_impedance_residue_protocol.py"
 )
 

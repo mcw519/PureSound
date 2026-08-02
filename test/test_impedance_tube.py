@@ -257,6 +257,9 @@ def test_impedance_tube_cli_writes_loadable_complex_measurement(tmp_path):
                 repo_root
                 / "egs"
                 / "rir_generation"
+                / "phases"
+                / "m2_impedance"
+                / "scripts"
                 / "reduce_impedance_tube_measurement.py"
             ),
             "--transfer-csv",

@@ -198,6 +198,8 @@ def test_direct_normalized_liner_measurements_fit_held_out_frequencies():
         Path(__file__).resolve().parents[1]
         / "egs"
         / "rir_generation"
+        / "phases"
+        / "m2_impedance"
         / "measurements"
         / "zenodo_15195587"
     )
