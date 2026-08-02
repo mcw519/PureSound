@@ -22,15 +22,15 @@ from egs.rir_generation.phases.m3_wave_path.scripts.validate_oblique_fdtd_bounda
     _uniform_model,
     _worst_metrics,
 )
-from puresound.audio.acoustic_impedance import (
+from puresound.audio.rir.physics.impedance.admittance import (
     FirstOrderRelaxationAdmittance,
     digital_normalized_admittance_filter,
 )
-from puresound.audio.fdtd_reference import (
+from puresound.audio.rir.physics.wave.fdtd import (
     fdtd_discrete_plane_wave_reflection,
     ricker_source,
 )
-from puresound.audio.impedance_modes import (
+from puresound.audio.rir.physics.impedance.modes import (
     RectangularImpedanceBoundaryConfig,
 )
 

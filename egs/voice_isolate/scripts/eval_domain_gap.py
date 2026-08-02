@@ -59,7 +59,7 @@ from eval_far_suppression import (  # noqa: E402
 )
 
 from puresound.audio.io import AudioIO  # noqa: E402
-from puresound.audio.rir_bank import PreGeneratedRoomBank  # noqa: E402
+from puresound.audio.rir.bank.loader import PreGeneratedRoomBank
 from puresound.utils import fftconvolve  # noqa: E402
 
 

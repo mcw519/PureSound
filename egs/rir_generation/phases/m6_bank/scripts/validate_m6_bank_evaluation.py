@@ -11,17 +11,17 @@ from pathlib import Path
 from typing import Any, Sequence
 
 from egs.rir_generation.phases.m6_bank.scripts import validate_m6_variant_release
-from puresound.audio.rir_bank_evaluation import (
+from puresound.audio.rir.bank.evaluation import (
     M6_DOWNSTREAM_SCHEMA_VERSION,
     M6_LISTENING_SCHEMA_VERSION,
     M6_THROUGHPUT_SCHEMA_VERSION,
-    evaluate_m6_release,
     _paired_t_confidence_interval,
+    evaluate_m6_release,
     validate_downstream_report,
     validate_listening_report,
 )
-from puresound.audio.rir_bank_manifest import canonical_json_sha256
-from puresound.audio.rir_bank_release import RIRBankReleaseManifest
+from puresound.audio.rir.bank.schema import canonical_json_sha256
+from puresound.audio.rir.bank.release import RIRBankReleaseManifest
 
 
 REPO_ROOT = Path(__file__).resolve().parents[5]

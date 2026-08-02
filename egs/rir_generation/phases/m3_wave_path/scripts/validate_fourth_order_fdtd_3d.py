@@ -21,17 +21,17 @@ from egs.rir_generation.phases.m3_wave_path.scripts.validate_oblique_fdtd_bounda
     _error_summary,
     _uniform_model,
 )
-from puresound.audio.acoustic_impedance import (
+from puresound.audio.rir.physics.impedance.admittance import (
     FirstOrderRelaxationAdmittance,
 )
-from puresound.audio.fdtd_reference import (
+from puresound.audio.rir.physics.wave.fdtd import (
     BOUNDARIES,
-    FOURTH_ORDER_CLOSURE_CFL_LIMIT,
     FDTDReferenceConfig,
+    FOURTH_ORDER_CLOSURE_CFL_LIMIT,
     fdtd_discrete_plane_wave_reflection,
     simulate_fdtd_reference,
 )
-from puresound.audio.impedance_modes import (
+from puresound.audio.rir.physics.impedance.modes import (
     RectangularImpedanceBoundaryConfig,
 )
 

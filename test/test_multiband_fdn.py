@@ -4,7 +4,7 @@ import math
 import numpy as np
 import pytest
 
-from puresound.audio.multiband_fdn import (
+from puresound.audio.rir.render.multiband_fdn import (
     analyze_fdn_coloration,
     delay_proportional_loop_gains,
     design_multiband_fdn,
@@ -14,7 +14,7 @@ from puresound.audio.multiband_fdn import (
     render_multiband_fdn_impulse,
     select_prime_delay_lengths,
 )
-from puresound.audio.rir_metrics import analyze_echo_density, estimate_decay_time
+from puresound.audio.rir.metrics import analyze_echo_density, estimate_decay_time
 
 
 def _render_scalar_reference(design, excitation):

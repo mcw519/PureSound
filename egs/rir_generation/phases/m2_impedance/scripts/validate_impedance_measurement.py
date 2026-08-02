@@ -19,18 +19,16 @@ REPO_ROOT = Path(__file__).resolve().parents[5]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from puresound.audio.acoustic_impedance import (  # noqa: E402
+from puresound.audio.rir.physics.impedance.admittance import (
     FirstOrderRelaxationAdmittance,
 )
-from puresound.audio.impedance_fitting import (  # noqa: E402
+from puresound.audio.rir.physics.impedance.fitting import (
     fit_normalized_complex_impedance_measurement,
 )
-from puresound.audio.impedance_measurements import (  # noqa: E402
+from puresound.audio.rir.physics.impedance.measurements import (
     NormalizedComplexImpedanceMeasurement,
 )
-from puresound.audio.impedance_modes import (  # noqa: E402
-    solve_1d_impedance_cavity_modes,
-)
+from puresound.audio.rir.physics.impedance.modes import solve_1d_impedance_cavity_modes
 
 
 SCHEMA_VERSION = "puresound.impedance_measurement_validation.v1"

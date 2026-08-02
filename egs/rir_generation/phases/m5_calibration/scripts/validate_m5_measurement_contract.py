@@ -10,22 +10,22 @@ from typing import Any, Mapping, Sequence
 
 import numpy as np
 
-from puresound.audio.rir_calibration import (
-    RIR_CALIBRATION_LOSS_POLICY,
+from puresound.audio.rir.calibration.loss import (
     CalibrationLossWeights,
+    RIR_CALIBRATION_LOSS_POLICY,
     analyze_rir_calibration_loss,
     causality_penalty,
     spatial_coherence_distance,
 )
-from puresound.audio.rir_measurement_campaign import (
-    RIR_MEASUREMENT_CAMPAIGN_SCHEMA_VERSION,
-    ROOM_SPLITS,
+from puresound.audio.rir.calibration.measured_campaign import (
     CalibratedTransducer,
     MeasuredRIRRecord,
     MeasuredRoom,
     MeasurementAsset,
     MeasurementPose,
     RIRMeasurementCampaign,
+    RIR_MEASUREMENT_CAMPAIGN_SCHEMA_VERSION,
+    ROOM_SPLITS,
     SweepCapture,
     audit_measurement_campaign,
 )

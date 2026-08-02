@@ -1,6 +1,6 @@
 from egs.rir_generation import generate_hybrid_rir
 from egs.rir_generation import generate_m6_bank
-from puresound.audio.hybrid_rir import HybridRIRScene
+from puresound.audio.rir.scene.sampling import HybridRIRScene
 
 
 def test_m6_emission_is_opt_in_and_default_backend_is_unchanged(tmp_path):

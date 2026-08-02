@@ -10,9 +10,9 @@ from pathlib import Path
 from typing import Any, Sequence
 
 from egs.rir_generation.phases.m6_bank.scripts import validate_m6_bank_evaluation
-from puresound.audio.rir_bank import PreGeneratedReleaseBank
-from puresound.audio.rir_bank_manifest import canonical_json_sha256
-from puresound.audio.rir_bank_production import (
+from puresound.audio.rir.bank.loader import PreGeneratedReleaseBank
+from puresound.audio.rir.bank.schema import canonical_json_sha256
+from puresound.audio.rir.bank.production import (
     DEFAULT_PRODUCTION_DECISION_NAME,
     M6_PRODUCTION_EVIDENCE_SCHEMA_VERSION,
     audit_m6_production_evidence,

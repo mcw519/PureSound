@@ -11,8 +11,10 @@ from pathlib import Path
 
 import numpy as np
 
-from puresound.audio.acoustic_impedance import FirstOrderRelaxationAdmittance
-from puresound.audio.rir_path_events import (
+from puresound.audio.rir.physics.impedance.admittance import (
+    FirstOrderRelaxationAdmittance,
+)
+from puresound.audio.rir.path_events import (
     FRACTIONAL_DELAY_POLICY,
     PATH_EVENT_SCHEMA_VERSION,
     PATH_EVENT_SET_SCHEMA_VERSION,
@@ -21,7 +23,7 @@ from puresound.audio.rir_path_events import (
     generate_shoebox_path_events,
     render_path_events,
 )
-from puresound.audio.rir_source_convention import (
+from puresound.audio.rir.physics.wave.source_convention import (
     FREE_FIELD_1_OVER_R_RIR_CONVENTION,
 )
 

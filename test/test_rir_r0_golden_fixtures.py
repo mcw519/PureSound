@@ -25,11 +25,9 @@ import pathlib
 
 import pytest
 
-from puresound.audio.hybrid_rir import (
-    HybridRIRConfig,
-    sample_material_first_rir_scene,
-)
-from puresound.audio.rir_bank_manifest import (
+from puresound.audio.rir.contracts import HybridRIRConfig
+from puresound.audio.rir.scene.sampling import sample_material_first_rir_scene
+from puresound.audio.rir.bank.schema import (
     BankGeneratorProvenance,
     BankRendererProfile,
     BankSplitIndex,
@@ -40,8 +38,8 @@ from puresound.audio.rir_bank_manifest import (
     canonical_json_sha256,
     task_plan_rows,
 )
-from puresound.audio.rir_path_events import PathEventSet, generate_shoebox_path_events
-from puresound.audio.rir_scene import SCENE_SCHEMA_VERSION, RoomSceneV2
+from puresound.audio.rir.path_events import PathEventSet, generate_shoebox_path_events
+from puresound.audio.rir.scene.schema import RoomSceneV2, SCENE_SCHEMA_VERSION
 
 
 FIXTURE_DIR = pathlib.Path(__file__).resolve().parent / "fixtures" / "rir_r0"

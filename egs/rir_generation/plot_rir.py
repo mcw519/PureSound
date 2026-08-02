@@ -51,12 +51,9 @@ def load_scene(args):
 
 def _scene_and_config_from_metadata(metadata, duration_s):
     """Reconstruct the low-band scene/config needed for a field diagnostic."""
-    from puresound.audio.hybrid_rir import (
-        HybridRIRConfig,
-        HybridRIRScene,
-        PolygonObstacle,
-    )
-    from puresound.audio.rir_scene import RoomSceneV2
+    from puresound.audio.rir.contracts import HybridRIRConfig
+    from puresound.audio.rir.scene.sampling import HybridRIRScene, PolygonObstacle
+    from puresound.audio.rir.scene.schema import RoomSceneV2
 
     scene_data = metadata["scene"]
     if scene_data.get("schema_version") == "rir_scene.v2":
@@ -467,9 +464,9 @@ def cmd_field(args):
 # low-field (actual modal pressure slice)
 # --------------------------------------------------------------------------- #
 def _make_low_field_backend(metadata, args):
-    from puresound.audio.hybrid_rir import (
-        GpuARDPytARDCuPyBackend,
+    from puresound.audio.rir.render.low_frequency import (
         GpuARDPytARDBackend,
+        GpuARDPytARDCuPyBackend,
     )
 
     recorded = metadata.get("bands", {}).get("low", {}).get("backend", "")

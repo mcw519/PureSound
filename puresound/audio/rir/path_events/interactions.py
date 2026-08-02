@@ -634,3 +634,8 @@ def augment_scene_path_events_with_interactions(
         generator=f"{event_set.generator}+scene_interactions.m3.v1",
         metadata=metadata,
     )
+
+
+__all__ = [
+    "augment_scene_path_events_with_interactions",
+]

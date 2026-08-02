@@ -4,7 +4,7 @@ from egs.rir_generation.phases.m5_calibration.scripts.validate_m5_measurement_co
     audit_legacy_bank_metadata,
     build_report,
 )
-from puresound.audio.rir_measurement_campaign import RIRMeasurementCampaign
+from puresound.audio.rir.calibration.measured_campaign import RIRMeasurementCampaign
 
 
 def test_m5_1_implementation_exit_is_separate_from_measurement_readiness(tmp_path):

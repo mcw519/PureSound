@@ -58,3 +58,9 @@ def directivity_pressure_gain(
     )
     alpha = alpha_by_pattern[pattern]
     return float(alpha + (1.0 - alpha) * np.dot(forward, direction))
+
+
+__all__ = [
+    "directivity_pressure_gain",
+    "orientation_forward_unit",
+]

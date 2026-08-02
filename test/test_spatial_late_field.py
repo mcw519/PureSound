@@ -4,11 +4,12 @@ from dataclasses import replace
 import numpy as np
 import pytest
 
-from puresound.audio.multiband_fdn import design_multiband_fdn
-from puresound.audio.binaural_renderer import analytic_first_order_binaural_decoder
-from puresound.audio.hybrid_rir import HybridRIRConfig, sample_material_first_rir_scene
-from puresound.audio.spatial_rir import render_room_scene_spatial_rir
-from puresound.audio.spatial_late_field import (
+from puresound.audio.rir.render.multiband_fdn import design_multiband_fdn
+from puresound.audio.rir.render.binaural import analytic_first_order_binaural_decoder
+from puresound.audio.rir.contracts import HybridRIRConfig
+from puresound.audio.rir.scene.sampling import sample_material_first_rir_scene
+from puresound.audio.rir.render.spatial import render_room_scene_spatial_rir
+from puresound.audio.rir.render.spatial_late_field import (
     couple_receiver_array_early_late,
     fibonacci_sphere_directions,
     render_spatial_fdn_late_field,

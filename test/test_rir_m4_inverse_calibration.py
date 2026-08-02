@@ -3,7 +3,7 @@ import json
 import numpy as np
 import pytest
 
-from puresound.audio.rir_m4_inverse_calibration import (
+from puresound.audio.rir.calibration.inverse_m4 import (
     M4InverseObservation,
     M4InverseParameters,
     M4ProfileObjectiveConfig,

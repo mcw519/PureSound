@@ -3,14 +3,14 @@ import json
 import numpy as np
 import pytest
 
-from puresound.audio.impedance_residues import (
+from puresound.audio.rir.physics.impedance.residues import (
     FixedPoleResidueCase,
     IMPEDANCE_MODAL_RESIDUE_SCHEMA_VERSION,
-    LEGACY_IMPEDANCE_MODAL_RESIDUE_SCHEMA_VERSION,
     ImpedanceModalResidueCalibration,
+    LEGACY_IMPEDANCE_MODAL_RESIDUE_SCHEMA_VERSION,
     fit_fixed_pole_modal_residues,
 )
-from puresound.audio.rir_source_convention import (
+from puresound.audio.rir.physics.wave.source_convention import (
     FDTD_PRESSURE_CELL_SOURCE_CONVENTION,
     FREE_FIELD_1_OVER_R_RIR_CONVENTION,
     PRESSURE_STATE_TO_FREE_FIELD_RESIDUE_TRANSFORM,

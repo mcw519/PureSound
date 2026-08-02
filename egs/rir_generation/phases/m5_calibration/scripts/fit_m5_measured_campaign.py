@@ -12,14 +12,12 @@ REPO_ROOT = Path(__file__).resolve().parents[5]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from puresound.audio.rir_measured_calibration import (  # noqa: E402
-    M5_MEASURED_ROOM_FIT_POLICY,
+from puresound.audio.rir.calibration.measured_runner import (
     CampaignNotReadyError,
+    M5_MEASURED_ROOM_FIT_POLICY,
     run_measured_campaign_fit,
 )
-from puresound.audio.rir_measurement_campaign import (  # noqa: E402
-    RIRMeasurementCampaign,
-)
+from puresound.audio.rir.calibration.measured_campaign import RIRMeasurementCampaign
 
 
 def main() -> int:

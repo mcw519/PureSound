@@ -6,7 +6,7 @@ from egs.rir_generation.phases.m2_impedance.scripts.validate_full_room_crossover
     _image_source_transfer,
     _shoebox_image_geometry,
 )
-from puresound.audio.acoustic_impedance import (
+from puresound.audio.rir.physics.impedance.admittance import (
     FirstOrderRelaxationAdmittance,
 )
 

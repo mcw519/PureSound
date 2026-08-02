@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from puresound.audio.rir_measurement_campaign import (
+from puresound.audio.rir.calibration.measured_campaign import (
     CalibratedTransducer,
     MeasuredRIRRecord,
     MeasuredRoom,

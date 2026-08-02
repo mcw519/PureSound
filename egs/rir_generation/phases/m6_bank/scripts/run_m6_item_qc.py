@@ -8,7 +8,7 @@ import json
 from pathlib import Path
 from typing import Sequence
 
-from puresound.audio.rir_bank_qc import (
+from puresound.audio.rir.bank.qc import (
     DEFAULT_QC_SUMMARY_NAME,
     RIRBankQCPolicy,
     audit_rir_bank_qc_release,

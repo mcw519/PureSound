@@ -17,16 +17,14 @@ REPO_ROOT = Path(__file__).resolve().parents[5]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from puresound.audio.hybrid_rir import (  # noqa: E402
-    HybridRIRConfig,
-    sample_material_first_rir_scene,
-)
-from puresound.audio.rir_m5_pipeline import (  # noqa: E402
+from puresound.audio.rir.contracts import HybridRIRConfig
+from puresound.audio.rir.scene.sampling import sample_material_first_rir_scene
+from puresound.audio.rir.calibration.inverse_m5 import (
     M5_SPATIAL_CANDIDATE_PROFILE_POLICY,
     select_spatial_calibration_candidate,
 )
-from puresound.audio.rir_scene import MaterialSpectrum  # noqa: E402
-from puresound.audio.spatial_rir import (  # noqa: E402
+from puresound.audio.rir.scene.schema import MaterialSpectrum
+from puresound.audio.rir.render.spatial import (
     SPATIAL_ROOM_RIR_POLICY,
     render_room_scene_spatial_rir,
 )

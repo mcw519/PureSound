@@ -20,13 +20,13 @@ REPO_ROOT = Path(__file__).resolve().parents[5]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from puresound.audio.multiband_fdn import (  # noqa: E402
+from puresound.audio.rir.render.multiband_fdn import (
     MULTIBAND_FDN_POLICY,
     analyze_fdn_coloration,
     design_multiband_fdn,
     render_multiband_fdn_impulse,
 )
-from puresound.audio.rir_metrics import analyze_multiband_late_field  # noqa: E402
+from puresound.audio.rir.metrics import analyze_multiband_late_field
 
 
 DEFAULT_TARGET_REPORT = (

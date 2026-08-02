@@ -3,7 +3,7 @@ import pytest
 
 from egs.rir_generation.phases.m6_bank.scripts import validate_m6_variant_release
 from puresound.audio.augmentation import AudioEffectAugmentor
-from puresound.audio.rir_bank import PreGeneratedReleaseBank
+from puresound.audio.rir.bank.loader import PreGeneratedReleaseBank
 from puresound.task.ns import NoiseSuppressionCollateFunc, NoiseSuppressionDataset
 
 

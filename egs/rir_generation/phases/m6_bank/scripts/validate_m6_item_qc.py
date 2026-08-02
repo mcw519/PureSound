@@ -15,17 +15,14 @@ import numpy as np
 import soundfile as sf
 
 from egs.rir_generation.phases.m6_bank.scripts.validate_m6_reproducible_generation import _run_generator
-from puresound.audio.rir_bank import PreGeneratedRoomBank
-from puresound.audio.rir_bank_manifest import (
+from puresound.audio.rir.bank.loader import PreGeneratedRoomBank
+from puresound.audio.rir.bank.schema import (
     RIRBankItem,
     RIRBankManifest,
     audit_rir_bank_manifest,
     sha256_file,
 )
-from puresound.audio.rir_bank_qc import (
-    audit_rir_bank_qc_release,
-    run_rir_bank_qc,
-)
+from puresound.audio.rir.bank.qc import audit_rir_bank_qc_release, run_rir_bank_qc
 
 
 REPO_ROOT = Path(__file__).resolve().parents[5]

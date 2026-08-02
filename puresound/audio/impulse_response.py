@@ -3,7 +3,7 @@ from typing import Optional
 import torch
 import torchaudio
 
-from puresound.audio.rir_metrics import compute_drr_db as _compute_drr_db
+from puresound.audio.rir.metrics import compute_drr_db as _compute_drr_db
 from puresound.utils import fftconvolve
 
 

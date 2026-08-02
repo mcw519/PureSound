@@ -35,10 +35,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from puresound.audio.rir_metrics import (  # noqa: E402
-    DEFAULT_OCTAVE_CENTERS_HZ,
-    analyze_rir,
-)
+from puresound.audio.rir.metrics import DEFAULT_OCTAVE_CENTERS_HZ, analyze_rir
 
 BUCKETS = [(0.0, 1.0), (1.0, 2.0), (2.0, 3.5), (3.5, 6.0), (6.0, 99.0)]
 

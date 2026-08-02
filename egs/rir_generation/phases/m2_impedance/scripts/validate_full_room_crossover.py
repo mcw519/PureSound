@@ -13,29 +13,29 @@ from typing import Any
 import numpy as np
 from scipy.signal import butter, sosfreqz
 
-from puresound.audio.fdtd_reference import (
+from puresound.audio.rir.physics.wave.fdtd import (
     FDTDReferenceConfig,
     ricker_source,
-    simulate_reciprocal_fdtd_reference,
     simulate_fdtd_reference,
+    simulate_reciprocal_fdtd_reference,
 )
-from puresound.audio.hybrid_rir import (
-    HybridRIRConfig,
+from puresound.audio.rir.contracts import HybridRIRConfig
+from puresound.audio.rir.render.low_frequency import ImpedanceModalLowFrequencyBackend
+from puresound.audio.rir.scene.sampling import (
     HybridRIRScene,
-    ImpedanceModalLowFrequencyBackend,
     upgrade_hybrid_scene_to_v2,
 )
-from puresound.audio.impedance_modes import (
+from puresound.audio.rir.physics.impedance.modes import (
     RectangularImpedanceBoundaryConfig,
 )
-from puresound.audio.impedance_residues import (
+from puresound.audio.rir.physics.impedance.residues import (
     ImpedanceModalResidueCalibration,
 )
-from puresound.audio.rir_source_convention import (
+from puresound.audio.rir.physics.wave.source_convention import (
     fdtd_cell_center_position,
     fdtd_pressure_cell_to_free_field_input,
 )
-from puresound.audio.rir_path_events import (
+from puresound.audio.rir.path_events import (
     generate_shoebox_path_events,
     render_path_events,
 )

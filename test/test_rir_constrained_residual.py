@@ -2,7 +2,7 @@ import json
 
 import numpy as np
 
-from puresound.audio.rir_constrained_residual import (
+from puresound.audio.rir.calibration.residual import (
     evaluate_residual_ablation,
     fit_causal_decay_residual,
 )

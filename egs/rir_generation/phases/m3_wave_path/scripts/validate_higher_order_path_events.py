@@ -14,12 +14,10 @@ from egs.rir_generation.phases.m2_impedance.scripts.validate_full_room_crossover
     _image_source_transfer,
     _shoebox_image_geometry,
 )
-from puresound.audio.impedance_modes import (
+from puresound.audio.rir.physics.impedance.modes import (
     RectangularImpedanceBoundaryConfig,
 )
-from puresound.audio.rir_path_events import (
-    generate_shoebox_path_events,
-)
+from puresound.audio.rir.path_events import generate_shoebox_path_events
 
 
 REPORT_SCHEMA_VERSION = "puresound.higher_order_path_event_validation.v1"

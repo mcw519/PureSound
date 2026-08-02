@@ -11,16 +11,14 @@ from typing import Any
 
 import numpy as np
 
-from puresound.audio.acoustic_impedance import (
+from puresound.audio.rir.physics.impedance.admittance import (
     digital_locally_reacting_reflection_filter,
 )
-from puresound.audio.fdtd_reference import (
-    fdtd_discrete_plane_wave_reflection,
-)
-from puresound.audio.impedance_modes import (
+from puresound.audio.rir.physics.wave.fdtd import fdtd_discrete_plane_wave_reflection
+from puresound.audio.rir.physics.impedance.modes import (
     RectangularImpedanceBoundaryConfig,
 )
-from puresound.audio.rir_path_events import (
+from puresound.audio.rir.path_events import (
     generate_shoebox_path_events,
     partition_path_events_by_arrival,
 )

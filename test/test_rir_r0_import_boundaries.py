@@ -9,12 +9,10 @@ Two kinds of guard live here:
 
 1. **Forward guard** — every module under ``puresound/audio/rir/`` is checked
    against the layer table, so a cross-layer import cannot be introduced during
-   R1..R7.  Today only ``contracts`` exists, which is the point: the rule is in
-   place before the code arrives.
-2. **Regression guard** — the flat modules that are *already* free of heavy or
-   optional dependencies must stay that way.  ``scene``/``materials``/
-   ``bank_manifest`` currently import neither ``torch`` nor a renderer, and the
-   plan requires that to hold after the migration.
+   R1..R7 or afterwards.
+2. **Dependency guard** — the modules that carry schemas and analysis must
+   import without ``torch``, ``torchaudio`` or a renderer, so a manifest reader
+   or a metrics consumer does not pay for the whole stack.
 """
 
 from __future__ import annotations
@@ -48,25 +46,13 @@ LAYER_RANK: dict[str, int] = {
 #: time.  Plan §3.1 rule 1 plus the NumPy/Torch boundary in the risk table.
 CONTRACTS_FORBIDDEN_ROOTS = ("torch", "torchaudio", "pyroomacoustics", "cupy")
 
-#: Flat modules that import cleanly today and must keep doing so.
-#: ``scipy`` is permitted — plan §3.1 puts ``numpy/scipy`` at the bottom layer.
-PURE_FLAT_MODULES = (
-    "puresound.audio.rir_scene",
-    "puresound.audio.rir_materials",
-    "puresound.audio.rir_bank_manifest",
-)
-
 #: Optional backends that must never be imported merely by importing a module.
 #: Plan §3.1 rule 8 requires lazy import.
 OPTIONAL_BACKEND_ROOTS = ("pyroomacoustics", "cupy", "torch", "torchaudio")
 
-#: Canonical package modules that must import without the heavy stack.
-#:
-#: This is where the property really has to hold: the flat entries below are
-#: shims that will eventually go away, but these are the modules everything
-#: will import afterwards.  ``bank.schema`` is here deliberately — a manifest
-#: reader must not need ``torch``, which is why ``bank/__init__.py`` imports
-#: nothing.
+#: Modules that must import without the heavy stack.  ``bank.schema`` is here
+#: deliberately — a manifest reader must not need ``torch``, which is why
+#: ``bank/__init__.py`` imports nothing.
 PURE_PACKAGE_MODULES = (
     "puresound.audio.rir.contracts",
     "puresound.audio.rir.scene",
@@ -82,17 +68,15 @@ PURE_PACKAGE_MODULES = (
     "puresound.audio.rir.bank.schema",
 )
 
-#: Flat modules that must not drag an optional renderer in at import time,
-#: even though they may legitimately use scipy.
-NO_OPTIONAL_BACKEND_MODULES = PURE_FLAT_MODULES + (
-    "puresound.audio.rir_metrics",
-    "puresound.audio.rir_path_events",
-    "puresound.audio.multiband_fdn",
-    "puresound.audio.rir_late_coupling",
-    "puresound.audio.rir_bank_qc",
-    "puresound.audio.rir_bank_release",
-    "puresound.audio.rir_bank_evaluation",
-    "puresound.audio.rir_bank_production",
+#: Modules that must not drag an optional renderer in at import time.
+#: Plan §3.1 rule 8 requires lazy import.
+NO_OPTIONAL_BACKEND_MODULES = PURE_PACKAGE_MODULES + (
+    "puresound.audio.rir.render.coupling",
+    "puresound.audio.rir.render.multiband_fdn",
+    "puresound.audio.rir.bank.qc",
+    "puresound.audio.rir.bank.release",
+    "puresound.audio.rir.bank.evaluation",
+    "puresound.audio.rir.bank.production",
 )
 
 
@@ -238,14 +222,7 @@ class TestPackageModuleGuards:
         )
 
 
-class TestFlatModuleRegressionGuards:
-    @pytest.mark.parametrize("module", PURE_FLAT_MODULES)
-    def test_pure_modules_stay_free_of_heavy_dependencies(self, module):
-        loaded = _import_in_subprocess(module, CONTRACTS_FORBIDDEN_ROOTS)
-        assert not loaded, (
-            f"{module} imports cleanly today; it must not start pulling {loaded}"
-        )
-
+class TestOptionalBackendGuards:
     @pytest.mark.parametrize("module", NO_OPTIONAL_BACKEND_MODULES)
     def test_optional_backends_are_lazily_imported(self, module):
         loaded = _import_in_subprocess(module, OPTIONAL_BACKEND_ROOTS)

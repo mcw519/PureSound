@@ -1,9 +1,13 @@
-"""Hybrid low-frequency wave and high-frequency geometric RIR generation.
+"""Hybrid RIR generation: the orchestration that composes the render layers.
 
-The module is intentionally split into small, testable pieces.  Scene
-sampling, obstacle geometry, crossover filtering, and file writing work without
-optional simulators installed.  Real generation uses a low-frequency backend
-such as pytARD and a high-frequency Pyroomacoustics backend.
+``generate_hybrid_rir`` samples or accepts a scene, runs a low-frequency and a
+high-frequency backend, applies the causality clip and the crossover, and
+assembles the metadata.  It owns no geometry, no solver and no file writing —
+those live in ``scene``, ``render.low_frequency`` / ``render.high_frequency``,
+``render.crossover`` and ``bank.storage`` respectively.
+
+Backends are injected: pass any object satisfying
+``puresound.audio.rir.render.backend.RIRBackend``.
 """
 
 from __future__ import annotations
@@ -17,66 +21,25 @@ import torch
 from puresound.audio.rir.bank.storage import write_hybrid_rir_dataset_item
 from puresound.audio.rir.contracts import HybridRIRConfig
 from puresound.audio.rir.metrics import analyze_rir, valid_octave_centers
-from puresound.audio.rir.render.arrays import (
-    coerce_rir_array as _coerce_rir_array,
-    pad_or_trim as _pad_or_trim,
-)
 from puresound.audio.rir.render.backend import RIRBackend
 from puresound.audio.rir.render.crossover import (
-    align_high_band_direct as _align_high_band_direct,
-    clip_rir_before_physical_arrival as _clip_rir_before_physical_arrival,
-    effective_crossover_match_band as _effective_crossover_match_band,
-    hybrid_crossover,
-    hybrid_crossover_with_metadata as _hybrid_crossover_with_metadata,
-    match_low_band_to_high_band as _match_low_band_to_high_band,
+    clip_rir_before_physical_arrival,
+    hybrid_crossover_with_metadata,
 )
 from puresound.audio.rir.render.high_frequency import (
-    PathEventFDNHighFrequencyBackend,
     PathEventHighFrequencyBackend,
     PyroomacousticsHighFrequencyBackend,
-    apply_obstacle_high_frequency_effects,
     obstacle_effects_metadata,
 )
 from puresound.audio.rir.render.low_frequency import (
     AnalyticModalLowFrequencyBackend,
     GpuARDPytARDBackend,
-    GpuARDPytARDCuPyBackend,
     ImpedanceModalLowFrequencyBackend,
-    PytARDWaveBackend,
     material_modal_damping_metadata,
-)
-from puresound.audio.rir.render.low_frequency.modal_damping import (
-    material_modal_decay_rates as _material_modal_decay_rates,
-)
-from puresound.audio.rir.render.low_frequency.pytard import (
-    apply_rt60_decay_envelope as _apply_rt60_decay_envelope,
-    calibrate_pytard_signal as _calibrate_pytard_signal,
-    pytard_green_delta_excitation as _pytard_green_delta_excitation,
-    solve_modal_ard as _solve_modal_ard,
-)
-from puresound.audio.rir.scene.geometry import (
-    clip_position_to_room as _clip_position_to_room,
-    distance_point_to_polygon as _distance_point_to_polygon,
-    distance_point_to_segment as _distance_point_to_segment,
-    max_room_distance_from_point as _max_room_distance_from_point,
-    max_room_horizontal_distance_from_point as _max_room_horizontal_distance_from_point,  # noqa: E501
-    point_in_polygon as _point_in_polygon,
-    polygon_area as _polygon_area,
-    polygon_distance as _polygon_distance,
-    polygons_overlap as _polygons_overlap,
-    segments_intersect as _segments_intersect,
 )
 from puresound.audio.rir.scene.sampling import (
     HybridRIRScene,
-    PolygonObstacle,
-    min_feasible_rt60 as _min_feasible_rt60,
-    obstacle_floor_coverage as _obstacle_floor_coverage,
     sample_hybrid_rir_scene,
-    sample_material_first_rir_scene,
-    sample_point as _sample_point,
-    sample_polygon_obstacles,
-    sample_source_in_horizontal_shell as _sample_source_in_horizontal_shell,
-    upgrade_hybrid_scene_to_v2,
 )
 from puresound.audio.rir.scene.schema import RoomSceneV2
 
@@ -118,7 +81,7 @@ def generate_hybrid_rir(
     # must not be allowed into the hybrid signal (or into M6 causality QC).
     # Apply the same discrete arrival-bin contract used by the high-band
     # alignment: samples n < floor(distance / c * fs) are exactly zero.
-    low = _clip_rir_before_physical_arrival(low, scene, effective_config)
+    low = clip_rir_before_physical_arrival(low, scene, effective_config)
     high = high_backend.simulate(scene, effective_config)
     if isinstance(scene, RoomSceneV2):
         gains = scene.transducer_channel_gains(
@@ -154,7 +117,7 @@ def generate_hybrid_rir(
         effective_config,
         match_crossover_energy=energy_matching_applied,
     )
-    rir, crossover_metadata = _hybrid_crossover_with_metadata(
+    rir, crossover_metadata = hybrid_crossover_with_metadata(
         low,
         high,
         crossover_config,
@@ -465,31 +428,4 @@ def _config_metadata(config: HybridRIRConfig) -> dict[str, Any]:
 
 
 
-#: The public surface of this module, frozen by R0 and enforced by
-#: ``test/test_rir_r0_api_inventory.py``.  Symbols re-exported from
-#: ``puresound.audio.rir`` during the modularization stay listed here so the
-#: legacy import path keeps working.
-__all__ = [
-    "AnalyticModalLowFrequencyBackend",
-    "GpuARDPytARDBackend",
-    "GpuARDPytARDCuPyBackend",
-    "HybridRIRConfig",
-    "HybridRIRScene",
-    "ImpedanceModalLowFrequencyBackend",
-    "PathEventFDNHighFrequencyBackend",
-    "PathEventHighFrequencyBackend",
-    "PolygonObstacle",
-    "PyroomacousticsHighFrequencyBackend",
-    "PytARDWaveBackend",
-    "RIRBackend",
-    "apply_obstacle_high_frequency_effects",
-    "generate_hybrid_rir",
-    "hybrid_crossover",
-    "material_modal_damping_metadata",
-    "obstacle_effects_metadata",
-    "sample_hybrid_rir_scene",
-    "sample_material_first_rir_scene",
-    "sample_polygon_obstacles",
-    "upgrade_hybrid_scene_to_v2",
-    "write_hybrid_rir_dataset_item",
-]
+__all__ = ["generate_hybrid_rir"]

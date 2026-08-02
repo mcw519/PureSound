@@ -6,38 +6,46 @@ import numpy as np
 import pytest
 import torch
 
-from puresound.audio.hybrid_rir import (
+from puresound.audio.rir.bank.storage import write_hybrid_rir_dataset_item
+from puresound.audio.rir.contracts import HybridRIRConfig
+from puresound.audio.rir.render.crossover import (
+    clip_rir_before_physical_arrival as _clip_rir_before_physical_arrival,
+    hybrid_crossover,
+    hybrid_crossover_with_metadata as _hybrid_crossover_with_metadata,
+)
+from puresound.audio.rir.render.high_frequency import (
+    PathEventFDNHighFrequencyBackend,
+    PathEventHighFrequencyBackend,
+    apply_obstacle_high_frequency_effects,
+    obstacle_effects_metadata,
+)
+from puresound.audio.rir.render.hybrid import generate_hybrid_rir
+from puresound.audio.rir.render.low_frequency import (
     AnalyticModalLowFrequencyBackend,
     GpuARDPytARDBackend,
     GpuARDPytARDCuPyBackend,
-    HybridRIRConfig,
-    HybridRIRScene,
     ImpedanceModalLowFrequencyBackend,
-    PathEventFDNHighFrequencyBackend,
-    PathEventHighFrequencyBackend,
+)
+from puresound.audio.rir.render.low_frequency.pytard import (
+    pytard_green_delta_excitation as _pytard_green_delta_excitation,
+    solve_modal_ard as _solve_modal_ard,
+)
+from puresound.audio.rir.scene.geometry import polygons_overlap as _polygons_overlap
+from puresound.audio.rir.scene.sampling import (
+    HybridRIRScene,
     PolygonObstacle,
-    apply_obstacle_high_frequency_effects,
-    generate_hybrid_rir,
-    hybrid_crossover,
-    obstacle_effects_metadata,
+    obstacle_floor_coverage as _obstacle_floor_coverage,
     sample_hybrid_rir_scene,
     upgrade_hybrid_scene_to_v2,
-    write_hybrid_rir_dataset_item,
-    _obstacle_floor_coverage,
-    _polygons_overlap,
-    _hybrid_crossover_with_metadata,
-    _clip_rir_before_physical_arrival,
-    _pytard_green_delta_excitation,
-    _solve_modal_ard,
 )
-from puresound.audio.acoustic_impedance import (
+from puresound.audio.rir.physics.impedance.admittance import (
     FirstOrderRelaxationAdmittance,
 )
-from puresound.audio.impedance_modes import (
+from puresound.audio.rir.physics.impedance.modes import (
     RECTANGULAR_BOUNDARIES,
     RectangularImpedanceBoundaryConfig,
 )
-from puresound.audio.impedance_residues import (
+from puresound.audio.rir.physics.impedance.residues import (
     ImpedanceModalResidueCalibration,
 )
 
@@ -676,7 +684,9 @@ def test_crossover_rejects_audit_band_that_excludes_crossover():
 
 
 def test_pytard_calibrated_signal_has_rt60_tail_decay():
-    from puresound.audio.hybrid_rir import _calibrate_pytard_signal
+    from puresound.audio.rir.render.low_frequency.pytard import (
+        calibrate_pytard_signal as _calibrate_pytard_signal,
+    )
 
     signal = np.ones(8000, dtype=np.float64)
     out = _calibrate_pytard_signal(
@@ -694,7 +704,9 @@ def test_pytard_calibrated_signal_has_rt60_tail_decay():
 
 
 def test_decay_envelope_starts_at_direct_path_not_signal_peak():
-    from puresound.audio.hybrid_rir import _apply_rt60_decay_envelope
+    from puresound.audio.rir.render.low_frequency.pytard import (
+        apply_rt60_decay_envelope as _apply_rt60_decay_envelope,
+    )
 
     # Energy concentrated late (as in a lossless modal field). The envelope must
     # be keyed to the supplied direct-path origin, not the signal peak: samples
@@ -713,7 +725,9 @@ def test_decay_envelope_starts_at_direct_path_not_signal_peak():
 def test_high_band_reverberation_follows_requested_rt60():
     if importlib.util.find_spec("pyroomacoustics") is None:
         pytest.skip("pyroomacoustics not installed")
-    from puresound.audio.hybrid_rir import PyroomacousticsHighFrequencyBackend
+    from puresound.audio.rir.render.high_frequency import (
+        PyroomacousticsHighFrequencyBackend,
+    )
 
     config = HybridRIRConfig(sample_rate=16000, duration=0.8, num_obstacles_range=(0, 0))
 
@@ -747,7 +761,9 @@ def test_high_band_reverberation_follows_requested_rt60():
 def test_pyroom_ray_tracing_is_repeatable_when_task_seed_is_reset():
     if importlib.util.find_spec("pyroomacoustics") is None:
         pytest.skip("pyroomacoustics not installed")
-    from puresound.audio.hybrid_rir import PyroomacousticsHighFrequencyBackend
+    from puresound.audio.rir.render.high_frequency import (
+        PyroomacousticsHighFrequencyBackend,
+    )
 
     config = HybridRIRConfig(
         sample_rate=8000,
@@ -780,7 +796,9 @@ def test_pyroom_ray_tracing_is_repeatable_when_task_seed_is_reset():
 def test_pyroom_v2_backend_renders_scene_source_directivity():
     if importlib.util.find_spec("pyroomacoustics") is None:
         pytest.skip("pyroomacoustics not installed")
-    from puresound.audio.hybrid_rir import PyroomacousticsHighFrequencyBackend
+    from puresound.audio.rir.render.high_frequency import (
+        PyroomacousticsHighFrequencyBackend,
+    )
 
     config = HybridRIRConfig(
         sample_rate=8000,
@@ -934,7 +952,9 @@ def test_opt_in_m4_backend_preserves_early_paths_and_serializes_coupling():
 
 
 def test_high_band_alignment_removes_energy_before_physical_arrival():
-    from puresound.audio.hybrid_rir import _align_high_band_direct
+    from puresound.audio.rir.render.crossover import (
+        align_high_band_direct as _align_high_band_direct,
+    )
 
     config = HybridRIRConfig(
         sample_rate=1000,
@@ -999,9 +1019,9 @@ def test_scene_sampling_constrains_3d_distance_and_feasible_rt60():
     always Sabine-feasible so the metadata matches the realized reverberation."""
     import numpy as np
 
-    from puresound.audio.hybrid_rir import (
-        HybridRIRConfig,
-        _min_feasible_rt60,
+    from puresound.audio.rir.contracts import HybridRIRConfig
+    from puresound.audio.rir.scene.sampling import (
+        min_feasible_rt60 as _min_feasible_rt60,
         sample_hybrid_rir_scene,
     )
 

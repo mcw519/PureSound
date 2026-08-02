@@ -12,16 +12,16 @@ from pathlib import Path
 import numpy as np
 from scipy.signal import butter, fftconvolve, sosfiltfilt
 
-from puresound.audio.fdtd_reference import (
+from puresound.audio.rir.physics.wave.fdtd import (
     FDTDReferenceConfig,
     ricker_source,
     simulate_fdtd_reference,
 )
-from puresound.audio.impedance_modes import (
+from puresound.audio.rir.physics.impedance.modes import (
     RectangularImpedanceBoundaryConfig,
     solve_rectangular_impedance_modes,
 )
-from puresound.audio.impedance_residues import (
+from puresound.audio.rir.physics.impedance.residues import (
     FixedPoleResidueCase,
     fit_fixed_pole_modal_residues,
 )

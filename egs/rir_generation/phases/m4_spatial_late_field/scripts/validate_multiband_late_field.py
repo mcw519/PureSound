@@ -34,7 +34,7 @@ from egs.rir_generation.phases.m4_spatial_late_field.scripts.validate_late_field
     discover_items,
     distance_bucket,
 )
-from puresound.audio.rir_metrics import (  # noqa: E402
+from puresound.audio.rir.metrics import (
     DIFFUSE_FIELD_COHERENCE_POLICY,
     IACC_POLICY,
     MULTIBAND_LATE_FIELD_POLICY,

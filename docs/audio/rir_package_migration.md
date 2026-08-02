@@ -4,19 +4,19 @@ The RIR code moved from flat modules under `puresound/audio/` into the
 `puresound.audio.rir` domain package, following
 [`RIR_MODULARIZATION_PLAN.md`](../../RIR_MODULARIZATION_PLAN.md) stages R0–R7.
 
-**Nothing you import today has broken.** Every old path still works through a
-compatibility shim. This guide is for writing new code and for moving existing
-code when you happen to touch it.
+The flat modules are **gone**, and so are the compatibility shims that briefly
+stood in for them: every caller in `egs/`, `test/` and `puresound/` now imports
+the canonical path. This guide is the old-to-new map, kept because commits,
+notebooks and branches predating the migration still reference the old names.
 
-## Why bother moving
+## Why it was worth doing
 
 Two practical reasons, beyond tidiness:
 
-- **Import cost.** `puresound.audio.rir.scene.schema`,
-  `rir.bank.schema` and the whole `metrics` package import without `torch`,
-  `torchaudio` or Pyroomacoustics. The flat shims mostly do too, but the
-  canonical modules are where that property is enforced by
-  `test/test_rir_r0_import_boundaries.py`.
+- **Import cost.** `puresound.audio.rir.scene.schema`, `rir.bank.schema` and
+  the whole `metrics` package import without `torch`, `torchaudio` or
+  Pyroomacoustics, and `test/test_rir_r0_import_boundaries.py` enforces it.
+  A manifest reader no longer pays for the renderer stack.
 - **Finding things.** `rir_metrics.py` was 1,516 lines covering time, spectrum,
   decay, density and spatial coherence. Those are now five modules whose names
   say which one you want.
@@ -95,9 +95,8 @@ covers most uses.
 
 ## Renamed helpers
 
-Several private helpers that recipes and tests imported through the underscore
-got real names in their new home. The old names still work from
-`puresound.audio.hybrid_rir`:
+Several private helpers that recipes and tests reached for through the
+underscore got real names in their new home:
 
 | Old (`hybrid_rir._x`) | New |
 |---|---|
@@ -144,16 +143,23 @@ api  ->  render, calibration, bank  ->  path_events, scene, metrics
 `contracts` free of every project import. If you add a module under
 `puresound/audio/rir/`, put it in a layer listed in that test's `LAYER_RANK`.
 
-## When the shims go away
+## What the migration removed
 
-They have no removal date. The plan's R7 deliberately keeps them: the value of
-deleting them is small next to the churn of rewriting every recipe and phase
-validator. Two things should happen before anyone proposes removing them:
+- **35 compatibility shims.** They existed to let the eight migration stages be
+  verified one at a time; once the last stage landed they were pure duplication,
+  offering a second spelling for every name. `test_rir_r0_api_inventory.py`
+  fails if one reappears.
+- **The underscore aliases.** `render/hybrid.py` no longer re-exports
+  `_solve_modal_ard` and friends; the fifteen private helpers external code used
+  are public names in their own modules now. One cross-package private import
+  remains — the M6.5 validator's `_paired_t_confidence_interval` — and it is
+  recorded in the inventory test.
+- **`render/hybrid.py`'s re-export surface.** It exported 22 names for the
+  shim's benefit; it now exports one, `generate_hybrid_rir`, which is what an
+  orchestration module should own.
 
-1. `egs/` and `test/` move to canonical paths.
-2. The two dead-code candidates the R0 inventory recorded —
-   `PytARDWaveBackend` and `hybrid_rir._sample_source_in_shell` — are resolved
-   rather than carried along.
-
-Until then, treat a shim import as fine in existing code and avoidable in new
-code.
+Two dead-code candidates are deliberately *not* removed:
+`PytARDWaveBackend` and `scene.sampling._sample_source_in_shell`. Both are
+recorded in `KNOWN_UNUSED` in the inventory test, which fails if the claim stops
+being true in either direction — someone starts using them, or someone deletes
+them without updating the record.

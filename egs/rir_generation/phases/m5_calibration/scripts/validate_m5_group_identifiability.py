@@ -18,25 +18,21 @@ REPO_ROOT = Path(__file__).resolve().parents[5]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from puresound.audio.hybrid_rir import (  # noqa: E402
-    HybridRIRConfig,
-    sample_material_first_rir_scene,
-)
-from puresound.audio.rir_calibration import (  # noqa: E402
+from puresound.audio.rir.contracts import HybridRIRConfig
+from puresound.audio.rir.scene.sampling import sample_material_first_rir_scene
+from puresound.audio.rir.calibration.loss import (
     CalibrationLossWeights,
     analyze_rir_calibration_loss,
 )
-from puresound.audio.rir_m5_pipeline import (  # noqa: E402
-    M5_GROUPED_PATH_INVERSE_POLICY,
+from puresound.audio.rir.calibration.inverse_m5 import (
     GroupedPathObservation,
     GroupedPathParameters,
+    M5_GROUPED_PATH_INVERSE_POLICY,
     analyze_local_identifiability,
     fit_grouped_path_gains,
     render_grouped_path_observation,
 )
-from puresound.audio.rir_path_events import (  # noqa: E402
-    generate_scene_shoebox_path_events,
-)
+from puresound.audio.rir.path_events import generate_scene_shoebox_path_events
 
 
 DEFAULT_REPORT = (

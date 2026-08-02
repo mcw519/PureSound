@@ -7,15 +7,15 @@ from egs.rir_generation.phases.m3_wave_path.scripts.validate_direct_early_later_
 from egs.rir_generation.phases.m3_wave_path.scripts.validate_corrected_fdtd_boundary import (
     _time_domain_probe,
 )
-from puresound.audio.acoustic_impedance import (
+from puresound.audio.rir.physics.impedance.admittance import (
     FirstOrderRelaxationAdmittance,
 )
-from puresound.audio.rir_attribution import (
+from puresound.audio.rir.metrics.attribution import (
     complementary_early_late_masks,
     decompose_direct_early_later,
     reconstruction_error,
 )
-from puresound.audio.rir_path_events import (
+from puresound.audio.rir.path_events import (
     generate_shoebox_path_events,
     partition_path_events_by_arrival,
 )

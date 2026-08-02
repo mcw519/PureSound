@@ -30,7 +30,7 @@ REPO_ROOT = Path(__file__).resolve().parents[5]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from puresound.audio.rir_metrics import (  # noqa: E402
+from puresound.audio.rir.metrics import (
     ABEL_ECHO_DENSITY_POLICY,
     analyze_echo_density,
     direct_sample,

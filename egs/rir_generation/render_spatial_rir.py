@@ -16,17 +16,11 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from puresound.audio.binaural_renderer import (  # noqa: E402
-    analytic_first_order_binaural_decoder,
-)
-from puresound.audio.hybrid_rir import (  # noqa: E402
-    HybridRIRConfig,
-    sample_material_first_rir_scene,
-)
-from puresound.audio.rir_scene import RoomSceneV2  # noqa: E402
-from puresound.audio.spatial_rir import (  # noqa: E402
-    render_room_scene_spatial_rir,
-)
+from puresound.audio.rir.render.binaural import analytic_first_order_binaural_decoder
+from puresound.audio.rir.contracts import HybridRIRConfig
+from puresound.audio.rir.scene.sampling import sample_material_first_rir_scene
+from puresound.audio.rir.scene.schema import RoomSceneV2
+from puresound.audio.rir.render.spatial import render_room_scene_spatial_rir
 
 
 DEFAULT_OUTPUT_DIR = REPO_ROOT / "egs/rir_generation/exp/rir_realism/m4/spatial_demo"

@@ -5,7 +5,7 @@ import math
 import numpy as np
 import pytest
 
-from puresound.audio.acoustic_impedance import (
+from puresound.audio.rir.physics.impedance.admittance import (
     DigitalBoundaryReflectionFilter,
     FirstOrderRelaxationAdmittance,
     PassiveMultiPoleAdmittance,

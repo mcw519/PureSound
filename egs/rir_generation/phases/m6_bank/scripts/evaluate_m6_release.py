@@ -8,7 +8,7 @@ import json
 from pathlib import Path
 from typing import Sequence
 
-from puresound.audio.rir_bank_evaluation import evaluate_m6_release
+from puresound.audio.rir.bank.evaluation import evaluate_m6_release
 
 
 def main(argv: Sequence[str] | None = None) -> int:

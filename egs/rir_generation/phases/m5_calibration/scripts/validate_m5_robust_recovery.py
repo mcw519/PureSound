@@ -11,12 +11,12 @@ from typing import Any, Mapping, Sequence
 import numpy as np
 import soundfile as sf
 
-from puresound.audio.rir_inverse_calibration import (
-    RIR_ROBUST_RECOVERY_OBJECTIVE_POLICY,
+from puresound.audio.rir.calibration.synthetic_recovery import (
     PerturbedSyntheticMeasurement,
+    RIR_ROBUST_RECOVERY_OBJECTIVE_POLICY,
     SyntheticMeasurementPerturbation,
-    SyntheticRecoveryObservation,
     SyntheticRecoveryObjectiveConfig,
+    SyntheticRecoveryObservation,
     SyntheticRecoveryParameters,
     build_synthetic_recovery_observation,
     evaluate_synthetic_recovery,

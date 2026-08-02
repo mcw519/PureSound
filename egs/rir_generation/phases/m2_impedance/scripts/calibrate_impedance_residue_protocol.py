@@ -16,10 +16,10 @@ from egs.rir_generation.phases.m2_impedance.scripts.calibrate_impedance_modal_re
     RoomCalibrationSet,
     build_fdtd_residue_cases,
 )
-from puresound.audio.impedance_modes import (
+from puresound.audio.rir.physics.impedance.modes import (
     RectangularImpedanceBoundaryConfig,
 )
-from puresound.audio.impedance_residues import (
+from puresound.audio.rir.physics.impedance.residues import (
     FixedPoleResidueCase,
     fit_fixed_pole_modal_residues,
 )

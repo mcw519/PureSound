@@ -661,3 +661,16 @@ class PathEventSet:
                 else raw
             )
         return cls.from_dict(json.loads(payload))
+
+
+__all__ = [
+    "ComplexPathGainSpectrum",
+    "NormalizedAdmittanceModel",
+    "PATH_EVENT_SCHEMA_VERSION",
+    "PATH_EVENT_SET_SCHEMA_VERSION",
+    "PATH_GAIN_SCHEMA_VERSION",
+    "PathEvent",
+    "PathEventSet",
+    "locally_reacting_reflection_coefficient",
+    "material_absorption_relaxation_models",
+]

@@ -4,19 +4,23 @@ import importlib.util
 import numpy as np
 import pytest
 
-from puresound.audio.hybrid_rir import (
+from puresound.audio.rir.contracts import HybridRIRConfig
+from puresound.audio.rir.render.high_frequency import (
+    PyroomacousticsHighFrequencyBackend,
+)
+from puresound.audio.rir.render.hybrid import generate_hybrid_rir
+from puresound.audio.rir.render.low_frequency import (
     AnalyticModalLowFrequencyBackend,
     GpuARDPytARDBackend,
-    HybridRIRConfig,
-    HybridRIRScene,
-    PyroomacousticsHighFrequencyBackend,
-    generate_hybrid_rir,
     material_modal_damping_metadata,
+)
+from puresound.audio.rir.scene.sampling import (
+    HybridRIRScene,
     sample_material_first_rir_scene,
     upgrade_hybrid_scene_to_v2,
 )
-from puresound.audio.rir_metrics import octave_band_rir
-from puresound.audio.rir_scene import (
+from puresound.audio.rir.metrics import octave_band_rir
+from puresound.audio.rir.scene.schema import (
     MaterialSpectrum,
     RoomSceneV2,
     SurfaceMaterial,

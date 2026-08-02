@@ -14,10 +14,10 @@ import numpy as np
 import soundfile as sf
 
 from egs.rir_generation.phases.m6_bank.scripts.validate_m6_reproducible_generation import _run_generator
-from puresound.audio.rir_bank import PreGeneratedReleaseBank
-from puresound.audio.rir_bank_manifest import RIRBankManifest
-from puresound.audio.rir_bank_qc import run_rir_bank_qc
-from puresound.audio.rir_bank_release import (
+from puresound.audio.rir.bank.loader import PreGeneratedReleaseBank
+from puresound.audio.rir.bank.schema import RIRBankManifest
+from puresound.audio.rir.bank.qc import run_rir_bank_qc
+from puresound.audio.rir.bank.release import (
     RIRBankReleaseManifest,
     audit_m6_variant_release,
     build_m6_variant_release,

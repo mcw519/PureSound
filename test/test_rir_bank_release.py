@@ -1,10 +1,7 @@
 import numpy as np
 import soundfile as sf
 
-from puresound.audio.rir_bank_manifest import (
-    canonicalize_float_wav_header,
-    sha256_file,
-)
+from puresound.audio.rir.bank.schema import canonicalize_float_wav_header, sha256_file
 
 
 def _set_peak_timestamp(path, timestamp):

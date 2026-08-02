@@ -1,4 +1,4 @@
-from puresound.audio.rir_bank_evaluation import (
+from puresound.audio.rir.bank.evaluation import (
     M6_LISTENING_SCHEMA_VERSION,
     M6_THROUGHPUT_SCHEMA_VERSION,
     validate_listening_report,

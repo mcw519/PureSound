@@ -85,7 +85,7 @@ class AudioEffectAugmentor:
         ``bank_type`` defaults to ``release`` when ``recipe_id`` is present,
         otherwise to ``room`` for backward compatibility.
         """
-        from puresound.audio.rir_bank import (
+        from puresound.audio.rir.bank.loader import (
             PreGeneratedReleaseBank,
             PreGeneratedRoomBank,
         )

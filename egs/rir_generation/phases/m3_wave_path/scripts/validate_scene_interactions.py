@@ -10,13 +10,13 @@ from pathlib import Path
 
 import numpy as np
 
-from puresound.audio.rir_path_events import (
+from puresound.audio.rir.path_events import (
     PathEventSet,
     generate_scene_shoebox_path_events,
     render_path_events,
     segment_scene_object_intersection_interval,
 )
-from puresound.audio.rir_scene import (
+from puresound.audio.rir.scene.schema import (
     EnvironmentConfig,
     MaterialSpectrum,
     Pose,

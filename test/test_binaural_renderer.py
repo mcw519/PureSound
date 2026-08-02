@@ -3,7 +3,7 @@ import json
 import numpy as np
 import pytest
 
-from puresound.audio.binaural_renderer import (
+from puresound.audio.rir.render.binaural import (
     AmbisonicBinauralDecoder,
     analytic_first_order_binaural_decoder,
     render_ambisonic_brir,

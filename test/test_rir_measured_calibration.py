@@ -2,12 +2,12 @@ import json
 
 import pytest
 
-from puresound.audio.rir_measured_calibration import (
+from puresound.audio.rir.calibration.measured_runner import (
     CampaignNotReadyError,
     deterministic_position_assignments,
     run_measured_campaign_fit,
 )
-from puresound.audio.rir_measurement_campaign import RIRMeasurementCampaign
+from puresound.audio.rir.calibration.measured_campaign import RIRMeasurementCampaign
 
 
 def _template_campaign():

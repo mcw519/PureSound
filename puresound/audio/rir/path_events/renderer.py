@@ -254,3 +254,11 @@ def partition_path_events_by_arrival(
         "early_reflections": early,
         "later_reflections": later,
     }
+
+
+__all__ = [
+    "FRACTIONAL_DELAY_POLICY",
+    "causal_fractional_delay_kernel",
+    "partition_path_events_by_arrival",
+    "render_path_events",
+]

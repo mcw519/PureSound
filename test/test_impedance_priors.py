@@ -3,24 +3,24 @@ import json
 import numpy as np
 import pytest
 
-from puresound.audio.acoustic_impedance import (
+from puresound.audio.rir.physics.impedance.admittance import (
     FirstOrderRelaxationAdmittance,
 )
-from puresound.audio.fdtd_reference import (
+from puresound.audio.rir.physics.wave.fdtd import (
     FDTDReferenceConfig,
     simulate_fdtd_reference,
 )
-from puresound.audio.impedance_priors import (
+from puresound.audio.rir.physics.impedance.priors import (
     IMPEDANCE_PRIOR_CATALOG_VERSION,
     fit_first_order_relaxation,
     reference_impedance_priors,
 )
-from puresound.audio.impedance_modes import (
+from puresound.audio.rir.physics.impedance.modes import (
     RECTANGULAR_BOUNDARIES,
     RectangularImpedanceBoundaryConfig,
     solve_rectangular_impedance_modes,
 )
-from puresound.audio.low_frequency_modes import estimate_low_frequency_modes
+from puresound.audio.rir.physics.wave.low_frequency import estimate_low_frequency_modes
 
 
 def test_reference_priors_have_provenance_and_conservative_validity():

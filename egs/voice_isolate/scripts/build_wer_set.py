@@ -19,7 +19,7 @@ REPO = Path(__file__).resolve().parents[3]
 if str(REPO) not in sys.path: sys.path.insert(0, str(REPO))
 import numpy as np, soundfile as sf, librosa  # noqa: E402
 from scipy.signal import fftconvolve  # noqa: E402
-from puresound.audio.rir_bank import PreGeneratedRoomBank  # noqa: E402
+from puresound.audio.rir.bank.loader import PreGeneratedRoomBank
 
 # Default corpus locations -- overridable via CLI so the script is not pinned to one box.
 DEFAULT_LT = "/data/audio/LibriTTS/test-clean"          # transcribed foreground corpus

@@ -13,8 +13,8 @@ from pathlib import Path
 from typing import Any, Sequence
 
 from egs.rir_generation.generate_hybrid_rir import _m6_task_seed
-from puresound.audio.rir_bank import PreGeneratedRoomBank
-from puresound.audio.rir_bank_manifest import RIRBankManifest
+from puresound.audio.rir.bank.loader import PreGeneratedRoomBank
+from puresound.audio.rir.bank.schema import RIRBankManifest
 
 
 REPO_ROOT = Path(__file__).resolve().parents[5]

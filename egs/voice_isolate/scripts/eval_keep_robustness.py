@@ -44,7 +44,7 @@ from eval_far_suppression import (  # noqa: E402
     reduction_db,
 )
 
-from puresound.audio.rir_bank import PreGeneratedRoomBank  # noqa: E402
+from puresound.audio.rir.bank.loader import PreGeneratedRoomBank
 
 RECIPE_DIR = Path(__file__).resolve().parents[1]
 SR = 16000

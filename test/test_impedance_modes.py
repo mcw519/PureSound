@@ -3,12 +3,12 @@ import math
 
 import pytest
 
-from puresound.audio.acoustic_impedance import (
+from puresound.audio.rir.physics.impedance.admittance import (
     FirstOrderRelaxationAdmittance,
     PassiveMultiPoleAdmittance,
     PassiveResonantAdmittance,
 )
-from puresound.audio.impedance_modes import (
+from puresound.audio.rir.physics.impedance.modes import (
     RECTANGULAR_BOUNDARIES,
     RectangularImpedanceBoundaryConfig,
     solve_1d_impedance_cavity_modes,

@@ -3,11 +3,11 @@ from dataclasses import replace
 import numpy as np
 import pytest
 
-from puresound.audio.acoustic_impedance import (
+from puresound.audio.rir.physics.impedance.admittance import (
     FirstOrderRelaxationAdmittance,
     digital_locally_reacting_reflection_filter,
 )
-from puresound.audio.rir_path_events import (
+from puresound.audio.rir.path_events import (
     ComplexPathGainSpectrum,
     PathEventSet,
     apply_scene_object_visibility,
@@ -19,11 +19,7 @@ from puresound.audio.rir_path_events import (
     render_path_events,
     segment_intersects_scene_object,
 )
-from puresound.audio.rir_scene import (
-    MaterialSpectrum,
-    Pose,
-    SceneObject,
-)
+from puresound.audio.rir.scene.schema import MaterialSpectrum, Pose, SceneObject
 
 
 DIMENSIONS = np.asarray([5.0, 4.0, 3.0])
@@ -172,7 +168,8 @@ def test_first_order_directivity_patterns_use_real_pressure_gain():
 
 
 def test_scene_path_events_select_receiver_and_apply_receiver_directivity():
-    from puresound.audio.hybrid_rir import HybridRIRConfig, sample_material_first_rir_scene
+    from puresound.audio.rir.contracts import HybridRIRConfig
+    from puresound.audio.rir.scene.sampling import sample_material_first_rir_scene
 
     config = HybridRIRConfig(
         sample_rate=8000,
@@ -446,10 +443,8 @@ def test_nearby_source_motion_changes_each_path_continuously():
 
 
 def test_room_scene_v2_adapter_preserves_channel_and_surface_identity():
-    from puresound.audio.hybrid_rir import (
-        HybridRIRConfig,
-        sample_material_first_rir_scene,
-    )
+    from puresound.audio.rir.contracts import HybridRIRConfig
+    from puresound.audio.rir.scene.sampling import sample_material_first_rir_scene
 
     config = HybridRIRConfig(
         sample_rate=8000,
@@ -746,10 +741,8 @@ def test_vertical_prism_visibility_is_reciprocal_and_height_aware():
 
 
 def test_opt_in_scene_interactions_add_transmission_diffraction_and_scattering():
-    from puresound.audio.hybrid_rir import (
-        HybridRIRConfig,
-        sample_material_first_rir_scene,
-    )
+    from puresound.audio.rir.contracts import HybridRIRConfig
+    from puresound.audio.rir.scene.sampling import sample_material_first_rir_scene
 
     config = HybridRIRConfig(
         sample_rate=8000,

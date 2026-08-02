@@ -29,9 +29,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from puresound.audio.low_frequency_modes import (  # noqa: E402
-    estimate_low_frequency_modes,
-)
+from puresound.audio.rir.physics.wave.low_frequency import estimate_low_frequency_modes
 
 
 def _paired_wav(metadata_path: Path) -> Path:

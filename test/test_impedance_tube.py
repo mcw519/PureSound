@@ -7,13 +7,11 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from puresound.audio.acoustic_impedance import (
-    PassiveMultiPoleAdmittance,
-)
-from puresound.audio.impedance_measurements import (
+from puresound.audio.rir.physics.impedance.admittance import PassiveMultiPoleAdmittance
+from puresound.audio.rir.physics.impedance.measurements import (
     ComplexImpedanceMeasurement,
 )
-from puresound.audio.impedance_tube import (
+from puresound.audio.rir.physics.impedance.tube import (
     TwoMicrophoneTubeGeometry,
     microphone_switch_calibration_factor,
     reduce_two_microphone_repeats,

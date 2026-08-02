@@ -10,14 +10,14 @@ from typing import Any
 
 import numpy as np
 
-from puresound.audio.acoustic_impedance import (
+from puresound.audio.rir.physics.impedance.admittance import (
     DIGITAL_BOUNDARY_FILTER_SCHEMA_VERSION,
     FirstOrderRelaxationAdmittance,
     PassiveMultiPoleAdmittance,
     PassiveResonantAdmittance,
     digital_locally_reacting_reflection_filter,
 )
-from puresound.audio.impedance_modes import (
+from puresound.audio.rir.physics.impedance.modes import (
     RectangularImpedanceBoundaryConfig,
 )
 

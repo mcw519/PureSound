@@ -1,6 +1,6 @@
 import numpy as np
 
-from puresound.audio.rir_air_absorption import (
+from puresound.audio.rir.physics.propagation import (
     air_adjusted_rt60_s,
     atmospheric_absorption_db_per_m,
     minimum_phase_air_absorption_filter,

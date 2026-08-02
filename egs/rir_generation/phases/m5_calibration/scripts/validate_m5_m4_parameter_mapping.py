@@ -19,22 +19,22 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from egs.rir_generation.generate_hybrid_rir import _make_high_backend
-from puresound.audio.hybrid_rir import (
-    HybridRIRConfig,
+from puresound.audio.rir.contracts import HybridRIRConfig
+from puresound.audio.rir.render.high_frequency import (
     PathEventHighFrequencyBackend,
     PyroomacousticsHighFrequencyBackend,
-    sample_material_first_rir_scene,
 )
-from puresound.audio.rir_calibration import (
+from puresound.audio.rir.scene.sampling import sample_material_first_rir_scene
+from puresound.audio.rir.calibration.loss import (
     CalibrationLossWeights,
     analyze_rir_calibration_loss,
 )
-from puresound.audio.rir_late_coupling import PATH_EVENT_FDN_COUPLING_POLICY
-from puresound.audio.rir_m4_inverse_calibration import (
-    M4_PARAMETER_PROFILE_INVERSE_POLICY,
+from puresound.audio.rir.render.coupling import PATH_EVENT_FDN_COUPLING_POLICY
+from puresound.audio.rir.calibration.inverse_m4 import (
     M4InverseObservation,
     M4InverseParameters,
     M4ProfileObjectiveConfig,
+    M4_PARAMETER_PROFILE_INVERSE_POLICY,
     fit_m4_parameter_profile,
     render_m4_inverse_observation,
 )

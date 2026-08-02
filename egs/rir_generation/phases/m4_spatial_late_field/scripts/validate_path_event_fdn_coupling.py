@@ -18,15 +18,15 @@ REPO_ROOT = Path(__file__).resolve().parents[5]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from puresound.audio.hybrid_rir import (  # noqa: E402
-    AnalyticModalLowFrequencyBackend,
-    HybridRIRConfig,
+from puresound.audio.rir.contracts import HybridRIRConfig
+from puresound.audio.rir.render.crossover import hybrid_crossover
+from puresound.audio.rir.render.high_frequency import (
     PathEventFDNHighFrequencyBackend,
     PathEventHighFrequencyBackend,
-    hybrid_crossover,
-    sample_material_first_rir_scene,
 )
-from puresound.audio.rir_metrics import (  # noqa: E402
+from puresound.audio.rir.render.low_frequency import AnalyticModalLowFrequencyBackend
+from puresound.audio.rir.scene.sampling import sample_material_first_rir_scene
+from puresound.audio.rir.metrics import (
     analyze_multiband_late_field,
     clarity_db,
     valid_octave_centers,

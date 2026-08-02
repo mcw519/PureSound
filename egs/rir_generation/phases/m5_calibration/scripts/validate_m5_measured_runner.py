@@ -17,16 +17,16 @@ REPO_ROOT = Path(__file__).resolve().parents[5]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from puresound.audio.rir_m5_pipeline import (  # noqa: E402
+from puresound.audio.rir.calibration.inverse_m5 import (
     GroupedPathObservation,
     GroupedPathParameters,
     render_grouped_path_observation,
 )
-from puresound.audio.rir_measured_calibration import (  # noqa: E402
+from puresound.audio.rir.calibration.measured_runner import (
     deterministic_position_assignments,
     run_measured_campaign_fit,
 )
-from puresound.audio.rir_measurement_campaign import (  # noqa: E402
+from puresound.audio.rir.calibration.measured_campaign import (
     CalibratedTransducer,
     MeasuredRIRRecord,
     MeasuredRoom,
@@ -36,10 +36,8 @@ from puresound.audio.rir_measurement_campaign import (  # noqa: E402
     SweepCapture,
     sha256_file,
 )
-from puresound.audio.rir_path_events import (  # noqa: E402
-    generate_shoebox_path_events,
-)
-from puresound.audio.rir_scene import SHOEBOX_BOUNDARIES  # noqa: E402
+from puresound.audio.rir.path_events import generate_shoebox_path_events
+from puresound.audio.rir.scene.schema import SHOEBOX_BOUNDARIES
 
 
 DEFAULT_REPORT = (

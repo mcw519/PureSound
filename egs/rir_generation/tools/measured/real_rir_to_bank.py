@@ -350,7 +350,7 @@ def self_test() -> None:
     import tempfile
 
     sys.path.insert(0, str(Path(__file__).resolve().parents[4]))
-    from puresound.audio.rir_bank import PreGeneratedRoomBank
+    from puresound.audio.rir.bank.loader import PreGeneratedRoomBank
 
     sr = 16000
     with tempfile.TemporaryDirectory() as tmp:

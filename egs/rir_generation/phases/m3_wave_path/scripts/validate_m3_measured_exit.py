@@ -19,14 +19,12 @@ from egs.rir_generation.compare_bank_acoustics import (
     bucket_label,
     discover_items,
 )
-from puresound.audio.hybrid_rir import (
-    AnalyticModalLowFrequencyBackend,
-    HybridRIRConfig,
-    PathEventHighFrequencyBackend,
-    generate_hybrid_rir,
-)
-from puresound.audio.rir_metrics import clarity_db, direct_sample
-from puresound.audio.rir_scene import RoomSceneV2
+from puresound.audio.rir.contracts import HybridRIRConfig
+from puresound.audio.rir.render.high_frequency import PathEventHighFrequencyBackend
+from puresound.audio.rir.render.hybrid import generate_hybrid_rir
+from puresound.audio.rir.render.low_frequency import AnalyticModalLowFrequencyBackend
+from puresound.audio.rir.metrics import clarity_db, direct_sample
+from puresound.audio.rir.scene.schema import RoomSceneV2
 
 
 REPORT_SCHEMA_VERSION = "puresound.m3_measured_exit.v1"

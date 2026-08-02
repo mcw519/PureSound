@@ -3,7 +3,7 @@ import json
 import numpy as np
 import pytest
 
-from puresound.audio.rir_inverse_calibration import (
+from puresound.audio.rir.calibration.synthetic_recovery import (
     SyntheticMeasurementPerturbation,
     SyntheticRecoveryObjectiveConfig,
     SyntheticRecoveryParameters,

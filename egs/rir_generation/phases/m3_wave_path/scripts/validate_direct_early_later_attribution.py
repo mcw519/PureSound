@@ -16,26 +16,26 @@ from egs.rir_generation.phases.m2_impedance.scripts.validate_full_room_crossover
     _complex_metrics,
     _sampled_frequency_response,
 )
-from puresound.audio.fdtd_reference import (
+from puresound.audio.rir.physics.wave.fdtd import (
     FDTDReferenceConfig,
     ricker_source,
-    simulate_reciprocal_fdtd_reference,
     simulate_fdtd_reference,
+    simulate_reciprocal_fdtd_reference,
 )
-from puresound.audio.impedance_modes import (
+from puresound.audio.rir.physics.impedance.modes import (
     RectangularImpedanceBoundaryConfig,
 )
-from puresound.audio.rir_attribution import (
+from puresound.audio.rir.metrics.attribution import (
     ATTRIBUTION_SCHEMA_VERSION,
     decompose_direct_early_later,
     reconstruction_error,
 )
-from puresound.audio.rir_path_events import (
+from puresound.audio.rir.path_events import (
     generate_shoebox_path_events,
     partition_path_events_by_arrival,
     render_path_events,
 )
-from puresound.audio.rir_source_convention import (
+from puresound.audio.rir.physics.wave.source_convention import (
     fdtd_cell_center_position,
     fdtd_pressure_cell_to_free_field_input,
 )

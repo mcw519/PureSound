@@ -12,8 +12,8 @@ from typing import Any
 import numpy as np
 import soundfile as sf
 
-from puresound.audio.rir_bank import PreGeneratedRoomBank
-from puresound.audio.rir_bank_manifest import (
+from puresound.audio.rir.bank.loader import PreGeneratedRoomBank
+from puresound.audio.rir.bank.schema import (
     BANK_SPLITS,
     BankGeneratorProvenance,
     BankRendererProfile,
@@ -27,7 +27,7 @@ from puresound.audio.rir_bank_manifest import (
     task_plan_rows,
     write_split_indexes,
 )
-from puresound.audio.rir_scene import SCENE_SCHEMA_VERSION
+from puresound.audio.rir.scene.schema import SCENE_SCHEMA_VERSION
 
 
 REPO_ROOT = Path(__file__).resolve().parents[5]

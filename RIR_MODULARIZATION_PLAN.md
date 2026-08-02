@@ -1,7 +1,7 @@
 # PureSound RIR 模組化重構計畫
 
-狀態：R0–R7 全部完成；遷移收尾  
-版本：v1.0  
+狀態：R0–R7 全部完成；shim 已退場，呼叫端全數改用正規路徑  
+版本：v1.1  
 日期：2026-08-02  
 範圍：`puresound/audio` 底下與 RIR 生成、物理模型、空間渲染、校準、bank 管理相關的程式
 
@@ -528,9 +528,32 @@ R0 inventory 測試在 R1–R7 期間共擋下 4 次改動，每次都不是搬�
 - `contracts`、`scene.*`、`metrics`、`path_events`、`physics.*`、`bank.schema`
   全部可在不載入 torch 的情況下 import。
 
-**遷移後規模**：`puresound/audio/rir/` 共 70 個模組、28,701 行；
-`puresound/audio/` 下留 35 個 compatibility shim。`egs/`、`test/` 尚有 216 處
-沿用舊路徑的 import——全部照常運作，依 §R7 的設計刻意不強制改寫。
+**遷移後規模**：`puresound/audio/rir/` 共 73 個模組、28,701 行。
+
+#### R7 後續：shim 退場（同日）
+
+計畫原本讓 shim 無限期留存，理由是「刪除的收益小於改寫呼叫端的擾動」。這個判斷
+在盤點後不成立：shim 最正當的用途是**改不到的外部消費者**，但這裡沒有——沒有
+entry point、沒有設定檔以字串引用模組路徑、沒有 pickle 依賴，216 處全在 repo 內。
+留著的代價則是同一個東西有兩種 import 方式，而新程式碼會照抄看到的那種。
+
+- AST 改寫 214 個 import 敘述、92 個檔案，全部指向正規模組；私有別名一併解析到
+  它們的公開名稱（`_solve_modal_ard` → `pytard.solve_modal_ard` 等）。
+- 刪除 35 個 shim。外部引用的私有名稱從 15 個降到 1 個
+  （M6.5 validator 的 `_paired_t_confidence_interval`，已登記在 inventory 測試）。
+- `render/hybrid.py` 的 `__all__` 從 22 項收斂到 1 項（`generate_hybrid_rir`）。
+  其餘 21 項是為 shim 服務的 re-export，沒有任何呼叫端使用；同時移除 24 個
+  底線別名與 11 個未用 import，模組回歸純 orchestration。
+- inventory 測試改寫成遷移後的守門：`__all__` 完整性、跨 package 私有 import
+  登記、shim 不得重生、以及兩個 dead-code 候選（`PytARDWaveBackend`、
+  `_sample_source_in_shell`）的「確實無人使用」宣稱。
+
+改寫器刻意跳過 `puresound/audio/*.py` 以免動到 shim 本身，但那裡也住著兩個**真實
+模組**——`impulse_response.py` 與 `augmentation.py`——它們因此指向已刪除的模組。
+由 repo 全域掃描抓出並修正。教訓：以「目錄」界定豁免範圍不安全，該以「檔案性質」
+界定。
+
+驗證：573 passed，6 個既有失敗不變；golden digest 未變。
 
 ## 5. 測試與驗收策略
 

@@ -11,13 +11,15 @@ from pathlib import Path
 import numpy as np
 from scipy.signal import butter, sosfreqz
 
-from puresound.audio.hybrid_rir import (
-    HybridRIRConfig,
-    HybridRIRScene,
-    PyroomacousticsHighFrequencyBackend,
-    _hybrid_crossover_with_metadata,
+from puresound.audio.rir.contracts import HybridRIRConfig
+from puresound.audio.rir.render.crossover import (
     hybrid_crossover,
+    hybrid_crossover_with_metadata as _hybrid_crossover_with_metadata,
 )
+from puresound.audio.rir.render.high_frequency import (
+    PyroomacousticsHighFrequencyBackend,
+)
+from puresound.audio.rir.scene.sampling import HybridRIRScene
 
 
 REPORT_SCHEMA_VERSION = "puresound.hybrid_crossover_validation.v1"

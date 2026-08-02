@@ -11,7 +11,7 @@ from typing import Any, Sequence
 import numpy as np
 import soundfile as sf
 
-from puresound.audio.rir_inverse_calibration import (
+from puresound.audio.rir.calibration.synthetic_recovery import (
     RIR_SYNTHETIC_RECOVERY_POLICY,
     SyntheticRecoveryObservation,
     SyntheticRecoveryParameters,

@@ -9,7 +9,7 @@ from egs.rir_generation.phases.m6_bank.scripts.validate_m6_bank_contract import 
     build_fixture,
 )
 from puresound.audio.augmentation import AudioEffectAugmentor
-from puresound.audio.rir_bank import PreGeneratedRoomBank
+from puresound.audio.rir.bank.loader import PreGeneratedRoomBank
 
 
 def _write_room(root, room_id, distances, sr=16000, length=2400):

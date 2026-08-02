@@ -8,7 +8,7 @@ import json
 from pathlib import Path
 from typing import Sequence
 
-from puresound.audio.rir_bank_production import (
+from puresound.audio.rir.bank.production import (
     DEFAULT_PRODUCTION_DECISION_NAME,
     build_m6_production_decision,
     validate_m6_production_certificate,

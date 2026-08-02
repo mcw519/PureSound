@@ -4,7 +4,7 @@ from egs.rir_generation import generate_hybrid_rir as generate_hybrid_rir_cli
 from egs.rir_generation.phases.m4_spatial_late_field.scripts import (
     validate_path_event_fdn_coupling,
 )
-from puresound.audio.hybrid_rir import (
+from puresound.audio.rir.render.high_frequency import (
     PathEventFDNHighFrequencyBackend,
     PyroomacousticsHighFrequencyBackend,
 )

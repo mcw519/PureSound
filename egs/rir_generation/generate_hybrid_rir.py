@@ -33,33 +33,39 @@ import torch
 import torchaudio
 from tqdm import tqdm
 
-from puresound.audio.hybrid_rir import (
-    AnalyticModalLowFrequencyBackend,
-    GpuARDPytARDBackend,
-    GpuARDPytARDCuPyBackend,
-    HybridRIRConfig,
-    HybridRIRScene,
-    ImpedanceModalLowFrequencyBackend,
+from puresound.audio.rir.contracts import HybridRIRConfig
+from puresound.audio.rir.render.high_frequency import (
     PathEventFDNHighFrequencyBackend,
     PathEventHighFrequencyBackend,
     PyroomacousticsHighFrequencyBackend,
-    _distance_point_to_polygon,
-    _max_room_horizontal_distance_from_point,
-    _min_feasible_rt60,
-    _sample_point,
-    _sample_source_in_horizontal_shell,
-    generate_hybrid_rir,
+)
+from puresound.audio.rir.render.hybrid import generate_hybrid_rir
+from puresound.audio.rir.render.low_frequency import (
+    AnalyticModalLowFrequencyBackend,
+    GpuARDPytARDBackend,
+    GpuARDPytARDCuPyBackend,
+    ImpedanceModalLowFrequencyBackend,
+)
+from puresound.audio.rir.scene.geometry import (
+    distance_point_to_polygon as _distance_point_to_polygon,
+    max_room_horizontal_distance_from_point as _max_room_horizontal_distance_from_point,
+)
+from puresound.audio.rir.scene.sampling import (
+    HybridRIRScene,
+    min_feasible_rt60 as _min_feasible_rt60,
+    sample_point as _sample_point,
     sample_polygon_obstacles,
+    sample_source_in_horizontal_shell as _sample_source_in_horizontal_shell,
     upgrade_hybrid_scene_to_v2,
 )
-from puresound.audio.impedance_modes import (
+from puresound.audio.rir.physics.impedance.modes import (
     RectangularImpedanceBoundaryConfig,
 )
-from puresound.audio.impedance_residues import (
+from puresound.audio.rir.physics.impedance.residues import (
     ImpedanceModalResidueCalibration,
 )
-from puresound.audio.rir_materials import ROOM_TYPE_RECIPES
-from puresound.audio.rir_bank_manifest import (
+from puresound.audio.rir.scene.materials import ROOM_TYPE_RECIPES
+from puresound.audio.rir.bank.schema import (
     BankGeneratorProvenance,
     BankRendererProfile,
     BankSplitPolicy,
@@ -72,7 +78,7 @@ from puresound.audio.rir_bank_manifest import (
     task_plan_rows,
     write_split_indexes,
 )
-from puresound.audio.rir_scene import SCENE_SCHEMA_VERSION
+from puresound.audio.rir.scene.schema import SCENE_SCHEMA_VERSION
 
 
 _WORKER_CONTEXT = {}

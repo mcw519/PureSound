@@ -4,11 +4,8 @@ from dataclasses import replace
 import pytest
 
 from egs.rir_generation.phases.m6_bank.scripts.validate_m6_bank_contract import build_fixture
-from puresound.audio.rir_bank_manifest import (
-    RIRBankManifest,
-    canonical_json_sha256,
-)
-from puresound.audio.rir_bank_qc import (
+from puresound.audio.rir.bank.schema import RIRBankManifest, canonical_json_sha256
+from puresound.audio.rir.bank.qc import (
     RIRBankQCPolicy,
     audit_rir_bank_qc_release,
     run_rir_bank_qc,

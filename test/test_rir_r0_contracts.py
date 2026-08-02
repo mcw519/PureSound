@@ -137,7 +137,7 @@ class TestRenderContext:
             RenderContext(**base)
 
     def test_from_config_reads_the_hybrid_config_fields(self):
-        from puresound.audio.hybrid_rir import HybridRIRConfig
+        from puresound.audio.rir.contracts import HybridRIRConfig
 
         config = HybridRIRConfig(sample_rate=16000, duration=1.6)
         ctx = RenderContext.from_config(config)

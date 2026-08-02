@@ -3,8 +3,8 @@ from dataclasses import replace
 import pytest
 
 from egs.rir_generation.phases.m6_bank.scripts.validate_m6_bank_contract import build_fixture
-from puresound.audio.rir_bank import PreGeneratedRoomBank
-from puresound.audio.rir_bank_manifest import (
+from puresound.audio.rir.bank.loader import PreGeneratedRoomBank
+from puresound.audio.rir.bank.schema import (
     BANK_SPLITS,
     BankSplitPolicy,
     RIRBankManifest,

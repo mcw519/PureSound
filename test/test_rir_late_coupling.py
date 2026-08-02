@@ -3,7 +3,7 @@ import json
 import numpy as np
 import pytest
 
-from puresound.audio.rir_late_coupling import (
+from puresound.audio.rir.render.coupling import (
     PATH_EVENT_FDN_COUPLING_POLICY,
     couple_path_event_rir_with_fdn,
     equal_power_transition_weights,

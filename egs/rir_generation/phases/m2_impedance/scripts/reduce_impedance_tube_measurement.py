@@ -17,11 +17,11 @@ REPO_ROOT = Path(__file__).resolve().parents[5]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from puresound.audio.impedance_measurements import (  # noqa: E402
+from puresound.audio.rir.physics.impedance.measurements import (
     COMPLEX_IMPEDANCE_MEASUREMENT_SCHEMA_VERSION,
     ComplexImpedanceMeasurement,
 )
-from puresound.audio.impedance_tube import (  # noqa: E402
+from puresound.audio.rir.physics.impedance.tube import (
     IMPEDANCE_TUBE_TRANSFER_MEASUREMENT_SCHEMA_VERSION,
     TwoMicrophoneTubeGeometry,
     load_microphone_switch_csv,

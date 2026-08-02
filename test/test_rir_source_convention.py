@@ -4,15 +4,15 @@ import numpy as np
 import pytest
 from scipy.signal import fftconvolve
 
-from puresound.audio.acoustic_impedance import (
+from puresound.audio.rir.physics.impedance.admittance import (
     FirstOrderRelaxationAdmittance,
 )
-from puresound.audio.fdtd_reference import (
+from puresound.audio.rir.physics.wave.fdtd import (
     FDTDReferenceConfig,
     ricker_source,
     simulate_fdtd_reference,
 )
-from puresound.audio.rir_source_convention import (
+from puresound.audio.rir.physics.wave.source_convention import (
     convert_pressure_state_modal_residue,
     fdtd_cell_center_position,
     fdtd_pressure_cell_free_field_direct,

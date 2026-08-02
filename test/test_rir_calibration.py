@@ -3,7 +3,7 @@ import json
 import numpy as np
 import pytest
 
-from puresound.audio.rir_calibration import (
+from puresound.audio.rir.calibration.loss import (
     CalibrationLossWeights,
     analyze_rir_calibration_loss,
     causality_penalty,

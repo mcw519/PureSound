@@ -6,22 +6,22 @@ import pytest
 from egs.rir_generation.phases.m3_wave_path.scripts.validate_corrected_fdtd_boundary import (
     _simulate_1d_plane_wave,
 )
-from puresound.audio.acoustic_impedance import (
+from puresound.audio.rir.physics.impedance.admittance import (
     FirstOrderRelaxationAdmittance,
     PassiveMultiPoleAdmittance,
     PassiveResonantAdmittance,
     characteristic_impedance_pa_s_m,
 )
-from puresound.audio.fdtd_reference import (
+from puresound.audio.rir.physics.wave.fdtd import (
     BOUNDARIES,
     FDTDReferenceConfig,
     absorption_to_impedance,
     fdtd_discrete_plane_wave_reflection,
     impedance_to_absorption,
-    simulate_reciprocal_fdtd_reference,
     simulate_fdtd_reference,
+    simulate_reciprocal_fdtd_reference,
 )
-from puresound.audio.low_frequency_modes import (
+from puresound.audio.rir.physics.wave.low_frequency import (
     estimate_low_frequency_modes,
     rigid_rectangular_room_modes,
 )

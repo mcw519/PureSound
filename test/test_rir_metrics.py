@@ -6,7 +6,7 @@ import pytest
 import torch
 
 from puresound.audio.impulse_response import compute_drr_db as legacy_compute_drr_db
-from puresound.audio.rir_metrics import (
+from puresound.audio.rir.metrics import (
     DEFAULT_OCTAVE_CENTERS_HZ,
     abel_normalized_echo_density_profile,
     analyze_array_spatial_coherence,

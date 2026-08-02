@@ -3,7 +3,7 @@ import json
 import numpy as np
 import pytest
 
-from puresound.audio.rir_m5_pipeline import (
+from puresound.audio.rir.calibration.inverse_m5 import (
     analyze_local_identifiability,
     select_spatial_calibration_candidate,
 )

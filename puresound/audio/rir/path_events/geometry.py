@@ -477,3 +477,11 @@ def _ordered_shoebox_image_path(
         "arrival_direction_unit": directions[-1],
         "has_edge_or_corner_hit": has_edge_or_corner_hit,
     }
+
+
+__all__ = [
+    "OBJECT_VISIBILITY_POLICY",
+    "apply_scene_object_visibility",
+    "segment_intersects_scene_object",
+    "segment_scene_object_intersection_interval",
+]

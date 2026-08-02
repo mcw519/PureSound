@@ -17,7 +17,7 @@ from egs.rir_generation.phases.m3_wave_path.scripts.validate_corrected_fdtd_boun
 from egs.rir_generation.phases.m3_wave_path.scripts.validate_oblique_fdtd_boundary import (
     _uniform_model,
 )
-from puresound.audio.impedance_modes import (
+from puresound.audio.rir.physics.impedance.modes import (
     RectangularImpedanceBoundaryConfig,
 )
 

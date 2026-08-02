@@ -5,16 +5,16 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from puresound.audio.acoustic_impedance import (
+from puresound.audio.rir.physics.impedance.admittance import (
     PassiveMultiPoleAdmittance,
     characteristic_impedance_pa_s_m,
 )
-from puresound.audio.impedance_measurements import (
+from puresound.audio.rir.physics.impedance.measurements import (
     COMPLEX_IMPEDANCE_MEASUREMENT_SCHEMA_VERSION,
     ComplexImpedanceMeasurement,
     NormalizedComplexImpedanceMeasurement,
 )
-from puresound.audio.impedance_fitting import (
+from puresound.audio.rir.physics.impedance.fitting import (
     fit_complex_impedance_measurement,
     fit_normalized_complex_impedance_measurement,
 )

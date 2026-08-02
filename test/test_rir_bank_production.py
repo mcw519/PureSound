@@ -1,7 +1,7 @@
 import json
 
-from puresound.audio.rir_bank_manifest import canonical_json_sha256, sha256_file
-from puresound.audio.rir_bank_production import (
+from puresound.audio.rir.bank.schema import canonical_json_sha256, sha256_file
+from puresound.audio.rir.bank.production import (
     M6_PRODUCTION_EVIDENCE_SCHEMA_VERSION,
     M6_PRODUCTION_SIGNOFF_SCHEMA_VERSION,
     audit_m6_production_evidence,

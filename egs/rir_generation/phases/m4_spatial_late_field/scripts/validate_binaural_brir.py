@@ -16,12 +16,12 @@ REPO_ROOT = Path(__file__).resolve().parents[5]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from puresound.audio.binaural_renderer import (  # noqa: E402
+from puresound.audio.rir.render.binaural import (
     AmbisonicBinauralDecoder,
     analytic_first_order_binaural_decoder,
     render_ambisonic_brir,
 )
-from puresound.audio.rir_metrics import analyze_binaural_iacc  # noqa: E402
+from puresound.audio.rir.metrics import analyze_binaural_iacc
 
 
 DEFAULT_SPATIAL_REPORT = (

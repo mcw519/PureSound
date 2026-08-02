@@ -396,3 +396,9 @@ def generate_scene_shoebox_path_events(
             boundary_admittance_models=surface_models,
         )
     return event_set
+
+
+__all__ = [
+    "generate_scene_shoebox_path_events",
+    "generate_shoebox_path_events",
+]
