@@ -24,12 +24,12 @@ import torch
 
 from puresound.audio.impulse_response import compute_drr_db
 from puresound.audio.io import AudioIO
-from puresound.audio.rir_bank_manifest import BANK_SPLITS, RIRBankManifest
-from puresound.audio.rir_bank_production import (
+from puresound.audio.rir.bank.schema import BANK_SPLITS, RIRBankManifest
+from puresound.audio.rir.bank.production import (
     DEFAULT_PRODUCTION_DECISION_NAME,
     validate_m6_production_certificate,
 )
-from puresound.audio.rir_bank_release import (
+from puresound.audio.rir.bank.release import (
     DEFAULT_RELEASE_MANIFEST_NAME,
     RIRBankReleaseManifest,
     audit_m6_variant_release,

@@ -8,24 +8,24 @@ from typing import Any, Mapping
 
 import numpy as np
 
-from puresound.audio.binaural_renderer import (
+from puresound.audio.rir.render.binaural import (
     AmbisonicBinauralDecoder,
     BinauralBRIRRender,
     render_ambisonic_brir,
 )
-from puresound.audio.multiband_fdn import design_multiband_fdn
-from puresound.audio.rir_air_absorption import (
+from puresound.audio.rir.render.multiband_fdn import design_multiband_fdn
+from puresound.audio.rir.physics.propagation import (
     air_adjusted_rt60_s,
     apply_air_absorption,
 )
-from puresound.audio.rir_path_events import (
+from puresound.audio.rir.path_events import (
     PathEventSet,
     generate_scene_shoebox_path_events,
     material_absorption_relaxation_models,
     render_path_events,
 )
-from puresound.audio.rir_scene import RoomSceneV2
-from puresound.audio.spatial_late_field import (
+from puresound.audio.rir.scene.schema import RoomSceneV2
+from puresound.audio.rir.render.spatial_late_field import (
     SpatialEarlyLateRender,
     SpatialLateFieldRender,
     couple_receiver_array_early_late,

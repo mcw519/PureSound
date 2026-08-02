@@ -18,15 +18,15 @@ from typing import Any, Mapping, Sequence
 import numpy as np
 from scipy.optimize import least_squares
 
-from puresound.audio.rir_calibration import (
+from puresound.audio.rir.calibration.loss import (
     CalibrationLossWeights,
     analyze_rir_calibration_loss,
 )
-from puresound.audio.rir_late_coupling import (
+from puresound.audio.rir.render.coupling import (
     PathEventFDNCouplingResult,
     couple_path_event_rir_with_fdn,
 )
-from puresound.audio.rir_path_events import (
+from puresound.audio.rir.path_events import (
     ComplexPathGainSpectrum,
     PathEvent,
     PathEventSet,

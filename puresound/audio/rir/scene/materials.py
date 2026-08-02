@@ -6,7 +6,7 @@ from typing import Any, Iterable, Optional
 
 import numpy as np
 
-from puresound.audio.rir_scene import (
+from puresound.audio.rir.scene.schema import (
     MaterialSpectrum,
     SceneObject,
     SceneSurface,

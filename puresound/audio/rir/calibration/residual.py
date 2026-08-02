@@ -9,7 +9,7 @@ from typing import Any, Sequence
 
 import numpy as np
 
-from puresound.audio.rir_calibration import (
+from puresound.audio.rir.calibration.loss import (
     CalibrationLossWeights,
     analyze_rir_calibration_loss,
 )

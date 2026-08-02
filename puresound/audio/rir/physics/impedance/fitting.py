@@ -9,12 +9,12 @@ from typing import Any, Iterable
 import numpy as np
 from scipy.optimize import least_squares
 
-from puresound.audio.acoustic_impedance import (
+from puresound.audio.rir.physics.impedance.admittance import (
     PassiveMultiPoleAdmittance,
     PassiveResonantAdmittance,
     normal_incidence_reflection_coefficient,
 )
-from puresound.audio.impedance_measurements import (
+from puresound.audio.rir.physics.impedance.measurements import (
     ComplexImpedanceMeasurement,
     NormalizedComplexImpedanceMeasurement,
 )

@@ -13,7 +13,7 @@ from typing import Any, Mapping, Sequence
 import numpy as np
 import soundfile as sf
 
-from puresound.audio.rir_bank_manifest import (
+from puresound.audio.rir.bank.schema import (
     BANK_SPLITS,
     BankGeneratorProvenance,
     RIRBankItem,
@@ -24,7 +24,7 @@ from puresound.audio.rir_bank_manifest import (
     task_plan_rows,
     write_split_indexes,
 )
-from puresound.audio.rir_bank_qc import (
+from puresound.audio.rir.bank.qc import (
     audit_rir_bank_qc_release,
     run_rir_bank_qc,
 )
@@ -586,7 +586,7 @@ def _materialize_peak_normalized_bank(
         "target_peak_abs": float(target_peak),
     }
     generator = BankGeneratorProvenance(
-        generator_id="puresound.audio.rir_bank_release",
+        generator_id="puresound.audio.rir.bank.release",
         generator_version="M6.4",
         code_revision=source.generator.code_revision,
         config_sha256=canonical_json_sha256(transform_config),

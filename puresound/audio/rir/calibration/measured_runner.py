@@ -17,32 +17,32 @@ from typing import Any, Mapping, Sequence
 import numpy as np
 import soundfile as sf
 
-from puresound.audio.rir_calibration import analyze_rir_calibration_loss
-from puresound.audio.rir_m4_inverse_calibration import (
+from puresound.audio.rir.calibration.loss import analyze_rir_calibration_loss
+from puresound.audio.rir.calibration.inverse_m4 import (
     M4InverseObservation,
     M4InverseParameters,
     M4ProfileObjectiveConfig,
     fit_m4_parameter_profile,
 )
-from puresound.audio.rir_m5_pipeline import (
+from puresound.audio.rir.calibration.inverse_m5 import (
     GroupedPathObservation,
     GroupedPathParameters,
     fit_grouped_path_gains,
     render_grouped_path_observation,
 )
-from puresound.audio.rir_measurement_campaign import (
+from puresound.audio.rir.calibration.measured_campaign import (
     MeasuredRIRRecord,
     MeasuredRoom,
     RIRMeasurementCampaign,
     audit_measurement_campaign,
 )
-from puresound.audio.rir_metrics import valid_octave_centers
-from puresound.audio.rir_path_events import (
+from puresound.audio.rir.metrics import valid_octave_centers
+from puresound.audio.rir.path_events import (
     PathEventSet,
     generate_shoebox_path_events,
     render_path_events,
 )
-from puresound.audio.rir_scene import SHOEBOX_BOUNDARIES
+from puresound.audio.rir.scene.schema import SHOEBOX_BOUNDARIES
 
 
 M5_MEASURED_ROOM_FIT_POLICY = "puresound.m5_measured_room_fit.v1"

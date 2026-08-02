@@ -15,7 +15,7 @@ from typing import Any, Mapping
 
 import numpy as np
 
-from puresound.audio.multiband_fdn import (
+from puresound.audio.rir.render.multiband_fdn import (
     MultibandFDNDesign,
     design_multiband_fdn,
     render_multiband_fdn,

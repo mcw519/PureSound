@@ -96,7 +96,7 @@ def fdtd_pressure_cell_free_field_direct(
 ) -> np.ndarray:
     """Predict the free-field direct pressure produced by the FDTD source.
 
-    For the pressure-cell update used by :mod:`puresound.audio.fdtd_reference`,
+    For the pressure-cell update used by :mod:`puresound.audio.rir.physics.wave.fdtd`,
     the continuum limit is
 
     ``p(r,t) = cell_volume / (dt * 4*pi*c**2*r) * dq(t-r/c)/dt``.

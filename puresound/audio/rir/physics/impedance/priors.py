@@ -22,7 +22,7 @@ from typing import Any, Iterable
 import numpy as np
 from scipy.optimize import least_squares
 
-from puresound.audio.acoustic_impedance import (
+from puresound.audio.rir.physics.impedance.admittance import (
     FirstOrderRelaxationAdmittance,
     characteristic_impedance_pa_s_m,
     normal_incidence_reflection_coefficient,

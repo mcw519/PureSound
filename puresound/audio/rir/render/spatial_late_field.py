@@ -16,18 +16,18 @@ from typing import Any, Iterable, Mapping, Sequence
 
 import numpy as np
 
-from puresound.audio.multiband_fdn import (
+from puresound.audio.rir.render.multiband_fdn import (
     MultibandFDNDesign,
     render_multiband_fdn,
 )
-from puresound.audio.rir_late_coupling import (
+from puresound.audio.rir.render.coupling import (
     energy_preserving_diffuse_gain,
     equal_power_transition_weights,
     extrapolated_path_tail_energy_target,
     transition_samples,
 )
-from puresound.audio.rir_metrics import octave_band_rir
-from puresound.audio.rir_path_events import (
+from puresound.audio.rir.metrics import octave_band_rir
+from puresound.audio.rir.path_events import (
     PathEventSet,
     causal_fractional_delay_kernel,
     directivity_pressure_gain,

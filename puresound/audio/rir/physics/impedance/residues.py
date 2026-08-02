@@ -16,7 +16,7 @@ from typing import Any, Iterable
 
 import numpy as np
 
-from puresound.audio.rir_source_convention import (
+from puresound.audio.rir.physics.wave.source_convention import (
     FDTD_PRESSURE_CELL_SOURCE_CONVENTION,
     FREE_FIELD_1_OVER_R_RIR_CONVENTION,
     PRESSURE_STATE_TO_FREE_FIELD_RESIDUE_TRANSFORM,

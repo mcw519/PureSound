@@ -15,11 +15,11 @@ from typing import Any, Mapping, Sequence
 import numpy as np
 from scipy.optimize import least_squares
 
-from puresound.audio.rir_calibration import (
+from puresound.audio.rir.calibration.loss import (
     CalibrationLossWeights,
     analyze_rir_calibration_loss,
 )
-from puresound.audio.rir_metrics import octave_band_rir, valid_octave_centers
+from puresound.audio.rir.metrics import octave_band_rir, valid_octave_centers
 
 
 RIR_SYNTHETIC_RECOVERY_POLICY = "puresound.rir_synthetic_recovery.v1"

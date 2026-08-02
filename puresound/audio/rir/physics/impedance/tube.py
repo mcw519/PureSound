@@ -18,7 +18,7 @@ from typing import Iterable
 
 import numpy as np
 
-from puresound.audio.acoustic_impedance import (
+from puresound.audio.rir.physics.impedance.admittance import (
     characteristic_impedance_pa_s_m,
 )
 

@@ -14,7 +14,7 @@ from typing import Any, Iterable
 
 import numpy as np
 
-from puresound.audio.acoustic_impedance import (
+from puresound.audio.rir.physics.impedance.admittance import (
     FirstOrderRelaxationAdmittance,
     PassiveMultiPoleAdmittance,
     PassiveResonantAdmittance,

@@ -10,7 +10,7 @@ from typing import Any, Mapping, Sequence
 import numpy as np
 from scipy.signal import csd, stft, welch
 
-from puresound.audio.rir_metrics import (
+from puresound.audio.rir.metrics import (
     direct_sample,
     estimate_decay_time,
     octave_band_rir,

@@ -6,13 +6,13 @@ import json
 from pathlib import Path, PurePosixPath
 from typing import Any, Mapping, Sequence
 
-from puresound.audio.rir_bank_evaluation import M6_EVALUATION_SCHEMA_VERSION
-from puresound.audio.rir_bank_manifest import (
+from puresound.audio.rir.bank.evaluation import M6_EVALUATION_SCHEMA_VERSION
+from puresound.audio.rir.bank.schema import (
     RIRBankManifest,
     canonical_json_sha256,
     sha256_file,
 )
-from puresound.audio.rir_bank_release import (
+from puresound.audio.rir.bank.release import (
     DEFAULT_RELEASE_MANIFEST_NAME,
     RIRBankReleaseManifest,
     audit_m6_variant_release,

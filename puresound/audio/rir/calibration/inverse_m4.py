@@ -15,11 +15,11 @@ from typing import Any, Mapping, Sequence
 import numpy as np
 from scipy.optimize import least_squares
 
-from puresound.audio.rir_late_coupling import (
+from puresound.audio.rir.render.coupling import (
     PathEventFDNCouplingResult,
     couple_path_event_rir_with_fdn,
 )
-from puresound.audio.rir_metrics import octave_band_rir, valid_octave_centers
+from puresound.audio.rir.metrics import octave_band_rir, valid_octave_centers
 
 
 M4_PARAMETER_PROFILE_INVERSE_POLICY = "puresound.m4_parameter_profile_inverse.v1"

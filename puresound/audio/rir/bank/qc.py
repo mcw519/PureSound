@@ -24,7 +24,7 @@ from typing import Any, Mapping, Sequence
 import numpy as np
 import soundfile as sf
 
-from puresound.audio.rir_bank_manifest import (
+from puresound.audio.rir.bank.schema import (
     BANK_SPLITS,
     RIRBankItem,
     RIRBankManifest,
@@ -33,7 +33,7 @@ from puresound.audio.rir_bank_manifest import (
     sha256_file,
     split_index_rows,
 )
-from puresound.audio.rir_metrics import analyze_echo_density, analyze_rir
+from puresound.audio.rir.metrics import analyze_echo_density, analyze_rir
 
 
 RIR_BANK_QC_POLICY_ID = "puresound.rir_bank_qc.physical.v1"

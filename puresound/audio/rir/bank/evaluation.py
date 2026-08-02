@@ -10,8 +10,8 @@ from typing import Any, Mapping, Sequence
 import numpy as np
 from scipy.stats import t as student_t
 
-from puresound.audio.rir_bank_manifest import canonical_json_sha256
-from puresound.audio.rir_bank_release import (
+from puresound.audio.rir.bank.schema import canonical_json_sha256
+from puresound.audio.rir.bank.release import (
     RIRBankReleaseManifest,
     audit_m6_variant_release,
 )

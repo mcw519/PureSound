@@ -14,7 +14,7 @@ from typing import Any, Mapping, Optional
 import numpy as np
 from scipy.signal import butter, sosfilt, sosfreqz
 
-from puresound.audio.rir_metrics import valid_octave_centers
+from puresound.audio.rir.metrics import valid_octave_centers
 
 
 MULTIBAND_FDN_POLICY = "puresound.multiband_fdn.v2"

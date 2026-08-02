@@ -1,6 +1,6 @@
 """Versioned, content-addressed production RIR bank contract for M6.
 
-The legacy :class:`puresound.audio.rir_bank.PreGeneratedRoomBank` intentionally
+The legacy :class:`puresound.audio.rir.bank.loader.PreGeneratedRoomBank` intentionally
 continues to consume same-stem WAV/JSON pairs.  This module adds the release
 layer around those pairs: deterministic room-disjoint splits, renderer and
 generator provenance, content hashes, and fail-closed production claims.
