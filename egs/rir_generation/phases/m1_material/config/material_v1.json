@@ -1,0 +1,173 @@
+{
+  "schema_version": 1,
+  "name": "hybrid_rir_material_v1_16k",
+  "status": "m1_reference",
+  "generator": "egs/rir_generation/generate_hybrid_rir.py",
+  "dataset": {
+    "probe": {
+      "output_name": "rir_m1_probe",
+      "seed": 1337,
+      "num_rooms": 20,
+      "rir_per_room": 5,
+      "purpose": "M1 acoustic smoke comparison; not a training bank",
+      "overrides": {
+        "duration_s": 1.0,
+        "low_backend": "AnalyticModalLowFrequencyBackend",
+        "max_image_source_order": 8,
+        "num_rays": 2000,
+        "num_obstacles": [
+          1,
+          4
+        ]
+      }
+    },
+    "recommended_train": {
+      "output_name": "hybrid_rir_material_v1_16k",
+      "seed": 1337,
+      "num_rooms": 1000,
+      "rir_per_room": 10
+    },
+    "recommended_heldout": {
+      "output_name": "hybrid_rir_material_v1_16k_test",
+      "seed": 2026,
+      "num_rooms": 100,
+      "rir_per_room": 10
+    }
+  },
+  "scene": {
+    "scene_version": "v1",
+    "metadata_schema": "rir_scene.v2",
+    "material_catalog": "puresound-materials.v1",
+    "room_type": "mixed",
+    "material_variation_scale": 1.0,
+    "sample_rate": 16000,
+    "duration_s": 1.6,
+    "room_x_m": [
+      3.5,
+      8.0
+    ],
+    "room_y_m": [
+      3.5,
+      7.0
+    ],
+    "room_z_m": [
+      2.4,
+      3.6
+    ],
+    "near_distance_m": [
+      0.35,
+      0.95
+    ],
+    "far_distance_m": [
+      2.05,
+      5.5
+    ],
+    "num_near_sources": 2,
+    "num_far_sources": 3,
+    "num_obstacles": [
+      2,
+      6
+    ],
+    "requested_rt60_s": null,
+    "rt60_policy": "derive predicted octave decay from sampled surfaces; record realized decay from generated RIR"
+  },
+  "materials": {
+    "bands_hz": [
+      125,
+      250,
+      500,
+      1000,
+      2000,
+      4000,
+      8000
+    ],
+    "room_types": [
+      "classroom",
+      "living_room",
+      "meeting_room",
+      "office"
+    ],
+    "surface_roles": [
+      "wall",
+      "floor",
+      "ceiling",
+      "window",
+      "door",
+      "furniture"
+    ],
+    "properties": [
+      "absorption",
+      "scattering",
+      "transmission",
+      "optional_complex_impedance"
+    ]
+  },
+  "environment": {
+    "temperature_c": [
+      18.0,
+      25.0
+    ],
+    "relative_humidity_percent": [
+      30.0,
+      70.0
+    ],
+    "pressure_pa": [
+      98000.0,
+      103000.0
+    ],
+    "sound_speed": "derived per scene"
+  },
+  "low_frequency_backend": {
+    "name": "GpuARDPytARDCuPyBackend",
+    "frequency_hz": [
+      20.0,
+      1000.0
+    ],
+    "internal_sample_rate": 16000,
+    "spatial_samples_per_wavelength": 2,
+    "calibration_peak": 0.05,
+    "temporary_m1_bridge": "material-derived mid-band RT60 still drives the global low-band envelope; removed in M2"
+  },
+  "high_frequency_backend": {
+    "name": "PyroomacousticsHighFrequencyBackend",
+    "frequency_hz": [
+      1000.0,
+      8000.0
+    ],
+    "max_image_source_order": 12,
+    "ray_tracing": true,
+    "num_rays": 20000,
+    "air_absorption": true,
+    "boundary_model": "per-surface frequency-dependent absorption and scattering"
+  },
+  "crossover": {
+    "type": "causal_linkwitz_riley_4",
+    "frequency_hz": 1000.0,
+    "energy_match_band_hz": [
+      700.0,
+      1300.0
+    ],
+    "target_db": 0.0,
+    "max_gain": 2.0
+  },
+  "output": {
+    "mode": "calibrated",
+    "per_item_peak_normalize": false,
+    "reference_source_spl_db": 94.0,
+    "record_realized_metrics": true,
+    "channels": [
+      "near_0",
+      "near_1",
+      "far_0",
+      "far_1",
+      "far_2"
+    ]
+  },
+  "known_limitations": [
+    "The low-frequency v1 bridge still applies one material-derived global RT60 envelope; per-mode boundary damping is M2.",
+    "Pyroomacoustics receives area-weighted window and door patches on each shoebox boundary; it does not trace explicit patch geometry.",
+    "Furniture remains a high-frequency post occlusion/scatter approximation.",
+    "Directivity identities are serialized but the current backend renders point-omnidirectional transducers.",
+    "Transmission and optional complex impedance are serialized for later backends but are not consumed by Pyroomacoustics."
+  ]
+}

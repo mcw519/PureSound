@@ -1,483 +1,388 @@
-# rir_generation
+# RIR generation
 
-Tooling for the room-impulse-response (RIR) side of near/far speech
-augmentation. It covers the whole pipeline: **generate** synthetic hybrid
-wave/geometric RIRs, **inspect / apply** them, and **package** them — whether
-synthesised here or measured in a real room — into training banks that
-[`PreGeneratedRoomBank`](../../puresound/audio/rir_bank.py) consumes.
+This directory contains the public tools for generating, inspecting, and
+packaging room impulse responses (RIRs) for near/far speech augmentation.
+The recommended path for training data is the M6 bank entry point, which
+combines deterministic generation, per-item QC, and release packaging.
 
-Each room item has **one microphone and five sources** (2 near, 3 far), written
-as a 5-channel RIR WAV plus a JSON sidecar:
+繁體中文版本：[`README.zh-TW.md`](README.zh-TW.md)
 
-| WAV channel | Source label | Horizontal distance from mic |
-|-------------|--------------|-------------------|
-| 0 | `near_0` | `< 1 m` |
-| 1 | `near_1` | `< 1 m` |
-| 2 | `far_0`  | `> 2 m` |
-| 3 | `far_1`  | `> 2 m` |
-| 4 | `far_2`  | `> 2 m` |
+## What one simulated item is
 
-The low band (`20 Hz`–`1000 Hz`) is a wave simulation (vendored `gpuard/pytARD`
-modal model, solved with an exact batched modal recurrence); the high band
-(`1000 Hz`–Nyquist) is a Pyroomacoustics geometric simulation; the two are glued
-with a causal Linkwitz-Riley crossover. Furniture obstacles are sampled with
-area-aware counts and material-specific footprint/height profiles, then applied
-as height-aware high-frequency occlusion and scattering. See
-[`docs/audio/hybrid_rir.md`](../../docs/audio/hybrid_rir.md) for the acoustic
-model and tuning details.
+One item is a five-channel RIR WAV plus a same-stem JSON sidecar:
 
-## Scripts
+| Channel | Source | Intended distance |
+|---:|---|---|
+| 0 | `near_0` | near, usually `< 1 m` |
+| 1 | `near_1` | near, usually `< 1 m` |
+| 2 | `far_0` | far, usually `> 2 m` |
+| 3 | `far_1` | far, usually `> 2 m` |
+| 4 | `far_2` | far, usually `> 2 m` |
 
-The bold tag marks each script's stage in the pipeline: **Generate** synthetic
-RIRs → **Apply / Inspect** them → **Bank** them for training.
+The receiver is one microphone. A room/acoustic-space sample contains room
+dimensions, surface/material causes, furniture/obstacles, microphone position,
+source positions, renderer settings, and realized acoustic metrics. Multiple
+items may share an acoustic space while varying the microphone/source layout;
+M6 keeps train/validation/test assignments room- and acoustic-space-disjoint.
 
-| Script | Purpose |
-|--------|---------|
-| `generate_hybrid_rir.py` | **Generate** — sample rooms and write 5-channel RIR WAV + metadata JSON. |
-| `generate_bank_boundary.sh` | **Generate** — one-shot recipe for the boundary-distance bank (far sources 1.10–3.5 m + a held-out twin). |
-| `generate_bank_high_reverb.sh` | **Generate** — one-shot recipe for the high-reverb bank (RT60 0.85–1.5, beyond the training domain). |
-| `apply_rir_to_wav.py` | **Apply** — convolve a dry WAV with a generated RIR WAV. |
-| `simulate_room_scene.py` | **Apply** — build (mix, target) listening scenes with the on-the-fly shoebox room simulator (`puresound.audio.room_simulator`), the path recipes with a pre-generated bank do not exercise. |
-| `plot_rir.py` | **Inspect** — visualize one RIR: room geometry, reflection paths, or a 2D wave-field animation. |
-| `inspect_bank.py` | **Inspect** — print distribution stats for a folder of RIRs (room dims, RT60, distances, obstacles) to the terminal. |
-| `build_bank_view.py` | **Bank** — symlink-only views: `levels` slices one bank into cumulative difficulty levels by RT60 + DRR, `merge` unions several views into one training view. |
-| `real_rir_to_bank.py` | **Bank** — measured RIRs → a `PreGeneratedRoomBank` folder: `scan` a public corpus into a manifest, `from-manifest` assemble the bank, `but` do both for BUT ReverbDB, `self-test` verify the emission. |
-| `classify_but_rirs.py` | **Bank** — index a BUT ReverbDB tree by reverb tier and room type (browse trees + per-RIR index + per-room CSV) to pick rooms worth banking. |
+The normal hybrid renderer combines a low-frequency wave/modal component with
+a high-frequency geometric component through a causal crossover. The JSON
+sidecar is part of the data contract; do not copy WAV files without their
+metadata. A finite modal/voxel low-band solve can leave a tiny numerical
+precursor, so the generator zeros each low-band channel before
+`floor(distance / sound_speed * sample_rate)` while preserving the arrival
+sample itself; this is the causality contract used by M6 QC.
 
-## Install
+## What the M-series means
+
+The M labels are milestones in the renderer and data-bank roadmap. They are
+not quality scores and a later M does not automatically make every earlier
+backend production-ready.
+
+| Milestone | Meaning | Practical status |
+|---|---|---|
+| **M0** | Frozen RT60-driven hybrid baseline (`v0`), useful as a regression/reference condition. | Reference only; not the preferred training recipe. |
+| **M1** | Material-first scene sampling (`v1`): room type, surface/material priors, obstacles, and correlated acoustic causes. | Recommended physical scene foundation. |
+| **M2** | Complex impedance and frequency-dependent modal loss, including impedance measurements and residue calibration. | Experimental/opt-in; production mapping is not frozen. |
+| **M3** | Coherent PathEvents for early/direct/reflected wave paths. | Implemented and opt-in as a high-band backend. |
+| **M4** | Spatial late field: PathEvents coupled to a multiband late-field/FDN realization. | Implemented and opt-in; not the default bank renderer. |
+| **M5** | Controlled measured-room campaigns, inverse calibration, constrained residuals, and spatial calibration. | Implementation gates exist; empirical room evidence is still required. |
+| **M6** | Deterministic training-bank contract, QC, variants, evaluation, and immutable production decision. | Candidate-bank pipeline is usable; production promotion remains evidence-gated. |
+
+### M6 sub-milestones
+
+1. **M6.1 — contract:** versioned manifest, provenance, hashes, and deterministic
+   train/validation/test split.
+2. **M6.2 — generation:** complete task plan, per-item seeds, parallel/resume
+   generation, and post-generation audit.
+3. **M6.3 — QC:** physical per-item checks, pass-only indexes, and quarantine
+   for failed or non-evaluable items.
+4. **M6.4 — release:** immutable calibrated and peak-normalized variants plus
+   training recipes.
+5. **M6.5 — evaluation:** acoustic distributions, throughput, listening, and
+   downstream-model evidence contracts.
+6. **M6.6 — decision:** append-only promotion certificate binding the release,
+   evidence hashes, renderer approval, and sign-offs.
+
+M6.1–M6.6 implementation gates are present. The current synthetic release is
+still a **candidate**, not a production-approved bank: measured/mixed assets,
+controlled listening, downstream-model evidence, and production approvals are
+not bundled automatically.
+
+### Post-review hardening (2026-08-02)
+
+The bank path now seeds both NumPy and libroom for Pyroomacoustics ray tracing,
+binds resume identity to the code revision and runtime package versions, and
+tests serial, parallel, fresh-run, and resume reproducibility on the actual
+default high backend. The low-frequency production recommendation uses a
+single-sample causal excitation rather than the former bipolar excitation that
+created fixed spectral comb nulls.
+
+The M4 alternative now covers DC through Nyquist with an endpoint-complete FDN
+filterbank, derives late-tail energy from material RT60 instead of the
+order-truncated path tail, preserves one shared spatial-field gain, and applies
+material boundary phase priors, air absorption, source directivity, and
+path-local obstacle effects. These are renderer changes, not merely parameter
+tuning of Pyroomacoustics.
+
+M6 admission and evidence validation were also tightened: late-arrival and
+octave-decay gates are active, calibrated float RIRs no longer inherit a false
+unit-peak limit, unsafe item paths and manifestless M6 layouts fail closed,
+variant audio lineage is sample-verified, downstream confidence intervals are
+recomputed, and production certificates re-run the bound release/evidence
+audits. Existing banks generated before these fixes must not be presented as
+post-hardening results; generate a new output directory.
+
+### Hardened matched preflight result (2026-08-02)
+
+The first post-hardening smoke campaign is complete in
+[`exp/rir_realism/m6/rir_m6_hardened_preflight_20260802/`](exp/rir_realism/m6/rir_m6_hardened_preflight_20260802/).
+It used 30 matched rooms × 2 items (60 items / 300 channels per backend),
+`v1/mixed`, seed `1337`, calibrated `16 kHz / 1.6 s` output, and the GPU low
+backend `pytard-cupy-material`. Every scene hash, room/acoustic-space ID,
+split, seed, and audio shape matched across Pyroomacoustics and M4; both banks
+had 60/60 QC PASS, zero quarantines, and passing release audits. The actual
+calibrated train readers also loaded 56 PASS items from each release.
+
+The paired medians show what the backends currently change:
+
+| Metric | Pyroomacoustics | PathEvents-M4 | M4 − Pyroom |
+|---|---:|---:|---:|
+| DRR | -4.83 dB | -3.24 dB | +1.59 dB |
+| C50 | 6.10 dB | 10.28 dB | +4.18 dB |
+| C80 | 8.03 dB | 15.01 dB | +6.97 dB |
+| T20 | 0.99 s | 0.47 s | -0.52 s |
+| absolute T20 − scene RT60 error | 0.327 s | 0.080 s | M4 closer |
+
+M4 is drier and more early-energy dominant in this sample, while its broadband
+T20 tracks the sampled scene RT60 more closely. Causal arrival, exact-zero final
+sample, the fixed 390 Hz comb check, and M4 high-tail coverage all passed. This
+is evidence that the hardened pipeline and M4 algorithm exercise the intended
+mechanisms; it is not a measured-room realism winner. Validation and test each
+contain only two items per backend, the code revision is dirty, and no measured
+RIR, human listening, or downstream-model result is included. Both releases are
+therefore **candidate** only, Pyroomacoustics remains the default, and the full
+4,000-item pilot is still required.
+
+The observed aggregate generation cost was about 6.5 s/item for Pyroomacoustics
+with two workers and 8.2 s/item for M4 with eight workers after resume. M4 is
+currently CPU PathEvent/material-boundary limited; the GPU mainly accelerates
+the shared low-frequency solve, so adding workers does not make the M4 high band
+GPU-bound.
+
+The machine-readable conclusion, including manifest/QC/release hashes and
+provenance warnings, is [`preflight_validation_summary.json`](exp/rir_realism/m6/rir_m6_hardened_preflight_20260802/preflight_validation_summary.json).
+
+## Closest available training-data simulation
+
+The closest current simulation to something usable as training data is:
+
+| Setting | Recommended value | Why |
+|---|---|---|
+| Bank pipeline | `generate_m6_bank.py` | Produces manifest, QC indexes, and release recipes. |
+| Scene | `--scene-version v1 --room-type mixed` | Material-first, correlated room/finish/obstacle causes. |
+| Output | `--output-mode calibrated --record-realized-metrics` | Stable level semantics and auditable acoustic metrics. |
+| Low band | `--low-backend pytard-material` | CPU wave/modal solver with material-frequency-dependent modal damping and a causal delta excitation without the former fixed comb signature. |
+| High band | `--backend pyroomacoustics` | Default geometric renderer; best-controlled baseline today. |
+| Sample rate / duration | `16 kHz / 1.6 s` | Matches the recommended speech-augmentation bank setup. |
+| Bank size | `1000 rooms × 4 items = 4000 items` | Enough for a first training pilot while preserving room-disjoint splits. |
+| Seed / workers | `1337 / 8` | Reproducible content; worker count does not change item identity. |
+| Training recipe | `synthetic_calibrated`, `split: train` | Uses only QC-passed train items. |
+
+This is the recommended **synthetic candidate**. It is not a claim that the
+simulation is equivalent to a measured room. The M4 high backend
+(`path-events-m4`) is useful for a matched ablation, but should not silently
+replace the Pyroomacoustics baseline in the first training run.
+
+### Generate the recommended M6 candidate
+
+Run from the repository root:
 
 ```bash
-# CPU (pytARD is already vendored in this repo)
-pip install pyroomacoustics
-
-# Optional GPU low band (CUDA 12)
-uv pip install cupy-cuda12x
+PYTHONPATH=. .venv/bin/python \
+  egs/rir_generation/generate_m6_bank.py \
+  --output-dir egs/rir_generation/exp/rir_realism/m6/training_pilot \
+  --backend pyroomacoustics \
+  --n-rooms 1000 \
+  --rir-per-room 4 \
+  --num-workers 8 \
+  --seed 1337 \
+  --sample-rate 16000 \
+  --duration 1.6 \
+  --scene-version v1 \
+  --room-type mixed \
+  --output-mode calibrated \
+  --low-backend pytard-material \
+  --record-realized-metrics
 ```
 
-## Generate
-
-Smoke test without running pytARD (still requires Pyroomacoustics for the high
-band):
-
-```bash
-python generate_hybrid_rir.py \
-  --output-dir exp/hybrid_rir_smoke \
-  --n-rooms 2 --rir-per-room 1 \
-  --low-backend analytic
-```
-
-Dataset on CPU (recommended for a single machine — set `--num-workers` near the
-core count):
-
-```bash
-python generate_hybrid_rir.py \
-  --output-dir exp/hybrid_rir \
-  --n-rooms 1000 --rir-per-room 4 \
-  --sample-rate 16000 --duration 1.6 \
-  --low-backend pytard \
-  --num-workers 22 \
-  --pytard-low-sample-rate 16000 \
-  --pytard-spatial-samples-per-wavelength 2
-```
-
-GPU low band (one worker per device):
-
-```bash
-python generate_hybrid_rir.py \
-  --output-dir exp/hybrid_rir_gpu \
-  --n-rooms 1000 --rir-per-room 4 \
-  --sample-rate 16000 --duration 1.6 \
-  --low-backend pytard-cupy \
-  --gpu-devices 0,1 --num-workers 2 \
-  --pytard-low-sample-rate 16000 \
-  --pytard-spatial-samples-per-wavelength 2
-```
-
-Only `pytard-cupy` uses the GPU; the `pytard`/`analytic` low backends and the
-Pyroomacoustics high band are always CPU. Because the modal solve made the GPU
-low band only a few seconds per RIR, a high core-count machine running CPU
-multi-worker can out-throughput a small number of GPUs — benchmark both.
-
-### Key options
-
-| Option | Meaning |
-|--------|---------|
-| `--n-rooms`, `--rir-per-room` | Number of rooms, and RIRs per room (same geometry, resampled mic/source positions). |
-| `--num-workers` | Parallel generation workers. Defaults to one per `--gpu-devices` entry, else 1. |
-| `--gpu-devices` | Comma-separated CUDA devices for `pytard-cupy` workers, e.g. `0,1`. |
-| `--low-backend` | `pytard` (CPU), `pytard-cupy` (GPU), or `analytic` (fast smoke fallback). |
-| `--sample-rate`, `--duration` | Output sample rate (Hz) and RIR length (s). |
-| `--rt60 MIN MAX` | RT60 range; one value is sampled per room and drives both bands. |
-| `--obstacles MIN MAX` | Hard cap for sampled furniture count; actual count also tracks room floor area and coverage limits. |
-| `--crossover-hz` | Low/high crossover frequency. |
-| `--pytard-low-sample-rate` | Internal wave simulation rate (resampled to `--sample-rate` afterwards). |
-| `--pytard-spatial-samples-per-wavelength` | Grid resolution; `2` is practical, larger is slower. |
-| `--seed` | RNG seed. Scene sampling is deterministic and independent of `--num-workers`. |
-| `--resume` | Skip RIRs already written to `--output-dir` and generate only the rest. |
-
-Run `python generate_hybrid_rir.py --help` for the full list.
-
-### Resume an interrupted run
-
-If a run is killed partway through, rerun the **same command** with `--resume`
-added. It rescans `--output-dir`, skips every room/RIR that already has both a
-`.wav` and a parseable `.json` (a half-written item is regenerated), and
-continues with the remainder; the progress bar starts at the already-finished
-count:
-
-```bash
-python generate_hybrid_rir.py \
-  --output-dir exp/hybrid_rir \
-  --n-rooms 1000 --rir-per-room 4 \
-  --sample-rate 16000 --duration 1.6 \
-  --low-backend pytard --num-workers 22 \
-  --pytard-low-sample-rate 16000 \
-  --pytard-spatial-samples-per-wavelength 2 \
-  --resume
-```
-
-Keep `--seed`, `--n-rooms`, `--rir-per-room`, and the room/RT60/obstacle options
-identical to the original run. Scene sampling is deterministic, so the resumed
-items reuse the exact room/mic/source geometry the uninterrupted run would have
-produced (the high-band acoustic realization is randomized per RIR regardless of
-resume).
-
-### Output layout
-
-Items are grouped by `room_id`, each RIR/metadata pair named `{room_id}_{index}`:
+The one command runs M6.2 generation, M6.3 QC, and M6.4 release packaging.
+It creates:
 
 ```text
-exp/hybrid_rir/
-  room_000000/
-    room_000000_000000.wav   # [5, samples] RIR, PCM_F
-    room_000000_000000.json  # config, scene geometry, per-channel distances
-    room_000000_000001.wav
-    room_000000_000001.json
+egs/rir_generation/exp/rir_realism/m6/training_pilot/
+├── pyroomacoustics_bank/       # WAV/JSON items, manifest, split indexes, QC
+└── pyroomacoustics_release/    # audited training variants and recipes
 ```
 
-## Apply a RIR to dry audio
+An interrupted generation can be rerun with the same arguments; M6 resume
+checks task/config/scene/audio identity before skipping an item. A release
+directory is never overwritten; choose a new `--output-dir` for a new bank.
 
-Convolve a dry mono/multi-channel WAV with a generated RIR. Multi-channel dry
-input is mixed down to mono by default.
+To build a matched M4 high-band candidate, keep every setting and seed the same
+and change only the output directory and renderer:
 
 ```bash
-# One wet channel per RIR channel
-python apply_rir_to_wav.py \
-  --wav path/to/dry.wav \
-  --rir exp/hybrid_rir/room_000000/room_000000_000000.wav \
-  --output exp/hybrid_rir/room_000000/wet_5ch.wav \
-  --rir-mode full --length-mode same \
-  --output-layout rir-channels --peak-normalize
-
-# Single mono mixture (sum all RIR channels)
-python apply_rir_to_wav.py \
-  --wav path/to/dry.wav \
-  --rir exp/hybrid_rir/room_000000/room_000000_000000.wav \
-  --output exp/hybrid_rir/room_000000/wet_mono.wav \
-  --output-layout mono-sum --peak-normalize
+PYTHONPATH=. .venv/bin/python egs/rir_generation/generate_m6_bank.py \
+  --output-dir egs/rir_generation/exp/rir_realism/m6/training_pilot_m4 \
+  --backend path-events-m4 \
+  --n-rooms 1000 --rir-per-room 4 --num-workers 8 --seed 1337 \
+  --sample-rate 16000 --duration 1.6 \
+  --scene-version v1 --room-type mixed \
+  --output-mode calibrated --low-backend pytard-material \
+  --record-realized-metrics
 ```
 
-Useful flags: `--rir-mode {full,early,direct}` (trim to direct path or early
-reflections), `--dry-wet` (blend dry/wet), and `--metadata PATH` (write a
-convolution metadata JSON).
+Use this M4 bank as a matched realism ablation first. Do not silently mix it
+with the baseline bank or label it production-approved without the empirical
+M4/M5 evidence gates.
 
-## Build a training RIR bank
+### Same-scene backend comparison
 
-Both bank scripts emit folders that
-[`PreGeneratedRoomBank`](../../puresound/audio/rir_bank.py) indexes directly:
-same-stem `.wav`/`.json` pairs whose JSON carries a `scene.channel_map` giving a
-near/far label and a distance per channel. Training recipes point at one of
-these folders. `build_bank_view.py` reshapes banks you already have;
-`real_rir_to_bank.py` builds one from RIRs measured in real rooms.
+The overview below replaces the original single-backend illustration. Both
+panels use the same v1 scene, source/receiver geometry, `16 kHz / 1.6 s`
+configuration, calibrated output, and the same low backend. Only the high-band
+renderer changes:
 
-### Difficulty levels from a generated bank — `build_bank_view.py levels`
+- left: Pyroomacoustics high-frequency renderer;
+- right: M4 PathEvent early response plus FDN late field.
 
-Slices an existing hybrid RIR bank into **cumulative** difficulty levels, judged by
-RT60 and the measured near/far DRR (direct-to-reverberant ratio) separation. The
-conservative gap per item is `min(DRR over near channels) − max(DRR over far
-channels)`, so every near/far pair in a level clears the printed bound.
+The scene metadata hash is
+`5564ef77c1630b54f2deaa2ccc156e450c898640bf0482b8a1eba68df6bb50c7` in both
+versions. The waveform and Schroeder decay panels therefore show a matched
+backend ablation rather than two independently sampled rooms.
 
-| Level | RT60 | Worst-case near/far DRR gap |
-|-------|------|------------------------------|
-| `core`   | 0.20–0.45 s | ≥ 6 dB |
-| `expand` | 0.20–0.65 s | ≥ 3 dB |
-| `wide`   | 0.20–0.85 s | ≥ 3 dB |
-| `stress` | valid items in none of the above | — |
-| `all`    | every valid item, unfiltered | — |
+![Matched Pyroomacoustics versus M4 overview](assets/overview.png)
 
-Use `all` for banks whose whole point is unfiltered coverage — a boundary-distance
-fill (where a low DRR gap is the intent) or a bank probed above RT60 0.85.
+The path view and the pressure-field animation use this same scene. Paths are
+geometry-only; the animation is the actual low-frequency modal pressure slice,
+so it is shared by both high-band variants.
 
-Output folders hold **relative symlinks only** (no RIR audio is copied), each
-under an `items/` child, plus a per-level `manifest.json` (RT60, near/far DRR,
-gap per item) and a top-level `summary.json` carrying the thresholds and
-RT60/gap percentiles.
+![Matched scene reflection paths](assets/paths_ch2.png)
+
+![Low-frequency modal pressure-field animation](assets/field_ch2.gif)
+
+### Use a GPU for the low band
+
+Install the CUDA-matched CuPy package and select the
+`pytard-cupy-material` backend:
 
 ```bash
-# Measure and report only; nothing is written to disk
-python build_bank_view.py levels \
-  exp/hybrid_rir_16k exp/hybrid_rir_16k_levels --dry-run
+uv pip install cupy-cuda12x
 
-# Cut the level views
-python build_bank_view.py levels \
-  exp/hybrid_rir_16k exp/hybrid_rir_16k_levels \
-  --drr-window-ms 2.5 --workers 16
+PYTHONPATH=. .venv/bin/python egs/rir_generation/generate_m6_bank.py \
+  --output-dir egs/rir_generation/exp/rir_realism/m6/training_pilot_gpu \
+  --backend pyroomacoustics \
+  --n-rooms 1000 --rir-per-room 4 \
+  --num-workers 1 --gpu-devices 0 \
+  --low-backend pytard-cupy-material \
+  --seed 1337 --sample-rate 16000 --duration 1.6 \
+  --scene-version v1 --room-type mixed \
+  --output-mode calibrated --record-realized-metrics
 ```
 
-Set `--drr-window-ms` to match the direct-path window your recipe config uses.
-The output path must not already exist — there is no overwrite option by design.
+Only the low-frequency modal solve uses the GPU; the high-frequency
+Pyroomacoustics or PathEvents renderer remains CPU-based. Prefer one worker per
+GPU (`--gpu-devices 0,1 --num-workers 2` for two GPUs) because each CuPy worker
+owns a separate CUDA context and memory pool.
 
-### Union several views into one — `build_bank_view.py merge`
+### Small smoke run
 
-Training on more than one bank means indexing one folder, but every generation run
-numbers its rooms from zero, so stems collide across banks. `merge` prefixes each
-symlink with a per-source tag (wav and json renamed together) and records the
-provenance in `merged.json`:
+M6 needs all three splits, so use at least a few rooms. This is a pipeline
+check, not a training configuration:
 
 ```bash
-python build_bank_view.py merge \
-  --source wide=exp/hybrid_rir_16k_levels/wide \
-  --source real=exp/real_rir_16k_train_view/all \
-  --output exp/hybrid_rir_16k_merged
+PYTHONPATH=. .venv/bin/python \
+  egs/rir_generation/generate_m6_bank.py \
+  --output-dir egs/rir_generation/exp/rir_realism/m6/smoke \
+  --backend pyroomacoustics \
+  --n-rooms 6 \
+  --rir-per-room 1 \
+  --num-workers 1 \
+  --low-backend analytic \
+  --duration 0.4
 ```
 
-Symlinks are resolved one hop, so the merged view points straight at the bank files
-rather than chaining through the source views.
+### Consume the release for augmentation
 
-### Real measured RIRs → a bank — `real_rir_to_bank.py`
+Use the release reader with an explicit recipe and split:
 
-Converts a real measured RIR dataset into a bank to narrow the synthetic→real
-domain gap. It runs in two stages decoupled by a JSON-Lines manifest, so the
-exact bank emission is independent of any one dataset's on-disk layout:
-
-* **Stage A — scan** a specific dataset into `manifest.jsonl`, one JSON object
-  per RIR: `room_id`, `rir_path`, `channel`, optional `rt60`, and a distance
-  given either as `distance_m` or as `src_xyz`/`mic_xyz` (Euclidean). This
-  scanner is dataset-specific and best-effort — verify it against your download.
-* **Stage B — assemble** the manifest into a bank. Within each `room_id`, RIRs
-  split near/far at `--d0` metres and group into multi-channel items (≤2 near,
-  ≤3 far). This stage is the definitive, self-tested one.
-
-By acoustic reciprocity a measured RIR is identical read source→mic or
-mic→source, so a dataset with one loudspeaker and many microphones maps cleanly
-onto the bank's "one receiver, many sources at various distances" item — the
-distance is just `‖loudspeaker − microphone‖`.
-
-```bash
-# Stage A — scan a public corpus into a manifest
-python real_rir_to_bank.py scan dechorate \
-  --input /path/to/dEchorate_sofa --staging exp/staging/dechorate \
-  --manifest exp/manifests/dechorate.jsonl
-
-# Stage B — assemble any manifest into a bank
-python real_rir_to_bank.py from-manifest \
-  --manifest manifest.jsonl --output exp/real_rir_bank \
-  --d0 1.0 --target-sr 16000
-
-# BUT ReverbDB end-to-end (scan → manifest → bank)
-python real_rir_to_bank.py but \
-  --input /path/to/BUT_ReverbDB --output exp/real_rir_bank --d0 1.0
-
-# Self-test Stage B against PreGeneratedRoomBank (no dataset needed)
-python real_rir_to_bank.py self-test
+```yaml
+pregenerated:
+  used: true
+  bank_type: release
+  folder: egs/rir_generation/exp/rir_realism/m6/training_pilot/pyroomacoustics_release
+  recipe_id: synthetic_calibrated
+  split: train
+  usage_role: train
+  require_production: false
 ```
 
-`scan` ships scanners for **dEchorate, BRUDEX, openSLR-28, ACE and DIFFRIR**; each
-corpus states its geometry differently (calibrated coordinates, direct-path TOA, a
-table in the tech report, per-config npy), and the script's docstring records the
-quirk per corpus — a wrong distance silently poisons the near/far labels. To add a
-corpus, write a `scan_*` that emits the manifest schema above and register it in
-`SCANNERS`; Stage B is reused unchanged.
+`usage_role` must match the dataset role and split, so a training dataset cannot
+silently consume `validation` or `test`. `require_production: false` is
+intentional while M6.5 empirical evidence and the M6.6 promotion certificate
+are still open. Never point a training job at the unsplit bank root when an M6
+manifest is present.
 
-Rooms that have far RIRs but no near ones can borrow near channels from another
-corpus with `--near-pool <manifest>`: a near channel is direct-path dominated, so
-the cross-room error is small, and it keeps the whole item real rather than mixing
-in a simulated near channel.
+## Public commands
 
-## Visualize a RIR
+Run these commands from the repository root. Use `--help` for all options.
 
-`plot_rir.py` is one CLI with three subcommands. Each reads a RIR WAV and its
-`.json` sidecar, and writes its output next to the RIR by default (override with
-`--output`). Common flags: `--rir` (required), `--json`, `--output`, `--dpi`.
-
-| Subcommand | Output | Shows |
-|------------|--------|-------|
-| `overview` | `*_overview.png` | Floor plan + 3D scene + per-channel RIR waveforms + Schroeder energy decay. |
-| `paths` | `*_paths_chN.png` | Geometric sound paths to the mic (image-source: direct + 1st/2nd-order wall reflections). |
-| `field` | `*_field_chN.mp4` (+ `.gif`, `_sheet.png`) | Illustrative 2D wave-field animation: reflection off walls and diffraction/scattering around furniture. |
-
-```bash
-RIR=exp/hybrid_rir/room_000000/room_000000_000000.wav
-
-# Geometry + waveforms + energy decay
-python plot_rir.py overview --rir "$RIR"
-
-# Reflection paths for source channel 2 (far_0), up to 2nd order
-python plot_rir.py paths --rir "$RIR" --channel 2 --order 2
-
-# 2D wave-field animation for channel 2 (MP4 + GIF + contact sheet)
-python plot_rir.py field --rir "$RIR" --channel 2 --nx 340 --t-ms 40 --gif
-```
-
-`paths`/`field` take `--channel` (0–4, see the channel table above); `paths`
-takes `--order {1,2}`; `field` takes `--nx` (grid resolution), `--t-ms`
-(duration), `--fps`, `--frame-stride`, and `--gif`.
-
-### Example outputs
-
-All three are rendered from the same item (`room_000000_000000`, a
-`7.5 × 4.1 × 3.5 m`, `RT60 = 0.81 s` room), with `paths`/`field` on channel 2
-(`far_0`, `2.53 m` from the mic).
-
-**`overview`** — floor plan + 3D scene + per-channel RIR waveforms + Schroeder
-energy decay:
-
-![plot_rir overview output](assets/overview.png)
-
-**`paths`** — image-source reflection paths to the mic (solid = direct,
-dashed = 1st-order, dotted = 2nd-order wall reflections):
-
-![plot_rir paths output for far_0](assets/paths_ch2.png)
-
-**`field`** — 2D FDTD wave-field animation (red = compression, blue =
-rarefaction); note the wave reflecting off the walls and bending around the
-furniture footprints:
-
-![plot_rir field animation for far_0](assets/field_ch2.gif)
-
-> The GIF here is downsized (`--nx 190`, sparse frames) to keep the repo light;
-> the default `--nx 340` render is sharper. `field` also writes an MP4 and a
-> 6-frame `_sheet.png` contact sheet, not shown here.
-
-A caveats worth stating plainly:
-
-* **`field` is a standalone 2D FDTD for visualization only** — not the
-  pipeline's low-band modal solver, which runs on an empty box without
-  obstacles. It illustrates wave behavior; it is not the exact RIR computation.
-
-### How the wave-field (`field`) is computed
-
-The animation is a small 2D **FDTD** (finite-difference time-domain) solver on a
-horizontal slice at mic height. Five steps:
-
-**1. Physics — the 2D wave equation.** The acoustic pressure `p(x, y, t)` obeys
-
-```
-∂²p/∂t² = c²·∇²p ,   c = 343 m/s ,   ∇²p = ∂²p/∂x² + ∂²p/∂y²
-```
-
-i.e. a point's pressure *accelerates* in proportion to how it differs from its
-surroundings (the Laplacian), which is what makes energy spread outward as waves.
-
-**2. Discretization — a grid you can step cell by cell.** The room slice becomes
-an `ny × nx` grid (`--nx`), time becomes steps `dt`. Central differences turn the
-derivatives into a leapfrog update of the whole field per step:
-
-```
-p^{n+1} = 2·p^n − p^{n-1} + C²·∇²p^n ,   C = c·dt/dx
-```
-
-with the Laplacian as the 5-point stencil (each cell vs. its 4 neighbors). This
-is the one line in `cmd_field`:
-
-```python
-p_next = (2.0 * p_cur - p_prev + c2 * _laplacian_neumann(p_cur, air)) * air
-```
-
-**Stability (CFL).** An explicit scheme only stays bounded if a wave travels less
-than one cell per step; in 2D that means `C ≤ 1/√2 ≈ 0.707`. The code fixes
-`courant = 0.5` and derives `dt = 0.5·dx/c`.
-
-**3. Boundaries — rigid walls and furniture.** A rigid surface means zero normal
-pressure gradient (`∂p/∂n = 0`, Neumann). `_laplacian_neumann` enforces it with
-one trick: when a neighbor is wall/furniture, substitute the center value
-(`np.where(rolled_air, rolled, p)`), so that direction's pressure difference is
-zero and the wave reflects. Furniture footprints from the JSON are rasterized
-into the boolean `air` mask (`_rasterize_air_mask`); waves reflect off them and
-diffract around their edges.
-
-**4. Source — a Ricker wavelet.** A bipolar pulse (2nd derivative of a Gaussian)
-is injected at the source cell each step. Bipolar so the animation shows
-compressions (red) and rarefactions (blue); band-limited and low enough in
-frequency that its wavelength spans many cells, which avoids grid dispersion
-ripples.
-
-**5. Rendering.** Every `--frame-stride` steps a snapshot is saved. Frames use the
-`RdBu_r` colormap (red = positive pressure, blue = negative, white = zero). Each
-frame is normalized to its own 99.8th-percentile amplitude, because the pulse is
-huge at the source but spreads thin — a single fixed color scale would wash out
-later frames. `FuncAnimation` + `FFMpegWriter` write the MP4 (plus an optional
-GIF and a 6-frame contact sheet).
-
-## Third-party libraries and projects
-
-These scripts stand on the following external code. Generic numerics and audio
-I/O (`numpy`, `scipy`, `torch`/`torchaudio`) are repo-wide dependencies declared
-in [`pyproject.toml`](../../pyproject.toml); the acoustics- and rendering-specific
-ones are called out here with their role and which script pulls them in.
-
-| Library | Role here | Used by |
-|---------|-----------|---------|
-| [Pyroomacoustics](https://github.com/LCAV/pyroomacoustics) | High-band **geometric (image-source)** room simulation | `generate_hybrid_rir.py` (via `puresound.audio.hybrid_rir`) |
-| [CuPy](https://cupy.dev/) (`cupy-cuda12x`) | Optional **GPU** acceleration of the low-band modal solve (`--low-backend pytard-cupy`) | `generate_hybrid_rir.py` |
-| [PyTorch / torchaudio](https://pytorch.org/audio/) | Tensors, WAV I/O, resampling, FFT convolution | `generate_hybrid_rir.py`, `apply_rir_to_wav.py`, `real_rir_to_bank.py` |
-| [SciPy](https://scipy.org/) | Modal DCT/IDCT transforms; WAV-read fallback | low-band solver, `plot_rir.py` |
-
-`pyroomacoustics` and `cupy-cuda12x` are **optional extras**, not installed by
-default — see [Install](#install) (the `hybrid-rir` / `hybrid-rir-gpu` extras in
-`pyproject.toml`). `ffmpeg` is a system binary Matplotlib shells out to for MP4;
-without it, `field` can still write the GIF and contact sheet.
-
-### Vendored: gpuard/pytARD — low-band wave solver
-
-The low band (`20 Hz`–crossover) is solved with **Adaptive Rectangular
-Decomposition (ARD)** from [`gpuard/pytARD`](https://github.com/gpuard/pytARD),
-vendored under
-[`puresound/third_party/pytARD/`](../../puresound/third_party/pytARD). The
-adapter in [`puresound/audio/hybrid_rir.py`](../../puresound/audio/hybrid_rir.py)
-wraps pytARD's 3D partition modules and replaces its per-step FFT loop with an
-exact batched modal recurrence (optionally CuPy-accelerated) **without modifying
-the vendored source**. pytARD is licensed **AGPL-3.0** (see its bundled
-`LICENSE`); that license governs the vendored subtree.
-
-### External datasets (downloaded separately, not bundled)
-
-`real_rir_to_bank.py` converts *real measured* RIR corpora into banks. It ships a
-scanner for the [**BUT Speech@FIT Reverb Database**](https://speech.fit.vut.cz/software/but-speech-fit-reverb-database)
-(Brno University of Technology; CC-BY 4.0) — specifically the `rel_19_06`
-*RIR-Only* release. The dataset is downloaded separately and is not part of this
-repo; only the scanner and the manifest→bank converter live here. The
-docstring's "BUT, UPV, ..." notes other one-loudspeaker/many-microphone corpora
-that the same Stage-A→Stage-B path can target once a `scan_*` is added.
-
-## Rebuilding the frozen benchmark banks (stations 2/5)
-
-The voice_isolate benchmark's in-domain bank (`hybrid_rir_16k_phase1`, station 2
-via `config/exp/eval_indomain_phase1.yaml`) is a merged view of the wide level view
-plus the boundary-distance bank; the station-5 probe uses the boundary held-out
-bank (seed 1618, built by `generate_bank_boundary.sh`). Both live under
-`/work/any_exp_link/puresound_exp/` and are frozen — rebuild only after data
-loss:
-
-```bash
-# boundary main + held-out banks (see generate_bank_boundary.sh for the full recipe)
-bash egs/rir_generation/generate_bank_boundary.sh
-
-# merged phase1 view (wide + boundary; refuses to overwrite an existing output)
-uv run python egs/rir_generation/build_bank_view.py merge \
-  --source wide=/work/any_exp_link/puresound_exp/hybrid_rir_16k_levels/wide \
-  --source bnd=/work/any_exp_link/puresound_exp/hybrid_rir_16k_boundary_levels/all \
-  --output /work/any_exp_link/puresound_exp/hybrid_rir_16k_phase1
-```
-
-## Renamed / merged (older logs use the old names)
-
-| old | now |
+| Command | Use |
 |---|---|
-| `filter_rir_levels.py` | `build_bank_view.py levels` |
-| `merge_rir_views.py` | `build_bank_view.py merge` |
-| `rir_stats.py` | `inspect_bank.py` |
-| `rir_viz.py` | `plot_rir.py` |
-| `run_boundary_gen.sh` | `generate_bank_boundary.sh` |
-| `run_high_gen.sh` | `generate_bank_high_reverb.sh` |
-| `scan_public_rir_corpora.py` | `real_rir_to_bank.py scan <corpus>` (Stage A now lives with Stage B) |
+| `generate_hybrid_rir.py` | Generate individual simulated hybrid RIRs. |
+| `generate_m6_bank.py` | Generate, QC, and package an M6 synthetic candidate. |
+| `render_spatial_rir.py` | Render receiver-array, FOA, or optional BRIR outputs. |
+| `plot_rir.py` | Plot waveforms, EDCs, image-source paths, and actual low-band pressure fields. |
+| `inspect_bank.py` | Summarize metadata distributions for one RIR folder. |
+| `compare_bank_acoustics.py` | Compare DRR, C50, decay, and spectral statistics across banks. |
+| `compare_modal_acoustics.py` | Compare low-frequency modal peak/spacing/bandwidth/Q statistics. |
+
+Examples:
+
+```bash
+PYTHONPATH=. python egs/rir_generation/generate_hybrid_rir.py --help
+PYTHONPATH=. python egs/rir_generation/generate_m6_bank.py --help
+PYTHONPATH=. python egs/rir_generation/plot_rir.py --help
+PYTHONPATH=. python egs/rir_generation/inspect_bank.py --help
+```
+
+### Actual low-frequency pressure-field animation
+
+The `field` subcommand is a self-contained 2-D FDTD illustration. To inspect
+the pressure field generated by the low-frequency modal recurrence itself, use
+`low-field`:
+
+```bash
+PYTHONPATH=. python egs/rir_generation/plot_rir.py low-field \
+  --rir egs/rir_generation/exp/rir_realism/m6/training_pilot_gpu/pyroomacoustics_bank/room_000349/room_000349_000000.wav \
+  --backend pytard --channel 0 --t-ms 80 --gif
+```
+
+This re-runs one sample, reconstructs a fixed-height `p(x, y, z_slice, t)`
+slice from the modal state, and writes an MP4, a GIF when requested, a contact
+sheet, and a reusable `.npz` diagnostic. The normal M6 generator does not
+store field snapshots. The animation uses relative solver pressure units and
+does not include the final output calibration or the high-frequency band.
+`--slice-z` selects the slice height; by default it uses the receiver height.
+Use `--low-sample-rate` and `--spatial-samples-per-wavelength` to match the
+generation recipe when those values are not recorded in the sidecar metadata.
+
+## Directory layout
+
+```text
+egs/rir_generation/
+├── generate_hybrid_rir.py       # individual simulated RIRs
+├── generate_m6_bank.py          # public M6 one-command pipeline
+├── render_spatial_rir.py        # spatial/array rendering
+├── plot_rir.py                  # plots
+├── inspect_bank.py              # folder statistics
+├── compare_*_acoustics.py       # bank comparisons
+├── examples/                    # reproducible recipes
+├── tools/                       # audition, measured-RIR, and bank helpers
+├── exp/rir_realism/             # retained M0–M6 reference artifacts
+└── phases/
+    ├── m0_baseline/
+    ├── m1_material/
+    ├── m2_impedance/
+    ├── m3_wave_path/
+    ├── m4_spatial_late_field/
+    ├── m5_calibration/
+    └── m6_bank/
+```
+
+Phase scripts, configs, reports, and fixtures are kept under their milestone
+directory. Retained generated evidence is grouped under
+[`exp/rir_realism/`](exp/rir_realism/); the root is intentionally reserved for
+stable user-facing tools.
+
+## Dependencies and references
+
+The CPU M6 path uses the repository's `pytard` implementation and
+Pyroomacoustics for the high band:
+
+```bash
+pip install pyroomacoustics
+```
+
+Optional CUDA acceleration is available through the `pytard-cupy` backend when
+the matching CuPy package is installed. It is not required for the recommended
+CPU pilot.
+
+Further reading:
+
+- [`docs/audio/rir_realism_algorithm_zh-TW.md`](../../docs/audio/rir_realism_algorithm_zh-TW.md) — full physical/algorithmic notes.
+- [`docs/audio/rir_bank_v2_zh-TW.md`](../../docs/audio/rir_bank_v2_zh-TW.md) — M6 contract and evidence rules.
+- [`docs/audio/hybrid_rir.md`](../../docs/audio/hybrid_rir.md) — hybrid renderer details.
+- [`docs/audio/rir_scene_v2.md`](../../docs/audio/rir_scene_v2.md) — M1 scene/material schema.
+- [`RIR_REALISM_PLAN.md`](../../RIR_REALISM_PLAN.md) — project roadmap.

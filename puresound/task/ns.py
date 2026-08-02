@@ -12,6 +12,19 @@ from puresound.audio.noise import add_bg_noise
 from puresound.dataset.dynamic_base import DynamicBaseDataset
 
 
+RIR_PROVENANCE_KEYS = (
+    "rir_release_id",
+    "rir_release_sha256",
+    "rir_recipe_id",
+    "rir_variant_id",
+    "rir_split",
+    "rir_origin",
+    "rir_renderer_profile_id",
+    "rir_production_certificate_sha256",
+    "rir_interferer_variant_ids",
+)
+
+
 def if_none_else(a, b):
     if a is not None:
         return a
@@ -61,6 +74,7 @@ class NoiseSuppressionDataset(DynamicBaseDataset):
         augmentation_packet_loss_args: Optional[Dict] = None,
         augmentation_target_absent_args: Optional[Dict] = None,
         vad_label_args: Optional[Dict] = None,
+        dataset_role: str = "train",
     ):
         super().__init__(
             metafile_path=metafile_path,
@@ -78,6 +92,7 @@ class NoiseSuppressionDataset(DynamicBaseDataset):
             augmentation_hpf_args=augmentation_hpf_args,
             augmentation_volume_args=augmentation_volume_args,
             vad_label_args=vad_label_args,
+            dataset_role=dataset_role,
         )
         self.augmentation_codec_args = augmentation_codec_args
         self.augmentation_packet_loss_args = augmentation_packet_loss_args
@@ -1002,14 +1017,41 @@ class NoiseSuppressionDataset(DynamicBaseDataset):
         overlap_fraction: float = float("nan"),
         turn_taking: float = 0.0,
     ) -> None:
-        """Hook for task subclasses to attach extra per-sample labels.
+        """Attach bank lineage; subclasses may add task-specific labels."""
 
-        No-op in the base noise-suppression dataset. Task subclasses (e.g. the
-        distance-cued voice isolation dataset) override this to derive auxiliary
-        labels from the simulation metadata and ``sample.update`` them in. The
-        base dataset stays unaware of any derived task's label schema.
-        """
-        return
+        primary = foreground_metadata or (
+            interferer_metadata[0] if interferer_metadata else {}
+        )
+
+        def _text(metadata: Optional[dict], key: str) -> str:
+            if not metadata:
+                return ""
+            value = metadata.get(key)
+            return "" if value is None else str(value)
+
+        sample.update(
+            {
+                "rir_release_id": _text(primary, "release_id"),
+                "rir_release_sha256": _text(primary, "release_sha256"),
+                "rir_recipe_id": _text(primary, "release_recipe_id"),
+                "rir_variant_id": _text(primary, "release_variant_id"),
+                "rir_split": _text(primary, "split"),
+                "rir_origin": _text(primary, "origin")
+                or _text(primary, "release_origin"),
+                "rir_renderer_profile_id": _text(
+                    primary,
+                    "renderer_profile_id",
+                ),
+                "rir_production_certificate_sha256": _text(
+                    primary,
+                    "production_certificate_sha256",
+                ),
+                "rir_interferer_variant_ids": tuple(
+                    _text(metadata, "release_variant_id")
+                    for metadata in interferer_metadata
+                ),
+            }
+        )
 
     def _sample_turn_script(
         self, n_frames: int, hop: int, sr: int, overlap_cfg: dict
@@ -1248,4 +1290,7 @@ class NoiseSuppressionCollateFunc:
             out["vad_target"] = pad_sequence(col_vad, batch_first=True)
         if col_vad_ref:
             out["vad_reference"] = pad_sequence(col_vad_ref, batch_first=True)
+        for key in RIR_PROVENANCE_KEYS:
+            if any(key in item for item in batch):
+                out[key] = [item.get(key, "") for item in batch]
         return out

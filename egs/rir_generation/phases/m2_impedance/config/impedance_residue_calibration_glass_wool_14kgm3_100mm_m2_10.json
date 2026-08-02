@@ -1,0 +1,42 @@
+{
+  "schema_version": "puresound.impedance_modal_residue_calibration.v2",
+  "reference_id": "glass_wool_14kgm3_100mm_fdtd_residue_m2_10",
+  "boundary_reference_id": "uniform_glass_wool_14kgm3_100mm_miki_relaxation_validation",
+  "complex_scale": {
+    "real": 0.4441748956890689,
+    "imag": 0.1291461862944896
+  },
+  "frequency_exponent": 0.35,
+  "reference_frequency_hz": 100.0,
+  "valid_frequency_range_hz": [
+    60.0,
+    240.0
+  ],
+  "source": {
+    "evidence_tier": "independent_numerical_reference",
+    "reference_solver": "staggered_pressure_velocity_fdtd",
+    "coefficient_parent": "egs/rir_generation/phases/m2_impedance/config/impedance_residue_calibration_glass_wool_14kgm3_100mm_m2_9.json",
+    "source_convention_validation": "egs/rir_generation/phases/m2_impedance/reports/rir_source_convention_m2_10_report.json"
+  },
+  "applicability": {
+    "scope": "controlled_rectangular_room_position_room_grid_transfer",
+    "room_geometry": "shoebox",
+    "boundary_reference_id": "uniform_glass_wool_14kgm3_100mm_miki_relaxation_validation",
+    "production_material_mapping_enabled": false,
+    "measured_room_transfer_validated": false,
+    "free_field_direct_path_source_convention_validated": true
+  },
+  "fit_summary": {
+    "coefficient_fit": "unchanged_from_m2_9",
+    "position_holdout_mean_correlation": 0.9734203039865907,
+    "position_holdout_mean_nrmse": 0.2303566490080896,
+    "room_holdout_mean_correlation": 0.9932694717869917,
+    "room_holdout_mean_nrmse": 0.11765682651381848,
+    "grid_holdout_mean_correlation": 0.9929024635243637,
+    "grid_holdout_mean_nrmse": 0.11928978059699358,
+    "accepted": true
+  },
+  "fitted_source_convention": "puresound.fdtd_pressure_cell_state_increment.v1",
+  "rendered_rir_convention": "puresound.free_field_pressure_1_over_r_discrete_rir.v1",
+  "residue_transform": "puresound.pressure_state_residue_to_free_field_1_over_r.v1"
+}

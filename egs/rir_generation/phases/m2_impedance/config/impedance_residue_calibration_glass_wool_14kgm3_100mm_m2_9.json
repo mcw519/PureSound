@@ -1,0 +1,120 @@
+{
+  "schema_version": "puresound.impedance_modal_residue_calibration.v1",
+  "reference_id": "glass_wool_14kgm3_100mm_fdtd_residue_m2_9",
+  "boundary_reference_id": "uniform_glass_wool_14kgm3_100mm_miki_relaxation_validation",
+  "complex_scale": {
+    "real": 0.4441748956890689,
+    "imag": 0.1291461862944896
+  },
+  "frequency_exponent": 0.35,
+  "reference_frequency_hz": 100.0,
+  "valid_frequency_range_hz": [
+    60.0,
+    240.0
+  ],
+  "source": {
+    "evidence_tier": "independent_numerical_reference",
+    "reference_solver": "staggered_pressure_velocity_fdtd",
+    "boundary_config": "egs/rir_generation/phases/m2_impedance/config/impedance_reference_glass_wool_14kgm3_100mm.json",
+    "protocol": "m2_9_multi_boundary_room_grid_holdout"
+  },
+  "applicability": {
+    "scope": "controlled_rectangular_room_position_room_grid_transfer",
+    "room_geometry": "shoebox",
+    "boundary_reference_id": "uniform_glass_wool_14kgm3_100mm_miki_relaxation_validation",
+    "production_material_mapping_enabled": false,
+    "measured_room_transfer_validated": false
+  },
+  "fit_summary": {
+    "balanced_train_nrmse": 0.12997614328474716,
+    "aggregate": {
+      "train": {
+        "calibrated": {
+          "case_count": 4,
+          "mean_nrmse": 0.1299388982395492,
+          "mean_correlation": 0.9915594056841408,
+          "mean_energy_ratio": 0.9831078250793213
+        },
+        "baseline_legacy_1_over_f_sine": {
+          "case_count": 4,
+          "mean_nrmse": 0.9630550109389682,
+          "mean_correlation": 0.27051361392358075,
+          "mean_energy_ratio": 0.072469276247714
+        }
+      },
+      "grid_holdout": {
+        "calibrated": {
+          "case_count": 1,
+          "mean_nrmse": 0.11928978059699358,
+          "mean_correlation": 0.9929024635243637,
+          "mean_energy_ratio": 0.9673864401634656
+        },
+        "baseline_legacy_1_over_f_sine": {
+          "case_count": 1,
+          "mean_nrmse": 0.9878130691467003,
+          "mean_correlation": 0.18174542761183493,
+          "mean_energy_ratio": 0.07570501078509036
+        }
+      },
+      "position_holdout": {
+        "calibrated": {
+          "case_count": 2,
+          "mean_nrmse": 0.2303566490080896,
+          "mean_correlation": 0.9734203039865907,
+          "mean_energy_ratio": 1.0038871133082958
+        },
+        "baseline_legacy_1_over_f_sine": {
+          "case_count": 2,
+          "mean_nrmse": 0.9703259307875629,
+          "mean_correlation": 0.2466666030188454,
+          "mean_energy_ratio": 0.09130992556098197
+        }
+      },
+      "room_holdout": {
+        "calibrated": {
+          "case_count": 2,
+          "mean_nrmse": 0.11765682651381848,
+          "mean_correlation": 0.9932694717869917,
+          "mean_energy_ratio": 1.0282305462062924
+        },
+        "baseline_legacy_1_over_f_sine": {
+          "case_count": 2,
+          "mean_nrmse": 0.9733019894391219,
+          "mean_correlation": 0.23360427457353256,
+          "mean_energy_ratio": 0.073481355517142
+        }
+      }
+    },
+    "acceptance": {
+      "minimum_mean_holdout_correlation": 0.9,
+      "maximum_mean_holdout_nrmse": 0.35,
+      "requires_improvement_over_baseline": true,
+      "acceptance_splits": [
+        "position_holdout",
+        "room_holdout",
+        "grid_holdout"
+      ],
+      "by_split": {
+        "position_holdout": {
+          "accepted": true,
+          "calibrated_mean_correlation": 0.9734203039865907,
+          "calibrated_mean_nrmse": 0.2303566490080896,
+          "baseline_mean_nrmse": 0.9703259307875629
+        },
+        "room_holdout": {
+          "accepted": true,
+          "calibrated_mean_correlation": 0.9932694717869917,
+          "calibrated_mean_nrmse": 0.11765682651381848,
+          "baseline_mean_nrmse": 0.9733019894391219
+        },
+        "grid_holdout": {
+          "accepted": true,
+          "calibrated_mean_correlation": 0.9929024635243637,
+          "calibrated_mean_nrmse": 0.11928978059699358,
+          "baseline_mean_nrmse": 0.9878130691467003
+        }
+      },
+      "accepted": true
+    }
+  }
+}

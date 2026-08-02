@@ -9,10 +9,11 @@ such as pytARD and a high-frequency Pyroomacoustics backend.
 from __future__ import annotations
 
 import json
+import hashlib
 import math
 import sys
 from contextlib import contextmanager
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
 from typing import Any, Callable, Optional, Protocol
 
@@ -23,8 +24,47 @@ import torch
 import torchaudio
 from scipy.signal import butter, resample_poly, sosfilt, sosfiltfilt
 
+from puresound.audio.impedance_modes import (
+    RectangularImpedanceBoundaryConfig,
+    solve_rectangular_impedance_modes,
+)
+from puresound.audio.impedance_residues import (
+    ImpedanceModalResidueCalibration,
+)
+from puresound.audio.rir_source_convention import (
+    FREE_FIELD_1_OVER_R_RIR_CONVENTION,
+    convert_pressure_state_modal_residue,
+)
+from puresound.audio.rir_materials import (
+    MATERIAL_CATALOG_VERSION,
+    sample_materialized_shoebox,
+)
+from puresound.audio.rir_late_coupling import (
+    PATH_EVENT_FDN_COUPLING_POLICY,
+    couple_path_event_rir_with_fdn,
+)
+from puresound.audio.rir_air_absorption import (
+    AIR_ABSORPTION_POLICY,
+    air_adjusted_rt60_s,
+    apply_air_absorption,
+)
+from puresound.audio.rir_metrics import valid_octave_centers
+from puresound.audio.rir_path_events import (
+    generate_scene_shoebox_path_events,
+    material_absorption_relaxation_models,
+    orientation_forward_unit,
+    render_path_events,
+)
+from puresound.audio.rir_scene import (
+    EnvironmentConfig,
+    Pose,
+    RoomSceneV2,
+    TransducerConfig,
+)
+
 
 ArrayLike = np.ndarray | list[float] | tuple[float, ...]
+PYTARD_EXCITATION_POLICY = "puresound.pytard.green_delta.v1"
 
 
 class RIRBackend(Protocol):
@@ -32,7 +72,7 @@ class RIRBackend(Protocol):
 
     def simulate(
         self,
-        scene: "HybridRIRScene",
+        scene: "HybridRIRScene | RoomSceneV2",
         config: "HybridRIRConfig",
     ) -> np.ndarray:
         ...
@@ -68,11 +108,17 @@ class HybridRIRConfig:
     obstacle_margin: float = 0.4
     obstacle_height_range: tuple[float, float] = (0.35, 1.8)
     obstacle_radius_range: tuple[float, float] = (0.25, 0.9)
+    obstacle_occlusion_recovery_ms: float = 80.0
+    tail_fade_ms: float = 20.0
     normalize_peak: float = 0.98
+    output_mode: str = "peak_normalized"
+    calibrated_reference_source_spl_db: float = 94.0
+    record_realized_metrics: bool = False
     match_crossover_energy: bool = True
-    crossover_match_band_hz: tuple[float, float] = (700.0, 1300.0)
+    crossover_match_band_hz: Optional[tuple[float, float]] = None
     crossover_match_target_db: float = 0.0
     crossover_match_gain_range: tuple[float, float] = (1e-4, 2.0)
+    preserve_source_convention_at_crossover: bool = True
 
     @property
     def num_sources(self) -> int:
@@ -216,18 +262,49 @@ class GpuARDPytARDBackend:
     calibration_peak: float = 0.05
     apply_rt60_decay: bool = True
     rt60_decay_scale: float = 1.0
+    material_modal_damping: bool = False
+    material_modal_loss_scale: float = 1.0
     verbose: bool = False
     visualize: bool = False
     disable_notifications: bool = True
+    last_excitation_metadata: Optional[dict[str, Any]] = field(
+        default=None,
+        init=False,
+        repr=False,
+    )
 
     def simulate(self, scene: HybridRIRScene, config: HybridRIRConfig) -> np.ndarray:
         return self._simulate_with_pytard(scene, config, use_cupy=False)
+
+    def simulate_with_pressure_field(
+        self,
+        scene: HybridRIRScene | RoomSceneV2,
+        config: HybridRIRConfig,
+        field_capture: dict[str, Any],
+    ) -> tuple[np.ndarray, dict[str, Any]]:
+        """Run the low solver and capture a 2-D pressure-field slice.
+
+        ``field_capture`` is deliberately opt-in because a field animation is
+        a diagnostic artifact, not part of a normal RIR bank.  The capture is
+        performed inside the same modal recurrence used for the microphone
+        signal, so the resulting frames are not a separate illustrative FDTD
+        simulation.  Only one z-slice is reconstructed and copied to host
+        memory at the requested stride.
+        """
+        self._simulate_with_pytard(
+            scene,
+            config,
+            use_cupy=False,
+            field_capture=field_capture,
+        )
+        return field_capture.get("low_rir"), field_capture
 
     def _simulate_with_pytard(
         self,
         scene: HybridRIRScene,
         config: HybridRIRConfig,
         use_cupy: bool,
+        field_capture: Optional[dict[str, Any]] = None,
     ) -> np.ndarray:
         root = self.third_party_root or _default_pytard_root()
         if not root.exists():
@@ -238,6 +315,10 @@ class GpuARDPytARDBackend:
             )
 
         cp = _import_cupy() if use_cupy else None
+        if self.material_modal_damping and not isinstance(scene, RoomSceneV2):
+            raise ValueError(
+                "material_modal_damping requires a RoomSceneV2 with boundary materials"
+            )
         low_fs = int(self.low_sample_rate)
         spp = max(1, int(self.spatial_samples_per_wave_length))
         crossover = float(config.crossover_hz)
@@ -253,17 +334,9 @@ class GpuARDPytARDBackend:
                 f"low_sample_rate={low_fs} with spatial_samples_per_wave_length="
                 f"{spp} cannot resolve the crossover at {crossover} Hz."
             )
-        # pytARD's Unit impulse halves the requested cutoff internally
-        # (firwin uses (cutoff / 2) * 0.95), so request 2x to actually excite up
-        # to the crossover. Keep the excited band within the grid's resolvable
-        # range to avoid injecting energy that would alias.
-        excite_top = min(crossover, sim_fmax)
-        unit_cutoff = min(2.0 * excite_top / 0.95, nyq)
-
         xp = cp if cp is not None else np
 
         with _pytard_import_path(root):
-            from common.impulse import Unit
             from common.parameters import SimulationParameters
 
             room_dim = np.asarray(scene.room_dim, dtype=np.float64)
@@ -282,22 +355,25 @@ class GpuARDPytARDBackend:
                 verbose=bool(self.verbose),
                 visualize=bool(self.visualize),
             )
-            filter_order = min(
-                int(self.filter_order),
-                max(3, int(sim_param.number_of_samples) // 2),
+            # Solve the discrete Green's function directly.  pytARD's upstream
+            # ``Unit`` helper appends a delayed negative copy of a 41-tap FIR.
+            # Treating that bipolar probe as an RIR imprints (1-z^-41) comb
+            # zeros at 390.24 Hz intervals for 16 kHz audio.  The modal grid
+            # already limits the represented frequencies to ``sim_fmax`` and
+            # the hybrid crossover supplies the output band limit, so a causal
+            # unit sample is the correct uncoloured source here.
+            impulse = _pytard_green_delta_excitation(
+                int(sim_param.number_of_samples),
+                amplitude=float(self.amplitude),
             )
-            # The unit impulse depends only on the simulation parameters, not the
-            # source location, so every source shares one broadband excitation.
-            impulse = np.asarray(
-                Unit(
-                    sim_param,
-                    mic_pos.reshape(3),
-                    float(self.amplitude),
-                    int(round(unit_cutoff)),
-                    filter_order=filter_order,
-                ).get(),
-                dtype=np.float64,
-            )
+            self.last_excitation_metadata = {
+                "policy": PYTARD_EXCITATION_POLICY,
+                "nonzero_sample_count": 1,
+                "source_sample": 0,
+                "amplitude": float(self.amplitude),
+                "solver_bandlimit_hz": float(sim_fmax),
+                "legacy_bipolar_fir_used": False,
+            }
 
         mic_signals = _solve_modal_ard(
             sim_param=sim_param,
@@ -307,6 +383,9 @@ class GpuARDPytARDBackend:
             impulse=impulse,
             xp=xp,
             cp=cp,
+            material_scene=(scene if self.material_modal_damping else None),
+            material_modal_loss_scale=float(self.material_modal_loss_scale),
+            field_capture=field_capture,
         )
 
         low_rirs: list[np.ndarray] = []
@@ -320,7 +399,9 @@ class GpuARDPytARDBackend:
                     target_peak=float(self.calibration_peak),
                     sample_rate=low_fs,
                     rt60=float(scene.rt60) * float(self.rt60_decay_scale),
-                    apply_decay=bool(self.apply_rt60_decay),
+                    apply_decay=bool(
+                        self.apply_rt60_decay and not self.material_modal_damping
+                    ),
                     sound_speed=float(config.sound_speed),
                 )
             low_rirs.append(signal)
@@ -329,7 +410,10 @@ class GpuARDPytARDBackend:
         if low_fs != int(config.sample_rate):
             up, down = _resample_ratio(int(config.sample_rate), low_fs)
             low = np.asarray([resample_poly(channel, up, down) for channel in low])
-        return _coerce_rir_array(low, config.num_sources, config.num_samples)
+        low = _coerce_rir_array(low, config.num_sources, config.num_samples)
+        if field_capture is not None:
+            field_capture["low_rir"] = low
+        return low
 
 
 @dataclass
@@ -340,8 +424,168 @@ class GpuARDPytARDCuPyBackend(GpuARDPytARDBackend):
     calls to CuPy only while this backend is running.
     """
 
+    def simulate_with_pressure_field(
+        self,
+        scene: HybridRIRScene | RoomSceneV2,
+        config: HybridRIRConfig,
+        field_capture: dict[str, Any],
+    ) -> tuple[np.ndarray, dict[str, Any]]:
+        """GPU variant of :meth:`GpuARDPytARDBackend.simulate_with_pressure_field`."""
+        self._simulate_with_pytard(
+            scene,
+            config,
+            use_cupy=True,
+            field_capture=field_capture,
+        )
+        return field_capture.get("low_rir"), field_capture
+
     def simulate(self, scene: HybridRIRScene, config: HybridRIRConfig) -> np.ndarray:
         return self._simulate_with_pytard(scene, config, use_cupy=True)
+
+
+def _spectrum_values_at(
+    spectrum: Any,
+    frequencies_hz: np.ndarray,
+) -> np.ndarray:
+    centers = np.asarray(spectrum.center_frequencies_hz, dtype=np.float64)
+    values = np.asarray(spectrum.values, dtype=np.float64)
+    safe_frequency = np.maximum(np.asarray(frequencies_hz, dtype=np.float64), centers[0])
+    return np.interp(
+        np.log2(safe_frequency),
+        np.log2(centers),
+        values,
+        left=float(values[0]),
+        right=float(values[-1]),
+    )
+
+
+def _material_modal_decay_rates(
+    scene: RoomSceneV2,
+    nx: np.ndarray,
+    ny: np.ndarray,
+    nz: np.ndarray,
+    omega_rad_s: np.ndarray,
+    sound_speed: float,
+    loss_scale: float = 1.0,
+) -> np.ndarray:
+    """Return modal amplitude decay rates from boundary energy participation.
+
+    For the rigid-wall cosine eigenfunctions, the volume norm along one axis is
+    ``L`` for index zero and ``L/2`` otherwise. The surface-to-volume
+    participation of each opposing wall pair is therefore
+    ``(alpha_minus + alpha_plus) / norm``. Sabine's energy loss rate is
+    ``c * participation / 4``; modal amplitude decays at half that rate.
+    """
+    if loss_scale < 0.0:
+        raise ValueError("material modal loss scale cannot be negative")
+    effective = scene.effective_boundary_materials()
+    frequency_hz = np.asarray(omega_rad_s, dtype=np.float64) / (2.0 * math.pi)
+    alpha = {
+        boundary: _spectrum_values_at(material.absorption, frequency_hz)
+        for boundary, material in effective.items()
+    }
+    lx, ly, lz = (float(value) for value in scene.room_dim)
+    norm_x = np.where(np.asarray(nx) == 0, lx, 0.5 * lx)
+    norm_y = np.where(np.asarray(ny) == 0, ly, 0.5 * ly)
+    norm_z = np.where(np.asarray(nz) == 0, lz, 0.5 * lz)
+    participation = (
+        (alpha["west"] + alpha["east"]) / norm_x
+        + (alpha["south"] + alpha["north"]) / norm_y
+        + (alpha["floor"] + alpha["ceiling"]) / norm_z
+    )
+    gamma = (
+        float(loss_scale)
+        * float(sound_speed)
+        * np.maximum(participation, 0.0)
+        / 8.0
+    )
+    # Keep the current recurrence underdamped. Very low/DC modes are outside
+    # the propagating acoustic range and receive no damping here.
+    omega = np.asarray(omega_rad_s, dtype=np.float64)
+    gamma = np.minimum(gamma, 0.95 * np.maximum(omega, 0.0))
+    gamma = np.where(omega <= 1e-7, 0.0, gamma)
+    return np.asarray(gamma, dtype=np.float64)
+
+
+def material_modal_damping_metadata(
+    scene: RoomSceneV2,
+    config: HybridRIRConfig,
+    max_mode_index: int = 16,
+    max_modes: int = 128,
+    loss_scale: float = 1.0,
+) -> dict[str, Any]:
+    """Summarize the material-derived low-frequency modal decay distribution."""
+    indices: list[tuple[int, int, int]] = []
+    frequencies: list[float] = []
+    room = np.asarray(scene.room_dim, dtype=np.float64)
+    c = float(config.sound_speed)
+    for nx in range(max_mode_index + 1):
+        for ny in range(max_mode_index + 1):
+            for nz in range(max_mode_index + 1):
+                if nx == ny == nz == 0:
+                    continue
+                frequency = 0.5 * c * math.sqrt(
+                    (nx / room[0]) ** 2
+                    + (ny / room[1]) ** 2
+                    + (nz / room[2]) ** 2
+                )
+                if config.low_fmin_hz <= frequency <= config.low_fmax_hz:
+                    indices.append((nx, ny, nz))
+                    frequencies.append(float(frequency))
+    order = np.argsort(np.asarray(frequencies, dtype=np.float64))[:max_modes]
+    indices = [indices[int(index)] for index in order]
+    frequencies_array = np.asarray(
+        [frequencies[int(index)] for index in order], dtype=np.float64
+    )
+    if not indices:
+        return {
+            "model": "surface_participation_sabine",
+            "material_modal_loss_scale": float(loss_scale),
+            "mode_count": 0,
+            "modes": [],
+        }
+    nx = np.asarray([index[0] for index in indices], dtype=np.int64)
+    ny = np.asarray([index[1] for index in indices], dtype=np.int64)
+    nz = np.asarray([index[2] for index in indices], dtype=np.int64)
+    omega = 2.0 * math.pi * frequencies_array
+    gamma = _material_modal_decay_rates(
+        scene,
+        nx,
+        ny,
+        nz,
+        omega,
+        c,
+        loss_scale=loss_scale,
+    )
+    rt60 = math.log(1000.0) / np.maximum(gamma, 1e-12)
+    quality_factor = omega / np.maximum(2.0 * gamma, 1e-12)
+    modes = [
+        {
+            "indices": [int(nx[i]), int(ny[i]), int(nz[i])],
+            "frequency_hz": float(frequencies_array[i]),
+            "amplitude_decay_rate_per_s": float(gamma[i]),
+            "rt60_s": float(rt60[i]),
+            "quality_factor": float(quality_factor[i]),
+        }
+        for i in range(len(indices))
+    ]
+    return {
+        "model": "surface_participation_sabine",
+        "material_modal_loss_scale": float(loss_scale),
+        "mode_count": len(modes),
+        "global_rt60_envelope_applied": False,
+        "rt60_s": {
+            "minimum": float(np.min(rt60)),
+            "median": float(np.median(rt60)),
+            "maximum": float(np.max(rt60)),
+        },
+        "quality_factor": {
+            "minimum": float(np.min(quality_factor)),
+            "median": float(np.median(quality_factor)),
+            "maximum": float(np.max(quality_factor)),
+        },
+        "modes": modes,
+    }
 
 
 def _solve_modal_ard(
@@ -352,6 +596,9 @@ def _solve_modal_ard(
     impulse: np.ndarray,
     xp: Any,
     cp: Any,
+    material_scene: Optional[RoomSceneV2] = None,
+    material_modal_loss_scale: float = 1.0,
+    field_capture: Optional[dict[str, Any]] = None,
 ) -> list[np.ndarray]:
     """Exact modal ARD solve specialized to single-voxel sources and one mic.
 
@@ -371,7 +618,7 @@ def _solve_modal_ard(
     numerically equivalent to pytARD's loop while removing the FFT cost that
     dominated generation time.
     """
-    from scipy.fft import dctn, idct
+    from scipy.fft import dctn, idct, idctn
 
     c = float(sim_param.c)
     dt = float(sim_param.delta_t)
@@ -402,8 +649,31 @@ def _solve_modal_ard(
         )
     )
     omega[0, 0, 0] = 1e-8
-    cos_k = np.cos(omega * dt)
-    coef = (2.0 / (omega ** 2)) * (1.0 - cos_k)
+    if material_scene is None:
+        cos_k = np.cos(omega * dt)
+        recurrence_current = 2.0 * cos_k
+        recurrence_previous = -np.ones_like(omega)
+        coef = (2.0 / (omega ** 2)) * (1.0 - cos_k)
+    else:
+        gamma = _material_modal_decay_rates(
+            material_scene,
+            nx=xx,
+            ny=yy,
+            nz=zz,
+            omega_rad_s=omega,
+            sound_speed=c,
+            loss_scale=material_modal_loss_scale,
+        )
+        damped_omega = np.sqrt(np.maximum(omega**2 - gamma**2, 0.0))
+        pole_radius = np.exp(-gamma * dt)
+        damped_cosine = np.cos(damped_omega * dt)
+        recurrence_current = 2.0 * pole_radius * damped_cosine
+        recurrence_previous = -(pole_radius**2)
+        coef = (
+            1.0 - recurrence_current - recurrence_previous
+        ) / np.maximum(omega**2, 1e-16)
+    recurrence_current[0, 0, 0] = 2.0
+    recurrence_previous[0, 0, 0] = -1.0
 
     def _voxel(pos: np.ndarray) -> tuple[int, int, int]:
         return (
@@ -421,6 +691,41 @@ def _solve_modal_ard(
         basis_z[:, None, None] * basis_y[None, :, None] * basis_x[None, None, :]
     )
 
+    num_sources = int(source_positions.shape[0])
+    capture = field_capture if isinstance(field_capture, dict) else None
+    if capture is not None:
+        source_index = int(capture.get("source_index", 0))
+        if not 0 <= source_index < num_sources:
+            raise ValueError(
+                f"pressure-field source_index={source_index} is outside "
+                f"the {num_sources} generated source channels"
+            )
+        if capture.get("z_index") is None:
+            z_m = float(capture.get("z_m", float(mic_pos[2])))
+            z_index = min(max(int(div_z * z_m / dim[2]), 0), div_z - 1)
+        else:
+            z_index = min(max(int(capture["z_index"]), 0), div_z - 1)
+        stride = max(1, int(capture.get("stride", 1)))
+        max_frames = max(1, int(capture.get("max_frames", 240)))
+        stride = max(stride, int(math.ceil(n_samples / max_frames)))
+        capture["source_index"] = source_index
+        capture["z_index"] = z_index
+        capture["z_m"] = float((z_index + 0.5) * dim[2] / div_z)
+        capture["stride"] = stride
+        capture["grid_shape_zyx"] = [int(div_z), int(div_y), int(div_x)]
+        capture["slice_shape_yx"] = [int(div_y), int(div_x)]
+        capture["dt_s"] = float(dt)
+        capture["frames"] = []
+        capture["times_s"] = []
+        basis_z_d = xp.asarray(
+            idct(np.eye(div_z), type=2, axis=0)[z_index], dtype=xp.float64
+        )
+    else:
+        source_index = 0
+        stride = 0
+        max_frames = 0
+        basis_z_d = None
+
     # The forcing fed to the (former) forward DCT lags the impulse by one step,
     # mirroring how pytARD primes new_forces in preprocessing.
     impulse = np.asarray(impulse, dtype=np.float64).reshape(-1)
@@ -431,7 +736,6 @@ def _solve_modal_ard(
             copy_n = min(n_samples - 1, impulse.size)
             v_in[1 : 1 + copy_n] = impulse[:copy_n]
 
-    num_sources = int(source_positions.shape[0])
     gain = np.zeros((num_sources, div_z, div_y, div_x), dtype=np.float64)
     dc_drive = np.zeros((num_sources, n_samples), dtype=np.float64)
     for s in range(num_sources):
@@ -443,7 +747,8 @@ def _solve_modal_ard(
         if (sz, sy, sx) == (0, 0, 0):
             dc_drive[s, : min(n_samples, impulse.size)] = impulse[:n_samples]
 
-    cos_d = xp.asarray(cos_k)
+    recurrence_current_d = xp.asarray(recurrence_current)
+    recurrence_previous_d = xp.asarray(recurrence_previous)
     basis_d = xp.asarray(basis)
     gain_d = xp.asarray(gain)
     dc_d = xp.asarray(dc_drive)
@@ -459,12 +764,47 @@ def _solve_modal_ard(
         force_field[:, 0, 0, 0] = (
             2.0 * m_cur[:, 0, 0, 0] - m_prev[:, 0, 0, 0] + dt2 * dc_d[:, t]
         )
-        m_next = 2.0 * m_cur * cos_d - m_prev + force_field
+        m_next = (
+            recurrence_current_d * m_cur
+            + recurrence_previous_d * m_prev
+            + force_field
+        )
         signal[:, t] = (m_next * basis_d).sum(axis=(1, 2, 3))
+        if (
+            capture is not None
+            and t % stride == 0
+            and len(capture["frames"]) < max_frames
+        ):
+            # A fixed-z slice of the inverse 3-D DCT can be obtained by
+            # collapsing the z modes with the corresponding basis vector and
+            # applying a 2-D inverse DCT over y/x.  This avoids materializing
+            # the full 3-D pressure volume for every animation frame.
+            plane_modes = (
+                m_next[source_index] * basis_z_d[:, None, None]
+            ).sum(axis=0)
+            plane_modes_host = (
+                cp.asnumpy(plane_modes) if cp is not None else np.asarray(plane_modes)
+            )
+            pressure_plane = idctn(
+                plane_modes_host,
+                type=2,
+                s=[div_y, div_x],
+            )
+            capture["frames"].append(
+                np.asarray(pressure_plane, dtype=np.float32)
+            )
+            capture["times_s"].append(float((t + 1) * dt))
         m_prev = m_cur
         m_cur = m_next
 
     signal_host = cp.asnumpy(signal) if cp is not None else np.asarray(signal)
+    if capture is not None:
+        capture["frames"] = (
+            np.stack(capture["frames"], axis=0)
+            if capture["frames"]
+            else np.zeros((0, div_y, div_x), dtype=np.float32)
+        )
+        capture["times_s"] = np.asarray(capture["times_s"], dtype=np.float64)
     return [signal_host[s] for s in range(num_sources)]
 
 
@@ -478,8 +818,20 @@ class AnalyticModalLowFrequencyBackend:
     """
 
     num_modes_per_axis: int = 5
+    max_modes: Optional[int] = 256
+    material_modal_damping: bool = False
+    material_modal_loss_scale: float = 1.0
+    physical_mode_coupling: bool = True
 
-    def simulate(self, scene: HybridRIRScene, config: HybridRIRConfig) -> np.ndarray:
+    def simulate(
+        self,
+        scene: HybridRIRScene | RoomSceneV2,
+        config: HybridRIRConfig,
+    ) -> np.ndarray:
+        if self.material_modal_damping and not isinstance(scene, RoomSceneV2):
+            raise ValueError(
+                "material_modal_damping requires a RoomSceneV2 with boundary materials"
+            )
         fs = int(config.sample_rate)
         n = int(config.num_samples)
         t = np.arange(n, dtype=np.float64) / float(fs)
@@ -489,7 +841,7 @@ class AnalyticModalLowFrequencyBackend:
         out = np.zeros((srcs.shape[0], n), dtype=np.float64)
         tau = max(float(scene.rt60) / 6.91, 1e-3)
 
-        mode_freqs: list[float] = []
+        modes: list[tuple[float, int, int, int]] = []
         for nx in range(self.num_modes_per_axis + 1):
             for ny in range(self.num_modes_per_axis + 1):
                 for nz in range(self.num_modes_per_axis + 1):
@@ -501,8 +853,35 @@ class AnalyticModalLowFrequencyBackend:
                         + (nz / room[2]) ** 2
                     )
                     if config.low_fmin_hz <= f <= config.low_fmax_hz:
-                        mode_freqs.append(float(f))
-        mode_freqs = sorted(mode_freqs)[:64]
+                        modes.append((float(f), nx, ny, nz))
+        modes = sorted(modes)
+        if self.max_modes is not None:
+            if self.max_modes < 1:
+                raise ValueError("analytic modal max_modes must be positive")
+            modes = modes[: int(self.max_modes)]
+        if self.material_modal_damping:
+            mode_frequencies = np.asarray([mode[0] for mode in modes])
+            mode_gamma = _material_modal_decay_rates(
+                scene,
+                nx=np.asarray([mode[1] for mode in modes]),
+                ny=np.asarray([mode[2] for mode in modes]),
+                nz=np.asarray([mode[3] for mode in modes]),
+                omega_rad_s=2.0 * math.pi * mode_frequencies,
+                sound_speed=float(config.sound_speed),
+                loss_scale=float(self.material_modal_loss_scale),
+            )
+        else:
+            mode_gamma = np.full(len(modes), 1.0 / tau, dtype=np.float64)
+        first_mode_frequency = modes[0][0] if modes else 1.0
+        receiver_mode_values = np.asarray(
+            [
+                math.cos(nx * math.pi * mic[0] / room[0])
+                * math.cos(ny * math.pi * mic[1] / room[1])
+                * math.cos(nz * math.pi * mic[2] / room[2])
+                for _frequency, nx, ny, nz in modes
+            ],
+            dtype=np.float64,
+        )
 
         for idx, src in enumerate(srcs):
             distance = float(np.linalg.norm(src - mic))
@@ -510,12 +889,319 @@ class AnalyticModalLowFrequencyBackend:
             if direct < n:
                 out[idx, direct] += 1.0 / max(distance, 0.1)
             phase_seed = float(np.dot(src + mic, np.array([0.37, 0.61, 0.83])))
-            for mode_idx, freq in enumerate(mode_freqs):
-                phase = phase_seed * (mode_idx + 1)
-                amp = 0.015 / math.sqrt(mode_idx + 1)
-                wave = np.sin(2.0 * math.pi * freq * t + phase) * np.exp(-t / tau)
+            direct_time = direct / float(fs)
+            local_time = np.maximum(t - direct_time, 0.0)
+            active = t >= direct_time
+            for mode_idx, (freq, nx, ny, nz) in enumerate(modes):
+                if self.physical_mode_coupling:
+                    source_mode_value = (
+                        math.cos(nx * math.pi * src[0] / room[0])
+                        * math.cos(ny * math.pi * src[1] / room[1])
+                        * math.cos(nz * math.pi * src[2] / room[2])
+                    )
+                    inverse_volume_norm = (
+                        (2.0 if nx else 1.0)
+                        * (2.0 if ny else 1.0)
+                        * (2.0 if nz else 1.0)
+                    )
+                    modal_coupling = (
+                        inverse_volume_norm
+                        * source_mode_value
+                        * receiver_mode_values[mode_idx]
+                    )
+                    amp = (
+                        0.015
+                        * modal_coupling
+                        * first_mode_frequency
+                        / max(freq, 1e-6)
+                    )
+                    wave = (
+                        np.sin(2.0 * math.pi * freq * local_time)
+                        * np.exp(-float(mode_gamma[mode_idx]) * local_time)
+                        * active
+                    )
+                else:
+                    phase = phase_seed * (mode_idx + 1)
+                    amp = 0.015 / math.sqrt(mode_idx + 1)
+                    if self.material_modal_damping:
+                        wave = (
+                            np.sin(
+                                2.0 * math.pi * freq * local_time + phase
+                            )
+                            * np.exp(
+                                -float(mode_gamma[mode_idx]) * local_time
+                            )
+                            * active
+                        )
+                    else:
+                        wave = (
+                            np.sin(2.0 * math.pi * freq * t + phase)
+                            * np.exp(-t / tau)
+                        )
                 out[idx] += amp * wave
         return out.astype(np.float32)
+
+
+@dataclass
+class ImpedanceModalLowFrequencyBackend:
+    """Experimental separable 3D rational-impedance modal renderer.
+
+    Boundary assignment is explicit and independent of the scene absorption
+    catalog. The nonlinear eigenvalues and complex separable eigenfunctions are
+    physical; the current modal residue scale remains an engineering bridge for
+    RIR rendering and is recorded as such in metadata.
+    """
+
+    boundary_config: RectangularImpedanceBoundaryConfig
+    num_modes_per_axis: int = 5
+    max_modes: Optional[int] = 128
+    amplitude_scale: float = 0.015
+    residue_calibration: Optional[ImpedanceModalResidueCalibration] = None
+    continuation_steps: int = 8
+    search_margin: float = 0.25
+    impedance_boundary_model: bool = field(default=True, init=False)
+    physical_mode_coupling: bool = field(default=True, init=False)
+    last_modal_metadata: Optional[dict[str, Any]] = field(
+        default=None,
+        init=False,
+        repr=False,
+    )
+
+    def __post_init__(self) -> None:
+        if self.num_modes_per_axis < 1:
+            raise ValueError("impedance modal index limit must be positive")
+        if self.max_modes is not None and self.max_modes < 1:
+            raise ValueError("impedance modal max_modes must be positive")
+        if not math.isfinite(float(self.amplitude_scale)) or self.amplitude_scale <= 0.0:
+            raise ValueError("impedance modal amplitude scale must be positive")
+        if (
+            self.residue_calibration is not None
+            and self.residue_calibration.boundary_reference_id
+            != self.boundary_config.reference_id
+        ):
+            raise ValueError(
+                "impedance residue calibration boundary reference does not "
+                "match the selected boundary config"
+            )
+        if self.continuation_steps < 1:
+            raise ValueError("impedance modal continuation steps must be positive")
+        if (
+            not math.isfinite(float(self.search_margin))
+            or not 0.0 <= self.search_margin <= 1.0
+        ):
+            raise ValueError("impedance modal search margin must be in [0, 1]")
+
+    def _solve_modes(
+        self,
+        scene: RoomSceneV2,
+        config: HybridRIRConfig,
+    ):
+        room = np.asarray(scene.room_dim, dtype=np.float64)
+        candidates: list[tuple[float, tuple[int, int, int]]] = []
+        lower = max(
+            0.0,
+            float(config.low_fmin_hz) * (1.0 - float(self.search_margin)),
+        )
+        upper = float(config.low_fmax_hz) * (
+            1.0 + float(self.search_margin)
+        )
+        for nx in range(self.num_modes_per_axis + 1):
+            for ny in range(self.num_modes_per_axis + 1):
+                for nz in range(self.num_modes_per_axis + 1):
+                    if nx == ny == nz == 0:
+                        continue
+                    rigid_frequency = 0.5 * float(config.sound_speed) * math.sqrt(
+                        (nx / room[0]) ** 2
+                        + (ny / room[1]) ** 2
+                        + (nz / room[2]) ** 2
+                    )
+                    if lower <= rigid_frequency <= upper:
+                        candidates.append(
+                            (float(rigid_frequency), (nx, ny, nz))
+                        )
+        candidates.sort()
+        if self.max_modes is not None:
+            candidates = candidates[: int(self.max_modes)]
+        solved = solve_rectangular_impedance_modes(
+            scene.room_dim,
+            self.boundary_config,
+            mode_indices=[indices for _frequency, indices in candidates],
+            sound_speed_m_s=float(config.sound_speed),
+            continuation_steps=int(self.continuation_steps),
+        )
+        return tuple(
+            mode
+            for mode in solved
+            if float(config.low_fmin_hz)
+            <= mode.frequency_hz
+            <= float(config.low_fmax_hz)
+        )
+
+    def simulate(
+        self,
+        scene: HybridRIRScene | RoomSceneV2,
+        config: HybridRIRConfig,
+    ) -> np.ndarray:
+        if not isinstance(scene, RoomSceneV2):
+            raise ValueError(
+                "impedance modal backend requires a RoomSceneV2; its explicit "
+                "boundary config is not inferred from a legacy RT60 scene"
+            )
+        valid_range = self.boundary_config.applicability.get(
+            "valid_frequency_range_hz"
+        )
+        if valid_range is not None:
+            if (
+                not isinstance(valid_range, (list, tuple))
+                or len(valid_range) != 2
+            ):
+                raise ValueError(
+                    "impedance boundary valid_frequency_range_hz must be [min, max]"
+                )
+            valid_minimum, valid_maximum = (
+                float(value) for value in valid_range
+            )
+            if (
+                float(config.low_fmin_hz) < valid_minimum
+                or float(config.low_fmax_hz) > valid_maximum
+            ):
+                raise ValueError(
+                    "requested impedance modal band lies outside boundary "
+                    f"validity [{valid_minimum:g}, {valid_maximum:g}] Hz"
+                )
+        if self.residue_calibration is not None:
+            residue_minimum, residue_maximum = (
+                self.residue_calibration.valid_frequency_range_hz
+            )
+            if (
+                float(config.low_fmin_hz) < residue_minimum
+                or float(config.low_fmax_hz) > residue_maximum
+            ):
+                raise ValueError(
+                    "requested impedance modal band lies outside residue "
+                    f"calibration validity [{residue_minimum:g}, "
+                    f"{residue_maximum:g}] Hz"
+                )
+        fs = int(config.sample_rate)
+        n = int(config.num_samples)
+        t = np.arange(n, dtype=np.float64) / float(fs)
+        room = np.asarray(scene.room_dim, dtype=np.float64)
+        mic = np.asarray(scene.mic_pos, dtype=np.float64)
+        sources = np.asarray(scene.source_pos, dtype=np.float64)
+        output = np.zeros((sources.shape[0], n), dtype=np.float64)
+        modes = self._solve_modes(scene, config)
+        first_frequency = modes[0].frequency_hz if modes else 1.0
+        room_volume = float(np.prod(room))
+        receiver_values = np.asarray(
+            [mode.eigenfunction_at(mic) for mode in modes],
+            dtype=np.complex128,
+        )
+
+        for source_index, source in enumerate(sources):
+            distance = float(np.linalg.norm(source - mic))
+            direct = int(
+                round(
+                    distance
+                    / float(config.sound_speed)
+                    * float(config.sample_rate)
+                )
+            )
+            if direct < n:
+                output[source_index, direct] += 1.0 / max(distance, 0.1)
+            local_time = np.maximum(t - direct / float(fs), 0.0)
+            active = t >= direct / float(fs)
+            for mode_index, mode in enumerate(modes):
+                source_value = mode.eigenfunction_at(source)
+                if self.residue_calibration is not None:
+                    coupling = source_value * receiver_values[mode_index]
+                    weighted_residue = (
+                        self.residue_calibration.complex_scale
+                        * self.residue_calibration.frequency_weight(
+                            mode.frequency_hz
+                        )
+                        * coupling
+                    )
+                    weighted_residue = convert_pressure_state_modal_residue(
+                        weighted_residue,
+                        mode.complex_angular_frequency_rad_s,
+                        sample_rate_hz=fs,
+                        sound_speed_m_s=float(config.sound_speed),
+                    )
+                    # The fixed-pole fit uses absolute source time. Clipping at
+                    # the geometric arrival preserves causality without adding
+                    # a position-dependent phase rotation to the residue.
+                    response = np.real(
+                        weighted_residue
+                        * np.exp(
+                            mode.complex_angular_frequency_rad_s * t
+                        )
+                    )
+                    output[source_index] += response * active
+                else:
+                    coupling = (
+                        room_volume
+                        * source_value
+                        * receiver_values[mode_index]
+                    )
+                    amplitude = (
+                        float(self.amplitude_scale)
+                        * first_frequency
+                        / max(mode.frequency_hz, 1e-9)
+                    )
+                    response = np.imag(
+                        coupling
+                        * np.exp(
+                            mode.complex_angular_frequency_rad_s * local_time
+                        )
+                    )
+                    output[source_index] += amplitude * response * active
+
+        calibrated_residue = self.residue_calibration is not None
+        self.last_modal_metadata = {
+            "model": "separable_3d_rational_impedance_eigenproblem",
+            "reference": self.boundary_config.metadata(),
+            "mode_count": len(modes),
+            "global_rt60_envelope_applied": False,
+            "production_material_mapping_enabled": False,
+            "eigenvalue_formulation": (
+                "three_axis_robin_characteristics_plus_3d_dispersion"
+            ),
+            "eigenfunction_normalization": (
+                "separable_complex_bilinear_volume_norm"
+            ),
+            "modal_residue_model": (
+                "fdtd_calibrated_complex_scale_power_law"
+                if calibrated_residue
+                else "engineering_scale_times_complex_eigenfunction_coupling"
+            ),
+            "modal_residue_fdtd_validated": calibrated_residue,
+            "modal_residue_production_validated": False,
+            "modal_residue_calibration": (
+                self.residue_calibration.metadata()
+                if self.residue_calibration is not None
+                else None
+            ),
+            "rir_source_convention": FREE_FIELD_1_OVER_R_RIR_CONVENTION,
+            "modal_residue_fitted_source_convention": (
+                self.residue_calibration.fitted_source_convention
+                if self.residue_calibration is not None
+                else None
+            ),
+            "modal_residue_source_transform": (
+                self.residue_calibration.residue_transform
+                if self.residue_calibration is not None
+                else None
+            ),
+            "modal_residue_causality_policy": (
+                "absolute_modal_time_clipped_before_geometric_arrival"
+                if calibrated_residue
+                else "local_time_from_geometric_arrival"
+            ),
+            "direct_path_amplitude_calibrated_by_residue_fit": False,
+            "direct_path_source_convention_matched": calibrated_residue,
+            "modes": [mode.metadata() for mode in modes],
+        }
+        return output.astype(np.float32)
 
 
 @dataclass
@@ -528,8 +1214,19 @@ class PyroomacousticsHighFrequencyBackend:
     air_absorption: bool = True
     n_rays: int = 20000
     receiver_radius: float = 0.08
+    rng_seed: Optional[int] = field(default=None, repr=False)
 
-    def _absorption_and_max_order(self, scene: HybridRIRScene, pra) -> tuple[float, int]:
+    def set_rng_seed(self, seed: int) -> None:
+        """Pin libroom's process-global RNG immediately before one render."""
+
+        value = int(seed)
+        if not 0 <= value <= np.iinfo(np.uint32).max:
+            raise ValueError("Pyroomacoustics RNG seed must fit uint32")
+        self.rng_seed = value
+
+    def _absorption_and_max_order(
+        self, scene: HybridRIRScene, pra
+    ) -> tuple[float, int]:
         """Derive wall absorption and ISM order from the requested scene RT60.
 
         The geometric backend models the full broadband room response, so its
@@ -558,7 +1255,48 @@ class PyroomacousticsHighFrequencyBackend:
         order = int(min(int(needed_order), int(self.max_order)))
         return e_absorption, max(0, order)
 
-    def simulate(self, scene: HybridRIRScene, config: HybridRIRConfig) -> np.ndarray:
+    def _v2_materials(self, scene: RoomSceneV2, pra) -> dict[str, Any]:
+        materials: dict[str, Any] = {}
+        for boundary, material in scene.effective_boundary_materials().items():
+            materials[boundary] = pra.Material(
+                material.absorption.to_pra_dict(),
+                material.scattering.to_pra_dict(),
+            )
+        return materials
+
+    def _v2_source_directivity(
+        self,
+        scene: RoomSceneV2,
+        source_index: int,
+        pra,
+    ) -> Any:
+        source = scene.sources[int(source_index)]
+        if source.directivity_id == "omnidirectional":
+            return None
+        alpha_by_pattern = {
+            "speech_cardioid": 0.5,
+            "cardioid": 0.5,
+            "hypercardioid": 0.25,
+            "figure_eight": 0.0,
+        }
+        if source.directivity_id not in alpha_by_pattern:
+            raise NotImplementedError(
+                f"unsupported Pyroomacoustics source directivity: "
+                f"{source.directivity_id}"
+            )
+        forward = orientation_forward_unit(
+            source.pose.orientation_ypr_deg
+        )
+        return pra.directivities.CardioidFamily(
+            orientation=forward,
+            p=alpha_by_pattern[source.directivity_id],
+        )
+
+    def simulate(
+        self,
+        scene: HybridRIRScene | RoomSceneV2,
+        config: HybridRIRConfig,
+    ) -> np.ndarray:
         try:
             import pyroomacoustics as pra
         except ImportError as exc:
@@ -568,15 +1306,38 @@ class PyroomacousticsHighFrequencyBackend:
                 "high-frequency backend."
             ) from exc
 
-        e_absorption, max_order = self._absorption_and_max_order(scene, pra)
+        if self.rng_seed is not None:
+            seed_api = getattr(getattr(pra, "random", None), "seed", None)
+            if seed_api is None:
+                raise RuntimeError(
+                    "This Pyroomacoustics build cannot provide deterministic "
+                    "ray tracing because pra.random.seed is unavailable"
+                )
+            # Ray tracing consumes both libroom's C++ generator (wall
+            # scattering) and Pyroomacoustics' package-local NumPy Generator
+            # (the stochastic noise realization used to synthesize the energy
+            # histogram).  Seeding only one of them is still non-deterministic.
+            seed_api(numpy=int(self.rng_seed), libroom=int(self.rng_seed))
+
         room_kwargs = {
             "fs": int(config.sample_rate),
-            "max_order": int(max_order),
         }
-        if hasattr(pra, "Material"):
-            room_kwargs["materials"] = pra.Material(e_absorption)
+        if isinstance(scene, RoomSceneV2):
+            room_kwargs.update(
+                {
+                    "max_order": int(self.max_order),
+                    "materials": self._v2_materials(scene, pra),
+                    "temperature": float(scene.environment.temperature_c),
+                    "humidity": float(scene.environment.relative_humidity_percent),
+                }
+            )
         else:
-            room_kwargs["absorption"] = e_absorption
+            e_absorption, max_order = self._absorption_and_max_order(scene, pra)
+            room_kwargs["max_order"] = int(max_order)
+            if hasattr(pra, "Material"):
+                room_kwargs["materials"] = pra.Material(e_absorption)
+            else:
+                room_kwargs["absorption"] = e_absorption
         try:
             room = pra.ShoeBox(
                 scene.room_dim,
@@ -587,6 +1348,8 @@ class PyroomacousticsHighFrequencyBackend:
             room = pra.ShoeBox(scene.room_dim, **room_kwargs)
             if self.air_absorption and hasattr(room, "set_air_absorption"):
                 room.set_air_absorption()
+        if isinstance(scene, RoomSceneV2) and hasattr(room, "set_sound_speed"):
+            room.set_sound_speed(float(scene.environment.sound_speed_m_s))
         if self.ray_tracing and hasattr(room, "set_ray_tracing"):
             try:
                 room.set_ray_tracing(
@@ -600,8 +1363,16 @@ class PyroomacousticsHighFrequencyBackend:
                     n_rays=int(self.n_rays),
                 )
 
-        for src in scene.source_pos:
-            room.add_source(np.asarray(src, dtype=np.float64))
+        for source_index, src in enumerate(scene.source_pos):
+            directivity = (
+                self._v2_source_directivity(scene, source_index, pra)
+                if isinstance(scene, RoomSceneV2)
+                else None
+            )
+            room.add_source(
+                np.asarray(src, dtype=np.float64),
+                directivity=directivity,
+            )
         room.add_microphone_array(np.asarray(scene.mic_pos, dtype=np.float64).reshape(3, 1))
         room.compute_rir()
 
@@ -612,6 +1383,282 @@ class PyroomacousticsHighFrequencyBackend:
         rir = _pad_or_trim(rirs, config.num_samples)
         rir = _align_high_band_direct(rir, scene, config)
         return apply_obstacle_high_frequency_effects(rir, scene, config)
+
+
+@dataclass
+class PathEventHighFrequencyBackend:
+    """Opt-in inspectable M3 geometric backend for material-first scenes."""
+
+    max_order: int = 12
+    edge_corner_policy: str = "exclude"
+    include_scene_interactions: bool = True
+    material_reference_frequency_hz: float = 1000.0
+    fractional_delay_order: int = 3
+    boundary_filter_tail_ms: float = 24.0
+    air_absorption: bool = True
+    air_absorption_filter_taps: int = 129
+    last_boundary_metadata: Optional[dict[str, Any]] = field(
+        default=None,
+        init=False,
+        repr=False,
+    )
+    last_air_absorption_metadata: Optional[dict[str, Any]] = field(
+        default=None,
+        init=False,
+        repr=False,
+    )
+
+    def _boundary_models(
+        self,
+        scene: RoomSceneV2,
+    ) -> dict[str, Any]:
+        models, metadata = material_absorption_relaxation_models(
+            scene,
+            reference_frequency_hz=(
+                self.material_reference_frequency_hz
+            ),
+        )
+        self.last_boundary_metadata = metadata
+        return models
+
+    def simulate(
+        self,
+        scene: HybridRIRScene | RoomSceneV2,
+        config: HybridRIRConfig,
+    ) -> np.ndarray:
+        if not isinstance(scene, RoomSceneV2):
+            raise ValueError(
+                "PathEventHighFrequencyBackend requires a v2 material-first "
+                "scene"
+            )
+        if not 0 <= int(self.max_order) <= 20:
+            raise ValueError("PathEvent max_order must be in [0, 20]")
+        boundary_models = self._boundary_models(scene)
+        surface_models = {
+            surface.surface_id: boundary_models[surface.boundary]
+            for surface in scene.surfaces
+        }
+        outputs = []
+        for source_index in range(len(scene.sources)):
+            event_set = generate_scene_shoebox_path_events(
+                scene,
+                source_index=source_index,
+                max_order=int(self.max_order),
+                edge_corner_policy=self.edge_corner_policy,
+                resolve_object_visibility=True,
+                include_scene_interactions=(
+                    self.include_scene_interactions
+                ),
+                boundary_admittance_models=boundary_models,
+                reflection_frequencies_hz=(
+                    60.0,
+                    125.0,
+                    250.0,
+                    500.0,
+                    1000.0,
+                    2000.0,
+                    4000.0,
+                    8000.0,
+                ),
+            )
+            outputs.append(
+                render_path_events(
+                    event_set,
+                    sample_rate_hz=config.sample_rate,
+                    num_samples=config.num_samples,
+                    fractional_delay_order=(
+                        self.fractional_delay_order
+                    ),
+                    surface_admittance_models=surface_models,
+                    maximum_boundary_filter_tail_samples=max(
+                        1,
+                        int(
+                            round(
+                                float(self.boundary_filter_tail_ms)
+                                * 1e-3
+                                * float(config.sample_rate)
+                            )
+                        ),
+                    ),
+                )
+            )
+        if self.air_absorption:
+            filtered_outputs = []
+            channel_metadata = []
+            distances = scene.source_distances()
+            for source_index, output in enumerate(outputs):
+                filtered, air_metadata = apply_air_absorption(
+                    output,
+                    int(config.sample_rate),
+                    float(distances[source_index]),
+                    temperature_c=float(scene.environment.temperature_c),
+                    relative_humidity_percent=float(
+                        scene.environment.relative_humidity_percent
+                    ),
+                    pressure_pa=float(scene.environment.pressure_pa),
+                    num_taps=int(self.air_absorption_filter_taps),
+                )
+                filtered_outputs.append(filtered)
+                channel_metadata.append(
+                    {
+                        "channel": int(source_index),
+                        "source_id": scene.sources[
+                            source_index
+                        ].transducer_id,
+                        **air_metadata,
+                    }
+                )
+            outputs = filtered_outputs
+            self.last_air_absorption_metadata = {
+                "policy": AIR_ABSORPTION_POLICY,
+                "early_path_distance_policy": (
+                    "causal_minimum_phase_filter_at_direct_distance"
+                ),
+                "late_path_policy": (
+                    "FDN_RT60_adds_sound_speed_times_atmospheric_loss"
+                    if isinstance(self, PathEventFDNHighFrequencyBackend)
+                    else "direct_distance_lower_bound"
+                ),
+                "channels": channel_metadata,
+            }
+        else:
+            self.last_air_absorption_metadata = {
+                "policy": "disabled",
+            }
+        return np.asarray(outputs, dtype=np.float32)
+
+
+@dataclass
+class PathEventFDNHighFrequencyBackend(PathEventHighFrequencyBackend):
+    """Opt-in M4 PathEvent early / deterministic multiband-FDN late backend."""
+
+    mixing_time_s: float = 0.024
+    transition_duration_s: float = 0.016
+    delay_line_count: int = 16
+    fdn_seed: int = 20260731
+    fdn_filter_order: int = 4
+    minimum_fdn_center_hz: float = 500.0
+    last_late_field_metadata: Optional[dict[str, Any]] = field(
+        default=None,
+        init=False,
+        repr=False,
+    )
+
+    def _target_rt60_s_by_hz(
+        self,
+        scene: RoomSceneV2,
+        config: HybridRIRConfig,
+    ) -> dict[float, float]:
+        predicted = {
+            float(center): float(rt60_s)
+            for center, rt60_s in scene.predicted_octave_rt60_s().items()
+        }
+        if self.air_absorption:
+            predicted = {
+                center: air_adjusted_rt60_s(
+                    rt60_s,
+                    center,
+                    float(scene.environment.sound_speed_m_s),
+                    temperature_c=float(scene.environment.temperature_c),
+                    relative_humidity_percent=float(
+                        scene.environment.relative_humidity_percent
+                    ),
+                    pressure_pa=float(scene.environment.pressure_pa),
+                )
+                for center, rt60_s in predicted.items()
+            }
+        valid = set(valid_octave_centers(config.sample_rate, predicted))
+        lower = max(
+            float(self.minimum_fdn_center_hz),
+            0.5 * float(config.crossover_hz),
+        )
+        targets = {
+            center: predicted[center]
+            for center in sorted(valid)
+            if center >= lower
+        }
+        if not targets:
+            raise ValueError(
+                "no material octave target remains below Nyquist and above "
+                "the M4 FDN lower frequency"
+            )
+        return targets
+
+    def _channel_seed(self, scene: RoomSceneV2, source_index: int) -> int:
+        payload = (
+            f"{int(self.fdn_seed)}\0{scene.scene_id}\0{int(source_index)}"
+        ).encode("utf-8")
+        digest = hashlib.blake2b(payload, digest_size=8).digest()
+        return int.from_bytes(digest, byteorder="little", signed=False) & 0x7FFFFFFF
+
+    def simulate(
+        self,
+        scene: HybridRIRScene | RoomSceneV2,
+        config: HybridRIRConfig,
+    ) -> np.ndarray:
+        if not isinstance(scene, RoomSceneV2):
+            raise ValueError(
+                "PathEventFDNHighFrequencyBackend requires a v2 material-first "
+                "scene"
+            )
+        if not np.isfinite(self.mixing_time_s) or self.mixing_time_s <= 0.0:
+            raise ValueError("FDN mixing_time_s must be finite and positive")
+        if (
+            not np.isfinite(self.transition_duration_s)
+            or self.transition_duration_s <= 0.0
+        ):
+            raise ValueError(
+                "FDN transition_duration_s must be finite and positive"
+            )
+        coherent = np.asarray(super().simulate(scene, config), dtype=np.float64)
+        targets = self._target_rt60_s_by_hz(scene, config)
+        distances = scene.source_distances()
+        sound_speed = float(scene.environment.sound_speed_m_s)
+        outputs: list[np.ndarray] = []
+        channel_metadata: list[dict[str, Any]] = []
+        for source_index, channel in enumerate(coherent):
+            direct_sample = int(
+                round(
+                    distances[source_index]
+                    / max(sound_speed, 1e-9)
+                    * float(config.sample_rate)
+                )
+            )
+            result = couple_path_event_rir_with_fdn(
+                channel,
+                sample_rate=int(config.sample_rate),
+                direct_sample=direct_sample,
+                target_rt60_s_by_hz=targets,
+                mixing_time_s=float(self.mixing_time_s),
+                transition_duration_s=float(self.transition_duration_s),
+                delay_line_count=int(self.delay_line_count),
+                seed=self._channel_seed(scene, source_index),
+                filter_order=int(self.fdn_filter_order),
+            )
+            outputs.append(result.rir)
+            channel_metadata.append(
+                {
+                    "channel": int(source_index),
+                    "source_id": scene.sources[source_index].transducer_id,
+                    **dict(result.metadata),
+                }
+            )
+        self.last_late_field_metadata = {
+            "policy": PATH_EVENT_FDN_COUPLING_POLICY,
+            "renderer": "path_event_early_multiband_fdn_late",
+            "opt_in": True,
+            "production_default_changed": False,
+            "target_rt60_origin": "scene_material_predicted_octave_rt60_s",
+            "target_rt60_s_by_hz": {
+                f"{center:g}": value for center, value in targets.items()
+            },
+            "mixing_time_s_after_direct": float(self.mixing_time_s),
+            "transition_duration_s": float(self.transition_duration_s),
+            "delay_line_count": int(self.delay_line_count),
+            "base_seed": int(self.fdn_seed),
+            "channels": channel_metadata,
+        }
+        return np.asarray(outputs, dtype=np.float32)
 
 
 def _min_feasible_rt60(room_dim: np.ndarray, sound_speed: float = 343.0) -> float:
@@ -703,6 +1750,104 @@ def sample_hybrid_rir_scene(
     )
 
 
+def upgrade_hybrid_scene_to_v2(
+    scene: HybridRIRScene,
+    seed: Optional[int] = None,
+    rng: Optional[np.random.Generator] = None,
+    room_type: Optional[str] = None,
+    scene_id: str = "scene",
+    material_variation_scale: float = 1.0,
+) -> RoomSceneV2:
+    """Materialize a legacy geometry as a v2 material-first scene.
+
+    ``scene.rt60`` is deliberately not copied.  The v2 compatibility ``rt60``
+    property is derived from the sampled surface absorption spectra.
+    """
+    rng = np.random.default_rng(seed) if rng is None else rng
+    (
+        sampled_room_type,
+        surfaces,
+        materials,
+        objects,
+    ) = sample_materialized_shoebox(
+        dimensions_m=scene.room_dim,
+        rng=rng,
+        room_type=room_type,
+        legacy_obstacles=scene.obstacles,
+        variation_scale=material_variation_scale,
+    )
+    environment = EnvironmentConfig(
+        temperature_c=float(rng.uniform(18.0, 25.0)),
+        relative_humidity_percent=float(rng.uniform(30.0, 70.0)),
+        pressure_pa=float(rng.uniform(98_000.0, 103_000.0)),
+    )
+    room_source_level = float(rng.normal(70.0, 2.0))
+    sources = [
+        TransducerConfig(
+            transducer_id=label,
+            kind="source",
+            pose=Pose(
+                position_m=[float(value) for value in position],
+                orientation_ypr_deg=[
+                    float(rng.uniform(-180.0, 180.0)),
+                    float(rng.uniform(-15.0, 15.0)),
+                    0.0,
+                ],
+            ),
+            directivity_id="speech_cardioid",
+            calibration_gain_db=0.0,
+            power_db_spl_at_1m=float(room_source_level + rng.normal(0.0, 1.5)),
+            channel_index=index,
+        )
+        for index, (label, position) in enumerate(
+            zip(scene.source_labels, scene.source_pos)
+        )
+    ]
+    receivers = [
+        TransducerConfig(
+            transducer_id="mic_0",
+            kind="receiver",
+            pose=Pose(position_m=[float(value) for value in scene.mic_pos]),
+            directivity_id="omnidirectional",
+            calibration_gain_db=0.0,
+            array_id="mono_reference",
+            channel_index=0,
+        )
+    ]
+    return RoomSceneV2(
+        scene_id=str(scene_id),
+        room_type=sampled_room_type,
+        dimensions_m=[float(value) for value in scene.room_dim],
+        surfaces=surfaces,
+        materials=materials,
+        environment=environment,
+        sources=sources,
+        receivers=receivers,
+        objects=objects,
+        catalog_version=MATERIAL_CATALOG_VERSION,
+    )
+
+
+def sample_material_first_rir_scene(
+    config: HybridRIRConfig,
+    seed: Optional[int] = None,
+    rng: Optional[np.random.Generator] = None,
+    room_type: Optional[str] = None,
+    scene_id: str = "scene",
+    material_variation_scale: float = 1.0,
+) -> RoomSceneV2:
+    """Sample geometry and then physical materials without a requested RT60."""
+    rng = np.random.default_rng(seed) if rng is None else rng
+    legacy_geometry = sample_hybrid_rir_scene(config=config, rng=rng)
+    return upgrade_hybrid_scene_to_v2(
+        legacy_geometry,
+        rng=rng,
+        room_type=room_type,
+        scene_id=scene_id,
+        material_variation_scale=material_variation_scale,
+    )
+
+
 def sample_polygon_obstacles(
     room_dim: np.ndarray,
     protected_points: list[np.ndarray],
@@ -776,7 +1921,7 @@ def sample_polygon_obstacles(
 
 def generate_hybrid_rir(
     config: HybridRIRConfig,
-    scene: Optional[HybridRIRScene] = None,
+    scene: Optional[HybridRIRScene | RoomSceneV2] = None,
     low_backend: Optional[RIRBackend] = None,
     high_backend: Optional[RIRBackend] = None,
     seed: Optional[int] = None,
@@ -785,25 +1930,278 @@ def generate_hybrid_rir(
     low_backend = low_backend or GpuARDPytARDBackend()
     high_backend = high_backend or PyroomacousticsHighFrequencyBackend()
 
-    low = low_backend.simulate(scene, config)
-    high = high_backend.simulate(scene, config)
-    rir = hybrid_crossover(low, high, config)
+    if config.output_mode not in {"peak_normalized", "calibrated"}:
+        raise ValueError(
+            "HybridRIRConfig.output_mode must be 'peak_normalized' or 'calibrated'"
+        )
+    effective_config = config
+    if isinstance(scene, RoomSceneV2):
+        if len(scene.sources) != config.num_sources:
+            raise ValueError(
+                f"RoomSceneV2 contains {len(scene.sources)} sources but config "
+                f"expects {config.num_sources}"
+            )
+        if len(scene.receivers) != 1:
+            raise ValueError(
+                "generate_hybrid_rir produces source channels for exactly one "
+                "receiver; use the M4 spatial renderer for receiver arrays"
+            )
+        effective_config = replace(
+            config, sound_speed=float(scene.environment.sound_speed_m_s)
+        )
+
+    low = low_backend.simulate(scene, effective_config)
+    # The finite modal/voxel low-frequency solve can leave a small numerical
+    # precursor before the geometric wavefront.  It is not a physical path and
+    # must not be allowed into the hybrid signal (or into M6 causality QC).
+    # Apply the same discrete arrival-bin contract used by the high-band
+    # alignment: samples n < floor(distance / c * fs) are exactly zero.
+    low = _clip_rir_before_physical_arrival(low, scene, effective_config)
+    high = high_backend.simulate(scene, effective_config)
+    if isinstance(scene, RoomSceneV2):
+        gains = scene.transducer_channel_gains(
+            reference_source_spl_db=config.calibrated_reference_source_spl_db
+        ).reshape(-1, 1)
+        low = np.asarray(low, dtype=np.float64) * gains
+        high = np.asarray(high, dtype=np.float64) * gains
+    material_low_damping = bool(
+        getattr(low_backend, "material_modal_damping", False)
+    )
+    impedance_low_boundary = bool(
+        getattr(low_backend, "impedance_boundary_model", False)
+    )
+    low_modal_metadata = getattr(low_backend, "last_modal_metadata", None)
+    source_convention_matched = bool(
+        isinstance(low_modal_metadata, dict)
+        and low_modal_metadata.get(
+            "direct_path_source_convention_matched",
+            False,
+        )
+    )
+    energy_matching_requested = bool(
+        effective_config.match_crossover_energy
+    )
+    preserve_source_convention = bool(
+        source_convention_matched
+        and effective_config.preserve_source_convention_at_crossover
+    )
+    energy_matching_applied = bool(
+        energy_matching_requested and not preserve_source_convention
+    )
+    crossover_config = replace(
+        effective_config,
+        match_crossover_energy=energy_matching_applied,
+    )
+    rir, crossover_metadata = _hybrid_crossover_with_metadata(
+        low,
+        high,
+        crossover_config,
+    )
+    crossover_metadata.update(
+        {
+            "energy_matching_requested": energy_matching_requested,
+            "energy_matching_applied": energy_matching_applied,
+            "source_convention_matched_before_crossover": (
+                source_convention_matched
+            ),
+            "source_convention_preservation_enabled": bool(
+                effective_config.preserve_source_convention_at_crossover
+            ),
+            "source_convention_preserved": bool(
+                source_convention_matched and not energy_matching_applied
+            ),
+            "policy": (
+                "preserve_validated_source_convention"
+                if preserve_source_convention
+                else "energy_rms_match"
+                if energy_matching_applied
+                else "no_energy_match"
+            ),
+        }
+    )
+    if impedance_low_boundary:
+        low_mode_excitation_model = (
+            "separable_complex_eigenfunction_source_receiver_coupling"
+        )
+    elif hasattr(low_backend, "physical_mode_coupling"):
+        low_mode_excitation_model = (
+            "rectangular_eigenfunction_source_receiver_coupling"
+            if bool(getattr(low_backend, "physical_mode_coupling"))
+            else "legacy_rank_amplitude_and_position_phase"
+        )
+    else:
+        low_mode_excitation_model = "voxel_dct_source_receiver_coupling"
+    if isinstance(high_backend, PathEventHighFrequencyBackend):
+        obstacle_metadata = {
+            "policy": "per_path_geometry_visibility_transmission_diffraction",
+            "legacy_whole_rir_post_effect_applied": False,
+            "object_count": len(scene.objects) if isinstance(scene, RoomSceneV2) else 0,
+            "source_count": len(scene.sources) if isinstance(scene, RoomSceneV2) else 0,
+        }
+    else:
+        obstacle_metadata = obstacle_effects_metadata(scene, config)
     metadata = {
         "config": _config_metadata(config),
         "scene": scene.to_metadata(),
-        "obstacle_effects": obstacle_effects_metadata(scene, config),
+        "obstacle_effects": obstacle_metadata,
         "bands": {
             "low": {
                 "backend": low_backend.__class__.__name__,
                 "frequency_hz": [config.low_fmin_hz, config.low_fmax_hz],
+                "boundary_model": (
+                    "separable_rational_impedance_eigenproblem"
+                    if impedance_low_boundary
+                    else "per_mode_surface_material_damping"
+                    if material_low_damping
+                    else "global_rt60_envelope"
+                ),
+                "global_rt60_envelope_applied": not (
+                    material_low_damping or impedance_low_boundary
+                ),
+                "mode_excitation_model": low_mode_excitation_model,
+                "solver_excitation": getattr(
+                    low_backend,
+                    "last_excitation_metadata",
+                    None,
+                ),
+                "causality_policy": (
+                    "zero_samples_before_floor_distance_over_sound_speed"
+                ),
             },
             "high": {
                 "backend": high_backend.__class__.__name__,
                 "frequency_hz": [config.crossover_hz, config.sample_rate / 2.0],
+                "rng_seed": getattr(high_backend, "rng_seed", None),
+                "source_directivity_policy": (
+                    "scene_v2_first_order_pressure_pattern"
+                    if isinstance(scene, RoomSceneV2)
+                    else "legacy_omnidirectional"
+                ),
+                "boundary_model": (
+                    "frequency_dependent_surface_materials"
+                    if isinstance(scene, RoomSceneV2)
+                    else "uniform_broadband_inverse_sabine"
+                ),
             },
         },
+        "output_calibration": {
+            "mode": config.output_mode,
+            "peak_target": (
+                float(config.normalize_peak)
+                if config.output_mode == "peak_normalized"
+                else None
+            ),
+            "reference_source_spl_db": float(
+                config.calibrated_reference_source_spl_db
+            ),
+            "per_item_peak_normalized": config.output_mode == "peak_normalized",
+        },
+        "crossover": crossover_metadata,
     }
+    late_field_metadata = getattr(
+        high_backend,
+        "last_late_field_metadata",
+        None,
+    )
+    if isinstance(late_field_metadata, dict):
+        metadata["bands"]["high"]["late_field"] = late_field_metadata
+    boundary_metadata = getattr(
+        high_backend,
+        "last_boundary_metadata",
+        None,
+    )
+    if isinstance(boundary_metadata, dict):
+        metadata["bands"]["high"]["surface_boundary_prior"] = (
+            boundary_metadata
+        )
+    air_absorption_metadata = getattr(
+        high_backend,
+        "last_air_absorption_metadata",
+        None,
+    )
+    if isinstance(air_absorption_metadata, dict):
+        metadata["bands"]["high"]["air_absorption"] = (
+            air_absorption_metadata
+        )
+    if isinstance(low_backend, AnalyticModalLowFrequencyBackend):
+        metadata["bands"]["low"]["analytic_mode_index_limit"] = int(
+            low_backend.num_modes_per_axis
+        )
+        metadata["bands"]["low"]["analytic_max_modes"] = (
+            int(low_backend.max_modes)
+            if low_backend.max_modes is not None
+            else None
+        )
+    if isinstance(low_backend, ImpedanceModalLowFrequencyBackend):
+        metadata["bands"]["low"]["analytic_mode_index_limit"] = int(
+            low_backend.num_modes_per_axis
+        )
+        metadata["bands"]["low"]["analytic_max_modes"] = (
+            int(low_backend.max_modes)
+            if low_backend.max_modes is not None
+            else None
+        )
+        metadata["bands"]["low"]["impedance_modes"] = (
+            low_backend.last_modal_metadata
+        )
+    if material_low_damping and isinstance(scene, RoomSceneV2):
+        modal_loss_scale = float(
+            getattr(low_backend, "material_modal_loss_scale", 1.0)
+        )
+        metadata["bands"]["low"]["modal_damping"] = (
+            material_modal_damping_metadata(
+                scene,
+                effective_config,
+                loss_scale=modal_loss_scale,
+            )
+        )
+    if isinstance(scene, RoomSceneV2) and config.record_realized_metrics:
+        metadata["realized_acoustics"] = _realized_acoustics_metadata(
+            rir, scene, effective_config
+        )
     return torch.as_tensor(rir, dtype=torch.float32), metadata
+
+
+def _realized_acoustics_metadata(
+    rir: np.ndarray,
+    scene: RoomSceneV2,
+    config: HybridRIRConfig,
+) -> dict[str, Any]:
+    """Measure generated broadband and octave decay for every source channel."""
+    from puresound.audio.rir_metrics import analyze_rir, valid_octave_centers
+
+    centers = valid_octave_centers(
+        config.sample_rate,
+        next(iter(scene.materials.values())).absorption.center_frequencies_hz,
+    )
+    distances = scene.source_distances()
+    channels = []
+    for index, channel in enumerate(np.asarray(rir, dtype=np.float64)):
+        direct_index = int(
+            round(
+                distances[index]
+                / max(float(config.sound_speed), 1e-6)
+                * float(config.sample_rate)
+            )
+        )
+        channels.append(
+            {
+                "channel": index,
+                "label": scene.source_labels[index],
+                "distance_m": distances[index],
+                "metrics": analyze_rir(
+                    channel,
+                    sample_rate=config.sample_rate,
+                    direct_index=direct_index,
+                    octave_centers_hz=centers,
+                ),
+            }
+        )
+    return {
+        "method": "puresound.audio.rir_metrics.analyze_rir",
+        "octave_centers_hz": centers,
+        "channels": channels,
+    }
 
 
 def write_hybrid_rir_dataset_item(
@@ -834,6 +2232,19 @@ def hybrid_crossover(
     rir_high: np.ndarray,
     config: HybridRIRConfig,
 ) -> np.ndarray:
+    output, _metadata = _hybrid_crossover_with_metadata(
+        rir_low,
+        rir_high,
+        config,
+    )
+    return output
+
+
+def _hybrid_crossover_with_metadata(
+    rir_low: np.ndarray,
+    rir_high: np.ndarray,
+    config: HybridRIRConfig,
+) -> tuple[np.ndarray, dict[str, Any]]:
     low = _coerce_rir_array(rir_low, config.num_sources, config.num_samples)
     high = _coerce_rir_array(rir_high, config.num_sources, config.num_samples)
     # Linkwitz-Riley (4th order = Butterworth applied twice), filtered causally
@@ -857,13 +2268,58 @@ def hybrid_crossover(
     )
     low_band = sosfilt(sos_lp, sosfilt(sos_lp, low, axis=-1), axis=-1)
     high_band = sosfilt(sos_hp, sosfilt(sos_hp, high, axis=-1), axis=-1)
+    low_gain = np.ones((low_band.shape[0], 1), dtype=np.float64)
+    effective_match_band_hz = _effective_crossover_match_band(config)
     if config.match_crossover_energy:
-        low_band = _match_low_band_to_high_band(low_band, high_band, config)
+        low_band, low_gain = _match_low_band_to_high_band(
+            low_band,
+            high_band,
+            config,
+        )
     out = low_band + high_band
+    fade_samples = int(
+        round(float(config.tail_fade_ms) * 1e-3 * float(config.sample_rate))
+    )
+    if fade_samples < 0:
+        raise ValueError("tail_fade_ms cannot be negative")
+    fade_samples = min(fade_samples, out.shape[-1])
+    if fade_samples > 1:
+        fade = np.square(
+            np.cos(np.linspace(0.0, 0.5 * math.pi, fade_samples))
+        )
+        fade[-1] = 0.0
+        out[..., -fade_samples:] *= fade
+    elif fade_samples == 1:
+        out[..., -1] = 0.0
     peak = float(np.max(np.abs(out)))
-    if peak > 1e-9 and config.normalize_peak > 0:
-        out = out / peak * float(config.normalize_peak)
-    return out.astype(np.float32)
+    normalization_gain = 1.0
+    if (
+        config.output_mode == "peak_normalized"
+        and peak > 1e-9
+        and config.normalize_peak > 0
+    ):
+        normalization_gain = float(config.normalize_peak) / peak
+        out = out * normalization_gain
+    metadata = {
+        "filter": "causal_linkwitz_riley_fourth_order",
+        "crossover_hz": float(config.crossover_hz),
+        "energy_matching_requested": bool(config.match_crossover_energy),
+        "energy_matching_applied": bool(config.match_crossover_energy),
+        "effective_match_band_hz": [
+            float(effective_match_band_hz[0]),
+            float(effective_match_band_hz[1]),
+        ],
+        "low_band_gain_by_channel": [
+            float(value) for value in low_gain[:, 0]
+        ],
+        "post_sum_peak_normalization_gain": float(normalization_gain),
+        "tail_fade": {
+            "policy": "raised_cosine_squared_to_zero",
+            "duration_ms": float(config.tail_fade_ms),
+            "sample_count": int(fade_samples),
+        },
+    }
+    return out.astype(np.float32), metadata
 
 
 def _calibrate_pytard_signal(
@@ -902,6 +2358,24 @@ def _calibrate_pytard_signal(
     return calibrated
 
 
+def _pytard_green_delta_excitation(
+    sample_count: int,
+    *,
+    amplitude: float = 1.0,
+) -> np.ndarray:
+    """Return an uncoloured causal source for the discrete Green function."""
+
+    count = int(sample_count)
+    value = float(amplitude)
+    if count < 1:
+        raise ValueError("pytARD excitation requires at least one sample")
+    if not np.isfinite(value):
+        raise ValueError("pytARD excitation amplitude must be finite")
+    impulse = np.zeros(count, dtype=np.float64)
+    impulse[0] = value
+    return impulse
+
+
 def _apply_rt60_decay_envelope(
     signal: np.ndarray,
     sample_rate: int,
@@ -924,13 +2398,11 @@ def _match_low_band_to_high_band(
     low_band: np.ndarray,
     high_band: np.ndarray,
     config: HybridRIRConfig,
-) -> np.ndarray:
-    nyquist = float(config.sample_rate) / 2.0
-    lo_hz, hi_hz = config.crossover_match_band_hz
-    lo_hz = max(20.0, min(float(lo_hz), nyquist * 0.95))
-    hi_hz = max(lo_hz + 1.0, min(float(hi_hz), nyquist * 0.99))
+) -> tuple[np.ndarray, np.ndarray]:
+    lo_hz, hi_hz = _effective_crossover_match_band(config)
     if hi_hz <= lo_hz:
-        return low_band
+        gain = np.ones((low_band.shape[0], 1), dtype=np.float64)
+        return low_band, gain
 
     sos_bp = butter(
         2,
@@ -948,7 +2420,26 @@ def _match_low_band_to_high_band(
     raw_gain = high_rms * target_ratio / np.maximum(low_rms, 1e-12)
     gain_min, gain_max = config.crossover_match_gain_range
     gain = np.clip(raw_gain, float(gain_min), float(gain_max))
-    return low_band * gain
+    return low_band * gain, gain
+
+
+def _effective_crossover_match_band(
+    config: HybridRIRConfig,
+) -> tuple[float, float]:
+    """Return a valid energy-audit band centered on the actual crossover."""
+    nyquist = float(config.sample_rate) / 2.0
+    if config.crossover_match_band_hz is None:
+        lo_hz = 0.7 * float(config.crossover_hz)
+        hi_hz = 1.3 * float(config.crossover_hz)
+    else:
+        lo_hz, hi_hz = config.crossover_match_band_hz
+        if not float(lo_hz) < float(config.crossover_hz) < float(hi_hz):
+            raise ValueError(
+                "crossover_match_band_hz must contain crossover_hz"
+            )
+    lo_hz = max(20.0, min(float(lo_hz), nyquist * 0.95))
+    hi_hz = max(lo_hz + 1.0, min(float(hi_hz), nyquist * 0.99))
+    return float(lo_hz), float(hi_hz)
 
 
 def apply_obstacle_high_frequency_effects(
@@ -966,7 +2457,18 @@ def apply_obstacle_high_frequency_effects(
     out = np.asarray(rir, dtype=np.float64).copy()
     for event in _obstacle_high_frequency_events(scene, config):
         source_idx = int(event["source_index"])
-        out[source_idx] *= float(event["attenuation"])
+        direct_idx = int(event["direct_index"])
+        recovery_end = min(
+            out.shape[-1],
+            int(event["occlusion_recovery_end_index"]) + 1,
+        )
+        if direct_idx < recovery_end:
+            gain = np.linspace(
+                float(event["attenuation"]),
+                1.0,
+                recovery_end - direct_idx,
+            )
+            out[source_idx, direct_idx:recovery_end] *= gain
         scatter_idx = int(event["scatter_index"])
         if 0 <= scatter_idx < out.shape[-1]:
             out[source_idx, scatter_idx] += float(event["scatter_amplitude"])
@@ -978,7 +2480,7 @@ def obstacle_effects_metadata(
     config: HybridRIRConfig,
 ) -> dict[str, Any]:
     return {
-        "obstacle_model": "high_frequency_post_occlusion_scatter",
+        "obstacle_model": "direct_early_occlusion_with_diffuse_recovery",
         "low_band_obstacle_model": "none",
         "obstacle_count": len(scene.obstacles),
         "floor_coverage_ratio": _obstacle_floor_coverage(
@@ -1019,6 +2521,21 @@ def _obstacle_high_frequency_events(
             )
             scatter_idx = int(round(scatter_distance / config.sound_speed * fs))
             direct_distance = max(float(np.linalg.norm(src - mic)), 0.1)
+            direct_idx = int(
+                math.floor(
+                    direct_distance / float(config.sound_speed) * fs
+                )
+            )
+            recovery_samples = max(
+                1,
+                int(
+                    round(
+                        float(config.obstacle_occlusion_recovery_ms)
+                        * fs
+                        / 1000.0
+                    )
+                ),
+            )
             amp = (
                 float(obstacle.scattering)
                 * (1.0 - float(obstacle.absorption))
@@ -1038,6 +2555,13 @@ def _obstacle_high_frequency_events(
                     "z_line_m": z_line,
                     "attenuation": float(attenuation),
                     "attenuation_db": float(20.0 * math.log10(max(attenuation, 1e-12))),
+                    "direct_index": direct_idx,
+                    "occlusion_recovery_end_index": int(
+                        direct_idx + recovery_samples
+                    ),
+                    "occlusion_recovery_ms": float(
+                        config.obstacle_occlusion_recovery_ms
+                    ),
                     "scatter_distance_m": scatter_distance,
                     "scatter_index": int(scatter_idx),
                     "scatter_delay_s": float(scatter_idx / max(fs, 1)),
@@ -1577,14 +3101,53 @@ def _align_high_band_direct(
         if seg[crossing] < threshold:
             continue
         shifts.append((lo + crossing) - expected)
-    if not shifts:
-        return rir
-    shift = int(round(float(np.median(shifts))))
-    if shift <= 0:
-        return rir
-    out = np.zeros_like(rir)
-    out[:, : n - shift] = rir[:, shift:]
+    shift = int(round(float(np.median(shifts)))) if shifts else 0
+    if shift > 0:
+        out = np.zeros_like(rir)
+        out[:, : n - shift] = rir[:, shift:]
+    else:
+        out = rir.copy()
+
+    # Fractional-delay kernels and the stochastic ray-tracing tail can leave
+    # low-level samples before the physical source-to-receiver travel time.
+    # Moving the common Pyroomacoustics filter delay to the left also moves
+    # those samples to t=0. A real acoustic path cannot arrive before d/c, so
+    # enforce that invariant independently for every source after alignment.
+    for idx in range(min(out.shape[0], srcs.shape[0])):
+        distance = float(np.linalg.norm(srcs[idx] - mic))
+        first_physical_sample = int(math.floor(distance / c * fs))
+        out[idx, : max(0, min(first_physical_sample, n))] = 0.0
     return out
+
+
+def _clip_rir_before_physical_arrival(
+    rir: np.ndarray,
+    scene: HybridRIRScene | RoomSceneV2,
+    config: HybridRIRConfig,
+) -> np.ndarray:
+    """Enforce the discrete geometric-arrival support on each source channel.
+
+    The low-frequency ARD/modal approximation is causal in its continuous wave
+    model, but a finite voxel/modal reconstruction can produce tiny numerical
+    support before the source-to-receiver travel time.  Keeping those samples
+    would make a hybrid RIR fail the bank's hard causality invariant and would
+    smear the direct arrival.  We therefore apply the explicit M6 contract to
+    every low-band backend before crossover.  The first allowed sample is
+    ``floor(distance / c * fs)``; the boundary sample itself is preserved.
+    """
+    output = np.asarray(rir, dtype=np.float64).copy()
+    if output.ndim != 2:
+        raise ValueError(f"expected [channels, samples] RIR, got {output.shape}")
+    distances = scene.source_distances()
+    sound_speed = max(float(config.sound_speed), 1e-6)
+    sample_rate = float(config.sample_rate)
+    for channel, distance in enumerate(distances[: output.shape[0]]):
+        first_physical = int(
+            math.floor(float(distance) / sound_speed * sample_rate)
+        )
+        if first_physical > 0:
+            output[channel, : min(first_physical, output.shape[1])] = 0.0
+    return output
 
 
 def _segment_segment_t(

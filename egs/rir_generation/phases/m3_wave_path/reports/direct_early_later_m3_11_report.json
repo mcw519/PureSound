@@ -1,0 +1,452 @@
+{
+  "schema_version": "puresound.direct_early_later_validation.v1",
+  "attribution_schema_version": "puresound.rir_attribution.v1",
+  "boundary_config": "egs/rir_generation/phases/m2_impedance/config/impedance_reference_glass_wool_14kgm3_100mm.json",
+  "boundary_reference_id": "uniform_glass_wool_14kgm3_100mm_miki_relaxation_validation",
+  "full_room_report": "egs/rir_generation/phases/m3_wave_path/reports/full_room_crossover_m3_11_report.json",
+  "configuration": {
+    "boundary_config": "egs/rir_generation/phases/m2_impedance/config/impedance_reference_glass_wool_14kgm3_100mm.json",
+    "full_room_report": "egs/rir_generation/phases/m3_wave_path/reports/full_room_crossover_m3_11_report.json",
+    "path_event_max_order": 12,
+    "analysis_sample_rate_hz": 8000,
+    "early_window_s": 0.05,
+    "transition_width_s": 0.008,
+    "maximum_reconstruction_nrmse": 1e-12,
+    "minimum_relative_source_magnitude": 0.01
+  },
+  "frequency_band_hz": [
+    168.0,
+    300.0
+  ],
+  "decomposition_contract": {
+    "direct_anchor": "validated free-field 1/r PathEvent convolved with the exact FDTD-equivalent band-limited input",
+    "why_direct_is_not_time_gated": "the 180 Hz source pulse is wider than the approximately 0.7-1.1 ms direct-to-first-reflection separation",
+    "fdtd_early_later": "full minus direct anchor, split by exactly complementary raised-cosine output masks",
+    "path_primary_comparison": "the complete PathEvent output is split by the same masks",
+    "path_geometry_audit": "events are also partitioned by arrival <= or > direct+50ms; filter tails remain owned by their generating event",
+    "component_norms_are_additive_energies": false,
+    "reason": "complex pressure components interfere; squared self terms plus the reported cross term reconstruct total error energy"
+  },
+  "cases": [
+    {
+      "case_id": "room_a_train_0",
+      "split": "train",
+      "fdtd_sample_rate_hz": 107377.74548912757,
+      "fdtd_reference_profile": "fourth_order_reciprocal",
+      "fdtd_reciprocity_averaged": true,
+      "fdtd_raw_reciprocity_nrmse": 5.547482695207052e-09,
+      "analysis_sample_rate_hz": 8000,
+      "source_cell_center_m": [
+        0.4545454545454546,
+        0.3815217391304348,
+        0.32083333333333336
+      ],
+      "receiver_cell_center_m": [
+        1.4848484848484849,
+        0.9684782608695652,
+        0.7291666666666666
+      ],
+      "direct_delay_s": 0.003656281697784561,
+      "split_center_s": 0.07865628169778456,
+      "path_event_counts": {
+        "direct": 1,
+        "early_reflections": 2584,
+        "later_reflections": 40
+      },
+      "simultaneous_edge_or_corner_path_count": 0,
+      "minimum_relative_source_magnitude": 0.7022022321465179,
+      "reconstruction": {
+        "fdtd": {
+          "maximum_absolute_error": 1.734723475976807e-18,
+          "nrmse": 6.413840982791363e-17
+        },
+        "path_time_window": {
+          "maximum_absolute_error": 1.3010426069826053e-18,
+          "nrmse": 8.160375591782437e-17
+        },
+        "path_arrival_bucket_time_domain_nrmse": 4.860099338629617e-15
+      },
+      "component_metrics_path_time_window_vs_fdtd": {
+        "direct": {
+          "complex_nrmse": 0.0,
+          "complex_correlation": 0.9999999999999997,
+          "transfer_energy_ratio": 1.0,
+          "fdtd_component_norm_over_fdtd_full_norm": 3.2656722139051246,
+          "path_component_norm_over_fdtd_full_norm": 3.2656722139051246,
+          "component_error_norm_over_fdtd_full_norm": 0.0
+        },
+        "early_reflections": {
+          "complex_nrmse": 0.2709193748720289,
+          "complex_correlation": 0.9657829250108968,
+          "transfer_energy_ratio": 0.9288108666801778,
+          "fdtd_component_norm_over_fdtd_full_norm": 2.996121692428723,
+          "path_component_norm_over_fdtd_full_norm": 2.782830385824003,
+          "component_error_norm_over_fdtd_full_norm": 0.8117074159533149
+        },
+        "later_reflections": {
+          "complex_nrmse": 1.4761916893586466,
+          "complex_correlation": 0.8333528891875217,
+          "transfer_energy_ratio": 1.075079116592681,
+          "fdtd_component_norm_over_fdtd_full_norm": 0.07613703494337623,
+          "path_component_norm_over_fdtd_full_norm": 0.08185333626691099,
+          "component_error_norm_over_fdtd_full_norm": 0.11239285823582086
+        },
+        "early_cumulative": {
+          "complex_nrmse": 0.809828933916867,
+          "complex_correlation": 0.5938276976408172,
+          "transfer_energy_ratio": 0.6154544142643215,
+          "fdtd_component_norm_over_fdtd_full_norm": 1.002319603508561,
+          "path_component_norm_over_fdtd_full_norm": 0.6168820244830082,
+          "component_error_norm_over_fdtd_full_norm": 0.8117074159533147
+        },
+        "full": {
+          "complex_nrmse": 0.8229978396441627,
+          "complex_correlation": 0.5776174477014692,
+          "transfer_energy_ratio": 0.6232086801343929,
+          "fdtd_component_norm_over_fdtd_full_norm": 1.0,
+          "path_component_norm_over_fdtd_full_norm": 0.6232086801343929,
+          "component_error_norm_over_fdtd_full_norm": 0.8229978396441627
+        }
+      },
+      "path_arrival_bucket_vs_path_time_window": {
+        "early_reflections": {
+          "complex_nrmse": 0.049555928457641646,
+          "complex_correlation": 0.9987930827437652,
+          "transfer_energy_ratio": 1.005321812792956
+        },
+        "later_reflections": {
+          "complex_nrmse": 1.684790746463395,
+          "complex_correlation": 0.5326517690488644,
+          "transfer_energy_ratio": 1.0518077424998709
+        },
+        "early_cumulative": {
+          "complex_nrmse": 0.22355286430208515,
+          "complex_correlation": 0.9766051328906837,
+          "transfer_energy_ratio": 1.02815716344177
+        },
+        "full": {
+          "complex_nrmse": 0.0,
+          "complex_correlation": 1.0000000000000002,
+          "transfer_energy_ratio": 1.0
+        }
+      },
+      "coherent_full_error_attribution": {
+        "early_error_norm_over_total_error_norm": 0.986281344680407,
+        "later_error_norm_over_total_error_norm": 0.13656519230283257,
+        "early_squared_term": 0.9727508908645918,
+        "later_squared_term": 0.01865005174870964,
+        "early_later_cross_term": 0.008599057386698547,
+        "term_sum": 1.0,
+        "error_reconstruction_nrmse": 7.521725589445201e-16
+      }
+    },
+    {
+      "case_id": "room_a_position_holdout_0",
+      "split": "position_holdout",
+      "fdtd_sample_rate_hz": 107377.74548912757,
+      "fdtd_reference_profile": "fourth_order_reciprocal",
+      "fdtd_reciprocity_averaged": true,
+      "fdtd_raw_reciprocity_nrmse": 7.955151213430156e-05,
+      "analysis_sample_rate_hz": 8000,
+      "source_cell_center_m": [
+        0.33333333333333337,
+        0.675,
+        0.7875
+      ],
+      "receiver_cell_center_m": [
+        1.7272727272727273,
+        0.675,
+        0.2625
+      ],
+      "direct_delay_s": 0.004342645636288269,
+      "split_center_s": 0.07934264563628828,
+      "path_event_counts": {
+        "direct": 1,
+        "early_reflections": 2589,
+        "later_reflections": 35
+      },
+      "simultaneous_edge_or_corner_path_count": 410,
+      "minimum_relative_source_magnitude": 0.7022022321465179,
+      "reconstruction": {
+        "fdtd": {
+          "maximum_absolute_error": 8.673617379884035e-19,
+          "nrmse": 3.965352351838755e-17
+        },
+        "path_time_window": {
+          "maximum_absolute_error": 8.673617379884035e-19,
+          "nrmse": 7.65194837955176e-17
+        },
+        "path_arrival_bucket_time_domain_nrmse": 4.285850030828744e-15
+      },
+      "component_metrics_path_time_window_vs_fdtd": {
+        "direct": {
+          "complex_nrmse": 0.0,
+          "complex_correlation": 0.9999999999999999,
+          "transfer_energy_ratio": 1.0,
+          "fdtd_component_norm_over_fdtd_full_norm": 2.181663617267973,
+          "path_component_norm_over_fdtd_full_norm": 2.181663617267973,
+          "component_error_norm_over_fdtd_full_norm": 0.0
+        },
+        "early_reflections": {
+          "complex_nrmse": 0.4422439063228358,
+          "complex_correlation": 0.9147889581297575,
+          "transfer_energy_ratio": 1.0083212354059707,
+          "fdtd_component_norm_over_fdtd_full_norm": 2.0811986192969503,
+          "path_component_norm_over_fdtd_full_norm": 2.0985167629347017,
+          "component_error_norm_over_fdtd_full_norm": 0.9203974072315757
+        },
+        "later_reflections": {
+          "complex_nrmse": 1.7496130219554658,
+          "complex_correlation": 0.38928066193207866,
+          "transfer_energy_ratio": 1.1025966601315915,
+          "fdtd_component_norm_over_fdtd_full_norm": 0.11477642453145509,
+          "path_component_norm_over_fdtd_full_norm": 0.12655210235022804,
+          "component_error_norm_over_fdtd_full_norm": 0.2008143269737226
+        },
+        "early_cumulative": {
+          "complex_nrmse": 0.9185623876276027,
+          "complex_correlation": 0.48441512399566783,
+          "transfer_energy_ratio": 0.3662193934611339,
+          "fdtd_component_norm_over_fdtd_full_norm": 1.001997708189111,
+          "path_component_norm_over_fdtd_full_norm": 0.3669509929424625,
+          "component_error_norm_over_fdtd_full_norm": 0.9203974072315757
+        },
+        "full": {
+          "complex_nrmse": 0.9195507604464536,
+          "complex_correlation": 0.47310058302680474,
+          "transfer_energy_ratio": 0.3891563188998292,
+          "fdtd_component_norm_over_fdtd_full_norm": 1.0,
+          "path_component_norm_over_fdtd_full_norm": 0.3891563188998292,
+          "component_error_norm_over_fdtd_full_norm": 0.9195507604464536
+        }
+      },
+      "path_arrival_bucket_vs_path_time_window": {
+        "early_reflections": {
+          "complex_nrmse": 0.053546009537492445,
+          "complex_correlation": 0.9985919358207445,
+          "transfer_energy_ratio": 1.0058265313367503
+        },
+        "later_reflections": {
+          "complex_nrmse": 0.8879125397041521,
+          "complex_correlation": 0.4794623989272467,
+          "transfer_energy_ratio": 0.5117796215548451
+        },
+        "early_cumulative": {
+          "complex_nrmse": 0.3062185435217187,
+          "complex_correlation": 0.9567544537033836,
+          "transfer_energy_ratio": 1.0487104481040561
+        },
+        "full": {
+          "complex_nrmse": 0.0,
+          "complex_correlation": 1.0,
+          "transfer_energy_ratio": 1.0
+        }
+      },
+      "coherent_full_error_attribution": {
+        "early_error_norm_over_total_error_norm": 1.000920717834773,
+        "later_error_norm_over_total_error_norm": 0.2183830796640575,
+        "early_squared_term": 1.001842283390877,
+        "later_squared_term": 0.047691169483558095,
+        "early_later_cross_term": -0.049533452874435335,
+        "term_sum": 0.9999999999999998,
+        "error_reconstruction_nrmse": 5.749777123295605e-16
+      }
+    },
+    {
+      "case_id": "room_c_room_holdout_0",
+      "split": "room_holdout",
+      "fdtd_sample_rate_hz": 107475.76941677864,
+      "fdtd_reference_profile": "fourth_order_reciprocal",
+      "fdtd_reciprocity_averaged": true,
+      "fdtd_raw_reciprocity_nrmse": 6.2238431843610795e-15,
+      "analysis_sample_rate_hz": 8000,
+      "source_cell_center_m": [
+        0.38551724137931037,
+        0.38458333333333333,
+        0.3242105263157895
+      ],
+      "receiver_cell_center_m": [
+        1.3344827586206898,
+        1.0354166666666667,
+        0.7957894736842106
+      ],
+      "direct_delay_s": 0.0036256153301963924,
+      "split_center_s": 0.0786256153301964,
+      "path_event_counts": {
+        "direct": 1,
+        "early_reflections": 2611,
+        "later_reflections": 13
+      },
+      "simultaneous_edge_or_corner_path_count": 0,
+      "minimum_relative_source_magnitude": 0.7022022468121872,
+      "reconstruction": {
+        "fdtd": {
+          "maximum_absolute_error": 1.734723475976807e-18,
+          "nrmse": 3.971036859319176e-17
+        },
+        "path_time_window": {
+          "maximum_absolute_error": 8.673617379884035e-19,
+          "nrmse": 6.92667680288719e-17
+        },
+        "path_arrival_bucket_time_domain_nrmse": 4.342644724019898e-15
+      },
+      "component_metrics_path_time_window_vs_fdtd": {
+        "direct": {
+          "complex_nrmse": 0.0,
+          "complex_correlation": 0.9999999999999997,
+          "transfer_energy_ratio": 1.0,
+          "fdtd_component_norm_over_fdtd_full_norm": 7.049300924769957,
+          "path_component_norm_over_fdtd_full_norm": 7.049300924769957,
+          "component_error_norm_over_fdtd_full_norm": 0.0
+        },
+        "early_reflections": {
+          "complex_nrmse": 0.2324975495480643,
+          "complex_correlation": 0.9781849495339533,
+          "transfer_energy_ratio": 1.0750832729575914,
+          "fdtd_component_norm_over_fdtd_full_norm": 6.34752611083529,
+          "path_component_norm_over_fdtd_full_norm": 6.824119146420575,
+          "component_error_norm_over_fdtd_full_norm": 1.4757842664615595
+        },
+        "later_reflections": {
+          "complex_nrmse": 4.204967057785806,
+          "complex_correlation": 0.9662383504508015,
+          "transfer_energy_ratio": 5.162939590816389,
+          "fdtd_component_norm_over_fdtd_full_norm": 0.09653604022228426,
+          "path_component_norm_over_fdtd_full_norm": 0.4984097440042748,
+          "component_error_norm_over_fdtd_full_norm": 0.40593086902379094
+        },
+        "early_cumulative": {
+          "complex_nrmse": 1.4769886757948167,
+          "complex_correlation": 0.45883029414035564,
+          "transfer_energy_ratio": 1.6340557540778993,
+          "fdtd_component_norm_over_fdtd_full_norm": 0.999184550732856,
+          "path_component_norm_over_fdtd_full_norm": 1.6327232645107639,
+          "component_error_norm_over_fdtd_full_norm": 1.4757842664615597
+        },
+        "full": {
+          "complex_nrmse": 1.3229857743902271,
+          "complex_correlation": 0.4715256973784045,
+          "transfer_energy_ratio": 1.4471092656386588,
+          "fdtd_component_norm_over_fdtd_full_norm": 1.0,
+          "path_component_norm_over_fdtd_full_norm": 1.4471092656386588,
+          "component_error_norm_over_fdtd_full_norm": 1.3229857743902271
+        }
+      },
+      "path_arrival_bucket_vs_path_time_window": {
+        "early_reflections": {
+          "complex_nrmse": 0.05775626568989798,
+          "complex_correlation": 0.9983505746804253,
+          "transfer_energy_ratio": 0.9971515335532118
+        },
+        "later_reflections": {
+          "complex_nrmse": 0.7907863826129445,
+          "complex_correlation": 0.8746428323585185,
+          "transfer_energy_ratio": 0.3375565768176336
+        },
+        "early_cumulative": {
+          "complex_nrmse": 0.2413976986101727,
+          "complex_correlation": 0.9747891181268518,
+          "transfer_energy_ratio": 0.9095074977975286
+        },
+        "full": {
+          "complex_nrmse": 0.0,
+          "complex_correlation": 1.0000000000000002,
+          "transfer_energy_ratio": 1.0
+        }
+      },
+      "coherent_full_error_attribution": {
+        "early_error_norm_over_total_error_norm": 1.1154951890104472,
+        "later_error_norm_over_total_error_norm": 0.3068293528786333,
+        "early_squared_term": 1.2443295167054536,
+        "later_squared_term": 0.09414425178792085,
+        "early_later_cross_term": -0.3384737684933746,
+        "term_sum": 0.9999999999999997,
+        "error_reconstruction_nrmse": 1.2064600054817858e-15
+      }
+    }
+  ],
+  "aggregate": {
+    "direct": {
+      "case_count": 3,
+      "mean_complex_nrmse": 0.0,
+      "mean_complex_correlation": 0.9999999999999997,
+      "mean_transfer_energy_ratio": 1.0,
+      "mean_fdtd_component_norm_over_fdtd_full_norm": 4.1655455853143515,
+      "mean_path_component_norm_over_fdtd_full_norm": 4.1655455853143515,
+      "mean_component_error_norm_over_fdtd_full_norm": 0.0
+    },
+    "early_reflections": {
+      "case_count": 3,
+      "mean_complex_nrmse": 0.3152202769143097,
+      "mean_complex_correlation": 0.9529189442248692,
+      "mean_transfer_energy_ratio": 1.0040717916812467,
+      "mean_fdtd_component_norm_over_fdtd_full_norm": 3.8082821408536542,
+      "mean_path_component_norm_over_fdtd_full_norm": 3.9018220983930934,
+      "mean_component_error_norm_over_fdtd_full_norm": 1.0692963632154833
+    },
+    "later_reflections": {
+      "case_count": 3,
+      "mean_complex_nrmse": 2.4769239230333064,
+      "mean_complex_correlation": 0.7296239671901339,
+      "mean_transfer_energy_ratio": 2.4468717891802205,
+      "mean_fdtd_component_norm_over_fdtd_full_norm": 0.09581649989903852,
+      "mean_path_component_norm_over_fdtd_full_norm": 0.23560506087380462,
+      "mean_component_error_norm_over_fdtd_full_norm": 0.23971268474444477
+    },
+    "early_cumulative": {
+      "case_count": 3,
+      "mean_complex_nrmse": 1.0684599991130954,
+      "mean_complex_correlation": 0.5123577052589469,
+      "mean_transfer_energy_ratio": 0.8719098539344516,
+      "mean_fdtd_component_norm_over_fdtd_full_norm": 1.0011672874768427,
+      "mean_path_component_norm_over_fdtd_full_norm": 0.8721854273120782,
+      "mean_component_error_norm_over_fdtd_full_norm": 1.0692963632154833
+    },
+    "full": {
+      "case_count": 3,
+      "mean_complex_nrmse": 1.0218447914936144,
+      "mean_complex_correlation": 0.5074145760355595,
+      "mean_transfer_energy_ratio": 0.8198247548909604,
+      "mean_fdtd_component_norm_over_fdtd_full_norm": 1.0,
+      "mean_path_component_norm_over_fdtd_full_norm": 0.8198247548909604,
+      "mean_component_error_norm_over_fdtd_full_norm": 1.0218447914936144
+    }
+  },
+  "diagnostic": {
+    "dominant_mean_component_error": "early_reflections",
+    "mean_early_component_error_norm_over_fdtd_full_norm": 1.0692963632154833,
+    "mean_later_component_error_norm_over_fdtd_full_norm": 0.23971268474444477,
+    "coherent_error_attribution_aggregate": {
+      "early_error_norm_over_total_error_norm": 1.034232417175209,
+      "later_error_norm_over_total_error_norm": 0.22059254161517447,
+      "early_squared_term": 1.0729742303203074,
+      "later_squared_term": 0.053495157673396194,
+      "early_later_cross_term": -0.1264693879937038,
+      "term_sum": 0.9999999999999999,
+      "error_reconstruction_nrmse": 8.445367589186222e-16
+    },
+    "interpretation": "the early-reflection field has similar standalone norm and high correlation, but its remaining complex error disrupts the strong direct/early cancellation; later response has large component-relative NRMSE but a much smaller norm and contribution to the full-transfer error",
+    "full_room_crossover_accepted": false
+  },
+  "acceptance": {
+    "maximum_reconstruction_nrmse": 1e-12,
+    "minimum_relative_source_magnitude": 0.01,
+    "reconstruction_accepted": true,
+    "source_band_accepted": true,
+    "m3_4_attribution_protocol_accepted": true
+  },
+  "scope": {
+    "validated": [
+      "exact reconstructive direct/early/later decomposition",
+      "common output-window comparison between FDTD and PathEvents",
+      "geometric PathEvent arrival buckets",
+      "coherent early/later error cross-term accounting"
+    ],
+    "pure_fdtd_direct_extracted": false,
+    "mesh_visibility_validated": false,
+    "diffraction_validated": false,
+    "production_backend_replaced": false
+  },
+  "decision": "accept_m3_4_attribution_and_localize_next_model_work",
+  "next_action": "validate oblique single-wall FDTD reflection magnitude and phase against the same locally reacting boundary model, then audit the modal low-pass branch in the crossover before evaluating a mesh engine or adding more late paths"
+}

@@ -1,0 +1,491 @@
+{
+  "schema_version": "puresound.rir_measurement_campaign.v1",
+  "campaign_id": "m5-controlled-room-template-not-measurement-evidence",
+  "rooms": [
+    {
+      "room_id": "replace-me-train-room",
+      "room_type": "REPLACE_ME",
+      "coordinate_frame": "right-handed xyz, metres",
+      "geometry_uncertainty_m": 0.01,
+      "dimensions_m": [
+        5.0,
+        4.0,
+        2.8
+      ],
+      "mesh_asset": null,
+      "provenance": {
+        "template_only": true,
+        "method": "laser measurement"
+      }
+    },
+    {
+      "room_id": "replace-me-validation-room",
+      "room_type": "REPLACE_ME",
+      "coordinate_frame": "right-handed xyz, metres",
+      "geometry_uncertainty_m": 0.01,
+      "dimensions_m": [
+        5.0,
+        4.0,
+        2.8
+      ],
+      "mesh_asset": null,
+      "provenance": {
+        "template_only": true,
+        "method": "laser measurement"
+      }
+    },
+    {
+      "room_id": "replace-me-test-room",
+      "room_type": "REPLACE_ME",
+      "coordinate_frame": "right-handed xyz, metres",
+      "geometry_uncertainty_m": 0.01,
+      "dimensions_m": [
+        5.0,
+        4.0,
+        2.8
+      ],
+      "mesh_asset": null,
+      "provenance": {
+        "template_only": true,
+        "method": "laser measurement"
+      }
+    }
+  ],
+  "transducers": [
+    {
+      "transducer_id": "source-reference",
+      "kind": "source",
+      "manufacturer": "REPLACE_ME",
+      "model": "REPLACE_ME",
+      "serial_number": "REPLACE_ME",
+      "calibration_asset": {
+        "path": "calibration/source_response.wav",
+        "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+        "media_type": "audio/wav",
+        "sample_rate": 48000,
+        "channel_count": 1,
+        "frame_count": 288000
+      },
+      "calibration_date_utc": "1970-01-01T00:00:00Z",
+      "reference_axis": "+x",
+      "provenance": {
+        "template_only": true,
+        "replace_with": "anechoic response"
+      }
+    },
+    {
+      "transducer_id": "receiver-left",
+      "kind": "receiver",
+      "manufacturer": "REPLACE_ME",
+      "model": "REPLACE_ME",
+      "serial_number": "REPLACE_ME_LEFT",
+      "calibration_asset": {
+        "path": "calibration/receiver_left.wav",
+        "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+        "media_type": "audio/wav",
+        "sample_rate": 48000,
+        "channel_count": 1,
+        "frame_count": 288000
+      },
+      "calibration_date_utc": "1970-01-01T00:00:00Z",
+      "reference_axis": "+x",
+      "provenance": {
+        "template_only": true,
+        "replace_with": "calibrated response"
+      }
+    },
+    {
+      "transducer_id": "receiver-right",
+      "kind": "receiver",
+      "manufacturer": "REPLACE_ME",
+      "model": "REPLACE_ME",
+      "serial_number": "REPLACE_ME_RIGHT",
+      "calibration_asset": {
+        "path": "calibration/receiver_right.wav",
+        "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+        "media_type": "audio/wav",
+        "sample_rate": 48000,
+        "channel_count": 1,
+        "frame_count": 288000
+      },
+      "calibration_date_utc": "1970-01-01T00:00:00Z",
+      "reference_axis": "+x",
+      "provenance": {
+        "template_only": true,
+        "replace_with": "calibrated response"
+      }
+    }
+  ],
+  "records": [
+    {
+      "measurement_id": "replace-me-train-000",
+      "room_id": "replace-me-train-room",
+      "session_id": "replace-me-train-session",
+      "timestamp_utc": "1970-01-01T00:00:00Z",
+      "source_id": "source-reference",
+      "source_pose": {
+        "position_m": [
+          1.0,
+          1.0,
+          1.4
+        ],
+        "orientation_ypr_deg": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "position_std_m": 0.005,
+        "orientation_std_deg": 1.0
+      },
+      "receiver_ids": [
+        "receiver-left",
+        "receiver-right"
+      ],
+      "receiver_poses": [
+        {
+          "position_m": [
+            3.0,
+            2.0,
+            1.4
+          ],
+          "orientation_ypr_deg": [
+            180.0,
+            0.0,
+            0.0
+          ],
+          "position_std_m": 0.005,
+          "orientation_std_deg": 1.0
+        },
+        {
+          "position_m": [
+            3.17,
+            2.0,
+            1.4
+          ],
+          "orientation_ypr_deg": [
+            180.0,
+            0.0,
+            0.0
+          ],
+          "position_std_m": 0.005,
+          "orientation_std_deg": 1.0
+        }
+      ],
+      "capture": {
+        "method": "exponential_sine_sweep",
+        "sample_rate": 48000,
+        "start_frequency_hz": 20.0,
+        "end_frequency_hz": 22000.0,
+        "duration_s": 6.0,
+        "fade_s": 0.05,
+        "silence_s": 1.0,
+        "playback_level_dbfs": -12.0,
+        "raw_recordings": [
+          {
+            "path": "captures/replace-me-train-room/position-000/sweep-repeat-00.wav",
+            "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+            "media_type": "audio/wav",
+            "sample_rate": 48000,
+            "channel_count": 2,
+            "frame_count": 288000
+          },
+          {
+            "path": "captures/replace-me-train-room/position-000/sweep-repeat-01.wav",
+            "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+            "media_type": "audio/wav",
+            "sample_rate": 48000,
+            "channel_count": 2,
+            "frame_count": 288000
+          }
+        ],
+        "inverse_filter_asset": {
+          "path": "excitation/ess-inverse.wav",
+          "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+          "media_type": "audio/wav",
+          "sample_rate": 48000,
+          "channel_count": 1,
+          "frame_count": 288000
+        },
+        "noise_recording_asset": {
+          "path": "captures/replace-me-train-room/position-000/noise.wav",
+          "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+          "media_type": "audio/wav",
+          "sample_rate": 48000,
+          "channel_count": 2,
+          "frame_count": 288000
+        },
+        "deconvolved_rir_asset": {
+          "path": "captures/replace-me-train-room/position-000/rir.wav",
+          "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+          "media_type": "audio/wav",
+          "sample_rate": 48000,
+          "channel_count": 2,
+          "frame_count": 288000
+        },
+        "latency_correction_samples": 0,
+        "deconvolution_config": {
+          "template_only": true,
+          "harmonic_separation": true,
+          "window": "REPLACE_ME"
+        }
+      },
+      "environment": {
+        "temperature_c": 20.0,
+        "relative_humidity_percent": 50.0,
+        "pressure_pa": 101325.0
+      },
+      "synchronized_receivers": true,
+      "notes": "Template only; replace every placeholder and asset hash."
+    },
+    {
+      "measurement_id": "replace-me-validation-000",
+      "room_id": "replace-me-validation-room",
+      "session_id": "replace-me-validation-session",
+      "timestamp_utc": "1970-01-01T00:00:00Z",
+      "source_id": "source-reference",
+      "source_pose": {
+        "position_m": [
+          1.0,
+          1.0,
+          1.4
+        ],
+        "orientation_ypr_deg": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "position_std_m": 0.005,
+        "orientation_std_deg": 1.0
+      },
+      "receiver_ids": [
+        "receiver-left",
+        "receiver-right"
+      ],
+      "receiver_poses": [
+        {
+          "position_m": [
+            3.0,
+            2.0,
+            1.4
+          ],
+          "orientation_ypr_deg": [
+            180.0,
+            0.0,
+            0.0
+          ],
+          "position_std_m": 0.005,
+          "orientation_std_deg": 1.0
+        },
+        {
+          "position_m": [
+            3.17,
+            2.0,
+            1.4
+          ],
+          "orientation_ypr_deg": [
+            180.0,
+            0.0,
+            0.0
+          ],
+          "position_std_m": 0.005,
+          "orientation_std_deg": 1.0
+        }
+      ],
+      "capture": {
+        "method": "exponential_sine_sweep",
+        "sample_rate": 48000,
+        "start_frequency_hz": 20.0,
+        "end_frequency_hz": 22000.0,
+        "duration_s": 6.0,
+        "fade_s": 0.05,
+        "silence_s": 1.0,
+        "playback_level_dbfs": -12.0,
+        "raw_recordings": [
+          {
+            "path": "captures/replace-me-validation-room/position-000/sweep-repeat-00.wav",
+            "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+            "media_type": "audio/wav",
+            "sample_rate": 48000,
+            "channel_count": 2,
+            "frame_count": 288000
+          },
+          {
+            "path": "captures/replace-me-validation-room/position-000/sweep-repeat-01.wav",
+            "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+            "media_type": "audio/wav",
+            "sample_rate": 48000,
+            "channel_count": 2,
+            "frame_count": 288000
+          }
+        ],
+        "inverse_filter_asset": {
+          "path": "excitation/ess-inverse.wav",
+          "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+          "media_type": "audio/wav",
+          "sample_rate": 48000,
+          "channel_count": 1,
+          "frame_count": 288000
+        },
+        "noise_recording_asset": {
+          "path": "captures/replace-me-validation-room/position-000/noise.wav",
+          "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+          "media_type": "audio/wav",
+          "sample_rate": 48000,
+          "channel_count": 2,
+          "frame_count": 288000
+        },
+        "deconvolved_rir_asset": {
+          "path": "captures/replace-me-validation-room/position-000/rir.wav",
+          "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+          "media_type": "audio/wav",
+          "sample_rate": 48000,
+          "channel_count": 2,
+          "frame_count": 288000
+        },
+        "latency_correction_samples": 0,
+        "deconvolution_config": {
+          "template_only": true,
+          "harmonic_separation": true,
+          "window": "REPLACE_ME"
+        }
+      },
+      "environment": {
+        "temperature_c": 20.0,
+        "relative_humidity_percent": 50.0,
+        "pressure_pa": 101325.0
+      },
+      "synchronized_receivers": true,
+      "notes": "Template only; replace every placeholder and asset hash."
+    },
+    {
+      "measurement_id": "replace-me-test-000",
+      "room_id": "replace-me-test-room",
+      "session_id": "replace-me-test-session",
+      "timestamp_utc": "1970-01-01T00:00:00Z",
+      "source_id": "source-reference",
+      "source_pose": {
+        "position_m": [
+          1.0,
+          1.0,
+          1.4
+        ],
+        "orientation_ypr_deg": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "position_std_m": 0.005,
+        "orientation_std_deg": 1.0
+      },
+      "receiver_ids": [
+        "receiver-left",
+        "receiver-right"
+      ],
+      "receiver_poses": [
+        {
+          "position_m": [
+            3.0,
+            2.0,
+            1.4
+          ],
+          "orientation_ypr_deg": [
+            180.0,
+            0.0,
+            0.0
+          ],
+          "position_std_m": 0.005,
+          "orientation_std_deg": 1.0
+        },
+        {
+          "position_m": [
+            3.17,
+            2.0,
+            1.4
+          ],
+          "orientation_ypr_deg": [
+            180.0,
+            0.0,
+            0.0
+          ],
+          "position_std_m": 0.005,
+          "orientation_std_deg": 1.0
+        }
+      ],
+      "capture": {
+        "method": "exponential_sine_sweep",
+        "sample_rate": 48000,
+        "start_frequency_hz": 20.0,
+        "end_frequency_hz": 22000.0,
+        "duration_s": 6.0,
+        "fade_s": 0.05,
+        "silence_s": 1.0,
+        "playback_level_dbfs": -12.0,
+        "raw_recordings": [
+          {
+            "path": "captures/replace-me-test-room/position-000/sweep-repeat-00.wav",
+            "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+            "media_type": "audio/wav",
+            "sample_rate": 48000,
+            "channel_count": 2,
+            "frame_count": 288000
+          },
+          {
+            "path": "captures/replace-me-test-room/position-000/sweep-repeat-01.wav",
+            "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+            "media_type": "audio/wav",
+            "sample_rate": 48000,
+            "channel_count": 2,
+            "frame_count": 288000
+          }
+        ],
+        "inverse_filter_asset": {
+          "path": "excitation/ess-inverse.wav",
+          "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+          "media_type": "audio/wav",
+          "sample_rate": 48000,
+          "channel_count": 1,
+          "frame_count": 288000
+        },
+        "noise_recording_asset": {
+          "path": "captures/replace-me-test-room/position-000/noise.wav",
+          "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+          "media_type": "audio/wav",
+          "sample_rate": 48000,
+          "channel_count": 2,
+          "frame_count": 288000
+        },
+        "deconvolved_rir_asset": {
+          "path": "captures/replace-me-test-room/position-000/rir.wav",
+          "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+          "media_type": "audio/wav",
+          "sample_rate": 48000,
+          "channel_count": 2,
+          "frame_count": 288000
+        },
+        "latency_correction_samples": 0,
+        "deconvolution_config": {
+          "template_only": true,
+          "harmonic_separation": true,
+          "window": "REPLACE_ME"
+        }
+      },
+      "environment": {
+        "temperature_c": 20.0,
+        "relative_humidity_percent": 50.0,
+        "pressure_pa": 101325.0
+      },
+      "synchronized_receivers": true,
+      "notes": "Template only; replace every placeholder and asset hash."
+    }
+  ],
+  "room_splits": {
+    "replace-me-train-room": "train",
+    "replace-me-validation-room": "validation",
+    "replace-me-test-room": "test"
+  },
+  "provenance": {
+    "template_only": true,
+    "measurement_evidence": false,
+    "warning": "Zero hashes and REPLACE_ME values are intentionally invalid evidence."
+  }
+}

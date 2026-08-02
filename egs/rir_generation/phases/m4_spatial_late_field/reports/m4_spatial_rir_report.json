@@ -1,0 +1,1597 @@
+{
+  "schema_version": "puresound.m4_spatial_rir_validation.v1",
+  "stage": "M4.5",
+  "evidence_scope": "model_derived_deterministic_validation",
+  "configuration": {
+    "sample_rate": 16000,
+    "duration_s": 1.2,
+    "max_path_event_order": 4,
+    "scene_seed": 20260731,
+    "spatial_seed": 20260731,
+    "receiver_spacing_m": 0.17,
+    "plane_wave_count": 256,
+    "delay_line_count": 16,
+    "coherence_estimator": {
+      "method": "Welch complex coherence on decaying late RIR",
+      "start_ms_after_direct": 80.0,
+      "nperseg": 48,
+      "reason_for_short_segment": "reduce variance from nonstationary exponential decay"
+    }
+  },
+  "scene": {
+    "schema_version": "rir_scene.v2",
+    "scene_id": "m4-5-spatial-validator",
+    "room_type": "office",
+    "dimensions_m": [
+      5.0,
+      4.0,
+      2.8
+    ],
+    "surfaces": [
+      {
+        "surface_id": "west_boundary",
+        "boundary": "west",
+        "vertices_m": [
+          [
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            4.0,
+            0
+          ],
+          [
+            0,
+            4.0,
+            2.8
+          ],
+          [
+            0,
+            0,
+            2.8
+          ]
+        ],
+        "material_id": "plasterboard:sampled",
+        "patches": []
+      },
+      {
+        "surface_id": "east_boundary",
+        "boundary": "east",
+        "vertices_m": [
+          [
+            5.0,
+            0,
+            0
+          ],
+          [
+            5.0,
+            0,
+            2.8
+          ],
+          [
+            5.0,
+            4.0,
+            2.8
+          ],
+          [
+            5.0,
+            4.0,
+            0
+          ]
+        ],
+        "material_id": "plasterboard:sampled",
+        "patches": []
+      },
+      {
+        "surface_id": "south_boundary",
+        "boundary": "south",
+        "vertices_m": [
+          [
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            2.8
+          ],
+          [
+            5.0,
+            0,
+            2.8
+          ],
+          [
+            5.0,
+            0,
+            0
+          ]
+        ],
+        "material_id": "plasterboard:sampled",
+        "patches": [
+          {
+            "patch_id": "south:door",
+            "role": "door",
+            "area_fraction": 0.0701025725365904,
+            "material_id": "wooden_door:sampled"
+          }
+        ]
+      },
+      {
+        "surface_id": "north_boundary",
+        "boundary": "north",
+        "vertices_m": [
+          [
+            0,
+            4.0,
+            0
+          ],
+          [
+            5.0,
+            4.0,
+            0
+          ],
+          [
+            5.0,
+            4.0,
+            2.8
+          ],
+          [
+            0,
+            4.0,
+            2.8
+          ]
+        ],
+        "material_id": "plasterboard:sampled",
+        "patches": [
+          {
+            "patch_id": "north:window",
+            "role": "window",
+            "area_fraction": 0.0743091856961479,
+            "material_id": "glass_window:sampled"
+          }
+        ]
+      },
+      {
+        "surface_id": "floor_boundary",
+        "boundary": "floor",
+        "vertices_m": [
+          [
+            0,
+            0,
+            0
+          ],
+          [
+            5.0,
+            0,
+            0
+          ],
+          [
+            5.0,
+            4.0,
+            0
+          ],
+          [
+            0,
+            4.0,
+            0
+          ]
+        ],
+        "material_id": "carpet_tufted:sampled",
+        "patches": []
+      },
+      {
+        "surface_id": "ceiling_boundary",
+        "boundary": "ceiling",
+        "vertices_m": [
+          [
+            0,
+            0,
+            2.8
+          ],
+          [
+            0,
+            4.0,
+            2.8
+          ],
+          [
+            5.0,
+            4.0,
+            2.8
+          ],
+          [
+            5.0,
+            0,
+            2.8
+          ]
+        ],
+        "material_id": "ceiling_fissured_tile:sampled",
+        "patches": []
+      }
+    ],
+    "materials": {
+      "carpet_tufted:sampled": {
+        "material_id": "carpet_tufted:sampled",
+        "name": "9.5 mm tufted carpet",
+        "family": "floor_soft",
+        "absorption": {
+          "center_frequencies_hz": [
+            125.0,
+            250.0,
+            500.0,
+            1000.0,
+            2000.0,
+            4000.0,
+            8000.0
+          ],
+          "values": [
+            0.09151512952672336,
+            0.3648903001301384,
+            0.5720269384720764,
+            0.6450129181339345,
+            0.5575985117185877,
+            0.8376639184961567,
+            0.8306529167542227
+          ],
+          "uncertainty_std": [
+            0.020000000000000004,
+            0.08000000000000002,
+            0.124,
+            0.13999999999999999,
+            0.126,
+            0.15,
+            0.15
+          ]
+        },
+        "scattering": {
+          "center_frequencies_hz": [
+            125.0,
+            250.0,
+            500.0,
+            1000.0,
+            2000.0,
+            4000.0,
+            8000.0
+          ],
+          "values": [
+            0.12301769042963477,
+            0.16493437822959028,
+            0.23740275355924695,
+            0.31809344142851476,
+            0.4069699243311025,
+            0.47415299163539987,
+            0.5007282560481932
+          ],
+          "uncertainty_std": [
+            0.08,
+            0.08,
+            0.08,
+            0.08,
+            0.08,
+            0.08,
+            0.08
+          ]
+        },
+        "transmission": {
+          "center_frequencies_hz": [
+            125.0,
+            250.0,
+            500.0,
+            1000.0,
+            2000.0,
+            4000.0,
+            8000.0
+          ],
+          "values": [
+            0.001,
+            0.001,
+            0.001,
+            0.001,
+            0.001,
+            0.001,
+            0.001
+          ],
+          "uncertainty_std": [
+            0.01,
+            0.01,
+            0.01,
+            0.01,
+            0.01,
+            0.01,
+            0.01
+          ]
+        },
+        "provenance": "Absorption prior adapted from the pyroomacoustics 0.10.1 materials database; uncertainty and scattering are explicit PureSound engineering priors, not certified measurements.",
+        "impedance_real": null,
+        "impedance_imag": null,
+        "notes": "Sampled from catalog entry 'carpet_tufted'; coefficients share a room-level latent and a smaller material-specific perturbation."
+      },
+      "ceiling_fissured_tile:sampled": {
+        "material_id": "ceiling_fissured_tile:sampled",
+        "name": "Fissured acoustic ceiling tile",
+        "family": "ceiling_absorber",
+        "absorption": {
+          "center_frequencies_hz": [
+            125.0,
+            250.0,
+            500.0,
+            1000.0,
+            2000.0,
+            4000.0,
+            8000.0
+          ],
+          "values": [
+            0.4122705826273665,
+            0.45602676483618365,
+            0.4605173849484093,
+            0.6981063420803982,
+            0.9002602820412038,
+            0.987518915045992,
+            0.9877399076277429
+          ],
+          "uncertainty_std": [
+            0.098,
+            0.10600000000000001,
+            0.10600000000000001,
+            0.15,
+            0.15,
+            0.15,
+            0.15
+          ]
+        },
+        "scattering": {
+          "center_frequencies_hz": [
+            125.0,
+            250.0,
+            500.0,
+            1000.0,
+            2000.0,
+            4000.0,
+            8000.0
+          ],
+          "values": [
+            0.06567800252788673,
+            0.0828065399054408,
+            0.11735148094984342,
+            0.17028133857809943,
+            0.24293068008160812,
+            0.30871513217837,
+            0.3381568351627283
+          ],
+          "uncertainty_std": [
+            0.08,
+            0.08,
+            0.08,
+            0.08,
+            0.08,
+            0.08,
+            0.08
+          ]
+        },
+        "transmission": {
+          "center_frequencies_hz": [
+            125.0,
+            250.0,
+            500.0,
+            1000.0,
+            2000.0,
+            4000.0,
+            8000.0
+          ],
+          "values": [
+            0.002,
+            0.002,
+            0.002,
+            0.002,
+            0.002,
+            0.002,
+            0.002
+          ],
+          "uncertainty_std": [
+            0.01,
+            0.01,
+            0.01,
+            0.01,
+            0.01,
+            0.01,
+            0.01
+          ]
+        },
+        "provenance": "Absorption prior adapted from the pyroomacoustics 0.10.1 materials database; uncertainty and scattering are explicit PureSound engineering priors, not certified measurements.",
+        "impedance_real": null,
+        "impedance_imag": null,
+        "notes": "Sampled from catalog entry 'ceiling_fissured_tile'; coefficients share a room-level latent and a smaller material-specific perturbation."
+      },
+      "glass_window:sampled": {
+        "material_id": "glass_window:sampled",
+        "name": "Ordinary glass window",
+        "family": "window",
+        "absorption": {
+          "center_frequencies_hz": [
+            125.0,
+            250.0,
+            500.0,
+            1000.0,
+            2000.0,
+            4000.0,
+            8000.0
+          ],
+          "values": [
+            0.07782131492611441,
+            0.03853304404550536,
+            0.030829608922234308,
+            0.023125647966942376,
+            0.023184321333831037,
+            0.023243140022215687,
+            0.02330210437403378
+          ],
+          "uncertainty_std": [
+            0.020000000000000004,
+            0.015,
+            0.015,
+            0.015,
+            0.015,
+            0.015,
+            0.015
+          ]
+        },
+        "scattering": {
+          "center_frequencies_hz": [
+            125.0,
+            250.0,
+            500.0,
+            1000.0,
+            2000.0,
+            4000.0,
+            8000.0
+          ],
+          "values": [
+            0.017844577114640162,
+            0.018093735873963724,
+            0.02754270120247869,
+            0.03725781685733568,
+            0.04723697851719002,
+            0.05747753066312684,
+            0.06797625511891527
+          ],
+          "uncertainty_std": [
+            0.08,
+            0.08,
+            0.08,
+            0.08,
+            0.08,
+            0.08,
+            0.08
+          ]
+        },
+        "transmission": {
+          "center_frequencies_hz": [
+            125.0,
+            250.0,
+            500.0,
+            1000.0,
+            2000.0,
+            4000.0,
+            8000.0
+          ],
+          "values": [
+            0.15,
+            0.1,
+            0.06,
+            0.03,
+            0.02,
+            0.015,
+            0.01
+          ],
+          "uncertainty_std": [
+            0.01,
+            0.01,
+            0.01,
+            0.01,
+            0.01,
+            0.01,
+            0.01
+          ]
+        },
+        "provenance": "Absorption prior adapted from the pyroomacoustics 0.10.1 materials database; uncertainty and scattering are explicit PureSound engineering priors, not certified measurements.",
+        "impedance_real": null,
+        "impedance_imag": null,
+        "notes": "Sampled from catalog entry 'glass_window'; coefficients share a room-level latent and a smaller material-specific perturbation."
+      },
+      "plasterboard:sampled": {
+        "material_id": "plasterboard:sampled",
+        "name": "Painted plasterboard on insulated steel frame",
+        "family": "wall_lightweight",
+        "absorption": {
+          "center_frequencies_hz": [
+            125.0,
+            250.0,
+            500.0,
+            1000.0,
+            2000.0,
+            4000.0,
+            8000.0
+          ],
+          "values": [
+            0.13837125995207336,
+            0.09102408063840278,
+            0.053901309687802344,
+            0.03552327805845261,
+            0.035192881819690984,
+            0.04364016158674668,
+            0.043237655933418
+          ],
+          "uncertainty_std": [
+            0.03,
+            0.020000000000000004,
+            0.015,
+            0.015,
+            0.015,
+            0.015,
+            0.015
+          ]
+        },
+        "scattering": {
+          "center_frequencies_hz": [
+            125.0,
+            250.0,
+            500.0,
+            1000.0,
+            2000.0,
+            4000.0,
+            8000.0
+          ],
+          "values": [
+            0.04365098332243703,
+            0.0528628759173053,
+            0.07120642858704203,
+            0.09899454332874236,
+            0.1365723427728641,
+            0.1842975490091511,
+            0.20446480886476184
+          ],
+          "uncertainty_std": [
+            0.08,
+            0.08,
+            0.08,
+            0.08,
+            0.08,
+            0.08,
+            0.08
+          ]
+        },
+        "transmission": {
+          "center_frequencies_hz": [
+            125.0,
+            250.0,
+            500.0,
+            1000.0,
+            2000.0,
+            4000.0,
+            8000.0
+          ],
+          "values": [
+            0.004,
+            0.003,
+            0.002,
+            0.001,
+            0.001,
+            0.001,
+            0.001
+          ],
+          "uncertainty_std": [
+            0.01,
+            0.01,
+            0.01,
+            0.01,
+            0.01,
+            0.01,
+            0.01
+          ]
+        },
+        "provenance": "Absorption prior adapted from the pyroomacoustics 0.10.1 materials database; uncertainty and scattering are explicit PureSound engineering priors, not certified measurements.",
+        "impedance_real": null,
+        "impedance_imag": null,
+        "notes": "Sampled from catalog entry 'plasterboard'; coefficients share a room-level latent and a smaller material-specific perturbation."
+      },
+      "wooden_door:sampled": {
+        "material_id": "wooden_door:sampled",
+        "name": "Wooden door",
+        "family": "door",
+        "absorption": {
+          "center_frequencies_hz": [
+            125.0,
+            250.0,
+            500.0,
+            1000.0,
+            2000.0,
+            4000.0,
+            8000.0
+          ],
+          "values": [
+            0.146257000634359,
+            0.10328338818748514,
+            0.06118950647885083,
+            0.08043040046112333,
+            0.09917233105112642,
+            0.09783467018424696,
+            0.09651311895348053
+          ],
+          "uncertainty_std": [
+            0.028000000000000004,
+            0.020000000000000004,
+            0.015,
+            0.016,
+            0.020000000000000004,
+            0.020000000000000004,
+            0.020000000000000004
+          ]
+        },
+        "scattering": {
+          "center_frequencies_hz": [
+            125.0,
+            250.0,
+            500.0,
+            1000.0,
+            2000.0,
+            4000.0,
+            8000.0
+          ],
+          "values": [
+            0.045756966048642,
+            0.05837284278101788,
+            0.07640483995395266,
+            0.09874681207169322,
+            0.11782202986430279,
+            0.1342989496869831,
+            0.13570644442975596
+          ],
+          "uncertainty_std": [
+            0.08,
+            0.08,
+            0.08,
+            0.08,
+            0.08,
+            0.08,
+            0.08
+          ]
+        },
+        "transmission": {
+          "center_frequencies_hz": [
+            125.0,
+            250.0,
+            500.0,
+            1000.0,
+            2000.0,
+            4000.0,
+            8000.0
+          ],
+          "values": [
+            0.04,
+            0.025,
+            0.015,
+            0.008,
+            0.004,
+            0.003,
+            0.002
+          ],
+          "uncertainty_std": [
+            0.01,
+            0.01,
+            0.01,
+            0.01,
+            0.01,
+            0.01,
+            0.01
+          ]
+        },
+        "provenance": "Absorption prior adapted from the pyroomacoustics 0.10.1 materials database; uncertainty and scattering are explicit PureSound engineering priors, not certified measurements.",
+        "impedance_real": null,
+        "impedance_imag": null,
+        "notes": "Sampled from catalog entry 'wooden_door'; coefficients share a room-level latent and a smaller material-specific perturbation."
+      }
+    },
+    "environment": {
+      "temperature_c": 18.349755182763136,
+      "relative_humidity_percent": 55.23051489479743,
+      "pressure_pa": 98379.75633640369,
+      "sound_speed_m_s": 343.1048100254499
+    },
+    "sources": [
+      {
+        "transducer_id": "near_0",
+        "kind": "source",
+        "pose": {
+          "position_m": [
+            4.255239161923115,
+            2.4990926121437766,
+            1.2731811292770892
+          ],
+          "orientation_ypr_deg": [
+            57.5747392955993,
+            -0.9364305201148522,
+            0.0
+          ]
+        },
+        "directivity_id": "speech_cardioid",
+        "calibration_gain_db": 0.0,
+        "power_db_spl_at_1m": 70.05225736177938,
+        "array_id": null,
+        "channel_index": 0
+      },
+      {
+        "transducer_id": "near_1",
+        "kind": "source",
+        "pose": {
+          "position_m": [
+            4.372765222821038,
+            2.821449743784083,
+            1.6201662976180442
+          ],
+          "orientation_ypr_deg": [
+            -58.12567066630379,
+            0.4718235591872677,
+            0.0
+          ]
+        },
+        "directivity_id": "speech_cardioid",
+        "calibration_gain_db": 0.0,
+        "power_db_spl_at_1m": 72.2497050464453,
+        "array_id": null,
+        "channel_index": 1
+      },
+      {
+        "transducer_id": "far_0",
+        "kind": "source",
+        "pose": {
+          "position_m": [
+            0.7179201217893865,
+            2.74340135627242,
+            1.3963248954522745
+          ],
+          "orientation_ypr_deg": [
+            -87.8598554353528,
+            -8.861407197098703,
+            0.0
+          ]
+        },
+        "directivity_id": "speech_cardioid",
+        "calibration_gain_db": 0.0,
+        "power_db_spl_at_1m": 69.6850061858237,
+        "array_id": null,
+        "channel_index": 2
+      },
+      {
+        "transducer_id": "far_1",
+        "kind": "source",
+        "pose": {
+          "position_m": [
+            2.250318921101183,
+            0.8857683774163008,
+            1.5977816027398988
+          ],
+          "orientation_ypr_deg": [
+            6.735193388177521,
+            9.330339994252427,
+            0.0
+          ]
+        },
+        "directivity_id": "speech_cardioid",
+        "calibration_gain_db": 0.0,
+        "power_db_spl_at_1m": 70.11558628088457,
+        "array_id": null,
+        "channel_index": 3
+      },
+      {
+        "transducer_id": "far_2",
+        "kind": "source",
+        "pose": {
+          "position_m": [
+            0.9210329637855308,
+            1.1099178586489744,
+            1.2674578264596223
+          ],
+          "orientation_ypr_deg": [
+            64.50342182384824,
+            -12.698898494290242,
+            0.0
+          ]
+        },
+        "directivity_id": "speech_cardioid",
+        "calibration_gain_db": 0.0,
+        "power_db_spl_at_1m": 70.64862627926065,
+        "array_id": null,
+        "channel_index": 4
+      }
+    ],
+    "receivers": [
+      {
+        "transducer_id": "binaural-left",
+        "kind": "receiver",
+        "pose": {
+          "position_m": [
+            4.456026906339944,
+            2.0640184432479383,
+            1.3125035508494172
+          ],
+          "orientation_ypr_deg": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "directivity_id": "omnidirectional",
+        "calibration_gain_db": 0.0,
+        "power_db_spl_at_1m": null,
+        "array_id": "binaural-0",
+        "channel_index": 0
+      },
+      {
+        "transducer_id": "binaural-right",
+        "kind": "receiver",
+        "pose": {
+          "position_m": [
+            4.626026906339944,
+            2.0640184432479383,
+            1.3125035508494172
+          ],
+          "orientation_ypr_deg": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "directivity_id": "omnidirectional",
+        "calibration_gain_db": 0.0,
+        "power_db_spl_at_1m": null,
+        "array_id": "binaural-0",
+        "channel_index": 1
+      }
+    ],
+    "objects": [],
+    "catalog_version": "puresound-materials.v1",
+    "predicted_octave_rt60_s": {
+      "125": 0.5307414398045898,
+      "250": 0.4302559349805922,
+      "500": 0.3862681776069078,
+      "1000": 0.3144484310625726,
+      "2000": 0.29113201854118387,
+      "4000": 0.2328539371117919,
+      "8000": 0.23379859576508616
+    },
+    "room_dim": [
+      5.0,
+      4.0,
+      2.8
+    ],
+    "rt60": 0.3503583043347402,
+    "rt60_origin": "surface_material_sabine_prediction",
+    "mic_pos": [
+      4.456026906339944,
+      2.0640184432479383,
+      1.3125035508494172
+    ],
+    "source_pos": [
+      [
+        4.255239161923115,
+        2.4990926121437766,
+        1.2731811292770892
+      ],
+      [
+        4.372765222821038,
+        2.821449743784083,
+        1.6201662976180442
+      ],
+      [
+        0.7179201217893865,
+        2.74340135627242,
+        1.3963248954522745
+      ],
+      [
+        2.250318921101183,
+        0.8857683774163008,
+        1.5977816027398988
+      ],
+      [
+        0.9210329637855308,
+        1.1099178586489744,
+        1.2674578264596223
+      ]
+    ],
+    "source_labels": [
+      "near_0",
+      "near_1",
+      "far_0",
+      "far_1",
+      "far_2"
+    ],
+    "source_distances": [
+      0.48078217894043673,
+      0.8217609437807898,
+      3.8002670291735514,
+      2.516903752762255,
+      3.6617644949824775
+    ],
+    "source_horizontal_distances": [
+      0.4791714210472096,
+      0.7619938864415371,
+      3.7993425056465413,
+      2.5006840931589682,
+      3.661487416259747
+    ],
+    "channel_map": [
+      {
+        "channel": 0,
+        "label": "near_0",
+        "source_pos": [
+          4.255239161923115,
+          2.4990926121437766,
+          1.2731811292770892
+        ],
+        "distance_m": 0.48078217894043673,
+        "horizontal_distance_m": 0.4791714210472096,
+        "power_db_spl_at_1m": 70.05225736177938,
+        "directivity_id": "speech_cardioid"
+      },
+      {
+        "channel": 1,
+        "label": "near_1",
+        "source_pos": [
+          4.372765222821038,
+          2.821449743784083,
+          1.6201662976180442
+        ],
+        "distance_m": 0.8217609437807898,
+        "horizontal_distance_m": 0.7619938864415371,
+        "power_db_spl_at_1m": 72.2497050464453,
+        "directivity_id": "speech_cardioid"
+      },
+      {
+        "channel": 2,
+        "label": "far_0",
+        "source_pos": [
+          0.7179201217893865,
+          2.74340135627242,
+          1.3963248954522745
+        ],
+        "distance_m": 3.8002670291735514,
+        "horizontal_distance_m": 3.7993425056465413,
+        "power_db_spl_at_1m": 69.6850061858237,
+        "directivity_id": "speech_cardioid"
+      },
+      {
+        "channel": 3,
+        "label": "far_1",
+        "source_pos": [
+          2.250318921101183,
+          0.8857683774163008,
+          1.5977816027398988
+        ],
+        "distance_m": 2.516903752762255,
+        "horizontal_distance_m": 2.5006840931589682,
+        "power_db_spl_at_1m": 70.11558628088457,
+        "directivity_id": "speech_cardioid"
+      },
+      {
+        "channel": 4,
+        "label": "far_2",
+        "source_pos": [
+          0.9210329637855308,
+          1.1099178586489744,
+          1.2674578264596223
+        ],
+        "distance_m": 3.6617644949824775,
+        "horizontal_distance_m": 3.661487416259747,
+        "power_db_spl_at_1m": 70.64862627926065,
+        "directivity_id": "speech_cardioid"
+      }
+    ]
+  },
+  "renderer": {
+    "policy": "puresound.spatial_room_rir.v1",
+    "scope": "explicit_opt_in_m4_spatial_renderer",
+    "scene_id": "m4-5-spatial-validator",
+    "source_id": "near_0",
+    "source_index": 0,
+    "receiver_ids": [
+      "binaural-left",
+      "binaural-right"
+    ],
+    "sample_rate": 16000,
+    "sample_count": 19200,
+    "duration_s": 1.2,
+    "max_path_event_order": 4,
+    "direct_samples": [
+      22,
+      27
+    ],
+    "ambisonic_origin_receiver_id": "binaural-left:foa-centroid",
+    "ambisonic_origin_position_m": [
+      4.541026906339944,
+      2.0640184432479383,
+      1.3125035508494172
+    ],
+    "ambisonic_direct_sample": 24,
+    "target_rt60_s_by_hz": {
+      "500": 0.3862681776069078,
+      "1000": 0.3144484310625726,
+      "2000": 0.29113201854118387,
+      "4000": 0.2328539371117919
+    },
+    "mixing_time_s": 0.024,
+    "transition_duration_s": 0.016,
+    "plane_wave_count": 256,
+    "seed": 20260731,
+    "late_excitation": "unit_impulse_at_earliest_receiver_direct_sample",
+    "receiver_path_event_counts": [
+      153,
+      153
+    ],
+    "ambisonic_path_event_count": 153,
+    "late_field": {
+      "policy": "puresound.spatial_late_field.v1",
+      "sample_rate": 16000,
+      "sample_count": 19200,
+      "seed": 20260732,
+      "plane_wave_count": 256,
+      "plane_wave_quadrature": "seeded_rotated_fibonacci_sphere",
+      "carrier": "independent_gaussian_nominal_octave_noise",
+      "envelope": "causal_rms_of_passive_multiband_fdn_band",
+      "envelope_window_ms": 10.0,
+      "plane_energy_normalization_gain": 1.0124591730476933,
+      "receiver_positions_m": [
+        [
+          4.456026906339944,
+          2.0640184432479383,
+          1.3125035508494172
+        ],
+        [
+          4.626026906339944,
+          2.0640184432479383,
+          1.3125035508494172
+        ]
+      ],
+      "spatial_reference": "receiver_array_centroid",
+      "spatial_reference_position_m": [
+        4.541026906339944,
+        2.0640184432479383,
+        1.3125035508494172
+      ],
+      "causal_aperture_margin_samples": 3.963803363465295,
+      "causal_aperture_margin_m": 0.08499999999999996,
+      "receiver_pair_distances_m": [
+        [
+          0.0,
+          0.16999999999999993
+        ],
+        [
+          0.16999999999999993,
+          0.0
+        ]
+      ],
+      "receiver_directivity_ids": [
+        "omnidirectional",
+        "omnidirectional"
+      ],
+      "receiver_orientations_ypr_deg": [
+        [
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0
+        ]
+      ],
+      "sound_speed_m_s": 343.1048100254499,
+      "fractional_delay_order": 3,
+      "maximum_relative_delay_samples": 7.904171422608339,
+      "ambisonic": {
+        "order": 1,
+        "channel_order": "ACN",
+        "normalization": "SN3D",
+        "channel_labels": [
+          "W",
+          "Y",
+          "Z",
+          "X"
+        ],
+        "basis": [
+          "1",
+          "arrival_y",
+          "arrival_z",
+          "arrival_x"
+        ]
+      },
+      "fdn_design": {
+        "policy": "puresound.multiband_fdn.v1",
+        "sample_rate": 16000,
+        "seed": 20260731,
+        "delay_line_count": 16,
+        "delay_lengths_samples": [
+          53,
+          59,
+          61,
+          67,
+          79,
+          89,
+          97,
+          113,
+          127,
+          139,
+          157,
+          179,
+          211,
+          223,
+          251,
+          283
+        ],
+        "delay_lengths_ms": [
+          3.3125,
+          3.6875,
+          3.8125,
+          4.1875,
+          4.9375,
+          5.5625,
+          6.0625,
+          7.0625,
+          7.9375,
+          8.6875,
+          9.8125,
+          11.1875,
+          13.1875,
+          13.9375,
+          15.6875,
+          17.6875
+        ],
+        "delays_are_distinct_primes": true,
+        "feedback_matrix": "signed_permuted_normalized_hadamard",
+        "feedback_orthogonality_error_2norm": 0.0,
+        "target_mixing_time_s": 0.024,
+        "band_weight_energy_sum": 1.0,
+        "bands": {
+          "500": {
+            "center_hz": 500.0,
+            "target_rt60_s": 0.3862681776069078,
+            "minimum_loop_gain": 0.7288326574201717,
+            "maximum_loop_gain": 0.9424819801111004,
+            "feedback_operator_2norm": 0.9424819801111004
+          },
+          "1000": {
+            "center_hz": 1000.0,
+            "target_rt60_s": 0.3144484310625726,
+            "minimum_loop_gain": 0.6780350418635109,
+            "maximum_loop_gain": 0.9298160613563303,
+            "feedback_operator_2norm": 0.9298160613563303
+          },
+          "2000": {
+            "center_hz": 2000.0,
+            "target_rt60_s": 0.29113201854118387,
+            "minimum_loop_gain": 0.6572601879036767,
+            "maximum_loop_gain": 0.9244129080008752,
+            "feedback_operator_2norm": 0.9244129080008752
+          },
+          "4000": {
+            "center_hz": 4000.0,
+            "target_rt60_s": 0.2328539371117919,
+            "minimum_loop_gain": 0.5917266044682679,
+            "maximum_loop_gain": 0.9064065434727407,
+            "feedback_operator_2norm": 0.9064065434727407
+          }
+        }
+      },
+      "finite_output": true
+    },
+    "receiver_coupling": {
+      "policy": "puresound.spatial_early_late_coupling.v1",
+      "sample_rate": 16000,
+      "receiver_count": 2,
+      "sample_count": 19200,
+      "mixing_time_s_after_direct": 0.024,
+      "transition_duration_s": 0.016,
+      "crossfade": "per_receiver_complementary_equal_power_cosine_sine",
+      "energy_policy": "per_receiver_positive_quadratic_root_exact_match",
+      "channels": [
+        {
+          "receiver_index": 0,
+          "direct_sample": 22,
+          "transition_center_sample": 406,
+          "transition_start_sample": 278,
+          "transition_end_sample": 534,
+          "pre_transition_max_abs_error": 0.0,
+          "energy": {
+            "target_original_post_transition_energy": 0.08392164814809375,
+            "weighted_coherent_energy": 0.028425339081418234,
+            "weighted_fdn_energy_before_gain": 0.015408524046326592,
+            "coherent_fdn_cross_inner_product": -0.00016480305998066495,
+            "fdn_output_gain": 1.9085304683378885,
+            "realized_coupled_post_transition_energy": 0.08392164814809373,
+            "relative_energy_error": 1.653660064364416e-16
+          }
+        },
+        {
+          "receiver_index": 1,
+          "direct_sample": 27,
+          "transition_center_sample": 411,
+          "transition_start_sample": 283,
+          "transition_end_sample": 539,
+          "pre_transition_max_abs_error": 0.0,
+          "energy": {
+            "target_original_post_transition_energy": 0.08276414481103947,
+            "weighted_coherent_energy": 0.025864486563597036,
+            "weighted_fdn_energy_before_gain": 0.016266828819268168,
+            "coherent_fdn_cross_inner_product": -0.0010828416457990455,
+            "fdn_output_gain": 1.9380177555987654,
+            "realized_coupled_post_transition_energy": 0.08276414481103944,
+            "relative_energy_error": 3.3535748697697827e-16
+          }
+        }
+      ],
+      "finite_output": true
+    },
+    "ambisonic_coupling": {
+      "policy": "puresound.spatial_early_late_coupling.v1",
+      "sample_rate": 16000,
+      "receiver_count": 4,
+      "sample_count": 19200,
+      "mixing_time_s_after_direct": 0.024,
+      "transition_duration_s": 0.016,
+      "crossfade": "per_receiver_complementary_equal_power_cosine_sine",
+      "energy_policy": "per_receiver_positive_quadratic_root_exact_match",
+      "channels": [
+        {
+          "receiver_index": 0,
+          "direct_sample": 24,
+          "transition_center_sample": 408,
+          "transition_start_sample": 280,
+          "transition_end_sample": 536,
+          "pre_transition_max_abs_error": 0.0,
+          "energy": {
+            "target_original_post_transition_energy": 0.08104166377727484,
+            "weighted_coherent_energy": 0.022599009601891536,
+            "weighted_fdn_energy_before_gain": 0.01442071381536857,
+            "coherent_fdn_cross_inner_product": -0.00011379075025006866,
+            "fdn_output_gain": 2.0210351632814443,
+            "realized_coupled_post_transition_energy": 0.08104166377727481,
+            "relative_energy_error": 3.424852640230709e-16
+          }
+        },
+        {
+          "receiver_index": 1,
+          "direct_sample": 24,
+          "transition_center_sample": 408,
+          "transition_start_sample": 280,
+          "transition_end_sample": 536,
+          "pre_transition_max_abs_error": 0.0,
+          "energy": {
+            "target_original_post_transition_energy": 0.04224783636210326,
+            "weighted_coherent_energy": 0.018185557348931895,
+            "weighted_fdn_energy_before_gain": 0.0055803508742917705,
+            "coherent_fdn_cross_inner_product": -5.434138653439207e-05,
+            "fdn_output_gain": 2.086288028051602,
+            "realized_coupled_post_transition_energy": 0.04224783636210328,
+            "relative_energy_error": 4.927277584892953e-16
+          }
+        },
+        {
+          "receiver_index": 2,
+          "direct_sample": 24,
+          "transition_center_sample": 408,
+          "transition_start_sample": 280,
+          "transition_end_sample": 536,
+          "pre_transition_max_abs_error": 0.0,
+          "energy": {
+            "target_original_post_transition_energy": 0.0030689104137458104,
+            "weighted_coherent_energy": 0.002513468419471731,
+            "weighted_fdn_energy_before_gain": 0.005212008598028712,
+            "coherent_fdn_cross_inner_product": -2.763309527300651e-05,
+            "fdn_output_gain": 0.3317949541139799,
+            "realized_coupled_post_transition_energy": 0.003068910413745811,
+            "relative_energy_error": 1.4131428113760585e-16
+          }
+        },
+        {
+          "receiver_index": 3,
+          "direct_sample": 24,
+          "transition_center_sample": 408,
+          "transition_start_sample": 280,
+          "transition_end_sample": 536,
+          "pre_transition_max_abs_error": 0.0,
+          "energy": {
+            "target_original_post_transition_energy": 0.030720171001034288,
+            "weighted_coherent_energy": 0.0016299776900226613,
+            "weighted_fdn_energy_before_gain": 0.005082332366609224,
+            "coherent_fdn_cross_inner_product": 0.00031641415106043065,
+            "fdn_output_gain": 2.3309962017990062,
+            "realized_coupled_post_transition_energy": 0.030720171001034264,
+            "relative_energy_error": 7.905596835010337e-16
+          }
+        }
+      ],
+      "finite_output": true
+    },
+    "binaural": null,
+    "production_default_changed": false,
+    "finite_output": true
+  },
+  "structural_checks": {
+    "receiver_shape_is_two_by_samples": true,
+    "ambisonic_shape_is_four_by_samples": true,
+    "same_seed_exact_receiver_determinism": true,
+    "same_seed_exact_ambisonic_determinism": true,
+    "finite_receiver_output": true,
+    "finite_ambisonic_output": true,
+    "causal_before_earliest_physical_arrival": true,
+    "receiver_early_exact_through_transition_start": true,
+    "ambisonic_early_exact_through_transition_start": true,
+    "receiver_post_transition_energy_exact": true,
+    "ambisonic_channel_order_is_acn_sn3d_wyzx": true,
+    "production_default_unchanged": true
+  },
+  "spatial_checks": {
+    "coherence_estimate_valid": true,
+    "qualified_octave_complex_coherence_rmse_within_tolerance": true,
+    "imaginary_coherence_rms_within_tolerance": true,
+    "all_reported_octave_coherence_bands_within_tolerance": true,
+    "late_iacc_l4_within_model_gate": true
+  },
+  "coherence_band_gates": {
+    "500": true,
+    "1000": true,
+    "2000": true,
+    "4000": true
+  },
+  "qualified_octave_coherence": {
+    "centers_hz": [
+      500.0,
+      1000.0,
+      2000.0,
+      4000.0
+    ],
+    "frequency_bin_count": 15,
+    "complex_rmse": 0.18719747543033616,
+    "scope": "500 Hz through 4 kHz nominal octave bands frozen by M4.2"
+  },
+  "coherence": {
+    "policy": "puresound.diffuse_field_coherence.v1",
+    "valid": true,
+    "reason": "ok",
+    "direct_sample": 22,
+    "direct_policy": "provided_shared_anchor",
+    "start_ms": 80.0,
+    "end_ms": null,
+    "window_start_sample": 1302,
+    "window_end_sample": 19200,
+    "microphone_spacing_m": 0.17,
+    "sound_speed_m_s": 343.1048100254499,
+    "nperseg": 48,
+    "welch_segment_count": 744,
+    "complex_rmse": 0.2169822909603963,
+    "measured_imaginary_rms": 0.12566749498290694,
+    "bands": {
+      "500": {
+        "center_hz": 500.0,
+        "frequency_bin_count": 1,
+        "measured_real_mean": 0.4607674841740207,
+        "measured_imaginary_rms": 0.12620262499691395,
+        "measured_magnitude_mean": 0.47773818878981,
+        "diffuse_target_mean": 0.42176332236279435,
+        "complex_rmse": 0.13209249484625543
+      },
+      "1000": {
+        "center_hz": 1000.0,
+        "frequency_bin_count": 2,
+        "measured_real_mean": -0.10981420516571387,
+        "measured_imaginary_rms": 0.06433941825113894,
+        "measured_magnitude_mean": 0.17528088964724134,
+        "diffuse_target_mean": -0.09739554278238044,
+        "complex_rmse": 0.08986110515727658
+      },
+      "2000": {
+        "center_hz": 2000.0,
+        "frequency_bin_count": 4,
+        "measured_real_mean": 0.10663670917298619,
+        "measured_imaginary_rms": 0.06273192357693752,
+        "measured_magnitude_mean": 0.25767220707316063,
+        "diffuse_target_mean": 0.01064081648027499,
+        "complex_rmse": 0.1888741066061245
+      },
+      "4000": {
+        "center_hz": 4000.0,
+        "frequency_bin_count": 8,
+        "measured_real_mean": 0.0037106814633853097,
+        "measured_imaginary_rms": 0.06360344788910484,
+        "measured_magnitude_mean": 0.1620213567115047,
+        "diffuse_target_mean": -0.009205401209575761,
+        "complex_rmse": 0.20897106435235255
+      }
+    }
+  },
+  "iacc": {
+    "policy": "puresound.binaural_iacc.v1",
+    "direct_sample": 22,
+    "direct_policy": "provided_shared_anchor",
+    "early_end_ms": 80.0,
+    "late_end_ms": null,
+    "maximum_lag_ms": 1.0,
+    "broadband": {
+      "early": {
+        "policy": "puresound.binaural_iacc.v1",
+        "valid": true,
+        "reason": "ok",
+        "iacc": 0.4093605006745519,
+        "signed_correlation": 0.4093605006745519,
+        "lag_samples": -4,
+        "lag_ms": -0.25,
+        "start_ms": 0.0,
+        "end_ms": 80.0,
+        "window_start_sample": 22,
+        "window_end_sample": 1302,
+        "maximum_lag_ms": 1.0
+      },
+      "late": {
+        "policy": "puresound.binaural_iacc.v1",
+        "valid": true,
+        "reason": "ok",
+        "iacc": 0.19428971142090654,
+        "signed_correlation": -0.19428971142090654,
+        "lag_samples": -16,
+        "lag_ms": -1.0,
+        "start_ms": 80.0,
+        "end_ms": null,
+        "window_start_sample": 1302,
+        "window_end_sample": 19200,
+        "maximum_lag_ms": 1.0
+      }
+    },
+    "octave_bands": {
+      "500": {
+        "center_hz": 500.0,
+        "early": {
+          "policy": "puresound.binaural_iacc.v1",
+          "valid": true,
+          "reason": "ok",
+          "iacc": 0.5902385573721038,
+          "signed_correlation": -0.5902385573721038,
+          "lag_samples": -16,
+          "lag_ms": -1.0,
+          "start_ms": 0.0,
+          "end_ms": 80.0,
+          "window_start_sample": 22,
+          "window_end_sample": 1302,
+          "maximum_lag_ms": 1.0
+        },
+        "late": {
+          "policy": "puresound.binaural_iacc.v1",
+          "valid": true,
+          "reason": "ok",
+          "iacc": 0.6524404566325965,
+          "signed_correlation": 0.6524404566325965,
+          "lag_samples": 1,
+          "lag_ms": 0.0625,
+          "start_ms": 80.0,
+          "end_ms": null,
+          "window_start_sample": 1302,
+          "window_end_sample": 19200,
+          "maximum_lag_ms": 1.0
+        }
+      },
+      "1000": {
+        "center_hz": 1000.0,
+        "early": {
+          "policy": "puresound.binaural_iacc.v1",
+          "valid": true,
+          "reason": "ok",
+          "iacc": 0.5834160233984227,
+          "signed_correlation": 0.5834160233984227,
+          "lag_samples": -4,
+          "lag_ms": -0.25,
+          "start_ms": 0.0,
+          "end_ms": 80.0,
+          "window_start_sample": 22,
+          "window_end_sample": 1302,
+          "maximum_lag_ms": 1.0
+        },
+        "late": {
+          "policy": "puresound.binaural_iacc.v1",
+          "valid": true,
+          "reason": "ok",
+          "iacc": 0.25469508597052426,
+          "signed_correlation": -0.25469508597052426,
+          "lag_samples": -13,
+          "lag_ms": -0.8125,
+          "start_ms": 80.0,
+          "end_ms": null,
+          "window_start_sample": 1302,
+          "window_end_sample": 19200,
+          "maximum_lag_ms": 1.0
+        }
+      },
+      "2000": {
+        "center_hz": 2000.0,
+        "early": {
+          "policy": "puresound.binaural_iacc.v1",
+          "valid": true,
+          "reason": "ok",
+          "iacc": 0.2792926100452658,
+          "signed_correlation": -0.2792926100452658,
+          "lag_samples": 11,
+          "lag_ms": 0.6875,
+          "start_ms": 0.0,
+          "end_ms": 80.0,
+          "window_start_sample": 22,
+          "window_end_sample": 1302,
+          "maximum_lag_ms": 1.0
+        },
+        "late": {
+          "policy": "puresound.binaural_iacc.v1",
+          "valid": true,
+          "reason": "ok",
+          "iacc": 0.2537386013442205,
+          "signed_correlation": 0.2537386013442205,
+          "lag_samples": -13,
+          "lag_ms": -0.8125,
+          "start_ms": 80.0,
+          "end_ms": null,
+          "window_start_sample": 1302,
+          "window_end_sample": 19200,
+          "maximum_lag_ms": 1.0
+        }
+      },
+      "4000": {
+        "center_hz": 4000.0,
+        "early": {
+          "policy": "puresound.binaural_iacc.v1",
+          "valid": true,
+          "reason": "ok",
+          "iacc": 0.46123795619140323,
+          "signed_correlation": 0.46123795619140323,
+          "lag_samples": -4,
+          "lag_ms": -0.25,
+          "start_ms": 0.0,
+          "end_ms": 80.0,
+          "window_start_sample": 22,
+          "window_end_sample": 1302,
+          "maximum_lag_ms": 1.0
+        },
+        "late": {
+          "policy": "puresound.binaural_iacc.v1",
+          "valid": true,
+          "reason": "ok",
+          "iacc": 0.1317023747549163,
+          "signed_correlation": -0.1317023747549163,
+          "lag_samples": 6,
+          "lag_ms": 0.375,
+          "start_ms": 80.0,
+          "end_ms": null,
+          "window_start_sample": 1302,
+          "window_end_sample": 19200,
+          "maximum_lag_ms": 1.0
+        }
+      }
+    },
+    "iacc_e4": 0.4785462867517989,
+    "iacc_l4": 0.3231441296755644
+  },
+  "thresholds": {
+    "maximum_coherence_rmse": 0.2,
+    "maximum_band_coherence_rmse": 0.23,
+    "maximum_imaginary_rms": 0.15,
+    "maximum_late_iacc_l4": 0.5
+  },
+  "exit": {
+    "passed": true,
+    "implementation_complete": true,
+    "production_default_enabled": false,
+    "measured_multi_receiver_validation_complete": false
+  },
+  "limitations": [
+    "Diffuse coherence is validated against the isotropic plane-wave model, not a measured multi-receiver room dataset.",
+    "The finite plane-wave quadrature and decaying-RIR Welch estimator have deterministic approximation error.",
+    "FOA coherent and late paths use the receiver-array centroid as the Ambisonic origin."
+  ]
+}

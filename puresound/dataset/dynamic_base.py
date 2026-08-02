@@ -31,6 +31,7 @@ class DynamicBaseDataset(torch.utils.data.Dataset):
         augmentation_hpf_args: Optional[Dict] = None,
         augmentation_volume_args: Optional[Dict] = None,
         vad_label_args: Optional[Dict] = None,
+        dataset_role: str = "train",
     ):
         super().__init__()
         # Matafile related
@@ -59,6 +60,11 @@ class DynamicBaseDataset(torch.utils.data.Dataset):
         self.augmentation_hpf_args = augmentation_hpf_args
         self.augmentation_volume_args = augmentation_volume_args
         self.vad_label_args = vad_label_args
+        self.dataset_role = str(dataset_role)
+        if self.dataset_role not in {"train", "validation", "test"}:
+            raise ValueError(
+                "dataset_role must be train, validation, or test"
+            )
         self.vad_labeler = None
 
         self.init_necessary()
@@ -270,10 +276,22 @@ class DynamicBaseDataset(torch.utils.data.Dataset):
             if simulator_args and simulator_args.get("used"):
                 pregenerated_args = simulator_args.get("pregenerated")
                 if pregenerated_args and pregenerated_args.get("used"):
-                    self.augmentor.init_room_bank(pregenerated_args)
+                    pregenerated_config = dict(pregenerated_args)
+                    configured_role = pregenerated_config.get("usage_role")
+                    if (
+                        configured_role is not None
+                        and str(configured_role) != self.dataset_role
+                    ):
+                        raise ValueError(
+                            "pregenerated RIR usage_role does not match "
+                            "the dataset_role"
+                        )
+                    pregenerated_config["usage_role"] = self.dataset_role
+                    self.augmentor.init_room_bank(pregenerated_config)
                     print(
-                        "Augmentor initialized pre-generated room RIR bank "
-                        f"({len(self.augmentor.room_bank)} rooms)"
+                        "Augmentor initialized pre-generated RIR bank "
+                        f"(kind={self.augmentor.room_bank_kind}, "
+                        f"items={len(self.augmentor.room_bank)})"
                     )
                 else:
                     self.augmentor.init_room_simulator(simulator_args)

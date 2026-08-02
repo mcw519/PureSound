@@ -1,0 +1,803 @@
+{
+  "schema_version": "puresound.m5_group_identifiability_report.v1",
+  "milestone": "M5.2d",
+  "policy": "puresound.m5_grouped_path_inverse.v1",
+  "scope": "actual_path_event_m4_effective_boundary_identifiability",
+  "sample_rate": 8000,
+  "duration_s": 0.4,
+  "path_event_max_order": 4,
+  "train_source_indices": [
+    0,
+    2,
+    4
+  ],
+  "holdout_source_indices": [
+    1,
+    3
+  ],
+  "target_snr_db": 48.0,
+  "truth": {
+    "mixing_time_s": 0.024,
+    "reflection_adjustment_db_by_group": {
+      "ceiling": -0.8,
+      "east": -2.0,
+      "floor": -3.0,
+      "north": -2.4,
+      "south": -1.4,
+      "west": -1.0
+    },
+    "target_rt60_s_by_hz": {
+      "500": 0.65,
+      "1000": 0.52,
+      "2000": 0.4
+    }
+  },
+  "fits": [
+    {
+      "policy": "puresound.m5_grouped_path_inverse.v1",
+      "parameters": {
+        "mixing_time_s": 0.024,
+        "reflection_adjustment_db_by_group": {
+          "ceiling": -0.7987760617728102,
+          "east": -2.0000225877603506,
+          "floor": -3.0005482316424907,
+          "north": -2.4000011110467554,
+          "south": -1.4012317381081472,
+          "west": -1.0007198563626634
+        },
+        "target_rt60_s_by_hz": {
+          "500": 0.65,
+          "1000": 0.52,
+          "2000": 0.4
+        }
+      },
+      "initial_cost": 0.7340795054998897,
+      "final_cost": 2.3755445522046446e-05,
+      "evaluations": 7,
+      "success": true,
+      "message": "`gtol` termination condition is satisfied.",
+      "local_identifiability": {
+        "policy": "puresound.m5_local_identifiability.v1",
+        "parameter_names": [
+          "ceiling",
+          "east",
+          "floor",
+          "north",
+          "south",
+          "west"
+        ],
+        "numerical_rank": 6,
+        "full_column_rank": true,
+        "normalized_condition_number": 2.7440115191924255,
+        "maximum_absolute_column_correlation": 0.539809638974205,
+        "accepted_parameters": [
+          "ceiling",
+          "east",
+          "floor",
+          "north",
+          "south",
+          "west"
+        ],
+        "rejected_parameters": {},
+        "singular_values": [
+          1.7681617243318282,
+          0.8734995935845332,
+          0.8323349840287989,
+          0.7492358815895914,
+          0.6642684161182664,
+          0.6443711012015744
+        ],
+        "absolute_column_correlation": [
+          [
+            1.0,
+            0.40033957264765546,
+            0.539809638974205,
+            0.4056340386222284,
+            0.43500129242014246,
+            0.5124688446729084
+          ],
+          [
+            0.40033957264765546,
+            1.0,
+            0.32487287336433873,
+            0.3468507246737566,
+            0.45703655839913643,
+            0.5076490451237627
+          ],
+          [
+            0.539809638974205,
+            0.32487287336433873,
+            1.0,
+            0.29240879524257435,
+            0.3948529588717763,
+            0.44266412978614084
+          ],
+          [
+            0.4056340386222284,
+            0.3468507246737566,
+            0.29240879524257435,
+            1.0,
+            0.35632853131464914,
+            0.49767552451027014
+          ],
+          [
+            0.43500129242014246,
+            0.45703655839913643,
+            0.3948529588717763,
+            0.35632853131464914,
+            1.0,
+            0.43224924804088904
+          ],
+          [
+            0.5124688446729084,
+            0.5076490451237627,
+            0.44266412978614084,
+            0.49767552451027014,
+            0.43224924804088904,
+            1.0
+          ]
+        ]
+      },
+      "scaled_jacobian_shape": [
+        9600,
+        6
+      ]
+    },
+    {
+      "policy": "puresound.m5_grouped_path_inverse.v1",
+      "parameters": {
+        "mixing_time_s": 0.024,
+        "reflection_adjustment_db_by_group": {
+          "ceiling": -0.7987760616692595,
+          "east": -2.000022587905279,
+          "floor": -3.0005482313027634,
+          "north": -2.400001111366978,
+          "south": -1.4012317380133277,
+          "west": -1.000719856783176
+        },
+        "target_rt60_s_by_hz": {
+          "500": 0.65,
+          "1000": 0.52,
+          "2000": 0.4
+        }
+      },
+      "initial_cost": 0.7822853798538203,
+      "final_cost": 2.375544552204644e-05,
+      "evaluations": 6,
+      "success": true,
+      "message": "`gtol` termination condition is satisfied.",
+      "local_identifiability": {
+        "policy": "puresound.m5_local_identifiability.v1",
+        "parameter_names": [
+          "ceiling",
+          "east",
+          "floor",
+          "north",
+          "south",
+          "west"
+        ],
+        "numerical_rank": 6,
+        "full_column_rank": true,
+        "normalized_condition_number": 2.7440115896858135,
+        "maximum_absolute_column_correlation": 0.539809678625438,
+        "accepted_parameters": [
+          "ceiling",
+          "east",
+          "floor",
+          "north",
+          "south",
+          "west"
+        ],
+        "rejected_parameters": {},
+        "singular_values": [
+          1.7681617541732402,
+          0.8734995811100972,
+          0.8323349665436354,
+          0.7492358867122038,
+          0.6642683747293421,
+          0.6443710955228483
+        ],
+        "absolute_column_correlation": [
+          [
+            1.0,
+            0.4003396178938198,
+            0.539809678625438,
+            0.4056340772423847,
+            0.4350013431241209,
+            0.5124688860438859
+          ],
+          [
+            0.4003396178938198,
+            1.0,
+            0.3248728933648061,
+            0.3468507474616655,
+            0.4570365511261603,
+            0.5076490518546862
+          ],
+          [
+            0.539809678625438,
+            0.3248728933648061,
+            1.0,
+            0.29240881489767584,
+            0.3948529799403087,
+            0.4426641228292502
+          ],
+          [
+            0.4056340772423847,
+            0.3468507474616655,
+            0.29240881489767584,
+            1.0,
+            0.35632854535771724,
+            0.49767555123517476
+          ],
+          [
+            0.4350013431241209,
+            0.4570365511261603,
+            0.3948529799403087,
+            0.35632854535771724,
+            1.0,
+            0.43224923148332745
+          ],
+          [
+            0.5124688860438859,
+            0.5076490518546862,
+            0.4426641228292502,
+            0.49767555123517476,
+            0.43224923148332745,
+            1.0
+          ]
+        ]
+      },
+      "scaled_jacobian_shape": [
+        9600,
+        6
+      ]
+    }
+  ],
+  "best_fit_index": 1,
+  "parameter_errors": {
+    "absolute_error_db_by_group": {
+      "ceiling": 0.001223938330740526,
+      "east": 2.258790527909227e-05,
+      "floor": 0.0005482313027633801,
+      "north": 1.1113669780016266e-06,
+      "south": 0.0012317380133277656,
+      "west": 0.0007198567831760982
+    },
+    "maximum_absolute_error_db": 0.0012317380133277656
+  },
+  "maximum_multistart_spread_db": 4.205127357437277e-10,
+  "absorption_scattering_split_diagnostic": {
+    "policy": "puresound.m5_local_identifiability.v1",
+    "parameter_names": [
+      "effective_reflection:ceiling",
+      "effective_reflection:east",
+      "effective_reflection:floor",
+      "effective_reflection:north",
+      "effective_reflection:south",
+      "effective_reflection:west",
+      "scattering_specular_loss:ceiling",
+      "scattering_specular_loss:east",
+      "scattering_specular_loss:floor",
+      "scattering_specular_loss:north",
+      "scattering_specular_loss:south",
+      "scattering_specular_loss:west"
+    ],
+    "numerical_rank": 6,
+    "full_column_rank": false,
+    "normalized_condition_number": 3.1224914854489584e+16,
+    "maximum_absolute_column_correlation": 1.0000000000000004,
+    "accepted_parameters": [
+      "effective_reflection:ceiling",
+      "effective_reflection:east",
+      "effective_reflection:floor",
+      "effective_reflection:north",
+      "effective_reflection:south",
+      "effective_reflection:west"
+    ],
+    "rejected_parameters": {
+      "scattering_specular_loss:ceiling": "redundant_with:effective_reflection:ceiling",
+      "scattering_specular_loss:east": "redundant_with:effective_reflection:east",
+      "scattering_specular_loss:floor": "redundant_with:effective_reflection:floor",
+      "scattering_specular_loss:north": "redundant_with:effective_reflection:north",
+      "scattering_specular_loss:south": "redundant_with:effective_reflection:south",
+      "scattering_specular_loss:west": "redundant_with:effective_reflection:west"
+    },
+    "singular_values": [
+      2.5005583332211994,
+      1.2353149543331168,
+      1.1770993981233655,
+      1.059579552405031,
+      0.9394173445977688,
+      0.9112783424896216,
+      4.033752907422637e-16,
+      3.4897613269019546e-16,
+      2.557576744738165e-16,
+      1.87027758731172e-16,
+      1.0498289466263908e-16,
+      8.008215057988105e-17
+    ],
+    "absolute_column_correlation": [
+      [
+        1.0,
+        0.4003396178938198,
+        0.539809678625438,
+        0.4056340772423847,
+        0.4350013431241209,
+        0.5124688860438859,
+        1.0000000000000002,
+        0.4003396178938198,
+        0.539809678625438,
+        0.4056340772423844,
+        0.43500134312412087,
+        0.5124688860438856
+      ],
+      [
+        0.4003396178938198,
+        1.0,
+        0.3248728933648061,
+        0.3468507474616655,
+        0.4570365511261603,
+        0.5076490518546862,
+        0.4003396178938198,
+        0.9999999999999998,
+        0.324872893364806,
+        0.34685074746166555,
+        0.4570365511261602,
+        0.5076490518546863
+      ],
+      [
+        0.539809678625438,
+        0.3248728933648061,
+        1.0,
+        0.29240881489767584,
+        0.3948529799403087,
+        0.4426641228292502,
+        0.539809678625438,
+        0.3248728933648061,
+        0.9999999999999998,
+        0.2924088148976758,
+        0.39485297994030866,
+        0.44266412282925016
+      ],
+      [
+        0.4056340772423847,
+        0.3468507474616655,
+        0.29240881489767584,
+        1.0,
+        0.35632854535771724,
+        0.49767555123517476,
+        0.4056340772423847,
+        0.3468507474616655,
+        0.2924088148976758,
+        1.0,
+        0.35632854535771735,
+        0.4976755512351747
+      ],
+      [
+        0.4350013431241209,
+        0.4570365511261603,
+        0.3948529799403087,
+        0.35632854535771724,
+        1.0,
+        0.43224923148332745,
+        0.4350013431241209,
+        0.4570365511261603,
+        0.39485297994030866,
+        0.35632854535771735,
+        1.0000000000000004,
+        0.4322492314833274
+      ],
+      [
+        0.5124688860438859,
+        0.5076490518546862,
+        0.4426641228292502,
+        0.49767555123517476,
+        0.43224923148332745,
+        1.0,
+        0.5124688860438859,
+        0.5076490518546862,
+        0.44266412282925016,
+        0.4976755512351747,
+        0.4322492314833274,
+        0.9999999999999996
+      ],
+      [
+        1.0000000000000002,
+        0.4003396178938198,
+        0.539809678625438,
+        0.4056340772423847,
+        0.4350013431241209,
+        0.5124688860438859,
+        1.0,
+        0.4003396178938198,
+        0.539809678625438,
+        0.4056340772423844,
+        0.43500134312412087,
+        0.5124688860438856
+      ],
+      [
+        0.4003396178938198,
+        0.9999999999999998,
+        0.3248728933648061,
+        0.3468507474616655,
+        0.4570365511261603,
+        0.5076490518546862,
+        0.4003396178938198,
+        1.0,
+        0.324872893364806,
+        0.34685074746166555,
+        0.4570365511261602,
+        0.5076490518546863
+      ],
+      [
+        0.539809678625438,
+        0.324872893364806,
+        0.9999999999999998,
+        0.2924088148976758,
+        0.39485297994030866,
+        0.44266412282925016,
+        0.539809678625438,
+        0.324872893364806,
+        1.0,
+        0.2924088148976758,
+        0.39485297994030866,
+        0.44266412282925016
+      ],
+      [
+        0.4056340772423844,
+        0.34685074746166555,
+        0.2924088148976758,
+        1.0,
+        0.35632854535771735,
+        0.4976755512351747,
+        0.4056340772423844,
+        0.34685074746166555,
+        0.2924088148976758,
+        1.0,
+        0.35632854535771735,
+        0.4976755512351747
+      ],
+      [
+        0.43500134312412087,
+        0.4570365511261602,
+        0.39485297994030866,
+        0.35632854535771735,
+        1.0000000000000004,
+        0.4322492314833274,
+        0.43500134312412087,
+        0.4570365511261602,
+        0.39485297994030866,
+        0.35632854535771735,
+        1.0,
+        0.4322492314833274
+      ],
+      [
+        0.5124688860438856,
+        0.5076490518546863,
+        0.44266412282925016,
+        0.4976755512351747,
+        0.4322492314833274,
+        0.9999999999999996,
+        0.5124688860438856,
+        0.5076490518546863,
+        0.44266412282925016,
+        0.4976755512351747,
+        0.4322492314833274,
+        1.0
+      ]
+    ]
+  },
+  "selection_decision": {
+    "accepted_for_m5_3": [
+      "effective_reflection:ceiling",
+      "effective_reflection:east",
+      "effective_reflection:floor",
+      "effective_reflection:north",
+      "effective_reflection:south",
+      "effective_reflection:west"
+    ],
+    "deferred_to_synchronized_m5_4": [
+      "scattering:ceiling",
+      "scattering:east",
+      "scattering:floor",
+      "scattering:north",
+      "scattering:south",
+      "scattering:west"
+    ],
+    "reason": "mono coherent amplitudes identify only the combined effective reflection loss; absorption and specular scattering columns are locally identical"
+  },
+  "independent_m5_1_oracle": {
+    "initial_holdout": {
+      "policy": "puresound.rir_calibration_loss.v1",
+      "implementation": "numpy_scipy_reference_not_autograd",
+      "total": 2.1795607049268972,
+      "terms": {
+        "multiresolution_stft": 1.9425106350038006,
+        "energy_decay": 0.042357864023925086,
+        "arrival_timing": 0.0,
+        "octave_acoustics": 0.1946922058991715,
+        "spatial_coherence": 0.2954094119857839,
+        "causality": 0.0,
+        "decay_regularization": 0.0
+      },
+      "weights": {
+        "multiresolution_stft": 1.0,
+        "energy_decay": 1.0,
+        "arrival_timing": 1.0,
+        "octave_acoustics": 1.0,
+        "spatial_coherence": 0.0,
+        "causality": 10.0,
+        "decay_regularization": 1.0
+      },
+      "diagnostics": {
+        "sample_rate": 8000,
+        "channel_count": 2,
+        "sample_count": 3200,
+        "measured_direct_samples": [
+          18,
+          57
+        ],
+        "synthetic_direct_samples": [
+          18,
+          57
+        ],
+        "physical_first_samples": [
+          17,
+          56
+        ],
+        "multiresolution_stft": {
+          "distance": 1.9425106350038006,
+          "resolutions": {
+            "256": {
+              "fft_size": 256,
+              "spectral_convergence": 0.7923132182799674,
+              "log_magnitude_l1": 1.0825345112487659,
+              "total": 1.8748477295287334
+            },
+            "512": {
+              "fft_size": 512,
+              "spectral_convergence": 0.9317590419954741,
+              "log_magnitude_l1": 1.0784144984833937,
+              "total": 2.010173540478868
+            }
+          }
+        },
+        "energy_decay": {
+          "distance": 0.042357864023925086,
+          "mean_rmse_db": 3.388629121914007,
+          "channel_rmse_db": [
+            4.661223835049791,
+            2.1160344087782232
+          ],
+          "floor_db": -80.0
+        },
+        "arrival_timing": {
+          "distance": 0.0,
+          "difference_ms_by_channel": [
+            0.0,
+            0.0
+          ],
+          "mean_absolute_difference_ms": 0.0,
+          "tolerance_ms": 1.0
+        },
+        "octave_acoustics": {
+          "distance": 0.1946922058991715,
+          "bands": {
+            "500": {
+              "center_hz": 500.0,
+              "mean_absolute_energy_error_db": 3.491479851371083,
+              "qualified_t20_channels": 2,
+              "mean_absolute_log_t20_ratio": 0.009505725316027249,
+              "distance": 0.1840797178845814
+            },
+            "1000": {
+              "center_hz": 1000.0,
+              "mean_absolute_energy_error_db": 2.707425415505104,
+              "qualified_t20_channels": 2,
+              "mean_absolute_log_t20_ratio": 0.06855069296244126,
+              "distance": 0.20392196373769644
+            },
+            "2000": {
+              "center_hz": 2000.0,
+              "mean_absolute_energy_error_db": 2.5375274857166596,
+              "qualified_t20_channels": 2,
+              "mean_absolute_log_t20_ratio": 0.0691985617894037,
+              "distance": 0.19607493607523668
+            }
+          }
+        },
+        "spatial_coherence": {
+          "distance": 0.2954094119857839,
+          "evaluable": true,
+          "reason": "ok",
+          "start_ms": 80.0,
+          "nperseg": 256,
+          "pairs": {
+            "0-1": {
+              "first_channel": 0,
+              "second_channel": 1,
+              "frequency_bin_count": 129,
+              "complex_rmse": 0.2954094119857839
+            }
+          }
+        },
+        "causality": {
+          "distance": 0.0,
+          "prearrival_energy_fraction_by_channel": [
+            0.0,
+            0.0
+          ]
+        },
+        "decay_regularization": {
+          "distance": 0.0,
+          "channel_penalties": [
+            0.0,
+            0.0
+          ],
+          "allowed_growth_db_per_hop": 1.0
+        }
+      }
+    },
+    "recovered_holdout": {
+      "policy": "puresound.rir_calibration_loss.v1",
+      "implementation": "numpy_scipy_reference_not_autograd",
+      "total": 0.7676355985359289,
+      "terms": {
+        "multiresolution_stft": 0.7621257729100528,
+        "energy_decay": 0.004329376117596899,
+        "arrival_timing": 0.0,
+        "octave_acoustics": 0.001180439919869804,
+        "spatial_coherence": 0.26017765595779824,
+        "causality": 0.0,
+        "decay_regularization": 9.588409354751154e-09
+      },
+      "weights": {
+        "multiresolution_stft": 1.0,
+        "energy_decay": 1.0,
+        "arrival_timing": 1.0,
+        "octave_acoustics": 1.0,
+        "spatial_coherence": 0.0,
+        "causality": 10.0,
+        "decay_regularization": 1.0
+      },
+      "diagnostics": {
+        "sample_rate": 8000,
+        "channel_count": 2,
+        "sample_count": 3200,
+        "measured_direct_samples": [
+          18,
+          57
+        ],
+        "synthetic_direct_samples": [
+          18,
+          57
+        ],
+        "physical_first_samples": [
+          17,
+          56
+        ],
+        "multiresolution_stft": {
+          "distance": 0.7621257729100528,
+          "resolutions": {
+            "256": {
+              "fft_size": 256,
+              "spectral_convergence": 0.005746833964312225,
+              "log_magnitude_l1": 0.7537963718009857,
+              "total": 0.7595432057652979
+            },
+            "512": {
+              "fft_size": 512,
+              "spectral_convergence": 0.00840905296486632,
+              "log_magnitude_l1": 0.7562992870899414,
+              "total": 0.7647083400548077
+            }
+          }
+        },
+        "energy_decay": {
+          "distance": 0.004329376117596899,
+          "mean_rmse_db": 0.3463500894077519,
+          "channel_rmse_db": [
+            0.516853880550058,
+            0.17584629826544584
+          ],
+          "floor_db": -80.0
+        },
+        "arrival_timing": {
+          "distance": 0.0,
+          "difference_ms_by_channel": [
+            0.0,
+            0.0
+          ],
+          "mean_absolute_difference_ms": 0.0,
+          "tolerance_ms": 1.0
+        },
+        "octave_acoustics": {
+          "distance": 0.001180439919869804,
+          "bands": {
+            "500": {
+              "center_hz": 500.0,
+              "mean_absolute_energy_error_db": 0.0012294206549781652,
+              "qualified_t20_channels": 2,
+              "mean_absolute_log_t20_ratio": 0.0015588411849118914,
+              "distance": 0.0016203122176607996
+            },
+            "1000": {
+              "center_hz": 1000.0,
+              "mean_absolute_energy_error_db": 0.0006266865706272712,
+              "qualified_t20_channels": 2,
+              "mean_absolute_log_t20_ratio": 0.000606370058546934,
+              "distance": 0.0006377043870782975
+            },
+            "2000": {
+              "center_hz": 2000.0,
+              "mean_absolute_energy_error_db": 0.0014766443395989037,
+              "qualified_t20_channels": 2,
+              "mean_absolute_log_t20_ratio": 0.0012094709378903694,
+              "distance": 0.0012833031548703145
+            }
+          }
+        },
+        "spatial_coherence": {
+          "distance": 0.26017765595779824,
+          "evaluable": true,
+          "reason": "ok",
+          "start_ms": 80.0,
+          "nperseg": 256,
+          "pairs": {
+            "0-1": {
+              "first_channel": 0,
+              "second_channel": 1,
+              "frequency_bin_count": 129,
+              "complex_rmse": 0.26017765595779824
+            }
+          }
+        },
+        "causality": {
+          "distance": 0.0,
+          "prearrival_energy_fraction_by_channel": [
+            0.0,
+            0.0
+          ]
+        },
+        "decay_regularization": {
+          "distance": 9.588409354751154e-09,
+          "channel_penalties": [
+            0.0,
+            1.9176818709502307e-08
+          ],
+          "allowed_growth_db_per_hop": 1.0
+        }
+      }
+    },
+    "relative_total_reduction": 0.647802606827748
+  },
+  "checks": {
+    "all_grouped_multistarts_converged": true,
+    "six_effective_boundary_groups_locally_full_rank": true,
+    "six_effective_boundary_groups_all_accepted": true,
+    "effective_group_condition_below_100": true,
+    "all_effective_group_gains_recovered_within_0_25_db": true,
+    "grouped_multistart_spread_below_1e_4_db": true,
+    "absorption_scattering_split_is_rank_deficient": true,
+    "all_six_scattering_duplicates_rejected": true,
+    "heldout_m5_1_total_reduced_50_percent": true,
+    "all_actual_m4_outputs_preserve_pre_transition": true,
+    "all_outputs_remain_physical_arrival_causal": true
+  },
+  "exit": {
+    "passed": true,
+    "m5_2d_group_identifiability_complete": true,
+    "individual_absorption_scattering_separation_claimed": false
+  },
+  "next_stage": {
+    "milestone": "M5.3/M5.4",
+    "measured_fit_requires_ready_controlled_campaign": true,
+    "scattering_requires_synchronized_receivers": true
+  },
+  "artifacts": {
+    "holdout_target": "egs/rir_generation/exp/rir_realism/m5/rir_m5_group_identifiability/m5_2d_holdout_target.wav",
+    "holdout_initial": "egs/rir_generation/exp/rir_realism/m5/rir_m5_group_identifiability/m5_2d_holdout_initial.wav",
+    "holdout_recovered": "egs/rir_generation/exp/rir_realism/m5/rir_m5_group_identifiability/m5_2d_holdout_recovered.wav"
+  }
+}

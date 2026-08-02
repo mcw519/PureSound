@@ -1,0 +1,141 @@
+{
+  "schema_version": "puresound.m6_reproducible_generation_validation.v1",
+  "milestone": "M6.2",
+  "scope": "actual_generator_fresh_parallel_resume_and_config_isolation",
+  "fixture": {
+    "room_count": 6,
+    "rir_per_room": 1,
+    "sample_rate": 8000,
+    "duration_s": 0.2,
+    "low_backend": "analytic",
+    "high_backend": "pyroomacoustics",
+    "pyroomacoustics_ray_count": 2000,
+    "explicitly_not_acoustic_or_production_evidence": true
+  },
+  "runs": {
+    "serial": {
+      "root": "egs/rir_generation/exp/rir_realism/m6/rir_m6_hardening_validation/reproducible/serial",
+      "manifest": "egs/rir_generation/exp/rir_realism/m6/rir_m6_hardening_validation/reproducible/serial/rir_bank_manifest.json",
+      "audit": "egs/rir_generation/exp/rir_realism/m6/rir_m6_hardening_validation/reproducible/serial/rir_bank_generation_audit.json",
+      "manifest_sha256": "3027cbf787ef933f493b4d427d71f57bdd6222badfe125523b5aa57d5b12b2de",
+      "generation_run": {
+        "task_count": 6,
+        "resume_requested": false,
+        "items_skipped_as_complete": 0,
+        "items_generated": 6,
+        "num_workers": 1
+      },
+      "stdout_summary": [
+        "[generate_hybrid_rir] M6 manifest 3027cbf787ef933f493b4d427d71f57bdd6222badfe125523b5aa57d5b12b2de; 6 items; audit PASS."
+      ]
+    },
+    "fresh_repeat": {
+      "root": "egs/rir_generation/exp/rir_realism/m6/rir_m6_hardening_validation/reproducible/fresh_repeat",
+      "manifest": "egs/rir_generation/exp/rir_realism/m6/rir_m6_hardening_validation/reproducible/fresh_repeat/rir_bank_manifest.json",
+      "audit": "egs/rir_generation/exp/rir_realism/m6/rir_m6_hardening_validation/reproducible/fresh_repeat/rir_bank_generation_audit.json",
+      "manifest_sha256": "3027cbf787ef933f493b4d427d71f57bdd6222badfe125523b5aa57d5b12b2de",
+      "generation_run": {
+        "task_count": 6,
+        "resume_requested": false,
+        "items_skipped_as_complete": 0,
+        "items_generated": 6,
+        "num_workers": 1
+      },
+      "stdout_summary": [
+        "[generate_hybrid_rir] M6 manifest 3027cbf787ef933f493b4d427d71f57bdd6222badfe125523b5aa57d5b12b2de; 6 items; audit PASS."
+      ]
+    },
+    "parallel": {
+      "root": "egs/rir_generation/exp/rir_realism/m6/rir_m6_hardening_validation/reproducible/parallel",
+      "manifest": "egs/rir_generation/exp/rir_realism/m6/rir_m6_hardening_validation/reproducible/parallel/rir_bank_manifest.json",
+      "audit": "egs/rir_generation/exp/rir_realism/m6/rir_m6_hardening_validation/reproducible/parallel/rir_bank_generation_audit.json",
+      "manifest_sha256": "3027cbf787ef933f493b4d427d71f57bdd6222badfe125523b5aa57d5b12b2de",
+      "generation_run": {
+        "task_count": 6,
+        "resume_requested": false,
+        "items_skipped_as_complete": 0,
+        "items_generated": 6,
+        "num_workers": 2
+      },
+      "stdout_summary": [
+        "[generate_hybrid_rir] M6 manifest 3027cbf787ef933f493b4d427d71f57bdd6222badfe125523b5aa57d5b12b2de; 6 items; audit PASS."
+      ]
+    },
+    "resumed_after_tamper": {
+      "root": "egs/rir_generation/exp/rir_realism/m6/rir_m6_hardening_validation/reproducible/resumed",
+      "manifest": "egs/rir_generation/exp/rir_realism/m6/rir_m6_hardening_validation/reproducible/resumed/rir_bank_manifest.json",
+      "audit": "egs/rir_generation/exp/rir_realism/m6/rir_m6_hardening_validation/reproducible/resumed/rir_bank_generation_audit.json",
+      "manifest_sha256": "3027cbf787ef933f493b4d427d71f57bdd6222badfe125523b5aa57d5b12b2de",
+      "generation_run": {
+        "task_count": 6,
+        "resume_requested": true,
+        "items_skipped_as_complete": 5,
+        "items_generated": 1,
+        "num_workers": 2
+      },
+      "stdout_summary": [
+        "[generate_hybrid_rir] resume: 5 already generated, 1 remaining (of 6).",
+        "[generate_hybrid_rir] M6 manifest 3027cbf787ef933f493b4d427d71f57bdd6222badfe125523b5aa57d5b12b2de; 6 items; audit PASS."
+      ]
+    },
+    "changed_config": {
+      "root": "egs/rir_generation/exp/rir_realism/m6/rir_m6_hardening_validation/reproducible/config_change",
+      "manifest": "egs/rir_generation/exp/rir_realism/m6/rir_m6_hardening_validation/reproducible/config_change/rir_bank_manifest.json",
+      "audit": "egs/rir_generation/exp/rir_realism/m6/rir_m6_hardening_validation/reproducible/config_change/rir_bank_generation_audit.json",
+      "manifest_sha256": "96403af47a35eb4954787c64719e8097c0b10654b356f508b0e01afbb5548952",
+      "generation_run": {
+        "task_count": 6,
+        "resume_requested": true,
+        "items_skipped_as_complete": 0,
+        "items_generated": 6,
+        "num_workers": 1
+      },
+      "stdout_summary": [
+        "[generate_hybrid_rir] resume: 0 already generated, 6 remaining (of 6).",
+        "[generate_hybrid_rir] M6 manifest 96403af47a35eb4954787c64719e8097c0b10654b356f508b0e01afbb5548952; 6 items; audit PASS."
+      ]
+    },
+    "changed_code_revision": {
+      "root": "egs/rir_generation/exp/rir_realism/m6/rir_m6_hardening_validation/reproducible/code_change",
+      "manifest": "egs/rir_generation/exp/rir_realism/m6/rir_m6_hardening_validation/reproducible/code_change/rir_bank_manifest.json",
+      "audit": "egs/rir_generation/exp/rir_realism/m6/rir_m6_hardening_validation/reproducible/code_change/rir_bank_generation_audit.json",
+      "manifest_sha256": "db974b3e91fbf1da862bae15df011f7fd7b30ece3062b663fbf7f50001508209",
+      "generation_run": {
+        "task_count": 6,
+        "resume_requested": true,
+        "items_skipped_as_complete": 0,
+        "items_generated": 6,
+        "num_workers": 2
+      },
+      "stdout_summary": [
+        "[generate_hybrid_rir] resume: 0 already generated, 6 remaining (of 6).",
+        "[generate_hybrid_rir] M6 manifest db974b3e91fbf1da862bae15df011f7fd7b30ece3062b663fbf7f50001508209; 6 items; audit PASS."
+      ]
+    }
+  },
+  "checks": {
+    "serial_generation_audit_passed": true,
+    "fresh_repeat_generation_audit_passed": true,
+    "serial_fresh_repeat_manifest_and_item_hashes_match": true,
+    "parallel_generation_audit_passed": true,
+    "serial_parallel_manifest_hashes_match": true,
+    "serial_parallel_item_content_hashes_match": true,
+    "serial_parallel_task_plan_hashes_match": true,
+    "all_splits_are_present_and_disjoint": true,
+    "tampered_item_is_the_only_resume_regeneration": true,
+    "resume_restores_exact_manifest_and_assets": true,
+    "config_change_invalidates_every_old_item": true,
+    "config_change_produces_new_manifest_and_frame_count": true,
+    "code_revision_change_invalidates_every_old_item": true,
+    "code_revision_change_is_recorded_in_manifest": true,
+    "changed_seed_changes_every_item_seed": true,
+    "split_indexes_and_task_plan_are_content_addressed": true,
+    "release_remains_draft_and_not_production_ready": true
+  },
+  "exit": {
+    "passed": true,
+    "m6_2_reproducible_generator_integration_complete": true,
+    "production_bank_complete": false,
+    "next_milestone": "M6.3 per-item QC and quarantine"
+  }
+}

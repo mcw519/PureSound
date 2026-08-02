@@ -1,0 +1,99 @@
+{
+  "schema_version": 1,
+  "name": "hybrid_rir_material_modal_m2_experimental",
+  "status": "m2_active_not_production",
+  "base_configuration": "egs/rir_generation/phases/m1_material/config/material_v1.json",
+  "generator_overrides": {
+    "scene_version": "v1",
+    "low_backend_cpu": "pytard-material",
+    "low_backend_gpu": "pytard-cupy-material",
+    "low_backend_smoke": "analytic-material",
+    "output_mode": "calibrated",
+    "record_realized_metrics": true
+  },
+  "corrected_paired_probe": {
+    "m1_bank": "egs/rir_generation/exp/rir_realism/m1/rir_m1_probe100_physical_dense_paired",
+    "m2_bank": "egs/rir_generation/exp/rir_realism/m2/rir_m2_probe100_physical_dense_paired",
+    "m2_scalar_diagnostic_bank": "egs/rir_generation/exp/rir_realism/m2/rir_m2_probe100_physical_dense_scale058_paired",
+    "seed": 1337,
+    "num_rooms": 20,
+    "rir_per_room": 5,
+    "sample_rate_hz": 16000,
+    "duration_s": 1.0,
+    "num_obstacles": [1, 4],
+    "max_image_source_order": 8,
+    "num_rays": 2000,
+    "low_backends": [
+      "analytic",
+      "analytic-material",
+      "analytic-material with loss scale 0.58"
+    ],
+    "mode_excitation_model": "rectangular_eigenfunction_source_receiver_coupling",
+    "mode_index_limit": 5,
+    "max_modes": 256,
+    "scene_and_config_matches": 100,
+    "development_measured_seed": 0,
+    "item_heldout_measured_seed": 1,
+    "measured_item_overlap": 0,
+    "split_limitation": "item-disjoint, not proven room-disjoint"
+  },
+  "modal_model": {
+    "equation": "q_n'' + 2 gamma_n q_n' + omega_n^2 q_n = f_n",
+    "boundary_participation": "rigid-wall cosine-mode surface integral divided by volume norm",
+    "amplitude_decay_rate": "gamma_n = loss_scale * sound_speed * weighted_absorption_participation / 8",
+    "rt60": "ln(1000) / gamma_n",
+    "quality_factor": "omega_n / (2 * gamma_n)",
+    "discretization": "exact underdamped sampled poles with zero-order-held forcing",
+    "global_rt60_envelope": false
+  },
+  "completed_validation": [
+    "mode-dependent RT60 and Q metadata",
+    "single-surface participation selectivity",
+    "exact-recurrence absorbing-versus-reflective late-energy test",
+    "end-to-end analytic-material CLI smoke",
+    "legacy undamped recurrence regression tests",
+    "independent 3D FDTD frequency and Q comparison",
+    "analytic modal-node, reciprocity, and causality tests",
+    "complete default 0-5 modal index coverage without the legacy first-64 truncation",
+    "100-channel paired development and zero-item-overlap measured comparisons"
+  ],
+  "latest_gate_result": {
+    "status": "failed_material_modal_loss_mapping",
+    "development_report": "egs/rir_generation/exp/rir_realism/m2/rir_benchmark_m2/modal_acoustics_dense_dev.json",
+    "item_heldout_report": "egs/rir_generation/exp/rir_realism/m2/rir_benchmark_m2/modal_acoustics_dense_item_heldout.json",
+    "heldout_normalized_wasserstein": {
+      "corrected_m1": {
+        "q": 0.087,
+        "spacing": 0.080,
+        "bandwidth": 0.183,
+        "peak_count": 0.280
+      },
+      "m2_loss_scale_1": {
+        "q": 0.505,
+        "spacing": 0.614,
+        "bandwidth": 0.364,
+        "peak_count": 0.325
+      },
+      "m2_loss_scale_0_58": {
+        "q": 0.304,
+        "spacing": 0.183,
+        "bandwidth": 0.270,
+        "peak_count": 0.387
+      }
+    },
+    "accepted_probe_changes": [
+      "reciprocal eigenfunction source-receiver coupling",
+      "causal zero-phase modal onset",
+      "256-mode cap covering all default index triplets"
+    ],
+    "rejected_model_changes": [
+      "diffuse absorption coefficients used directly as modal boundary loss",
+      "global scalar modal-loss calibration"
+    ]
+  },
+  "pending_exit_gates": [
+    "low-frequency complex-impedance boundary prior",
+    "true room-disjoint measured low-band distribution improvement",
+    "fixed downstream synthetic-to-real training result"
+  ]
+}

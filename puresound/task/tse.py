@@ -38,6 +38,7 @@ class TargetSpeakerExtractDataset(DynamicBaseDataset):
         augmentation_hpf_args: Optional[Dict] = None,
         augmentation_volume_args: Optional[Dict] = None,
         vad_label_args: Optional[Dict] = None,
+        dataset_role: str = "train",
     ):
         super().__init__(
             metafile_path=metafile_path,
@@ -55,6 +56,7 @@ class TargetSpeakerExtractDataset(DynamicBaseDataset):
             augmentation_hpf_args=augmentation_hpf_args,
             augmentation_volume_args=augmentation_volume_args,
             vad_label_args=vad_label_args,
+            dataset_role=dataset_role,
         )
         self.enroll_speech_args = enroll_speech_args
         self.init_enroll_augmentor()

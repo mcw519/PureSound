@@ -1,0 +1,71 @@
+{
+  "schema_version": "puresound.m4_exit.v1",
+  "milestone": "M4",
+  "scope": "implementation_exit_with_separate_empirical_status",
+  "expected_stages": [
+    "M4.1",
+    "M4.2",
+    "M4.3",
+    "M4.4",
+    "M4.5",
+    "M4.6"
+  ],
+  "input_reports": {
+    "M4.1": "egs/rir_generation/phases/m4_spatial_late_field/reports/m4_late_field_baseline.json",
+    "M4.2": "egs/rir_generation/phases/m4_spatial_late_field/reports/m4_multiband_late_field.json",
+    "M4.3": "egs/rir_generation/phases/m4_spatial_late_field/reports/m4_multiband_fdn_report.json",
+    "M4.4": "egs/rir_generation/phases/m4_spatial_late_field/reports/m4_path_event_fdn_coupling_report.json",
+    "M4.5": "egs/rir_generation/phases/m4_spatial_late_field/reports/m4_spatial_rir_report.json",
+    "M4.6": "egs/rir_generation/phases/m4_spatial_late_field/reports/m4_binaural_brir_report.json"
+  },
+  "stage_identity": {
+    "M4.1": true,
+    "M4.2": true,
+    "M4.3": true,
+    "M4.4": true,
+    "M4.5": true,
+    "M4.6": true
+  },
+  "stage_gates": {
+    "M4.1_measurement_foundation_present": true,
+    "M4.2_multiband_spatial_contract_present": true,
+    "M4.3_multiband_fdn_passed": true,
+    "M4.4_early_late_coupling_passed": true,
+    "M4.5_spatial_array_ambisonic_passed": true,
+    "M4.6_directivity_brir_api_passed": true
+  },
+  "artifact_checks": {
+    "receiver_array_rir": true,
+    "ambisonic_rir": true,
+    "analytic_brir": true
+  },
+  "artifact_paths": {
+    "receiver_array_rir": "egs/rir_generation/exp/rir_realism/m4/rir_m4_spatial/m4_spatial_receiver_rir_2ch.wav",
+    "ambisonic_rir": "egs/rir_generation/exp/rir_realism/m4/rir_m4_spatial/m4_spatial_ambisonic_rir_4ch.wav",
+    "analytic_brir": "egs/rir_generation/exp/rir_realism/m4/rir_m4_spatial/m4_analytic_brir_2ch.wav"
+  },
+  "invariant_checks": {
+    "production_default_unchanged": true,
+    "measured_hrtf_not_falsely_bundled": true,
+    "measured_spatial_exit_not_falsely_claimed": true
+  },
+  "implementation_exit": {
+    "passed": true,
+    "m4_1_through_m4_6_complete": true,
+    "spatial_renderer_available_as_explicit_opt_in": true
+  },
+  "empirical_exit": {
+    "passed": false,
+    "missing_evidence": [
+      "measured synchronized multi-receiver RIR validation",
+      "licensed measured HRTF decoder calibration",
+      "controlled listening test for metallic coloration and spatial plausibility"
+    ]
+  },
+  "production_enablement": {
+    "ready": false,
+    "default_backend": "pyroomacoustics",
+    "m4_renderer": "explicit opt-in API/CLI",
+    "reason": "implementation gates pass, while measured spatial, licensed HRTF, and controlled-listening evidence remains open"
+  }
+}

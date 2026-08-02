@@ -1,0 +1,58 @@
+{
+  "schema_version": "puresound.scene_interactions_validation.v1",
+  "configuration": {
+    "visibility_geometry": "closed_vertical_prisms",
+    "scattering_reference_hz": 1000.0,
+    "scattering_branch_count": 4,
+    "diffraction_reference_hz": 1000.0,
+    "maximum_diffraction_edges_per_object": 2
+  },
+  "geometry": {
+    "blocked_direct_visible": false,
+    "lit_direct_visible": true,
+    "direct_object_interval": [
+      0.3333333333333333,
+      0.6666666666666666
+    ],
+    "blocked_event_count": 4
+  },
+  "interactions": {
+    "transmission_event_count": 1,
+    "diffraction_event_count": 2,
+    "scattering_event_count": 12,
+    "scattering_energy_partition_sums": {
+      "source->receiver:image:-1,+0,+0": 1.0,
+      "source->receiver:image:+0,-1,+0": 1.0,
+      "source->receiver:image:+0,+0,-1": 1.0,
+      "source->receiver:image:+0,+0,+1": 1.0,
+      "source->receiver:image:+0,+1,+0": 1.0,
+      "source->receiver:image:+1,+0,+0": 1.0
+    },
+    "transmission_pressure_gain": 0.16666666666666666
+  },
+  "reciprocity": {
+    "forward_event_count": 22,
+    "reverse_event_count": 22,
+    "maximum_distance_error_m": 0.0
+  },
+  "acceptance": {
+    "visibility_accepted": true,
+    "transmission_accepted": true,
+    "diffraction_accepted": true,
+    "controlled_scattering_accepted": true,
+    "reciprocity_accepted": true,
+    "serialization_accepted": true,
+    "rendering_accepted": true,
+    "m3_scene_interactions_accepted": true,
+    "production_default_changed": false
+  },
+  "scope": {
+    "general_mesh_tracer": false,
+    "vertical_prism_furniture": true,
+    "straight_through_energy_transmission": true,
+    "reference_frequency_shadow_edge_diffraction": true,
+    "first_order_deterministic_surface_scattering": true,
+    "models_are_opt_in": true
+  },
+  "decision": "accept_opt_in_m3_scene_interactions"
+}

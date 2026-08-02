@@ -1,6 +1,6 @@
 """Build a real end-to-end far-field POOL manifest from VOiCES distant recordings.
 
-Unlike ``egs/rir_generation/real_rir_to_bank.py`` (which emits RIRs to CONVOLVE
+Unlike ``egs/rir_generation/tools/measured/real_rir_to_bank.py`` (which emits RIRs to CONVOLVE
 with clean speech), this indexes FINISHED far-field waveforms -- loudspeaker ->
 air -> mic recordings that already carry a whole capture chain, including the
 parts an RIR convolution cannot reproduce (transducer non-linearity, directivity,

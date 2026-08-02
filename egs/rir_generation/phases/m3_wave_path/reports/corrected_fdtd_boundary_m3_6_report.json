@@ -1,0 +1,679 @@
+{
+  "schema_version": "puresound.corrected_fdtd_boundary_validation.v1",
+  "boundary_config": "egs/rir_generation/phases/m2_impedance/config/impedance_reference_glass_wool_14kgm3_100mm.json",
+  "boundary_reference_id": "uniform_glass_wool_14kgm3_100mm_miki_relaxation_validation",
+  "full_room_report": "egs/rir_generation/phases/m3_wave_path/reports/full_room_crossover_m3_3_report.json",
+  "frequency_band_hz": [
+    168.0,
+    300.0
+  ],
+  "configuration": {
+    "boundary_config": "egs/rir_generation/phases/m2_impedance/config/impedance_reference_glass_wool_14kgm3_100mm.json",
+    "full_room_report": "egs/rir_generation/phases/m3_wave_path/reports/full_room_crossover_m3_3_report.json",
+    "path_event_sample_rate_hz": 8000,
+    "maximum_complex_error": 0.02,
+    "maximum_magnitude_error_db": 0.1,
+    "maximum_phase_error_deg": 1.0,
+    "maximum_time_domain_complex_error": 0.02,
+    "maximum_time_domain_phase_error_deg": 1.0
+  },
+  "schemes": {
+    "cell_center": {
+      "scheme": "cell_center",
+      "canonical_direction_count": 117,
+      "actual_early_representative_direction_count": 63,
+      "canonical_fdtd_vs_continuous": {
+        "worst_maximum_complex_error": 0.12376406707471199,
+        "worst_maximum_magnitude_error_db": 0.47490686321735864,
+        "worst_maximum_phase_error_deg": 7.679881820453958,
+        "mean_of_mean_complex_error": 0.0579128138976499,
+        "mean_of_mean_magnitude_error_db": 0.13377434994120496,
+        "mean_of_mean_phase_error_deg": 4.294021370150836
+      },
+      "canonical_fdtd_vs_dispersion_matched": {
+        "worst_maximum_complex_error": 0.07269197209289856,
+        "worst_maximum_magnitude_error_db": 0.3282642924230167,
+        "worst_maximum_phase_error_deg": 6.424163679875168,
+        "mean_of_mean_complex_error": 0.03977591676742446,
+        "mean_of_mean_magnitude_error_db": 0.0765239698688331,
+        "mean_of_mean_phase_error_deg": 3.1054546468906477
+      },
+      "actual_early_fdtd_vs_continuous": {
+        "worst_maximum_complex_error": 0.16647698233092084,
+        "worst_maximum_magnitude_error_db": 0.6557839998197563,
+        "worst_maximum_phase_error_deg": 9.75308674103573,
+        "mean_of_mean_complex_error": 0.057417887703947665,
+        "mean_of_mean_magnitude_error_db": 0.14630929079805008,
+        "mean_of_mean_phase_error_deg": 4.258467717518343
+      },
+      "actual_early_fdtd_vs_dispersion_matched": {
+        "worst_maximum_complex_error": 0.07279792086550793,
+        "worst_maximum_magnitude_error_db": 0.3281706937624832,
+        "worst_maximum_phase_error_deg": 6.476630594367214,
+        "mean_of_mean_complex_error": 0.04208535076858098,
+        "mean_of_mean_magnitude_error_db": 0.09666583081719705,
+        "mean_of_mean_phase_error_deg": 3.286386161012972
+      },
+      "maximum_canonical_reflection_magnitude": 0.868348057572133,
+      "maximum_actual_early_reflection_magnitude": 0.9002503042425585,
+      "early_path_geometry": [
+        {
+          "case_id": "room_a_train_0",
+          "early_reflection_event_count": 2584,
+          "later_reflection_event_count": 40,
+          "axis_interactions": {
+            "0": {
+              "interaction_count": 7752,
+              "incidence_cosine_quantiles": {
+                "0": 0.12945110443690114,
+                "0.1": 0.43998234086140275,
+                "0.25": 0.6902926743944279,
+                "0.5": 0.8892314456344881,
+                "0.75": 0.967517393358014,
+                "0.9": 0.9899801187768765,
+                "1": 0.999217233946589
+              },
+              "representative_sample_count": 7
+            },
+            "1": {
+              "interaction_count": 8134,
+              "incidence_cosine_quantiles": {
+                "0": 0.07383559131219325,
+                "0.1": 0.26106707746950947,
+                "0.25": 0.4738014396166755,
+                "0.5": 0.7456501472739739,
+                "0.75": 0.9210125111884683,
+                "0.9": 0.9774701725336512,
+                "1": 0.9978278006363132
+              },
+              "representative_sample_count": 7
+            },
+            "2": {
+              "interaction_count": 8140,
+              "incidence_cosine_quantiles": {
+                "0": 0.05710469338380127,
+                "0.1": 0.18792440792382287,
+                "0.25": 0.3525416224130917,
+                "0.5": 0.6156357662713825,
+                "0.75": 0.8505719808525778,
+                "0.9": 0.9568978687021608,
+                "1": 0.9958711522052137
+              },
+              "representative_sample_count": 7
+            }
+          }
+        },
+        {
+          "case_id": "room_a_position_holdout_0",
+          "early_reflection_event_count": 2589,
+          "later_reflection_event_count": 35,
+          "axis_interactions": {
+            "0": {
+              "interaction_count": 7800,
+              "incidence_cosine_quantiles": {
+                "0": 0.12941971519702508,
+                "0.1": 0.4328722643294945,
+                "0.25": 0.6921270195820813,
+                "0.5": 0.8897146241661027,
+                "0.75": 0.967978078406015,
+                "0.9": 0.9891121039905062,
+                "1": 0.9996021489471602
+              },
+              "representative_sample_count": 7
+            },
+            "1": {
+              "interaction_count": 8140,
+              "incidence_cosine_quantiles": {
+                "0": 0.07376954281303945,
+                "0.1": 0.266561610105066,
+                "0.25": 0.4702115765683991,
+                "0.5": 0.7481128603467433,
+                "0.75": 0.9202432427336876,
+                "0.9": 0.9775683666306481,
+                "1": 0.99579956819816
+              },
+              "representative_sample_count": 7
+            },
+            "2": {
+              "interaction_count": 8142,
+              "incidence_cosine_quantiles": {
+                "0": 0.056343577129818946,
+                "0.1": 0.18437938256427794,
+                "0.25": 0.35266905624769534,
+                "0.5": 0.6166589035028872,
+                "0.75": 0.8505719808525778,
+                "0.9": 0.9550008382462569,
+                "1": 0.9944075248956645
+              },
+              "representative_sample_count": 7
+            }
+          }
+        },
+        {
+          "case_id": "room_c_room_holdout_0",
+          "early_reflection_event_count": 2611,
+          "later_reflection_event_count": 13,
+          "axis_interactions": {
+            "0": {
+              "interaction_count": 8020,
+              "incidence_cosine_quantiles": {
+                "0": 0.10940440204154049,
+                "0.1": 0.3779838014695026,
+                "0.25": 0.625928565193202,
+                "0.5": 0.8570642994085937,
+                "0.75": 0.9579681270941163,
+                "0.9": 0.9889057834623888,
+                "1": 0.9990208688156105
+              },
+              "representative_sample_count": 7
+            },
+            "1": {
+              "interaction_count": 8158,
+              "incidence_cosine_quantiles": {
+                "0": 0.07785577415878377,
+                "0.1": 0.2827656114817293,
+                "0.25": 0.5117644777487425,
+                "0.5": 0.7822516034206036,
+                "0.75": 0.9347880279810947,
+                "0.9": 0.9818746795616035,
+                "1": 0.9982108104978972
+              },
+              "representative_sample_count": 7
+            },
+            "2": {
+              "interaction_count": 8160,
+              "incidence_cosine_quantiles": {
+                "0": 0.06140737116749144,
+                "0.1": 0.21365855324763053,
+                "0.25": 0.39394208342039566,
+                "0.5": 0.6685095152495022,
+                "0.75": 0.8773243679763426,
+                "0.9": 0.9671689459987886,
+                "1": 0.9965965232870392
+              },
+              "representative_sample_count": 7
+            }
+          }
+        }
+      ]
+    },
+    "face_extrapolated": {
+      "scheme": "face_extrapolated",
+      "canonical_direction_count": 117,
+      "actual_early_representative_direction_count": 63,
+      "canonical_fdtd_vs_continuous": {
+        "worst_maximum_complex_error": 0.0912032310314116,
+        "worst_maximum_magnitude_error_db": 0.4864059631518072,
+        "worst_maximum_phase_error_deg": 5.20390153667913,
+        "mean_of_mean_complex_error": 0.028515016283965144,
+        "mean_of_mean_magnitude_error_db": 0.23447412396399192,
+        "mean_of_mean_phase_error_deg": 1.2175521706677148
+      },
+      "canonical_fdtd_vs_dispersion_matched": {
+        "worst_maximum_complex_error": 0.029339166333267084,
+        "worst_maximum_magnitude_error_db": 0.3084526825776793,
+        "worst_maximum_phase_error_deg": 1.7000366385717889,
+        "mean_of_mean_complex_error": 0.015501370048733906,
+        "mean_of_mean_magnitude_error_db": 0.1757805522715441,
+        "mean_of_mean_phase_error_deg": 0.4271100821497308
+      },
+      "actual_early_fdtd_vs_continuous": {
+        "worst_maximum_complex_error": 0.1390395721599124,
+        "worst_maximum_magnitude_error_db": 0.6618002473512568,
+        "worst_maximum_phase_error_deg": 7.767312795528727,
+        "mean_of_mean_complex_error": 0.029630218981616507,
+        "mean_of_mean_magnitude_error_db": 0.2419185714528835,
+        "mean_of_mean_phase_error_deg": 1.3232946077335803
+      },
+      "actual_early_fdtd_vs_dispersion_matched": {
+        "worst_maximum_complex_error": 0.029329805564980747,
+        "worst_maximum_magnitude_error_db": 0.30844008878423723,
+        "worst_maximum_phase_error_deg": 1.699115539248349,
+        "mean_of_mean_complex_error": 0.01733453724047776,
+        "mean_of_mean_magnitude_error_db": 0.19131794520414877,
+        "mean_of_mean_phase_error_deg": 0.5842424785048553
+      },
+      "maximum_canonical_reflection_magnitude": 0.867786251747285,
+      "maximum_actual_early_reflection_magnitude": 0.9000271272216573,
+      "early_path_geometry": [
+        {
+          "case_id": "room_a_train_0",
+          "early_reflection_event_count": 2584,
+          "later_reflection_event_count": 40,
+          "axis_interactions": {
+            "0": {
+              "interaction_count": 7752,
+              "incidence_cosine_quantiles": {
+                "0": 0.12945110443690114,
+                "0.1": 0.43998234086140275,
+                "0.25": 0.6902926743944279,
+                "0.5": 0.8892314456344881,
+                "0.75": 0.967517393358014,
+                "0.9": 0.9899801187768765,
+                "1": 0.999217233946589
+              },
+              "representative_sample_count": 7
+            },
+            "1": {
+              "interaction_count": 8134,
+              "incidence_cosine_quantiles": {
+                "0": 0.07383559131219325,
+                "0.1": 0.26106707746950947,
+                "0.25": 0.4738014396166755,
+                "0.5": 0.7456501472739739,
+                "0.75": 0.9210125111884683,
+                "0.9": 0.9774701725336512,
+                "1": 0.9978278006363132
+              },
+              "representative_sample_count": 7
+            },
+            "2": {
+              "interaction_count": 8140,
+              "incidence_cosine_quantiles": {
+                "0": 0.05710469338380127,
+                "0.1": 0.18792440792382287,
+                "0.25": 0.3525416224130917,
+                "0.5": 0.6156357662713825,
+                "0.75": 0.8505719808525778,
+                "0.9": 0.9568978687021608,
+                "1": 0.9958711522052137
+              },
+              "representative_sample_count": 7
+            }
+          }
+        },
+        {
+          "case_id": "room_a_position_holdout_0",
+          "early_reflection_event_count": 2589,
+          "later_reflection_event_count": 35,
+          "axis_interactions": {
+            "0": {
+              "interaction_count": 7800,
+              "incidence_cosine_quantiles": {
+                "0": 0.12941971519702508,
+                "0.1": 0.4328722643294945,
+                "0.25": 0.6921270195820813,
+                "0.5": 0.8897146241661027,
+                "0.75": 0.967978078406015,
+                "0.9": 0.9891121039905062,
+                "1": 0.9996021489471602
+              },
+              "representative_sample_count": 7
+            },
+            "1": {
+              "interaction_count": 8140,
+              "incidence_cosine_quantiles": {
+                "0": 0.07376954281303945,
+                "0.1": 0.266561610105066,
+                "0.25": 0.4702115765683991,
+                "0.5": 0.7481128603467433,
+                "0.75": 0.9202432427336876,
+                "0.9": 0.9775683666306481,
+                "1": 0.99579956819816
+              },
+              "representative_sample_count": 7
+            },
+            "2": {
+              "interaction_count": 8142,
+              "incidence_cosine_quantiles": {
+                "0": 0.056343577129818946,
+                "0.1": 0.18437938256427794,
+                "0.25": 0.35266905624769534,
+                "0.5": 0.6166589035028872,
+                "0.75": 0.8505719808525778,
+                "0.9": 0.9550008382462569,
+                "1": 0.9944075248956645
+              },
+              "representative_sample_count": 7
+            }
+          }
+        },
+        {
+          "case_id": "room_c_room_holdout_0",
+          "early_reflection_event_count": 2611,
+          "later_reflection_event_count": 13,
+          "axis_interactions": {
+            "0": {
+              "interaction_count": 8020,
+              "incidence_cosine_quantiles": {
+                "0": 0.10940440204154049,
+                "0.1": 0.3779838014695026,
+                "0.25": 0.625928565193202,
+                "0.5": 0.8570642994085937,
+                "0.75": 0.9579681270941163,
+                "0.9": 0.9889057834623888,
+                "1": 0.9990208688156105
+              },
+              "representative_sample_count": 7
+            },
+            "1": {
+              "interaction_count": 8158,
+              "incidence_cosine_quantiles": {
+                "0": 0.07785577415878377,
+                "0.1": 0.2827656114817293,
+                "0.25": 0.5117644777487425,
+                "0.5": 0.7822516034206036,
+                "0.75": 0.9347880279810947,
+                "0.9": 0.9818746795616035,
+                "1": 0.9982108104978972
+              },
+              "representative_sample_count": 7
+            },
+            "2": {
+              "interaction_count": 8160,
+              "incidence_cosine_quantiles": {
+                "0": 0.06140737116749144,
+                "0.1": 0.21365855324763053,
+                "0.25": 0.39394208342039566,
+                "0.5": 0.6685095152495022,
+                "0.75": 0.8773243679763426,
+                "0.9": 0.9671689459987886,
+                "1": 0.9965965232870392
+              },
+              "representative_sample_count": 7
+            }
+          }
+        }
+      ]
+    },
+    "face_time_extrapolated": {
+      "scheme": "face_time_extrapolated",
+      "canonical_direction_count": 117,
+      "actual_early_representative_direction_count": 63,
+      "canonical_fdtd_vs_continuous": {
+        "worst_maximum_complex_error": 0.09066735194277618,
+        "worst_maximum_magnitude_error_db": 0.38689026594110393,
+        "worst_maximum_phase_error_deg": 5.478107508852163,
+        "mean_of_mean_complex_error": 0.020438323988008572,
+        "mean_of_mean_magnitude_error_db": 0.060876526519621395,
+        "mean_of_mean_phase_error_deg": 1.377927007887246
+      },
+      "canonical_fdtd_vs_dispersion_matched": {
+        "worst_maximum_complex_error": 0.02374406598393129,
+        "worst_maximum_magnitude_error_db": 0.03386866231097037,
+        "worst_maximum_phase_error_deg": 2.1018913504000376,
+        "mean_of_mean_complex_error": 0.004818699066110839,
+        "mean_of_mean_magnitude_error_db": 0.006433464256913928,
+        "mean_of_mean_phase_error_deg": 0.39311837851252696
+      },
+      "actual_early_fdtd_vs_continuous": {
+        "worst_maximum_complex_error": 0.13901235278227184,
+        "worst_maximum_magnitude_error_db": 0.581769548253481,
+        "worst_maximum_phase_error_deg": 7.994910934658918,
+        "mean_of_mean_complex_error": 0.022372732490415697,
+        "mean_of_mean_magnitude_error_db": 0.06103419115458356,
+        "mean_of_mean_phase_error_deg": 1.5402142053358667
+      },
+      "actual_early_fdtd_vs_dispersion_matched": {
+        "worst_maximum_complex_error": 0.023729078348929636,
+        "worst_maximum_magnitude_error_db": 0.03381599532969608,
+        "worst_maximum_phase_error_deg": 2.10074167800942,
+        "mean_of_mean_complex_error": 0.0084126056796118,
+        "mean_of_mean_magnitude_error_db": 0.013257741856080796,
+        "mean_of_mean_phase_error_deg": 0.6794787098331645
+      },
+      "maximum_canonical_reflection_magnitude": 0.875172979300648,
+      "maximum_actual_early_reflection_magnitude": 0.9056827441644705,
+      "early_path_geometry": [
+        {
+          "case_id": "room_a_train_0",
+          "early_reflection_event_count": 2584,
+          "later_reflection_event_count": 40,
+          "axis_interactions": {
+            "0": {
+              "interaction_count": 7752,
+              "incidence_cosine_quantiles": {
+                "0": 0.12945110443690114,
+                "0.1": 0.43998234086140275,
+                "0.25": 0.6902926743944279,
+                "0.5": 0.8892314456344881,
+                "0.75": 0.967517393358014,
+                "0.9": 0.9899801187768765,
+                "1": 0.999217233946589
+              },
+              "representative_sample_count": 7
+            },
+            "1": {
+              "interaction_count": 8134,
+              "incidence_cosine_quantiles": {
+                "0": 0.07383559131219325,
+                "0.1": 0.26106707746950947,
+                "0.25": 0.4738014396166755,
+                "0.5": 0.7456501472739739,
+                "0.75": 0.9210125111884683,
+                "0.9": 0.9774701725336512,
+                "1": 0.9978278006363132
+              },
+              "representative_sample_count": 7
+            },
+            "2": {
+              "interaction_count": 8140,
+              "incidence_cosine_quantiles": {
+                "0": 0.05710469338380127,
+                "0.1": 0.18792440792382287,
+                "0.25": 0.3525416224130917,
+                "0.5": 0.6156357662713825,
+                "0.75": 0.8505719808525778,
+                "0.9": 0.9568978687021608,
+                "1": 0.9958711522052137
+              },
+              "representative_sample_count": 7
+            }
+          }
+        },
+        {
+          "case_id": "room_a_position_holdout_0",
+          "early_reflection_event_count": 2589,
+          "later_reflection_event_count": 35,
+          "axis_interactions": {
+            "0": {
+              "interaction_count": 7800,
+              "incidence_cosine_quantiles": {
+                "0": 0.12941971519702508,
+                "0.1": 0.4328722643294945,
+                "0.25": 0.6921270195820813,
+                "0.5": 0.8897146241661027,
+                "0.75": 0.967978078406015,
+                "0.9": 0.9891121039905062,
+                "1": 0.9996021489471602
+              },
+              "representative_sample_count": 7
+            },
+            "1": {
+              "interaction_count": 8140,
+              "incidence_cosine_quantiles": {
+                "0": 0.07376954281303945,
+                "0.1": 0.266561610105066,
+                "0.25": 0.4702115765683991,
+                "0.5": 0.7481128603467433,
+                "0.75": 0.9202432427336876,
+                "0.9": 0.9775683666306481,
+                "1": 0.99579956819816
+              },
+              "representative_sample_count": 7
+            },
+            "2": {
+              "interaction_count": 8142,
+              "incidence_cosine_quantiles": {
+                "0": 0.056343577129818946,
+                "0.1": 0.18437938256427794,
+                "0.25": 0.35266905624769534,
+                "0.5": 0.6166589035028872,
+                "0.75": 0.8505719808525778,
+                "0.9": 0.9550008382462569,
+                "1": 0.9944075248956645
+              },
+              "representative_sample_count": 7
+            }
+          }
+        },
+        {
+          "case_id": "room_c_room_holdout_0",
+          "early_reflection_event_count": 2611,
+          "later_reflection_event_count": 13,
+          "axis_interactions": {
+            "0": {
+              "interaction_count": 8020,
+              "incidence_cosine_quantiles": {
+                "0": 0.10940440204154049,
+                "0.1": 0.3779838014695026,
+                "0.25": 0.625928565193202,
+                "0.5": 0.8570642994085937,
+                "0.75": 0.9579681270941163,
+                "0.9": 0.9889057834623888,
+                "1": 0.9990208688156105
+              },
+              "representative_sample_count": 7
+            },
+            "1": {
+              "interaction_count": 8158,
+              "incidence_cosine_quantiles": {
+                "0": 0.07785577415878377,
+                "0.1": 0.2827656114817293,
+                "0.25": 0.5117644777487425,
+                "0.5": 0.7822516034206036,
+                "0.75": 0.9347880279810947,
+                "0.9": 0.9818746795616035,
+                "1": 0.9982108104978972
+              },
+              "representative_sample_count": 7
+            },
+            "2": {
+              "interaction_count": 8160,
+              "incidence_cosine_quantiles": {
+                "0": 0.06140737116749144,
+                "0.1": 0.21365855324763053,
+                "0.25": 0.39394208342039566,
+                "0.5": 0.6685095152495022,
+                "0.75": 0.8773243679763426,
+                "0.9": 0.9671689459987886,
+                "1": 0.9965965232870392
+              },
+              "representative_sample_count": 7
+            }
+          }
+        }
+      ]
+    }
+  },
+  "time_domain_normal_incidence_cross_ratio": {
+    "cell_center": {
+      "boundary_pressure_scheme": "cell_center",
+      "geometry": {
+        "grid_spacing_m": 0.05917159763313609,
+        "source_cell_center_m": 15.0,
+        "receiver_cell_center_m": 10.029585798816568,
+        "sample_rate_hz": 29827.151524757657,
+        "time_step_s": 3.352650014769135e-05
+      },
+      "first_floor_reflection_center_s": 0.09297255334931945,
+      "window_s": [
+        0.06797255334931945,
+        0.16797255334931943
+      ],
+      "minimum_relative_cross_ratio_denominator": 0.03337808629014243,
+      "measured_vs_predicted_discrete_cross_ratio": {
+        "maximum_complex_error": 0.00010767384123487046,
+        "maximum_complex_error_frequency_hz": 183.0,
+        "maximum_magnitude_error_db": 0.0006695577450082101,
+        "maximum_magnitude_error_frequency_hz": 183.5,
+        "maximum_phase_error_deg": 0.004800338484211889,
+        "maximum_phase_error_frequency_hz": 183.0,
+        "mean_complex_error": 4.250286354699093e-05,
+        "mean_magnitude_error_db": 0.0002027106515191234,
+        "mean_phase_error_deg": 0.0016123720430286869
+      }
+    },
+    "face_extrapolated": {
+      "boundary_pressure_scheme": "face_extrapolated",
+      "geometry": {
+        "grid_spacing_m": 0.05917159763313609,
+        "source_cell_center_m": 15.0,
+        "receiver_cell_center_m": 10.029585798816568,
+        "sample_rate_hz": 29827.151524757657,
+        "time_step_s": 3.352650014769135e-05
+      },
+      "first_floor_reflection_center_s": 0.09297255334931945,
+      "window_s": [
+        0.06797255334931945,
+        0.16797255334931943
+      ],
+      "minimum_relative_cross_ratio_denominator": 0.033040640244487114,
+      "measured_vs_predicted_discrete_cross_ratio": {
+        "maximum_complex_error": 0.00010450337837644384,
+        "maximum_complex_error_frequency_hz": 285.5,
+        "maximum_magnitude_error_db": 0.0007470339328888492,
+        "maximum_magnitude_error_frequency_hz": 285.5,
+        "maximum_phase_error_deg": 0.004825272469618116,
+        "maximum_phase_error_frequency_hz": 183.0,
+        "mean_complex_error": 2.471807657686636e-05,
+        "mean_magnitude_error_db": 0.00014016841837011902,
+        "mean_phase_error_deg": 0.0006489132170328705
+      }
+    },
+    "face_time_extrapolated": {
+      "boundary_pressure_scheme": "face_time_extrapolated",
+      "geometry": {
+        "grid_spacing_m": 0.05917159763313609,
+        "source_cell_center_m": 15.0,
+        "receiver_cell_center_m": 10.029585798816568,
+        "sample_rate_hz": 29827.151524757657,
+        "time_step_s": 3.352650014769135e-05
+      },
+      "first_floor_reflection_center_s": 0.09297255334931945,
+      "window_s": [
+        0.06797255334931945,
+        0.16797255334931943
+      ],
+      "minimum_relative_cross_ratio_denominator": 0.03303223339186527,
+      "measured_vs_predicted_discrete_cross_ratio": {
+        "maximum_complex_error": 0.00011006948589504437,
+        "maximum_complex_error_frequency_hz": 285.5,
+        "maximum_magnitude_error_db": 0.0007787761843052409,
+        "maximum_magnitude_error_frequency_hz": 285.5,
+        "maximum_phase_error_deg": 0.005055053967618499,
+        "maximum_phase_error_frequency_hz": 183.0,
+        "mean_complex_error": 2.5635431574419347e-05,
+        "mean_magnitude_error_db": 0.00014270912245291503,
+        "mean_phase_error_deg": 0.0006808795353319914
+      }
+    }
+  },
+  "acceptance": {
+    "maximum_complex_error": 0.02,
+    "maximum_magnitude_error_db": 0.1,
+    "maximum_phase_error_deg": 1.0,
+    "maximum_time_domain_complex_error": 0.02,
+    "maximum_time_domain_phase_error_deg": 1.0,
+    "by_scheme": {
+      "cell_center": {
+        "harmonic_continuous_parity_accepted": false,
+        "discrete_passivity_accepted": true,
+        "time_domain_equation_accepted": true,
+        "reference_candidate_accepted": false
+      },
+      "face_extrapolated": {
+        "harmonic_continuous_parity_accepted": false,
+        "discrete_passivity_accepted": true,
+        "time_domain_equation_accepted": true,
+        "reference_candidate_accepted": false
+      },
+      "face_time_extrapolated": {
+        "harmonic_continuous_parity_accepted": false,
+        "discrete_passivity_accepted": true,
+        "time_domain_equation_accepted": true,
+        "reference_candidate_accepted": false
+      }
+    },
+    "accepted_reference_candidates": []
+  },
+  "scope": {
+    "face_extrapolated": "linear extrapolation from the first two pressure-cell centers",
+    "face_time_extrapolated": "face extrapolation plus causal 1.5*p[n]-0.5*p[n-1] half-step predictor",
+    "time_domain_probe": "1D normal-incidence FDTD cross-ratio; direct and all paths without the test wall cancel algebraically",
+    "3d_time_domain_oblique_validated": false,
+    "production_default_changed": false
+  },
+  "decision": "reject_simple_extrapolation_as_complete_boundary_fix",
+  "next_action": "retain the legacy production default; simple local extrapolation cannot remove grazing-angle dispersion. Evaluate a higher-order characteristic or angle-aware boundary reference before rerunning the full-room crossover"
+}

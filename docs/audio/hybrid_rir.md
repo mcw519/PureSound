@@ -39,7 +39,10 @@ The generator creates one room item with one microphone and five sources:
 - Crossover: causal fourth-order Linkwitz-Riley filters at `1000 Hz` (Butterworth
   applied twice). The complementary low/high pass share a phase response, so the
   two independently simulated bands stay time-aligned and sum to a flat
-  magnitude while keeping the RIR causal (no pre-ringing).
+  magnitude while keeping the RIR causal (no pre-ringing). Before crossover,
+  every low-band channel is explicitly zeroed for samples before
+  `floor(distance / sound_speed * sample_rate)`; this removes finite-modal
+  numerical precursors while preserving the geometric arrival sample.
 - Furniture: random polygon-prism obstacles are stored in metadata and applied
   to the high-frequency RIR as deterministic, height-aware occlusion and
   scattering (a low obstacle does not shadow a path above its top). Obstacle
@@ -79,7 +82,7 @@ For a smoke test without running pytARD:
 
 ```bash
 python egs/rir_generation/generate_hybrid_rir.py \
-  --output-dir exp/hybrid_rir_smoke \
+  --output-dir egs/rir_generation/exp/rir_realism/m0/hybrid_rir_smoke \
   --n-rooms 2 \
   --rir-per-room 1 \
   --low-backend analytic
@@ -91,7 +94,7 @@ vendored in this repository:
 ```bash
 pip install pyroomacoustics
 python egs/rir_generation/generate_hybrid_rir.py \
-  --output-dir exp/hybrid_rir \
+  --output-dir egs/rir_generation/exp/rir_realism/m1/hybrid_rir \
   --n-rooms 1000 \
   --rir-per-room 1 \
   --low-backend pytard \
@@ -135,7 +138,7 @@ Then select the CuPy backend:
 
 ```bash
 python egs/rir_generation/generate_hybrid_rir.py \
-  --output-dir exp/hybrid_rir_gpu \
+  --output-dir egs/rir_generation/exp/rir_realism/m1/hybrid_rir_gpu \
   --n-rooms 1000 \
   --rir-per-room 4 \
   --low-backend pytard-cupy \
@@ -195,10 +198,10 @@ Use `apply_rir_to_wav.py` to convolve a dry mono/multi-channel WAV with a
 generated RIR WAV. Multi-channel dry WAVs are mixed down to mono by default.
 
 ```bash
-python egs/rir_generation/apply_rir_to_wav.py \
+python egs/rir_generation/tools/audition/apply_rir_to_wav.py \
   --wav path/to/dry.wav \
-  --rir exp/hybrid_rir/room_000000/room_000000_000000.wav \
-  --output exp/hybrid_rir/room_000000/wet_5ch.wav \
+  --rir egs/rir_generation/exp/rir_realism/m1/hybrid_rir/room_000000/room_000000_000000.wav \
+  --output egs/rir_generation/exp/rir_realism/m1/hybrid_rir/room_000000/wet_5ch.wav \
   --rir-mode full \
   --length-mode same \
   --output-layout rir-channels \
@@ -209,10 +212,10 @@ python egs/rir_generation/apply_rir_to_wav.py \
 single mono mixture, use:
 
 ```bash
-python egs/rir_generation/apply_rir_to_wav.py \
+python egs/rir_generation/tools/audition/apply_rir_to_wav.py \
   --wav path/to/dry.wav \
-  --rir exp/hybrid_rir/room_000000/room_000000_000000.wav \
-  --output exp/hybrid_rir/room_000000/wet_mono.wav \
+  --rir egs/rir_generation/exp/rir_realism/m1/hybrid_rir/room_000000/room_000000_000000.wav \
+  --output egs/rir_generation/exp/rir_realism/m1/hybrid_rir/room_000000/wet_mono.wav \
   --output-layout mono-sum \
   --peak-normalize
 ```

@@ -1,14 +1,16 @@
 #!/usr/bin/env python
-"""Visualize a generated hybrid RIR. One CLI, three subcommands:
+"""Visualize a generated hybrid RIR. One CLI, four subcommands:
 
   overview   room geometry (floor plan + 3D) + per-channel RIR waveforms + EDC
   paths      geometric sound paths to the mic (image-source reflections)
   field      illustrative 2D wave-field animation (reflection + diffraction)
+  low-field  actual low-frequency modal pressure-field animation
 
 Examples:
-  python plot_rir.py overview --rir exp/hybrid_rir_16k/room_000000/room_000000_000000.wav
+  python plot_rir.py overview --rir egs/rir_generation/exp/rir_realism/m1/hybrid_rir_16k/room_000000/room_000000_000000.wav
   python plot_rir.py paths    --rir <rir.wav> --channel 2 --order 2
   python plot_rir.py field    --rir <rir.wav> --channel 2 --nx 340 --t-ms 40 --gif
+  python plot_rir.py low-field --rir <rir.wav> --channel 0 --t-ms 80 --gif
 
 Notes:
   * Room acoustics has no *refraction* (that needs a medium gradient the
@@ -16,9 +18,13 @@ Notes:
     `field`, diffraction/scattering around furniture.
   * `field` is a standalone 2D FDTD for visualization only — NOT the pipeline's
     low-band modal solver, which runs on an empty box without obstacles.
+  * `low-field` re-runs the pipeline's modal recurrence and reconstructs one
+    physical z-slice from the modal pressure state. It is intentionally an
+    opt-in diagnostic because snapshots are not stored in normal RIR banks.
 """
 import argparse
 import json
+from dataclasses import fields as dataclass_fields
 from pathlib import Path
 
 import matplotlib
@@ -41,6 +47,47 @@ SPEED = 343.0
 def load_scene(args):
     json_path = args.json or args.rir.with_suffix(".json")
     return json.loads(json_path.read_text())
+
+
+def _scene_and_config_from_metadata(metadata, duration_s):
+    """Reconstruct the low-band scene/config needed for a field diagnostic."""
+    from puresound.audio.hybrid_rir import (
+        HybridRIRConfig,
+        HybridRIRScene,
+        PolygonObstacle,
+    )
+    from puresound.audio.rir_scene import RoomSceneV2
+
+    scene_data = metadata["scene"]
+    if scene_data.get("schema_version") == "rir_scene.v2":
+        scene = RoomSceneV2.from_dict(scene_data)
+    else:
+        obstacles = [
+            PolygonObstacle(
+                footprint=item["footprint"],
+                z_min=float(item.get("z_min", 0.0)),
+                z_max=float(item.get("z_max", scene_data["room_dim"][2])),
+                material=str(item.get("material", "unknown")),
+                absorption=float(item.get("absorption", 0.0)),
+                scattering=float(item.get("scattering", 0.0)),
+            )
+            for item in scene_data.get("obstacles", [])
+        ]
+        scene = HybridRIRScene(
+            room_dim=list(scene_data["room_dim"]),
+            rt60=float(scene_data["rt60"]),
+            mic_pos=list(scene_data["mic_pos"]),
+            source_pos=[list(item) for item in scene_data["source_pos"]],
+            source_labels=list(scene_data.get("source_labels", [])),
+            obstacles=obstacles,
+        )
+
+    allowed = {item.name for item in dataclass_fields(HybridRIRConfig)}
+    config_values = {
+        key: value for key, value in metadata["config"].items() if key in allowed
+    }
+    config_values["duration"] = float(duration_s)
+    return scene, HybridRIRConfig(**config_values)
 
 
 def load_rir(rir_path: Path):
@@ -76,7 +123,16 @@ def default_out(args, suffix: str) -> Path:
 def draw_floor_plan(ax, scene):
     room = scene["room_dim"]
     ax.add_patch(plt.Rectangle((0, 0), room[0], room[1], fill=False, ec="black", lw=1.5))
-    for obs in scene.get("obstacles", []):
+    objects = list(scene.get("obstacles", []))
+    if not objects:
+        objects = [
+            {
+                "footprint": obj["footprint"],
+                "material": obj.get("family", obj.get("material_id", "object")),
+            }
+            for obj in scene.get("objects", [])
+        ]
+    for obs in objects:
         foot = np.asarray(obs["footprint"])
         ax.add_patch(Polygon(foot, closed=True, facecolor="0.7",
                              edgecolor="0.4", alpha=0.6, lw=0.8))
@@ -164,15 +220,21 @@ def draw_edc(ax, sr, rir, scene):
 
 
 def cmd_overview(args):
-    scene = load_scene(args)["scene"]
+    metadata = load_scene(args)
+    scene = metadata["scene"]
     sr, rir = load_rir(args.rir)
     fig = plt.figure(figsize=(15, 10))
     draw_floor_plan(fig.add_subplot(2, 2, 1), scene)
     draw_3d(fig.add_subplot(2, 2, 2, projection="3d"), scene)
     draw_waveforms(fig.add_subplot(2, 2, 3), sr, rir, scene)
     draw_edc(fig.add_subplot(2, 2, 4), sr, rir, scene)
-    fig.suptitle(f"{args.rir.stem}   sr={sr} Hz   {rir.shape[0]} ch × {rir.shape[1]} samp",
-                 fontsize=12)
+    high_backend = metadata.get("bands", {}).get("high", {}).get("backend", "unknown")
+    low_backend = metadata.get("bands", {}).get("low", {}).get("backend", "unknown")
+    fig.suptitle(
+        f"{args.rir.stem}   sr={sr} Hz   {rir.shape[0]} ch × {rir.shape[1]} samp\n"
+        f"low={low_backend}   high={high_backend}",
+        fontsize=12,
+    )
     fig.tight_layout(rect=(0, 0, 1, 0.97))
     out = default_out(args, "_overview.png")
     fig.savefig(out, dpi=args.dpi)
@@ -402,6 +464,229 @@ def cmd_field(args):
 
 
 # --------------------------------------------------------------------------- #
+# low-field (actual modal pressure slice)
+# --------------------------------------------------------------------------- #
+def _make_low_field_backend(metadata, args):
+    from puresound.audio.hybrid_rir import (
+        GpuARDPytARDCuPyBackend,
+        GpuARDPytARDBackend,
+    )
+
+    recorded = metadata.get("bands", {}).get("low", {}).get("backend", "")
+    name = recorded if args.backend == "auto" else args.backend
+    material = bool(
+        metadata.get("bands", {}).get("low", {}).get("modal_damping")
+    ) or name.endswith("-material")
+    if name in {"GpuARDPytARDCuPyBackend", "pytard-cupy", "pytard-cupy-material"}:
+        return GpuARDPytARDCuPyBackend(
+            low_sample_rate=int(args.low_sample_rate),
+            spatial_samples_per_wave_length=int(args.spatial_samples_per_wavelength),
+            material_modal_damping=material,
+            calibrate_output=False,
+            apply_rt60_decay=False,
+        ), "pytard-cupy"
+    if name in {"GpuARDPytARDBackend", "pytard", "pytard-material"}:
+        return GpuARDPytARDBackend(
+            low_sample_rate=int(args.low_sample_rate),
+            spatial_samples_per_wave_length=int(args.spatial_samples_per_wavelength),
+            material_modal_damping=material,
+            calibrate_output=False,
+            apply_rt60_decay=False,
+        ), "pytard"
+    raise ValueError(
+        "low-field currently supports the pytARD modal backends only; "
+        f"metadata/backend={recorded!r}, requested={name!r}"
+    )
+
+
+def _low_field_output_paths(args):
+    output = args.output or args.rir.with_name(
+        f"{args.rir.stem}_low_field_ch{args.channel}.mp4"
+    )
+    diagnostic = args.diagnostic or output.with_suffix(".npz")
+    return output, diagnostic
+
+
+def _draw_low_field_overlay(ax, room, source, mic):
+    ax.add_patch(
+        plt.Rectangle(
+            (0.0, 0.0),
+            room[0],
+            room[1],
+            fill=False,
+            edgecolor="black",
+            linewidth=1.6,
+            zorder=4,
+        )
+    )
+    ax.scatter(
+        [source[0]],
+        [source[1]],
+        s=105,
+        facecolor="#00ff88",
+        edgecolor="black",
+        linewidth=1.2,
+        zorder=5,
+        label="source",
+    )
+    ax.scatter(
+        [mic[0]],
+        [mic[1]],
+        marker="^",
+        s=135,
+        facecolor="#00ff88",
+        edgecolor="black",
+        linewidth=1.2,
+        zorder=5,
+        label="receiver",
+    )
+    ax.set_xlim(0.0, room[0])
+    ax.set_ylim(0.0, room[1])
+    ax.set_aspect("equal")
+    ax.set_xlabel("x (m)")
+    ax.set_ylabel("y (m)")
+
+
+def cmd_low_field(args):
+    metadata = load_scene(args)
+    scene, config = _scene_and_config_from_metadata(
+        metadata,
+        duration_s=float(args.t_ms) * 1e-3,
+    )
+    backend, backend_label = _make_low_field_backend(metadata, args)
+    room = np.asarray(scene.room_dim, dtype=np.float64)
+    source = np.asarray(scene.source_pos[args.channel], dtype=np.float64)
+    mic = np.asarray(scene.mic_pos, dtype=np.float64)
+    slice_z = float(args.slice_z) if args.slice_z is not None else float(mic[2])
+    capture = {
+        "source_index": int(args.channel),
+        "z_m": slice_z,
+        "stride": int(args.frame_stride),
+        "max_frames": int(args.max_frames),
+    }
+    _low_rir, capture = backend.simulate_with_pressure_field(
+        scene,
+        config,
+        capture,
+    )
+    frames = np.asarray(capture["frames"], dtype=np.float32)
+    times_s = np.asarray(capture["times_s"], dtype=np.float64)
+    if frames.ndim != 3 or frames.shape[0] == 0:
+        raise RuntimeError("low-field solver returned no pressure-field frames")
+
+    output, diagnostic = _low_field_output_paths(args)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    diagnostic.parent.mkdir(parents=True, exist_ok=True)
+    np.savez_compressed(
+        diagnostic,
+        frames=frames,
+        times_s=times_s,
+        room_dim=room,
+        source=source,
+        mic=mic,
+        slice_z=np.asarray(capture["z_m"]),
+        grid_shape_zyx=np.asarray(capture["grid_shape_zyx"], dtype=np.int64),
+        dt_s=np.asarray(capture["dt_s"]),
+        source_index=np.asarray(args.channel, dtype=np.int64),
+        backend=np.asarray(backend_label),
+        metadata_json=np.asarray(
+            json.dumps(
+                {
+                    "rir": str(args.rir),
+                    "backend": backend_label,
+                    "recorded_backend": metadata.get("bands", {})
+                    .get("low", {})
+                    .get("backend"),
+                    "note": "actual modal pressure slice; pre-output calibration",
+                },
+                ensure_ascii=False,
+            )
+        ),
+    )
+    print(f"wrote {diagnostic}")
+
+    vmax = float(np.percentile(np.abs(frames), 99.7))
+    vmax = max(vmax, float(np.max(np.abs(frames))) * 1e-3, 1e-12)
+    extent = [0.0, room[0], 0.0, room[1]]
+    fig, ax = plt.subplots(figsize=(8.4, 7.0))
+    im = ax.imshow(
+        frames[0],
+        origin="lower",
+        extent=extent,
+        cmap="RdBu_r",
+        vmin=-vmax,
+        vmax=vmax,
+        interpolation="bilinear",
+    )
+    _draw_low_field_overlay(ax, room, source, mic)
+    cbar = fig.colorbar(im, ax=ax, pad=0.02)
+    cbar.set_label("modal pressure (relative solver units)")
+    title = ax.set_title("")
+    ax.legend(loc="upper right", fontsize=8)
+
+    def update(index):
+        im.set_data(frames[index])
+        title.set_text(
+            f"{args.rir.stem} — low-frequency modal pressure field\n"
+            f"{backend_label}, channel={args.channel}, z={float(capture['z_m']):.2f} m, "
+            f"t={times_s[index] * 1e3:6.2f} ms"
+        )
+        return im, title
+
+    anim = animation.FuncAnimation(
+        fig,
+        update,
+        frames=len(frames),
+        interval=1000.0 / float(args.fps),
+        blit=False,
+    )
+    try:
+        anim.save(
+            output,
+            writer=animation.FFMpegWriter(fps=args.fps, bitrate=2400),
+        )
+    except FileNotFoundError as exc:
+        raise RuntimeError(
+            "ffmpeg is required for MP4 output; install it or use --gif"
+        ) from exc
+    print(
+        f"wrote {output} ({len(frames)} frames, "
+        f"grid {frames.shape[1]}x{frames.shape[2]}, "
+        f"solver dt={float(capture['dt_s']) * 1e3:.4f} ms)"
+    )
+    if args.gif:
+        gif = output.with_suffix(".gif")
+        anim.save(gif, writer=animation.PillowWriter(fps=args.fps))
+        print(f"wrote {gif}")
+    plt.close(fig)
+
+    sheet = output.with_name(output.stem + "_sheet.png")
+    indices = np.linspace(0, len(frames) - 1, 6).astype(int)
+    fig2, axes = plt.subplots(2, 3, figsize=(14, 9))
+    for axis, index in zip(axes.ravel(), indices):
+        axis.imshow(
+            frames[index],
+            origin="lower",
+            extent=extent,
+            cmap="RdBu_r",
+            vmin=-vmax,
+            vmax=vmax,
+            interpolation="bilinear",
+        )
+        _draw_low_field_overlay(axis, room, source, mic)
+        axis.set_title(f"t = {times_s[index] * 1e3:.2f} ms", fontsize=10)
+    fig2.suptitle(
+        f"{args.rir.stem} — actual low-frequency modal pressure field "
+        f"(channel {args.channel}, z={float(capture['z_m']):.2f} m)",
+        fontsize=12,
+    )
+    fig2.tight_layout(rect=(0, 0, 1, 0.96))
+    fig2.savefig(sheet, dpi=120)
+    print(f"wrote {sheet}")
+    plt.close(fig2)
+
+
+# --------------------------------------------------------------------------- #
 # CLI
 # --------------------------------------------------------------------------- #
 def build_parser():
@@ -435,6 +720,63 @@ def build_parser():
     sp.add_argument("--frame-stride", type=int, default=6, help="capture every Nth step")
     sp.add_argument("--gif", action="store_true", help="also write a .gif")
     sp.set_defaults(func=cmd_field)
+
+    sp = sub.add_parser(
+        "low-field",
+        help="actual low-frequency modal pressure-field animation",
+    )
+    add_common(sp)
+    sp.add_argument("--channel", type=int, default=0, help="source channel 0-4")
+    sp.add_argument(
+        "--backend",
+        choices=["auto", "pytard", "pytard-cupy"],
+        default="auto",
+        help="modal backend; auto uses the backend recorded in metadata",
+    )
+    sp.add_argument(
+        "--low-sample-rate",
+        type=int,
+        default=16000,
+        help="low solver sample rate used during the diagnostic re-run",
+    )
+    sp.add_argument(
+        "--spatial-samples-per-wavelength",
+        type=int,
+        default=2,
+        help="modal grid density, matching M6 pytARD generation",
+    )
+    sp.add_argument(
+        "--slice-z",
+        type=float,
+        default=None,
+        help="z height of the 2-D pressure slice in metres (default: mic height)",
+    )
+    sp.add_argument(
+        "--t-ms",
+        type=float,
+        default=80.0,
+        help="duration of the diagnostic animation in milliseconds",
+    )
+    sp.add_argument(
+        "--frame-stride",
+        type=int,
+        default=4,
+        help="capture every Nth solver step before max-frame limiting",
+    )
+    sp.add_argument(
+        "--max-frames",
+        type=int,
+        default=180,
+        help="maximum number of pressure frames held in memory",
+    )
+    sp.add_argument("--fps", type=int, default=25)
+    sp.add_argument("--gif", action="store_true", help="also write a .gif")
+    sp.add_argument(
+        "--diagnostic",
+        type=Path,
+        help="optional .npz path for reusable pressure snapshots",
+    )
+    sp.set_defaults(func=cmd_low_field)
     return p
 
 

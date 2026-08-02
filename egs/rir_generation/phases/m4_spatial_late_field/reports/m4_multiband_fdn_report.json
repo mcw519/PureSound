@@ -1,0 +1,282 @@
+{
+  "schema_version": 1,
+  "milestone": "M4.3",
+  "policy": "puresound.multiband_fdn.v1",
+  "scope": "isolated_late_field_core_not_production_hybrid_coupling",
+  "target_report_milestone": "M4.2",
+  "reference_tag": "measured",
+  "config": {
+    "sample_rate": 16000,
+    "duration_s": 1.5,
+    "delay_line_count": 16,
+    "seed": 20260731,
+    "qualified_centers_hz": [
+      500.0,
+      1000.0,
+      2000.0,
+      4000.0
+    ],
+    "maximum_rt60_relative_error": 0.1,
+    "target_mixing_time_s": 0.024
+  },
+  "design": {
+    "policy": "puresound.multiband_fdn.v1",
+    "sample_rate": 16000,
+    "seed": 20260731,
+    "delay_line_count": 16,
+    "delay_lengths_samples": [
+      53,
+      59,
+      61,
+      67,
+      79,
+      89,
+      97,
+      113,
+      127,
+      139,
+      157,
+      179,
+      211,
+      223,
+      251,
+      283
+    ],
+    "delay_lengths_ms": [
+      3.3125,
+      3.6875,
+      3.8125,
+      4.1875,
+      4.9375,
+      5.5625,
+      6.0625,
+      7.0625,
+      7.9375,
+      8.6875,
+      9.8125,
+      11.1875,
+      13.1875,
+      13.9375,
+      15.6875,
+      17.6875
+    ],
+    "delays_are_distinct_primes": true,
+    "feedback_matrix": "signed_permuted_normalized_hadamard",
+    "feedback_orthogonality_error_2norm": 0.0,
+    "target_mixing_time_s": 0.024,
+    "band_weight_energy_sum": 1.0000000000000002,
+    "bands": {
+      "125": {
+        "center_hz": 125.0,
+        "target_rt60_s": 0.3955827114376157,
+        "minimum_loop_gain": 0.7342812511048823,
+        "maximum_loop_gain": 0.9437975190271785,
+        "feedback_operator_2norm": 0.9437975190271785
+      },
+      "250": {
+        "center_hz": 250.0,
+        "target_rt60_s": 0.37633384982528284,
+        "minimum_loop_gain": 0.7227723367784163,
+        "maximum_loop_gain": 0.9410093196181752,
+        "feedback_operator_2norm": 0.9410093196181752
+      },
+      "500": {
+        "center_hz": 500.0,
+        "target_rt60_s": 0.5484378109146087,
+        "minimum_loop_gain": 0.8002909727505133,
+        "maximum_loop_gain": 0.9591363536714665,
+        "feedback_operator_2norm": 0.9591363536714665
+      },
+      "1000": {
+        "center_hz": 1000.0,
+        "target_rt60_s": 0.46288218868664044,
+        "minimum_loop_gain": 0.7680066833242245,
+        "maximum_loop_gain": 0.9517683402996033,
+        "feedback_operator_2norm": 0.9517683402996033
+      },
+      "2000": {
+        "center_hz": 2000.0,
+        "target_rt60_s": 0.47204715486297527,
+        "minimum_loop_gain": 0.7719526800740566,
+        "maximum_loop_gain": 0.9526822589190256,
+        "feedback_operator_2norm": 0.9526822589190256
+      },
+      "4000": {
+        "center_hz": 4000.0,
+        "target_rt60_s": 0.4740424396747184,
+        "minimum_loop_gain": 0.7727941390646357,
+        "maximum_loop_gain": 0.9528766549981952,
+        "feedback_operator_2norm": 0.9528766549981952
+      }
+    }
+  },
+  "render": {
+    "sample_count": 24000,
+    "peak_abs": 0.01877762077862226,
+    "energy": 0.03480500450669514,
+    "first_nonzero_sample": 53,
+    "first_nonzero_ms": 3.3125,
+    "block_energy_decay": {
+      "block_ms": 50.0,
+      "maximum_block_energy": 0.02537729358591374,
+      "final_block_energy": 4.0792955452461584e-19,
+      "final_to_maximum_ratio": 1.6074588613777423e-17
+    }
+  },
+  "structural_checks": {
+    "distinct_prime_delays": true,
+    "orthogonal_feedback": true,
+    "strict_feedback_contraction": true,
+    "unit_band_weight_energy": true,
+    "deterministic_same_seed": true,
+    "finite_output": true,
+    "causal_delayed_onset": true,
+    "decays_before_render_end": true
+  },
+  "band_checks": {
+    "125": {
+      "center_hz": 125.0,
+      "qualified_high_band_gate": false,
+      "target_t20_s": 0.3955827114376157,
+      "rendered_t20_s": 0.4815065086028179,
+      "t20_relative_error": 0.21720817083471705,
+      "t20_relative_error_passed": false,
+      "rendered_mixing_time_s": 0.022625,
+      "measured_mixing_time_p10_s": 0.022625,
+      "measured_mixing_time_p90_s": 0.060825000000000004,
+      "mixing_time_envelope_passed": true,
+      "rendered_late_median_normalized_density": 0.9823946267348539,
+      "measured_late_density_p10": 1.0686801724901056,
+      "measured_late_density_p90": 1.3014555364797136,
+      "late_density_envelope_passed": false,
+      "coloration": {
+        "center_hz": 125.0,
+        "frequency_bin_count": 181,
+        "spectral_flatness": 0.4026808702880864,
+        "p95_to_median_db": 6.105015222094171
+      }
+    },
+    "250": {
+      "center_hz": 250.0,
+      "qualified_high_band_gate": false,
+      "target_t20_s": 0.37633384982528284,
+      "rendered_t20_s": 0.43492590524519115,
+      "t20_relative_error": 0.15569169620832757,
+      "t20_relative_error_passed": false,
+      "rendered_mixing_time_s": 0.0153125,
+      "measured_mixing_time_p10_s": 0.0113125,
+      "measured_mixing_time_p90_s": 0.0333125,
+      "mixing_time_envelope_passed": true,
+      "rendered_late_median_normalized_density": 1.1546771238073612,
+      "measured_late_density_p10": 1.085222860721204,
+      "measured_late_density_p90": 1.2336813480678648,
+      "late_density_envelope_passed": true,
+      "coloration": {
+        "center_hz": 250.0,
+        "frequency_bin_count": 362,
+        "spectral_flatness": 0.6426413341390748,
+        "p95_to_median_db": 5.361003215151232
+      }
+    },
+    "500": {
+      "center_hz": 500.0,
+      "qualified_high_band_gate": true,
+      "target_t20_s": 0.5484378109146087,
+      "rendered_t20_s": 0.5547474391284153,
+      "t20_relative_error": 0.011504728682517739,
+      "t20_relative_error_passed": true,
+      "rendered_mixing_time_s": 0.012,
+      "measured_mixing_time_p10_s": 0.01,
+      "measured_mixing_time_p90_s": 0.0362,
+      "mixing_time_envelope_passed": true,
+      "rendered_late_median_normalized_density": 1.0603134462732482,
+      "measured_late_density_p10": 1.0190790344737328,
+      "measured_late_density_p90": 1.1094020317488615,
+      "late_density_envelope_passed": true,
+      "coloration": {
+        "center_hz": 500.0,
+        "frequency_bin_count": 724,
+        "spectral_flatness": 0.37852709919373906,
+        "p95_to_median_db": 7.737866849137162
+      }
+    },
+    "1000": {
+      "center_hz": 1000.0,
+      "qualified_high_band_gate": true,
+      "target_t20_s": 0.46288218868664044,
+      "rendered_t20_s": 0.48531381217093134,
+      "t20_relative_error": 0.048460761793270336,
+      "t20_relative_error_passed": true,
+      "rendered_mixing_time_s": 0.026,
+      "measured_mixing_time_p10_s": 0.01,
+      "measured_mixing_time_p90_s": 0.062,
+      "mixing_time_envelope_passed": true,
+      "rendered_late_median_normalized_density": 1.0504957291781256,
+      "measured_late_density_p10": 0.9807899378027546,
+      "measured_late_density_p90": 1.0514775008876378,
+      "late_density_envelope_passed": true,
+      "coloration": {
+        "center_hz": 1000.0,
+        "frequency_bin_count": 1448,
+        "spectral_flatness": 0.46320987816246006,
+        "p95_to_median_db": 7.936333097940038
+      }
+    },
+    "2000": {
+      "center_hz": 2000.0,
+      "qualified_high_band_gate": true,
+      "target_t20_s": 0.47204715486297527,
+      "rendered_t20_s": 0.4577524316704415,
+      "t20_relative_error": 0.030282405148026395,
+      "t20_relative_error_passed": true,
+      "rendered_mixing_time_s": 0.01,
+      "measured_mixing_time_p10_s": 0.01,
+      "measured_mixing_time_p90_s": 0.07020000000000001,
+      "mixing_time_envelope_passed": true,
+      "rendered_late_median_normalized_density": 1.0308602949878802,
+      "measured_late_density_p10": 0.9680269055790951,
+      "measured_late_density_p90": 1.0509866150328817,
+      "late_density_envelope_passed": true,
+      "coloration": {
+        "center_hz": 2000.0,
+        "frequency_bin_count": 2896,
+        "spectral_flatness": 0.4744513683556024,
+        "p95_to_median_db": 7.512797066324306
+      }
+    },
+    "4000": {
+      "center_hz": 4000.0,
+      "qualified_high_band_gate": true,
+      "target_t20_s": 0.4740424396747184,
+      "rendered_t20_s": 0.47392481091337535,
+      "t20_relative_error": 0.00024813972652689114,
+      "t20_relative_error_passed": true,
+      "rendered_mixing_time_s": 0.024,
+      "measured_mixing_time_p10_s": 0.011800000000000001,
+      "measured_mixing_time_p90_s": 0.0882,
+      "mixing_time_envelope_passed": true,
+      "rendered_late_median_normalized_density": 0.9817717095122669,
+      "measured_late_density_p10": 0.9130476898464082,
+      "measured_late_density_p90": 1.0112248607976349,
+      "late_density_envelope_passed": true,
+      "coloration": {
+        "center_hz": 4000.0,
+        "frequency_bin_count": 5793,
+        "spectral_flatness": 0.453275944148557,
+        "p95_to_median_db": 8.620254870316732
+      }
+    }
+  },
+  "coloration_scope_note": "Spectral flatness and p95/median ripple are diagnostics only; M4 listening tests remain required for metallic coloration.",
+  "exit": {
+    "structural_checks_passed": true,
+    "qualified_high_band_checks_passed": true,
+    "passed": true,
+    "limitations": [
+      "125/250 Hz remain diagnostic because the hybrid low/modal branch and parallel octave crossover affect fitted decay.",
+      "The FDN tail is not yet coupled to PathEvent direct/early energy.",
+      "No measured multi-receiver spatial output is available for IACC/coherence exit.",
+      "Coloration requires listening validation in addition to spectral diagnostics."
+    ]
+  }
+}

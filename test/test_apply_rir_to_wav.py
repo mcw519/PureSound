@@ -1,7 +1,7 @@
 import torch
 from torchaudio.functional import highpass_biquad, lowpass_biquad
 
-from egs.rir_generation.apply_rir_to_wav import apply_rir_to_wav
+from egs.rir_generation.tools.audition.apply_rir_to_wav import apply_rir_to_wav
 
 
 def test_apply_rir_to_wav_returns_one_channel_per_rir_channel():

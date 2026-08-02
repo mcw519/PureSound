@@ -412,6 +412,20 @@ class VoiceIsolationDataset(NoiseSuppressionDataset):
         overlap_fraction: float = float("nan"),
         turn_taking: float = 0.0,
     ) -> None:
+        super()._emit_task_metadata(
+            sample,
+            foreground_metadata=foreground_metadata,
+            interferer_metadata=interferer_metadata,
+            target_absent=target_absent,
+            background_speech_reference=background_speech_reference,
+            near_count=near_count,
+            far_count=far_count,
+            mix_mode=mix_mode,
+            realized_speech_sir=realized_speech_sir,
+            noise_snr=noise_snr,
+            overlap_fraction=overlap_fraction,
+            turn_taking=turn_taking,
+        )
         sample.update(
             self._build_voice_isolation_metadata(
                 foreground_metadata=foreground_metadata,

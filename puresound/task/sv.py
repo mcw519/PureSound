@@ -33,6 +33,7 @@ class SpeakerEmbeddingDataset(DynamicBaseDataset):
         augmentation_src_args: Optional[Dict] = None,
         augmentation_hpf_args: Optional[Dict] = None,
         augmentation_volume_args: Optional[Dict] = None,
+        dataset_role: str = "train",
     ):
         super().__init__(
             metafile_path=metafile_path,
@@ -49,6 +50,7 @@ class SpeakerEmbeddingDataset(DynamicBaseDataset):
             augmentation_src_args=augmentation_src_args,
             augmentation_hpf_args=augmentation_hpf_args,
             augmentation_volume_args=augmentation_volume_args,
+            dataset_role=dataset_role,
         )
 
     @property

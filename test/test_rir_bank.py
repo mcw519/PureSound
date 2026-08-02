@@ -1,9 +1,13 @@
 import json
 
 import numpy as np
+import pytest
 import torch
 import torchaudio
 
+from egs.rir_generation.phases.m6_bank.scripts.validate_m6_bank_contract import (
+    build_fixture,
+)
 from puresound.audio.augmentation import AudioEffectAugmentor
 from puresound.audio.rir_bank import PreGeneratedRoomBank
 
@@ -84,6 +88,14 @@ def test_bank_indexes_multiple_named_rirs_per_room_folder(tmp_path):
     }
 
 
+def test_manifestless_m6_bank_refuses_legacy_split_mixing(tmp_path):
+    build_fixture(tmp_path)
+    (tmp_path / "rir_bank_manifest.json").unlink()
+
+    with pytest.raises(ValueError, match="manifest is missing"):
+        PreGeneratedRoomBank(str(tmp_path))
+
+
 def test_foreground_uses_near_interferer_uses_far(tmp_path):
     root = _make_bank_folder(tmp_path)
     bank = PreGeneratedRoomBank(str(root))
@@ -134,3 +146,24 @@ def test_augmentor_bank_path_reuses_channel_for_target_rir_type(tmp_path):
     assert rir_id2 == rir_id
     assert reverb.shape[-1] >= wav.shape[-1]
     assert clean.shape[-1] >= 1
+
+
+def test_simulated_rir_cache_is_bounded(tmp_path):
+    root = _make_bank_folder(tmp_path)
+    aug = AudioEffectAugmentor()
+    aug.simulated_rir_cache_size = 2
+    aug.init_room_bank({"used": True, "folder": str(root)})
+    wav = torch.randn(1, 800)
+
+    ids = []
+    for _ in range(4):
+        _reverb, (rir_id, _info) = aug.apply_rir(
+            wav=wav,
+            rir_mode="full",
+            sr=16000,
+        )
+        ids.append(rir_id)
+
+    assert len(aug.simulated_rir) == 2
+    assert ids[0] not in aug.simulated_rir
+    assert ids[-1] in aug.simulated_rir

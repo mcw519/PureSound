@@ -1,0 +1,664 @@
+{
+  "schema_version": "puresound.path_event_validation.v1",
+  "path_event_schema_version": "puresound.path_event.v1",
+  "path_event_set_schema_version": "puresound.path_event_set.v1",
+  "source_convention": "puresound.free_field_pressure_1_over_r_discrete_rir.v1",
+  "fractional_delay_policy": "puresound.causal_forward_lagrange.v1",
+  "configuration": {
+    "sound_speed_m_s": 343.0,
+    "maximum_geometry_error_m": 1e-12,
+    "maximum_reciprocity_error": 1e-12,
+    "maximum_fractional_delay_magnitude_error_db": 0.11,
+    "maximum_fractional_delay_phase_error_deg": 0.6
+  },
+  "geometry_and_reciprocity_cases": [
+    {
+      "case_id": "ordinary_room",
+      "event_count": 7,
+      "direct_event_count": 1,
+      "first_order_reflection_count": 6,
+      "maximum_distance_error_m": 8.881784197001252e-16,
+      "maximum_delay_error_s": 3.469446951953614e-18,
+      "maximum_boundary_plane_error_m": 0.0,
+      "maximum_reflection_law_cosine_error": 1.1102230246251565e-16,
+      "maximum_complex_gain_formula_error": 0.0,
+      "maximum_reciprocity_distance_error_m": 8.881784197001252e-16,
+      "maximum_reciprocity_point_error_m": 4.440892098500626e-16,
+      "maximum_reciprocity_direction_component_error": 1.6653345369377348e-16,
+      "maximum_reciprocity_complex_gain_error": 8.355534721610418e-17,
+      "maximum_reflection_coefficient_magnitude": 0.8061509657274453,
+      "schema_round_trip_equal": true
+    },
+    {
+      "case_id": "asymmetric_room",
+      "event_count": 7,
+      "direct_event_count": 1,
+      "first_order_reflection_count": 6,
+      "maximum_distance_error_m": 8.881784197001252e-16,
+      "maximum_delay_error_s": 3.469446951953614e-18,
+      "maximum_boundary_plane_error_m": 0.0,
+      "maximum_reflection_law_cosine_error": 2.7755575615628914e-16,
+      "maximum_complex_gain_formula_error": 0.0,
+      "maximum_reciprocity_distance_error_m": 8.881784197001252e-16,
+      "maximum_reciprocity_point_error_m": 8.881784197001252e-16,
+      "maximum_reciprocity_direction_component_error": 5.551115123125783e-16,
+      "maximum_reciprocity_complex_gain_error": 4.291468873614597e-17,
+      "maximum_reflection_coefficient_magnitude": 0.8025692961039763,
+      "schema_round_trip_equal": true
+    },
+    {
+      "case_id": "near_grazing_paths",
+      "event_count": 7,
+      "direct_event_count": 1,
+      "first_order_reflection_count": 6,
+      "maximum_distance_error_m": 8.881784197001252e-16,
+      "maximum_delay_error_s": 3.469446951953614e-18,
+      "maximum_boundary_plane_error_m": 0.0,
+      "maximum_reflection_law_cosine_error": 3.3306690738754696e-16,
+      "maximum_complex_gain_formula_error": 0.0,
+      "maximum_reciprocity_distance_error_m": 8.881784197001252e-16,
+      "maximum_reciprocity_point_error_m": 4.440892098500626e-16,
+      "maximum_reciprocity_direction_component_error": 4.440892098500626e-16,
+      "maximum_reciprocity_complex_gain_error": 8.355534721610418e-17,
+      "maximum_reflection_coefficient_magnitude": 0.7782851478038153,
+      "schema_round_trip_equal": true
+    }
+  ],
+  "nearby_position_continuity_cases": [
+    {
+      "case_id": "ordinary_room",
+      "source_displacement_m": 0.001,
+      "event_ids_stable": true,
+      "maximum_path_distance_change_m": 0.0009514770805161277,
+      "distance_change_over_displacement": 0.9514770805161277,
+      "maximum_delay_change_s": 2.7739856574820337e-06,
+      "delay_change_over_displacement_divided_by_c": 0.9514770805163375
+    },
+    {
+      "case_id": "asymmetric_room",
+      "source_displacement_m": 0.001,
+      "event_ids_stable": true,
+      "maximum_path_distance_change_m": 0.0009318389972072794,
+      "distance_change_over_displacement": 0.9318389972072794,
+      "maximum_delay_change_s": 2.7167317702865568e-06,
+      "delay_change_over_displacement_divided_by_c": 0.931838997208289
+    },
+    {
+      "case_id": "near_grazing_paths",
+      "source_displacement_m": 0.001,
+      "event_ids_stable": true,
+      "maximum_path_distance_change_m": 0.000815113687177238,
+      "distance_change_over_displacement": 0.815113687177238,
+      "maximum_delay_change_s": 2.376424743957134e-06,
+      "delay_change_over_displacement_divided_by_c": 0.8151136871772969
+    }
+  ],
+  "fractional_delay_cases": [
+    {
+      "sample_rate_hz": 8000.0,
+      "validation_band_hz": [
+        60.0,
+        1000.0
+      ],
+      "channels": [
+        {
+          "distance_m": 0.8,
+          "fractional_delay_samples": 0.6588921282798808,
+          "first_allowed_sample": 18,
+          "pre_arrival_nonzero_sample_count": 0,
+          "dc_gain_error": 2.220446049250313e-16,
+          "maximum_magnitude_error_db": 0.07908173120361649,
+          "maximum_phase_error_deg": 0.30153015433352093
+        },
+        {
+          "distance_m": 1.0,
+          "fractional_delay_samples": 0.3236151603498527,
+          "first_allowed_sample": 23,
+          "pre_arrival_nonzero_sample_count": 0,
+          "dc_gain_error": 0.0,
+          "maximum_magnitude_error_db": 0.09393631809145464,
+          "maximum_phase_error_deg": 0.5569136226414914
+        },
+        {
+          "distance_m": 1.5,
+          "fractional_delay_samples": 0.9854227405247826,
+          "first_allowed_sample": 34,
+          "pre_arrival_nonzero_sample_count": 0,
+          "dc_gain_error": 0.0,
+          "maximum_magnitude_error_db": 0.0036342222053743854,
+          "maximum_phase_error_deg": 0.008000184999459151
+        },
+        {
+          "distance_m": 2.0,
+          "fractional_delay_samples": 0.6472303206997054,
+          "first_allowed_sample": 46,
+          "pre_arrival_nonzero_sample_count": 0,
+          "dc_gain_error": 5.551115123125783e-17,
+          "maximum_magnitude_error_db": 0.08107649280704832,
+          "maximum_phase_error_deg": 0.3142931277810814
+        },
+        {
+          "distance_m": 3.0,
+          "fractional_delay_samples": 0.9708454810495653,
+          "first_allowed_sample": 69,
+          "pre_arrival_nonzero_sample_count": 0,
+          "dc_gain_error": 5.551115123125783e-17,
+          "maximum_magnitude_error_db": 0.007291499655179171,
+          "maximum_phase_error_deg": 0.01653663312433093
+        }
+      ],
+      "worst_channel_magnitude_error_db": 0.09393631809145464,
+      "worst_channel_phase_error_deg": 0.5569136226414914,
+      "maximum_pre_arrival_nonzero_sample_count": 0,
+      "maximum_dc_gain_error": 2.220446049250313e-16,
+      "fraction_scan": [
+        {
+          "fractional_delay_samples": 0.05,
+          "maximum_magnitude_error_db": 0.021605301151178334,
+          "maximum_phase_error_deg": 0.1822809513845756,
+          "dc_sum_error": 0.0
+        },
+        {
+          "fractional_delay_samples": 0.1,
+          "maximum_magnitude_error_db": 0.04082942743938012,
+          "maximum_phase_error_deg": 0.32222483149285,
+          "dc_sum_error": 0.0
+        },
+        {
+          "fractional_delay_samples": 0.15,
+          "maximum_magnitude_error_db": 0.057469036341621656,
+          "maximum_phase_error_deg": 0.4248690214424865,
+          "dc_sum_error": 0.0
+        },
+        {
+          "fractional_delay_samples": 0.2,
+          "maximum_magnitude_error_db": 0.07139686525122697,
+          "maximum_phase_error_deg": 0.4949917836600084,
+          "dc_sum_error": 0.0
+        },
+        {
+          "fractional_delay_samples": 0.25,
+          "maximum_magnitude_error_db": 0.08255209660338336,
+          "maximum_phase_error_deg": 0.5370967470873204,
+          "dc_sum_error": 0.0
+        },
+        {
+          "fractional_delay_samples": 0.3,
+          "maximum_magnitude_error_db": 0.09093176913226907,
+          "maximum_phase_error_deg": 0.5554038291199641,
+          "dc_sum_error": 2.220446049250313e-16
+        },
+        {
+          "fractional_delay_samples": 0.35,
+          "maximum_magnitude_error_db": 0.0965831502039926,
+          "maximum_phase_error_deg": 0.5538448102720022,
+          "dc_sum_error": 0.0
+        },
+        {
+          "fractional_delay_samples": 0.39999999999999997,
+          "maximum_magnitude_error_db": 0.09959696508488743,
+          "maximum_phase_error_deg": 0.536062169629481,
+          "dc_sum_error": 2.220446049250313e-16
+        },
+        {
+          "fractional_delay_samples": 0.44999999999999996,
+          "maximum_magnitude_error_db": 0.10010137093958259,
+          "maximum_phase_error_deg": 0.5054101234144385,
+          "dc_sum_error": 0.0
+        },
+        {
+          "fractional_delay_samples": 0.49999999999999994,
+          "maximum_magnitude_error_db": 0.09825656286084915,
+          "maximum_phase_error_deg": 0.4649570892637749,
+          "dc_sum_error": 0.0
+        },
+        {
+          "fractional_delay_samples": 0.5499999999999999,
+          "maximum_magnitude_error_db": 0.09424990381277001,
+          "maximum_phase_error_deg": 0.4174890310743504,
+          "dc_sum_error": 0.0
+        },
+        {
+          "fractional_delay_samples": 0.6,
+          "maximum_magnitude_error_db": 0.08829147826219375,
+          "maximum_phase_error_deg": 0.36551332998121455,
+          "dc_sum_error": 1.1102230246251565e-16
+        },
+        {
+          "fractional_delay_samples": 0.65,
+          "maximum_magnitude_error_db": 0.08060997928480002,
+          "maximum_phase_error_deg": 0.3112629824041578,
+          "dc_sum_error": 0.0
+        },
+        {
+          "fractional_delay_samples": 0.7,
+          "maximum_magnitude_error_db": 0.07144885026969196,
+          "maximum_phase_error_deg": 0.25670105152066375,
+          "dc_sum_error": 1.1102230246251565e-16
+        },
+        {
+          "fractional_delay_samples": 0.75,
+          "maximum_magnitude_error_db": 0.061062614499186374,
+          "maximum_phase_error_deg": 0.20352539838527922,
+          "dc_sum_error": 0.0
+        },
+        {
+          "fractional_delay_samples": 0.7999999999999999,
+          "maximum_magnitude_error_db": 0.04971333851455656,
+          "maximum_phase_error_deg": 0.1531737966034846,
+          "dc_sum_error": 0.0
+        },
+        {
+          "fractional_delay_samples": 0.85,
+          "maximum_magnitude_error_db": 0.03766718806205321,
+          "maximum_phase_error_deg": 0.10682959240324319,
+          "dc_sum_error": 2.220446049250313e-16
+        },
+        {
+          "fractional_delay_samples": 0.9,
+          "maximum_magnitude_error_db": 0.025191048355778643,
+          "maximum_phase_error_deg": 0.06542811180334115,
+          "dc_sum_error": 1.1102230246251565e-16
+        },
+        {
+          "fractional_delay_samples": 0.95,
+          "maximum_magnitude_error_db": 0.012549193203658524,
+          "maximum_phase_error_deg": 0.029664039418589364,
+          "dc_sum_error": 0.0
+        }
+      ],
+      "worst_fraction_scan_magnitude_error_db": 0.10010137093958259,
+      "worst_fraction_scan_phase_error_deg": 0.5554038291199641,
+      "maximum_fraction_scan_dc_sum_error": 2.220446049250313e-16
+    },
+    {
+      "sample_rate_hz": 16000.0,
+      "validation_band_hz": [
+        60.0,
+        1000.0
+      ],
+      "channels": [
+        {
+          "distance_m": 0.8,
+          "fractional_delay_samples": 0.3177842565597615,
+          "first_allowed_sample": 37,
+          "pre_arrival_nonzero_sample_count": 0,
+          "dc_gain_error": 0.0,
+          "maximum_magnitude_error_db": 0.007720583051728111,
+          "maximum_phase_error_deg": 0.01980976669690669
+        },
+        {
+          "distance_m": 1.0,
+          "fractional_delay_samples": 0.6472303206997054,
+          "first_allowed_sample": 46,
+          "pre_arrival_nonzero_sample_count": 0,
+          "dc_gain_error": 1.1102230246251565e-16,
+          "maximum_magnitude_error_db": 0.005943951036054745,
+          "maximum_phase_error_deg": 0.01074984455416428
+        },
+        {
+          "distance_m": 1.5,
+          "fractional_delay_samples": 0.9708454810495653,
+          "first_allowed_sample": 69,
+          "pre_arrival_nonzero_sample_count": 0,
+          "dc_gain_error": 1.1102230246251565e-16,
+          "maximum_magnitude_error_db": 0.0004950295447438924,
+          "maximum_phase_error_deg": 0.0005473894464365539
+        },
+        {
+          "distance_m": 2.0,
+          "fractional_delay_samples": 0.29446064139941086,
+          "first_allowed_sample": 93,
+          "pre_arrival_nonzero_sample_count": 0,
+          "dc_gain_error": 0.0,
+          "maximum_magnitude_error_db": 0.007543767313144486,
+          "maximum_phase_error_deg": 0.019776976147844457
+        },
+        {
+          "distance_m": 3.0,
+          "fractional_delay_samples": 0.9416909620991305,
+          "first_allowed_sample": 139,
+          "pre_arrival_nonzero_sample_count": 0,
+          "dc_gain_error": 0.0,
+          "maximum_magnitude_error_db": 0.0010000487339305684,
+          "maximum_phase_error_deg": 0.0011679548022051564
+        }
+      ],
+      "worst_channel_magnitude_error_db": 0.007720583051728111,
+      "worst_channel_phase_error_deg": 0.01980976669690669,
+      "maximum_pre_arrival_nonzero_sample_count": 0,
+      "maximum_dc_gain_error": 1.1102230246251565e-16,
+      "fraction_scan": [
+        {
+          "fractional_delay_samples": 0.05,
+          "maximum_magnitude_error_db": 0.002076043126666965,
+          "maximum_phase_error_deg": 0.0067031211145697584,
+          "dc_sum_error": 0.0
+        },
+        {
+          "fractional_delay_samples": 0.1,
+          "maximum_magnitude_error_db": 0.0037970548826524266,
+          "maximum_phase_error_deg": 0.011774558104762628,
+          "dc_sum_error": 0.0
+        },
+        {
+          "fractional_delay_samples": 0.15,
+          "maximum_magnitude_error_db": 0.005185800606990936,
+          "maximum_phase_error_deg": 0.015428436698708282,
+          "dc_sum_error": 0.0
+        },
+        {
+          "fractional_delay_samples": 0.2,
+          "maximum_magnitude_error_db": 0.006265380546117116,
+          "maximum_phase_error_deg": 0.01786357502342596,
+          "dc_sum_error": 0.0
+        },
+        {
+          "fractional_delay_samples": 0.25,
+          "maximum_magnitude_error_db": 0.0070591147400290485,
+          "maximum_phase_error_deg": 0.01926383800857843,
+          "dc_sum_error": 0.0
+        },
+        {
+          "fractional_delay_samples": 0.3,
+          "maximum_magnitude_error_db": 0.007590431936405468,
+          "maximum_phase_error_deg": 0.01979850453577864,
+          "dc_sum_error": 2.220446049250313e-16
+        },
+        {
+          "fractional_delay_samples": 0.35,
+          "maximum_magnitude_error_db": 0.00788276232179076,
+          "maximum_phase_error_deg": 0.019622647658018695,
+          "dc_sum_error": 0.0
+        },
+        {
+          "fractional_delay_samples": 0.39999999999999997,
+          "maximum_magnitude_error_db": 0.007959433900954709,
+          "maximum_phase_error_deg": 0.018877528297460776,
+          "dc_sum_error": 2.220446049250313e-16
+        },
+        {
+          "fractional_delay_samples": 0.44999999999999996,
+          "maximum_magnitude_error_db": 0.007843572395560562,
+          "maximum_phase_error_deg": 0.017691002883965908,
+          "dc_sum_error": 0.0
+        },
+        {
+          "fractional_delay_samples": 0.49999999999999994,
+          "maximum_magnitude_error_db": 0.007558004571436035,
+          "maximum_phase_error_deg": 0.016177945417536754,
+          "dc_sum_error": 0.0
+        },
+        {
+          "fractional_delay_samples": 0.5499999999999999,
+          "maximum_magnitude_error_db": 0.0071251649392184285,
+          "maximum_phase_error_deg": 0.014440684434397865,
+          "dc_sum_error": 0.0
+        },
+        {
+          "fractional_delay_samples": 0.6,
+          "maximum_magnitude_error_db": 0.00656700580649067,
+          "maximum_phase_error_deg": 0.012569455328834868,
+          "dc_sum_error": 1.1102230246251565e-16
+        },
+        {
+          "fractional_delay_samples": 0.65,
+          "maximum_magnitude_error_db": 0.005904910690053049,
+          "maximum_phase_error_deg": 0.010642868430529287,
+          "dc_sum_error": 0.0
+        },
+        {
+          "fractional_delay_samples": 0.7,
+          "maximum_magnitude_error_db": 0.005159611124631431,
+          "maximum_phase_error_deg": 0.008728393168614759,
+          "dc_sum_error": 1.1102230246251565e-16
+        },
+        {
+          "fractional_delay_samples": 0.75,
+          "maximum_magnitude_error_db": 0.004351106929261495,
+          "maximum_phase_error_deg": 0.006882858563477465,
+          "dc_sum_error": 0.0
+        },
+        {
+          "fractional_delay_samples": 0.7999999999999999,
+          "maximum_magnitude_error_db": 0.003498590014196208,
+          "maximum_phase_error_deg": 0.0051529701874748375,
+          "dc_sum_error": 0.0
+        },
+        {
+          "fractional_delay_samples": 0.85,
+          "maximum_magnitude_error_db": 0.0026203718299776142,
+          "maximum_phase_error_deg": 0.0035758436173483235,
+          "dc_sum_error": 2.220446049250313e-16
+        },
+        {
+          "fractional_delay_samples": 0.9,
+          "maximum_magnitude_error_db": 0.0017338145756416094,
+          "maximum_phase_error_deg": 0.002179554277692507,
+          "dc_sum_error": 1.1102230246251565e-16
+        },
+        {
+          "fractional_delay_samples": 0.95,
+          "maximum_magnitude_error_db": 0.0008552662951189069,
+          "maximum_phase_error_deg": 0.0009837034394102081,
+          "dc_sum_error": 0.0
+        }
+      ],
+      "worst_fraction_scan_magnitude_error_db": 0.007959433900954709,
+      "worst_fraction_scan_phase_error_deg": 0.01979850453577864,
+      "maximum_fraction_scan_dc_sum_error": 2.220446049250313e-16
+    },
+    {
+      "sample_rate_hz": 48000.0,
+      "validation_band_hz": [
+        60.0,
+        1000.0
+      ],
+      "channels": [
+        {
+          "distance_m": 0.8,
+          "fractional_delay_samples": 0.9533527696792845,
+          "first_allowed_sample": 111,
+          "pre_arrival_nonzero_sample_count": 0,
+          "dc_gain_error": 0.0,
+          "maximum_magnitude_error_db": 1.0090635533068466e-05,
+          "maximum_phase_error_deg": 3.8141242047597358e-06
+        },
+        {
+          "distance_m": 1.0,
+          "fractional_delay_samples": 0.9416909620991305,
+          "first_allowed_sample": 139,
+          "pre_arrival_nonzero_sample_count": 0,
+          "dc_gain_error": 1.1102230246251565e-16,
+          "maximum_magnitude_error_db": 1.2668669644351254e-05,
+          "maximum_phase_error_deg": 4.890973913532483e-06
+        },
+        {
+          "distance_m": 1.5,
+          "fractional_delay_samples": 0.9125364431486958,
+          "first_allowed_sample": 209,
+          "pre_arrival_nonzero_sample_count": 0,
+          "dc_gain_error": 0.0,
+          "maximum_magnitude_error_db": 1.9186312291077234e-05,
+          "maximum_phase_error_deg": 7.794985164019675e-06
+        },
+        {
+          "distance_m": 2.0,
+          "fractional_delay_samples": 0.883381924198261,
+          "first_allowed_sample": 279,
+          "pre_arrival_nonzero_sample_count": 0,
+          "dc_gain_error": 0.0,
+          "maximum_magnitude_error_db": 2.5778327642408538e-05,
+          "maximum_phase_error_deg": 1.0994354972430285e-05
+        },
+        {
+          "distance_m": 3.0,
+          "fractional_delay_samples": 0.8250728862973915,
+          "first_allowed_sample": 419,
+          "pre_arrival_nonzero_sample_count": 0,
+          "dc_gain_error": 0.0,
+          "maximum_magnitude_error_db": 3.903111030125414e-05,
+          "maximum_phase_error_deg": 1.822579700937772e-05
+        }
+      ],
+      "worst_channel_magnitude_error_db": 3.903111030125414e-05,
+      "worst_channel_phase_error_deg": 1.822579700937772e-05,
+      "maximum_pre_arrival_nonzero_sample_count": 0,
+      "maximum_dc_gain_error": 1.1102230246251565e-16,
+      "fraction_scan": [
+        {
+          "fractional_delay_samples": 0.05,
+          "maximum_magnitude_error_db": 2.864527334892928e-05,
+          "maximum_phase_error_deg": 2.8912334664985293e-05,
+          "dc_sum_error": 0.0
+        },
+        {
+          "fractional_delay_samples": 0.1,
+          "maximum_magnitude_error_db": 5.202981280122548e-05,
+          "maximum_phase_error_deg": 5.067716395014241e-05,
+          "dc_sum_error": 0.0
+        },
+        {
+          "fractional_delay_samples": 0.15,
+          "maximum_magnitude_error_db": 7.058750011953082e-05,
+          "maximum_phase_error_deg": 6.62630969118625e-05,
+          "dc_sum_error": 0.0
+        },
+        {
+          "fractional_delay_samples": 0.2,
+          "maximum_magnitude_error_db": 8.473871653045163e-05,
+          "maximum_phase_error_deg": 7.656351487243472e-05,
+          "dc_sum_error": 0.0
+        },
+        {
+          "fractional_delay_samples": 0.25,
+          "maximum_magnitude_error_db": 9.489016055341379e-05,
+          "maximum_phase_error_deg": 8.239912079114232e-05,
+          "dc_sum_error": 0.0
+        },
+        {
+          "fractional_delay_samples": 0.3,
+          "maximum_magnitude_error_db": 0.00010143467201843677,
+          "maximum_phase_error_deg": 8.452050279938273e-05,
+          "dc_sum_error": 2.220446049250313e-16
+        },
+        {
+          "fractional_delay_samples": 0.35,
+          "maximum_magnitude_error_db": 0.00010475106229158078,
+          "maximum_phase_error_deg": 8.361071158515235e-05,
+          "dc_sum_error": 0.0
+        },
+        {
+          "fractional_delay_samples": 0.39999999999999997,
+          "maximum_magnitude_error_db": 0.0001052039508519378,
+          "maximum_phase_error_deg": 8.028785104972733e-05,
+          "dc_sum_error": 2.220446049250313e-16
+        },
+        {
+          "fractional_delay_samples": 0.44999999999999996,
+          "maximum_magnitude_error_db": 0.00010314360811686935,
+          "maximum_phase_error_deg": 7.510768204793534e-05,
+          "dc_sum_error": 0.0
+        },
+        {
+          "fractional_delay_samples": 0.49999999999999994,
+          "maximum_magnitude_error_db": 9.890580467991507e-05,
+          "maximum_phase_error_deg": 6.856623863125711e-05,
+          "dc_sum_error": 0.0
+        },
+        {
+          "fractional_delay_samples": 0.5499999999999999,
+          "maximum_magnitude_error_db": 9.281166693058983e-05,
+          "maximum_phase_error_deg": 6.110245649437953e-05,
+          "dc_sum_error": 0.0
+        },
+        {
+          "fractional_delay_samples": 0.6,
+          "maximum_magnitude_error_db": 8.516753911160877e-05,
+          "maximum_phase_error_deg": 5.310081293596122e-05,
+          "dc_sum_error": 1.1102230246251565e-16
+        },
+        {
+          "fractional_delay_samples": 0.65,
+          "maximum_magnitude_error_db": 7.626485186277542e-05,
+          "maximum_phase_error_deg": 4.489397819043735e-05,
+          "dc_sum_error": 0.0
+        },
+        {
+          "fractional_delay_samples": 0.7,
+          "maximum_magnitude_error_db": 6.637999726162729e-05,
+          "maximum_phase_error_deg": 3.6765477403163955e-05,
+          "dc_sum_error": 1.1102230246251565e-16
+        },
+        {
+          "fractional_delay_samples": 0.75,
+          "maximum_magnitude_error_db": 5.577421041853416e-05,
+          "maximum_phase_error_deg": 2.8952362857455234e-05,
+          "dc_sum_error": 0.0
+        },
+        {
+          "fractional_delay_samples": 0.7999999999999999,
+          "maximum_magnitude_error_db": 4.4693457652424855e-05,
+          "maximum_phase_error_deg": 2.164789599354908e-05,
+          "dc_sum_error": 0.0
+        },
+        {
+          "fractional_delay_samples": 0.85,
+          "maximum_magnitude_error_db": 3.3368331280329e-05,
+          "maximum_phase_error_deg": 1.500423854885889e-05,
+          "dc_sum_error": 2.220446049250313e-16
+        },
+        {
+          "fractional_delay_samples": 0.9,
+          "maximum_magnitude_error_db": 2.201395101460117e-05,
+          "maximum_phase_error_deg": 9.135152511000712e-06,
+          "dc_sum_error": 1.1102230246251565e-16
+        },
+        {
+          "fractional_delay_samples": 0.95,
+          "maximum_magnitude_error_db": 1.0829872078557662e-05,
+          "maximum_phase_error_deg": 4.118708197376032e-06,
+          "dc_sum_error": 0.0
+        }
+      ],
+      "worst_fraction_scan_magnitude_error_db": 0.0001052039508519378,
+      "worst_fraction_scan_phase_error_deg": 8.452050279938273e-05,
+      "maximum_fraction_scan_dc_sum_error": 2.220446049250313e-16
+    }
+  ],
+  "acceptance": {
+    "maximum_geometry_error_m": 1e-12,
+    "maximum_reciprocity_error": 1e-12,
+    "fractional_delay_validation_band_hz": [
+      60.0,
+      1000.0
+    ],
+    "maximum_fractional_delay_magnitude_error_db": 0.11,
+    "maximum_fractional_delay_phase_error_deg": 0.6,
+    "geometry_accepted": true,
+    "reciprocity_accepted": true,
+    "nearby_position_continuity_accepted": true,
+    "fractional_delay_accepted": true,
+    "passive_boundary_spectrum_accepted": true,
+    "accepted": true
+  },
+  "scope": {
+    "validated": [
+      "versioned PathEvent and PathEventSet JSON round trip",
+      "exact shoebox direct and six first-order image paths",
+      "specular reflection law and locally reacting complex gain",
+      "source-receiver reciprocity",
+      "one-millimeter local path continuity",
+      "causal scalar forward-Lagrange fractional-delay rendering",
+      "8/16/48 kHz response from 60 to 1000 Hz"
+    ],
+    "complex_boundary_filter_time_realization_validated": false,
+    "higher_order_paths_validated": false,
+    "mesh_visibility_validated": false,
+    "early_c50_against_measured_rooms_validated": false,
+    "m2_12_full_room_crossover_rerun": false,
+    "production_hybrid_backend_integration_validated": false
+  },
+  "decision": "accept_m3_1_path_event_geometry_and_scalar_renderer",
+  "next_action": "realize each angle-aware complex boundary spectrum as a passive causal digital filter, render the same PathEvents coherently, and then rerun the frozen M2.12 full-room crossover protocol"
+}

@@ -22,4 +22,8 @@ def test_manual_test_scripts_expose_help():
 
 
 def test_room_scene_script_exposes_help():
-    _assert_help("egs/rir_generation/simulate_room_scene.py")
+    _assert_help("egs/rir_generation/tools/audition/simulate_room_scene.py")
+
+
+def test_m6_public_script_exposes_help():
+    _assert_help("egs/rir_generation/generate_m6_bank.py")

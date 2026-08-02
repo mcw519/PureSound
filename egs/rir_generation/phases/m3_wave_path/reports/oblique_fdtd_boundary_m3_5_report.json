@@ -1,0 +1,527 @@
+{
+  "schema_version": "puresound.oblique_fdtd_boundary_validation.v1",
+  "boundary_config": "egs/rir_generation/phases/m2_impedance/config/impedance_reference_glass_wool_14kgm3_100mm.json",
+  "boundary_reference_id": "uniform_glass_wool_14kgm3_100mm_miki_relaxation_validation",
+  "full_room_report": "egs/rir_generation/phases/m3_wave_path/reports/full_room_crossover_m3_3_report.json",
+  "frequency_band_hz": [
+    168.0,
+    300.0
+  ],
+  "configuration": {
+    "boundary_config": "egs/rir_generation/phases/m2_impedance/config/impedance_reference_glass_wool_14kgm3_100mm.json",
+    "full_room_report": "egs/rir_generation/phases/m3_wave_path/reports/full_room_crossover_m3_3_report.json",
+    "path_event_sample_rate_hz": 8000,
+    "incidence_cosines": [
+      0.1,
+      0.25,
+      0.5,
+      0.75,
+      1.0
+    ],
+    "tangential_azimuth_deg": [
+      0.0,
+      45.0,
+      90.0
+    ],
+    "maximum_complex_error": 0.02,
+    "maximum_magnitude_error_db": 0.1,
+    "maximum_phase_error_deg": 1.0
+  },
+  "discrete_boundary_equation": {
+    "formula": "Gamma_fdtd=(q_d-Y_d*exp(-j*Omega/2)*exp(+j*k_n*dx_n/2))/(q_d+Y_d*exp(-j*Omega/2)*exp(-j*k_n*dx_n/2))",
+    "q_d": "normal discrete characteristic admittance from the 3D staggered-grid dispersion relation",
+    "half_time_factor": "pressure is sampled at integer time and boundary velocity at the following half step",
+    "half_cell_factors": "boundary velocity lies on the wall face while boundary pressure is taken from the first cell center"
+  },
+  "cases": [
+    {
+      "case_id": "room_a_train_0",
+      "grid_spacing_xyz_m": [
+        0.06060606060606061,
+        0.058695652173913045,
+        0.058333333333333334
+      ],
+      "fdtd_sample_rate_hz": 29827.151524757657,
+      "canonical_direction_count": 39,
+      "canonical_aggregate": {
+        "path_digital_vs_continuous": {
+          "worst_maximum_complex_error": 0.002869747457250984,
+          "worst_maximum_magnitude_error_db": 0.021753857274761396,
+          "worst_maximum_phase_error_deg": 0.2396920943555889,
+          "mean_of_mean_complex_error": 0.001558391814520674,
+          "mean_of_mean_magnitude_error_db": 0.005634157401864933,
+          "mean_of_mean_phase_error_deg": 0.11627571099763628
+        },
+        "fdtd_discrete_vs_continuous": {
+          "worst_maximum_complex_error": 0.12376406707471199,
+          "worst_maximum_magnitude_error_db": 0.47490686321735864,
+          "worst_maximum_phase_error_deg": 7.679881820453958,
+          "mean_of_mean_complex_error": 0.05794409653890138,
+          "mean_of_mean_magnitude_error_db": 0.13386894821373957,
+          "mean_of_mean_phase_error_deg": 4.296289635310296
+        },
+        "fdtd_discrete_vs_path_digital": {
+          "worst_maximum_complex_error": 0.12471646932660735,
+          "worst_maximum_magnitude_error_db": 0.47483099796449996,
+          "worst_maximum_phase_error_deg": 7.749131502512178,
+          "mean_of_mean_complex_error": 0.05939534936419927,
+          "mean_of_mean_magnitude_error_db": 0.13684351000225148,
+          "mean_of_mean_phase_error_deg": 4.412565346307933
+        }
+      },
+      "early_path_geometry": {
+        "early_reflection_event_count": 2584,
+        "later_reflection_event_count": 40,
+        "axis_interactions": {
+          "0": {
+            "interaction_count": 7752,
+            "incidence_cosine_quantiles": {
+              "0": 0.12945110443690114,
+              "0.1": 0.43998234086140275,
+              "0.25": 0.6902926743944279,
+              "0.5": 0.8892314456344881,
+              "0.75": 0.967517393358014,
+              "0.9": 0.9899801187768765,
+              "1": 0.999217233946589
+            },
+            "representative_sample_count": 7
+          },
+          "1": {
+            "interaction_count": 8134,
+            "incidence_cosine_quantiles": {
+              "0": 0.07383559131219325,
+              "0.1": 0.26106707746950947,
+              "0.25": 0.4738014396166755,
+              "0.5": 0.7456501472739739,
+              "0.75": 0.9210125111884683,
+              "0.9": 0.9774701725336512,
+              "1": 0.9978278006363132
+            },
+            "representative_sample_count": 7
+          },
+          "2": {
+            "interaction_count": 8140,
+            "incidence_cosine_quantiles": {
+              "0": 0.05710469338380127,
+              "0.1": 0.18792440792382287,
+              "0.25": 0.3525416224130917,
+              "0.5": 0.6156357662713825,
+              "0.75": 0.8505719808525778,
+              "0.9": 0.9568978687021608,
+              "1": 0.9958711522052137
+            },
+            "representative_sample_count": 7
+          }
+        }
+      },
+      "early_path_representative_direction_count": 21,
+      "early_path_representative_aggregate": {
+        "path_digital_vs_continuous": {
+          "worst_maximum_complex_error": 0.0028792767326492274,
+          "worst_maximum_magnitude_error_db": 0.021751758046283928,
+          "worst_maximum_phase_error_deg": 0.24320275039066871,
+          "mean_of_mean_complex_error": 0.0016155137315807982,
+          "mean_of_mean_magnitude_error_db": 0.007945898399485127,
+          "mean_of_mean_phase_error_deg": 0.11650890779285548
+        },
+        "fdtd_discrete_vs_continuous": {
+          "worst_maximum_complex_error": 0.15832461015748817,
+          "worst_maximum_magnitude_error_db": 0.6221806551097654,
+          "worst_maximum_phase_error_deg": 9.268214087981772,
+          "mean_of_mean_complex_error": 0.05753707020462438,
+          "mean_of_mean_magnitude_error_db": 0.14661776600321177,
+          "mean_of_mean_phase_error_deg": 4.265857756534729
+        },
+        "fdtd_discrete_vs_path_digital": {
+          "worst_maximum_complex_error": 0.15889444452954338,
+          "worst_maximum_magnitude_error_db": 0.6222060725758214,
+          "worst_maximum_phase_error_deg": 9.308113145296137,
+          "mean_of_mean_complex_error": 0.05904308161802337,
+          "mean_of_mean_magnitude_error_db": 0.15250342954411328,
+          "mean_of_mean_phase_error_deg": 4.382366664327584
+        }
+      }
+    },
+    {
+      "case_id": "room_a_position_holdout_0",
+      "grid_spacing_xyz_m": [
+        0.06060606060606061,
+        0.058695652173913045,
+        0.058333333333333334
+      ],
+      "fdtd_sample_rate_hz": 29827.151524757657,
+      "canonical_direction_count": 39,
+      "canonical_aggregate": {
+        "path_digital_vs_continuous": {
+          "worst_maximum_complex_error": 0.002869747457250984,
+          "worst_maximum_magnitude_error_db": 0.021753857274761396,
+          "worst_maximum_phase_error_deg": 0.2396920943555889,
+          "mean_of_mean_complex_error": 0.001558391814520674,
+          "mean_of_mean_magnitude_error_db": 0.005634157401864933,
+          "mean_of_mean_phase_error_deg": 0.11627571099763628
+        },
+        "fdtd_discrete_vs_continuous": {
+          "worst_maximum_complex_error": 0.12376406707471199,
+          "worst_maximum_magnitude_error_db": 0.47490686321735864,
+          "worst_maximum_phase_error_deg": 7.679881820453958,
+          "mean_of_mean_complex_error": 0.05794409653890138,
+          "mean_of_mean_magnitude_error_db": 0.13386894821373957,
+          "mean_of_mean_phase_error_deg": 4.296289635310296
+        },
+        "fdtd_discrete_vs_path_digital": {
+          "worst_maximum_complex_error": 0.12471646932660735,
+          "worst_maximum_magnitude_error_db": 0.47483099796449996,
+          "worst_maximum_phase_error_deg": 7.749131502512178,
+          "mean_of_mean_complex_error": 0.05939534936419927,
+          "mean_of_mean_magnitude_error_db": 0.13684351000225148,
+          "mean_of_mean_phase_error_deg": 4.412565346307933
+        }
+      },
+      "early_path_geometry": {
+        "early_reflection_event_count": 2589,
+        "later_reflection_event_count": 35,
+        "axis_interactions": {
+          "0": {
+            "interaction_count": 7800,
+            "incidence_cosine_quantiles": {
+              "0": 0.12941971519702508,
+              "0.1": 0.4328722643294945,
+              "0.25": 0.6921270195820813,
+              "0.5": 0.8897146241661027,
+              "0.75": 0.967978078406015,
+              "0.9": 0.9891121039905062,
+              "1": 0.9996021489471602
+            },
+            "representative_sample_count": 7
+          },
+          "1": {
+            "interaction_count": 8140,
+            "incidence_cosine_quantiles": {
+              "0": 0.07376954281303945,
+              "0.1": 0.266561610105066,
+              "0.25": 0.4702115765683991,
+              "0.5": 0.7481128603467433,
+              "0.75": 0.9202432427336876,
+              "0.9": 0.9775683666306481,
+              "1": 0.99579956819816
+            },
+            "representative_sample_count": 7
+          },
+          "2": {
+            "interaction_count": 8142,
+            "incidence_cosine_quantiles": {
+              "0": 0.056343577129818946,
+              "0.1": 0.18437938256427794,
+              "0.25": 0.35266905624769534,
+              "0.5": 0.6166589035028872,
+              "0.75": 0.8505719808525778,
+              "0.9": 0.9550008382462569,
+              "1": 0.9944075248956645
+            },
+            "representative_sample_count": 7
+          }
+        }
+      },
+      "early_path_representative_direction_count": 21,
+      "early_path_representative_aggregate": {
+        "path_digital_vs_continuous": {
+          "worst_maximum_complex_error": 0.0028791943110490488,
+          "worst_maximum_magnitude_error_db": 0.021752793782537,
+          "worst_maximum_phase_error_deg": 0.24324183558709817,
+          "mean_of_mean_complex_error": 0.0016149204309556017,
+          "mean_of_mean_magnitude_error_db": 0.007938939878173436,
+          "mean_of_mean_phase_error_deg": 0.1164747429046462
+        },
+        "fdtd_discrete_vs_continuous": {
+          "worst_maximum_complex_error": 0.16647698233092084,
+          "worst_maximum_magnitude_error_db": 0.6557839998197563,
+          "worst_maximum_phase_error_deg": 9.75308674103573,
+          "mean_of_mean_complex_error": 0.05773852642469255,
+          "mean_of_mean_magnitude_error_db": 0.14741465599472628,
+          "mean_of_mean_phase_error_deg": 4.277109429928538
+        },
+        "fdtd_discrete_vs_path_digital": {
+          "worst_maximum_complex_error": 0.16703843765126836,
+          "worst_maximum_magnitude_error_db": 0.6558099632772592,
+          "worst_maximum_phase_error_deg": 9.792458457961024,
+          "mean_of_mean_complex_error": 0.059243981982554816,
+          "mean_of_mean_magnitude_error_db": 0.1532573501460472,
+          "mean_of_mean_phase_error_deg": 4.393584172833184
+        }
+      }
+    },
+    {
+      "case_id": "room_c_room_holdout_0",
+      "grid_spacing_xyz_m": [
+        0.05931034482758621,
+        0.059166666666666666,
+        0.05894736842105264
+      ],
+      "fdtd_sample_rate_hz": 29854.38039354962,
+      "canonical_direction_count": 39,
+      "canonical_aggregate": {
+        "path_digital_vs_continuous": {
+          "worst_maximum_complex_error": 0.002869747457250984,
+          "worst_maximum_magnitude_error_db": 0.021753857274761396,
+          "worst_maximum_phase_error_deg": 0.2396920943555889,
+          "mean_of_mean_complex_error": 0.001558391814520674,
+          "mean_of_mean_magnitude_error_db": 0.005634157401864933,
+          "mean_of_mean_phase_error_deg": 0.11627571099763628
+        },
+        "fdtd_discrete_vs_continuous": {
+          "worst_maximum_complex_error": 0.12039026873086174,
+          "worst_maximum_magnitude_error_db": 0.45957888159804455,
+          "worst_maximum_phase_error_deg": 7.468889143118842,
+          "mean_of_mean_complex_error": 0.057850248615146926,
+          "mean_of_mean_magnitude_error_db": 0.13358515339613586,
+          "mean_of_mean_phase_error_deg": 4.289484839831916
+        },
+        "fdtd_discrete_vs_path_digital": {
+          "worst_maximum_complex_error": 0.12134433803312242,
+          "worst_maximum_magnitude_error_db": 0.45950301634518487,
+          "worst_maximum_phase_error_deg": 7.538138825177062,
+          "mean_of_mean_complex_error": 0.05930153729047712,
+          "mean_of_mean_magnitude_error_db": 0.13656859059161403,
+          "mean_of_mean_phase_error_deg": 4.405760550829553
+        }
+      },
+      "early_path_geometry": {
+        "early_reflection_event_count": 2611,
+        "later_reflection_event_count": 13,
+        "axis_interactions": {
+          "0": {
+            "interaction_count": 8020,
+            "incidence_cosine_quantiles": {
+              "0": 0.10940440204154049,
+              "0.1": 0.3779838014695026,
+              "0.25": 0.625928565193202,
+              "0.5": 0.8570642994085937,
+              "0.75": 0.9579681270941163,
+              "0.9": 0.9889057834623888,
+              "1": 0.9990208688156105
+            },
+            "representative_sample_count": 7
+          },
+          "1": {
+            "interaction_count": 8158,
+            "incidence_cosine_quantiles": {
+              "0": 0.07785577415878377,
+              "0.1": 0.2827656114817293,
+              "0.25": 0.5117644777487425,
+              "0.5": 0.7822516034206036,
+              "0.75": 0.9347880279810947,
+              "0.9": 0.9818746795616035,
+              "1": 0.9982108104978972
+            },
+            "representative_sample_count": 7
+          },
+          "2": {
+            "interaction_count": 8160,
+            "incidence_cosine_quantiles": {
+              "0": 0.06140737116749144,
+              "0.1": 0.21365855324763053,
+              "0.25": 0.39394208342039566,
+              "0.5": 0.6685095152495022,
+              "0.75": 0.8773243679763426,
+              "0.9": 0.9671689459987886,
+              "1": 0.9965965232870392
+            },
+            "representative_sample_count": 7
+          }
+        }
+      },
+      "early_path_representative_direction_count": 21,
+      "early_path_representative_aggregate": {
+        "path_digital_vs_continuous": {
+          "worst_maximum_complex_error": 0.002879308201164738,
+          "worst_maximum_magnitude_error_db": 0.021751227075356594,
+          "worst_maximum_phase_error_deg": 0.24287584286691655,
+          "mean_of_mean_complex_error": 0.0016201894094553906,
+          "mean_of_mean_magnitude_error_db": 0.00800201541845004,
+          "mean_of_mean_phase_error_deg": 0.1169041507750231
+        },
+        "fdtd_discrete_vs_continuous": {
+          "worst_maximum_complex_error": 0.15418755796274594,
+          "worst_maximum_magnitude_error_db": 0.6039275234026305,
+          "worst_maximum_phase_error_deg": 9.079963940198677,
+          "mean_of_mean_complex_error": 0.05697806648252607,
+          "mean_of_mean_magnitude_error_db": 0.14489545039621216,
+          "mean_of_mean_phase_error_deg": 4.23243596609176
+        },
+        "fdtd_discrete_vs_path_digital": {
+          "worst_maximum_complex_error": 0.15479790199107268,
+          "worst_maximum_magnitude_error_db": 0.6039491703799875,
+          "worst_maximum_phase_error_deg": 9.12284061170908,
+          "mean_of_mean_complex_error": 0.0584885303883283,
+          "mean_of_mean_magnitude_error_db": 0.15110428393290506,
+          "mean_of_mean_phase_error_deg": 4.349340116866784
+        }
+      }
+    }
+  ],
+  "canonical_aggregate": {
+    "path_digital_vs_continuous": {
+      "worst_maximum_complex_error": 0.002869747457250984,
+      "worst_maximum_magnitude_error_db": 0.021753857274761396,
+      "worst_maximum_phase_error_deg": 0.2396920943555889,
+      "mean_of_mean_complex_error": 0.001558391814520674,
+      "mean_of_mean_magnitude_error_db": 0.005634157401864934,
+      "mean_of_mean_phase_error_deg": 0.11627571099763631
+    },
+    "fdtd_discrete_vs_continuous": {
+      "worst_maximum_complex_error": 0.12376406707471199,
+      "worst_maximum_magnitude_error_db": 0.47490686321735864,
+      "worst_maximum_phase_error_deg": 7.679881820453958,
+      "mean_of_mean_complex_error": 0.0579128138976499,
+      "mean_of_mean_magnitude_error_db": 0.13377434994120496,
+      "mean_of_mean_phase_error_deg": 4.294021370150836
+    },
+    "fdtd_discrete_vs_path_digital": {
+      "worst_maximum_complex_error": 0.12471646932660735,
+      "worst_maximum_magnitude_error_db": 0.47483099796449996,
+      "worst_maximum_phase_error_deg": 7.749131502512178,
+      "mean_of_mean_complex_error": 0.05936407867295857,
+      "mean_of_mean_magnitude_error_db": 0.13675187019870566,
+      "mean_of_mean_phase_error_deg": 4.410297081148472
+    }
+  },
+  "early_path_representative_aggregate": {
+    "path_digital_vs_continuous": {
+      "worst_maximum_complex_error": 0.002879308201164738,
+      "worst_maximum_magnitude_error_db": 0.021752793782537,
+      "worst_maximum_phase_error_deg": 0.24324183558709817,
+      "mean_of_mean_complex_error": 0.0016168745239972632,
+      "mean_of_mean_magnitude_error_db": 0.007962284565369536,
+      "mean_of_mean_phase_error_deg": 0.11662926715750827
+    },
+    "fdtd_discrete_vs_continuous": {
+      "worst_maximum_complex_error": 0.16647698233092084,
+      "worst_maximum_magnitude_error_db": 0.6557839998197563,
+      "worst_maximum_phase_error_deg": 9.75308674103573,
+      "mean_of_mean_complex_error": 0.057417887703947665,
+      "mean_of_mean_magnitude_error_db": 0.14630929079805008,
+      "mean_of_mean_phase_error_deg": 4.258467717518343
+    },
+    "fdtd_discrete_vs_path_digital": {
+      "worst_maximum_complex_error": 0.16703843765126836,
+      "worst_maximum_magnitude_error_db": 0.6558099632772592,
+      "worst_maximum_phase_error_deg": 9.792458457961024,
+      "mean_of_mean_complex_error": 0.05892519799630215,
+      "mean_of_mean_magnitude_error_db": 0.1522883545410219,
+      "mean_of_mean_phase_error_deg": 4.375096984675852
+    }
+  },
+  "grid_convergence_at_worst_canonical_direction": {
+    "direction_unit": [
+      0.99498743710662,
+      0.1,
+      0.0
+    ],
+    "normal_axis": 1,
+    "cases": [
+      {
+        "linear_grid_scale": 1.0,
+        "grid_spacing_xyz_m": [
+          0.06060606060606061,
+          0.058695652173913045,
+          0.058333333333333334
+        ],
+        "fdtd_sample_rate_hz": 29827.151524757657,
+        "fdtd_discrete_vs_continuous": {
+          "maximum_complex_error": 0.12376406707471199,
+          "maximum_complex_error_frequency_hz": 300.0,
+          "maximum_magnitude_error_db": 0.4748267588163375,
+          "maximum_magnitude_error_frequency_hz": 300.0,
+          "maximum_phase_error_deg": 7.679881820453958,
+          "maximum_phase_error_frequency_hz": 300.0,
+          "mean_complex_error": 0.0960045315709082,
+          "mean_magnitude_error_db": 0.32658595883810926,
+          "mean_phase_error_deg": 6.001517163793922
+        }
+      },
+      {
+        "linear_grid_scale": 0.5,
+        "grid_spacing_xyz_m": [
+          0.030303030303030304,
+          0.029347826086956522,
+          0.029166666666666667
+        ],
+        "fdtd_sample_rate_hz": 59654.303049515314,
+        "fdtd_discrete_vs_continuous": {
+          "maximum_complex_error": 0.03996734287211163,
+          "maximum_complex_error_frequency_hz": 300.0,
+          "maximum_magnitude_error_db": 0.14801937254585798,
+          "maximum_magnitude_error_frequency_hz": 300.0,
+          "maximum_phase_error_deg": 2.4388239960770446,
+          "maximum_phase_error_frequency_hz": 300.0,
+          "mean_complex_error": 0.030542025141866623,
+          "mean_magnitude_error_db": 0.10394457153086326,
+          "mean_phase_error_deg": 1.880137881721767
+        }
+      },
+      {
+        "linear_grid_scale": 0.25,
+        "grid_spacing_xyz_m": [
+          0.015151515151515152,
+          0.014673913043478261,
+          0.014583333333333334
+        ],
+        "fdtd_sample_rate_hz": 119308.60609903063,
+        "fdtd_discrete_vs_continuous": {
+          "maximum_complex_error": 0.01331991403322373,
+          "maximum_complex_error_frequency_hz": 300.0,
+          "maximum_magnitude_error_db": 0.04629876041445659,
+          "maximum_magnitude_error_frequency_hz": 300.0,
+          "maximum_phase_error_deg": 0.8150017816633057,
+          "maximum_phase_error_frequency_hz": 300.0,
+          "mean_complex_error": 0.010233743420463695,
+          "mean_magnitude_error_db": 0.03464289128946048,
+          "mean_phase_error_deg": 0.6275393340040444
+        }
+      },
+      {
+        "linear_grid_scale": 0.125,
+        "grid_spacing_xyz_m": [
+          0.007575757575757576,
+          0.007336956521739131,
+          0.007291666666666667
+        ],
+        "fdtd_sample_rate_hz": 238617.21219806126,
+        "fdtd_discrete_vs_continuous": {
+          "maximum_complex_error": 0.00491866473163526,
+          "maximum_complex_error_frequency_hz": 300.0,
+          "maximum_magnitude_error_db": 0.01582840059880572,
+          "maximum_magnitude_error_frequency_hz": 300.0,
+          "maximum_phase_error_deg": 0.303363292177892,
+          "maximum_phase_error_frequency_hz": 300.0,
+          "mean_complex_error": 0.0038175850853963567,
+          "mean_magnitude_error_db": 0.012832151350794786,
+          "mean_phase_error_deg": 0.2339360655140752
+        }
+      }
+    ]
+  },
+  "acceptance": {
+    "maximum_complex_error": 0.02,
+    "maximum_magnitude_error_db": 0.1,
+    "maximum_phase_error_deg": 1.0,
+    "fdtd_continuous_boundary_parity_accepted": false,
+    "fdtd_discrete_passivity_accepted": true,
+    "grid_convergence_accepted": true,
+    "protocol_completed": true
+  },
+  "scope": {
+    "validated": [
+      "exact harmonic reflection of the implemented FDTD update",
+      "3D discrete dispersion and tangential azimuth",
+      "half-time and half-cell boundary staggering",
+      "canonical and actual early-path incidence distributions",
+      "linear grid refinement convergence"
+    ],
+    "time_domain_plane_wave_simulated": false,
+    "continuous_boundary_parity_claimed": false,
+    "production_path_event_phase_changed": false
+  },
+  "decision": "reject_coarse_fdtd_boundary_phase_as_continuous_ground_truth",
+  "next_action": "validate a face-pressure or boundary-phase-compensated update against this discrete equation and a time-domain plane-wave case; do not fit the physically continuous PathEvent reflection phase to the current coarse-grid FDTD artifact"
+}

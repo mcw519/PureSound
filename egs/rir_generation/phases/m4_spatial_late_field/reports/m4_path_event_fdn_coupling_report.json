@@ -1,0 +1,768 @@
+{
+  "schema_version": 1,
+  "milestone": "M4.4",
+  "scope": "opt_in_path_event_early_multiband_fdn_late_coupling",
+  "reference_tag": "measured",
+  "config": {
+    "sample_rate": 16000,
+    "duration_s": 1.2,
+    "max_path_order": 4,
+    "scene_seed": 20260731,
+    "fdn_seed": 20260731,
+    "mixing_time_s": 0.024,
+    "transition_duration_s": 0.016,
+    "delay_line_count": 16,
+    "qualified_centers_hz": [
+      500.0,
+      1000.0,
+      2000.0,
+      4000.0
+    ],
+    "maximum_rt60_relative_error": 0.12,
+    "maximum_late_density_absolute_error": 0.08
+  },
+  "scene": {
+    "scene_id": "m4-4-coupling-validator",
+    "room_type": "office",
+    "room_dim_m": [
+      7.497870923747,
+      3.7797757097873723,
+      2.7570363390324686
+    ],
+    "source_distances_m": [
+      0.5220253060317811,
+      0.8346679189484335,
+      5.128183563630197,
+      4.603285014832311,
+      2.8042145776109697
+    ],
+    "material_target_rt60_s_by_hz": {
+      "500": 0.30251806061648456,
+      "1000": 0.2636852140966636,
+      "2000": 0.25563805657183836,
+      "4000": 0.21957445662622047
+    }
+  },
+  "coupling": {
+    "policy": "puresound.path_event_fdn_coupling.v1",
+    "renderer": "path_event_early_multiband_fdn_late",
+    "opt_in": true,
+    "production_default_changed": false,
+    "target_rt60_origin": "scene_material_predicted_octave_rt60_s",
+    "target_rt60_s_by_hz": {
+      "500": 0.30251806061648456,
+      "1000": 0.2636852140966636,
+      "2000": 0.25563805657183836,
+      "4000": 0.21957445662622047
+    },
+    "mixing_time_s_after_direct": 0.024,
+    "transition_duration_s": 0.016,
+    "delay_line_count": 16,
+    "base_seed": 20260731,
+    "channels": [
+      {
+        "channel": 0,
+        "source_id": "near_0",
+        "policy": "puresound.path_event_fdn_coupling.v1",
+        "scope": "opt_in_path_event_early_multiband_fdn_late",
+        "sample_rate": 16000,
+        "sample_count": 19200,
+        "seed": 1013367465,
+        "direct_sample": 24,
+        "direct_time_s": 0.0015,
+        "mixing_time_s_after_direct": 0.024,
+        "transition_duration_s": 0.016,
+        "transition_center_sample": 408,
+        "transition_start_sample": 280,
+        "transition_end_sample": 536,
+        "transition_start_s_after_direct": 0.016,
+        "transition_end_s_after_direct": 0.032,
+        "crossfade": "complementary_equal_power_cosine_sine",
+        "injection": "path_event_response_times_early_weight",
+        "post_transition_energy_policy": "positive_quadratic_root_exact_match",
+        "pre_transition_max_abs_error": 0.0,
+        "finite_output": true,
+        "energy": {
+          "target_original_post_transition_energy": 0.0641362362556431,
+          "weighted_coherent_energy": 0.028395821405066198,
+          "weighted_fdn_energy_before_gain": 0.004551533495638907,
+          "coherent_fdn_cross_inner_product": 8.562692585197516e-05,
+          "fdn_output_gain": 2.7834619626932686,
+          "realized_coupled_post_transition_energy": 0.06413623625564309,
+          "relative_energy_error": 2.1637982859640292e-16
+        },
+        "fdn_design": {
+          "policy": "puresound.multiband_fdn.v1",
+          "sample_rate": 16000,
+          "seed": 1013367465,
+          "delay_line_count": 16,
+          "delay_lengths_samples": [
+            53,
+            59,
+            61,
+            67,
+            79,
+            89,
+            97,
+            109,
+            127,
+            139,
+            163,
+            179,
+            199,
+            227,
+            257,
+            283
+          ],
+          "delay_lengths_ms": [
+            3.3125,
+            3.6875,
+            3.8125,
+            4.1875,
+            4.9375,
+            5.5625,
+            6.0625,
+            6.8125,
+            7.9375,
+            8.6875,
+            10.1875,
+            11.1875,
+            12.4375,
+            14.1875,
+            16.0625,
+            17.6875
+          ],
+          "delays_are_distinct_primes": true,
+          "feedback_matrix": "signed_permuted_normalized_hadamard",
+          "feedback_orthogonality_error_2norm": 0.0,
+          "target_mixing_time_s": 0.024,
+          "band_weight_energy_sum": 1.0,
+          "bands": {
+            "500": {
+              "center_hz": 500.0,
+              "target_rt60_s": 0.30251806061648456,
+              "minimum_loop_gain": 0.6677244041111411,
+              "maximum_loop_gain": 0.9271515348102869,
+              "feedback_operator_2norm": 0.9271515348102869
+            },
+            "1000": {
+              "center_hz": 1000.0,
+              "target_rt60_s": 0.2636852140966636,
+              "minimum_loop_gain": 0.6291667106595702,
+              "maximum_loop_gain": 0.9168810939472637,
+              "feedback_operator_2norm": 0.9168810939472637
+            },
+            "2000": {
+              "center_hz": 2000.0,
+              "target_rt60_s": 0.25563805657183836,
+              "minimum_loop_gain": 0.6200563220648182,
+              "maximum_loop_gain": 0.9143799192191117,
+              "feedback_operator_2norm": 0.9143799192191117
+            },
+            "4000": {
+              "center_hz": 4000.0,
+              "target_rt60_s": 0.21957445662622047,
+              "minimum_loop_gain": 0.573243814083611,
+              "maximum_loop_gain": 0.9010357102062465,
+              "feedback_operator_2norm": 0.9010357102062465
+            }
+          }
+        }
+      },
+      {
+        "channel": 1,
+        "source_id": "near_1",
+        "policy": "puresound.path_event_fdn_coupling.v1",
+        "scope": "opt_in_path_event_early_multiband_fdn_late",
+        "sample_rate": 16000,
+        "sample_count": 19200,
+        "seed": 1250234814,
+        "direct_sample": 39,
+        "direct_time_s": 0.0024375,
+        "mixing_time_s_after_direct": 0.024,
+        "transition_duration_s": 0.016,
+        "transition_center_sample": 423,
+        "transition_start_sample": 295,
+        "transition_end_sample": 551,
+        "transition_start_s_after_direct": 0.016,
+        "transition_end_s_after_direct": 0.032,
+        "crossfade": "complementary_equal_power_cosine_sine",
+        "injection": "path_event_response_times_early_weight",
+        "post_transition_energy_policy": "positive_quadratic_root_exact_match",
+        "pre_transition_max_abs_error": 0.0,
+        "finite_output": true,
+        "energy": {
+          "target_original_post_transition_energy": 0.055320770436624936,
+          "weighted_coherent_energy": 0.016117003360414325,
+          "weighted_fdn_energy_before_gain": 0.009095399380801693,
+          "coherent_fdn_cross_inner_product": -0.0002075983598597306,
+          "fdn_output_gain": 2.099072688708087,
+          "realized_coupled_post_transition_energy": 0.05532077043662493,
+          "relative_energy_error": 1.254301747633174e-16
+        },
+        "fdn_design": {
+          "policy": "puresound.multiband_fdn.v1",
+          "sample_rate": 16000,
+          "seed": 1250234814,
+          "delay_line_count": 16,
+          "delay_lengths_samples": [
+            53,
+            59,
+            61,
+            67,
+            79,
+            89,
+            97,
+            109,
+            127,
+            139,
+            157,
+            173,
+            199,
+            229,
+            257,
+            283
+          ],
+          "delay_lengths_ms": [
+            3.3125,
+            3.6875,
+            3.8125,
+            4.1875,
+            4.9375,
+            5.5625,
+            6.0625,
+            6.8125,
+            7.9375,
+            8.6875,
+            9.8125,
+            10.8125,
+            12.4375,
+            14.3125,
+            16.0625,
+            17.6875
+          ],
+          "delays_are_distinct_primes": true,
+          "feedback_matrix": "signed_permuted_normalized_hadamard",
+          "feedback_orthogonality_error_2norm": 0.0,
+          "target_mixing_time_s": 0.024,
+          "band_weight_energy_sum": 1.0,
+          "bands": {
+            "500": {
+              "center_hz": 500.0,
+              "target_rt60_s": 0.30251806061648456,
+              "minimum_loop_gain": 0.6677244041111411,
+              "maximum_loop_gain": 0.9271515348102869,
+              "feedback_operator_2norm": 0.9271515348102869
+            },
+            "1000": {
+              "center_hz": 1000.0,
+              "target_rt60_s": 0.2636852140966636,
+              "minimum_loop_gain": 0.6291667106595702,
+              "maximum_loop_gain": 0.9168810939472637,
+              "feedback_operator_2norm": 0.9168810939472637
+            },
+            "2000": {
+              "center_hz": 2000.0,
+              "target_rt60_s": 0.25563805657183836,
+              "minimum_loop_gain": 0.6200563220648182,
+              "maximum_loop_gain": 0.9143799192191117,
+              "feedback_operator_2norm": 0.9143799192191117
+            },
+            "4000": {
+              "center_hz": 4000.0,
+              "target_rt60_s": 0.21957445662622047,
+              "minimum_loop_gain": 0.573243814083611,
+              "maximum_loop_gain": 0.9010357102062465,
+              "feedback_operator_2norm": 0.9010357102062465
+            }
+          }
+        }
+      },
+      {
+        "channel": 2,
+        "source_id": "far_0",
+        "policy": "puresound.path_event_fdn_coupling.v1",
+        "scope": "opt_in_path_event_early_multiband_fdn_late",
+        "sample_rate": 16000,
+        "sample_count": 19200,
+        "seed": 510854016,
+        "direct_sample": 238,
+        "direct_time_s": 0.014875,
+        "mixing_time_s_after_direct": 0.024,
+        "transition_duration_s": 0.016,
+        "transition_center_sample": 622,
+        "transition_start_sample": 494,
+        "transition_end_sample": 750,
+        "transition_start_s_after_direct": 0.016,
+        "transition_end_s_after_direct": 0.032,
+        "crossfade": "complementary_equal_power_cosine_sine",
+        "injection": "path_event_response_times_early_weight",
+        "post_transition_energy_policy": "positive_quadratic_root_exact_match",
+        "pre_transition_max_abs_error": 0.0,
+        "finite_output": true,
+        "energy": {
+          "target_original_post_transition_energy": 0.03681645707415972,
+          "weighted_coherent_energy": 0.02320591213051473,
+          "weighted_fdn_energy_before_gain": 0.0016987764210467204,
+          "coherent_fdn_cross_inner_product": 6.0333026601572887e-05,
+          "fdn_output_gain": 2.795249494844579,
+          "realized_coupled_post_transition_energy": 0.03681645707415973,
+          "relative_energy_error": 3.769452280500621e-16
+        },
+        "fdn_design": {
+          "policy": "puresound.multiband_fdn.v1",
+          "sample_rate": 16000,
+          "seed": 510854016,
+          "delay_line_count": 16,
+          "delay_lengths_samples": [
+            53,
+            59,
+            61,
+            71,
+            79,
+            89,
+            101,
+            113,
+            127,
+            139,
+            157,
+            179,
+            199,
+            233,
+            257,
+            283
+          ],
+          "delay_lengths_ms": [
+            3.3125,
+            3.6875,
+            3.8125,
+            4.4375,
+            4.9375,
+            5.5625,
+            6.3125,
+            7.0625,
+            7.9375,
+            8.6875,
+            9.8125,
+            11.1875,
+            12.4375,
+            14.5625,
+            16.0625,
+            17.6875
+          ],
+          "delays_are_distinct_primes": true,
+          "feedback_matrix": "signed_permuted_normalized_hadamard",
+          "feedback_orthogonality_error_2norm": 0.0,
+          "target_mixing_time_s": 0.024,
+          "band_weight_energy_sum": 1.0,
+          "bands": {
+            "500": {
+              "center_hz": 500.0,
+              "target_rt60_s": 0.30251806061648456,
+              "minimum_loop_gain": 0.6677244041111411,
+              "maximum_loop_gain": 0.9271515348102869,
+              "feedback_operator_2norm": 0.9271515348102869
+            },
+            "1000": {
+              "center_hz": 1000.0,
+              "target_rt60_s": 0.2636852140966636,
+              "minimum_loop_gain": 0.6291667106595702,
+              "maximum_loop_gain": 0.9168810939472637,
+              "feedback_operator_2norm": 0.9168810939472637
+            },
+            "2000": {
+              "center_hz": 2000.0,
+              "target_rt60_s": 0.25563805657183836,
+              "minimum_loop_gain": 0.6200563220648182,
+              "maximum_loop_gain": 0.9143799192191117,
+              "feedback_operator_2norm": 0.9143799192191117
+            },
+            "4000": {
+              "center_hz": 4000.0,
+              "target_rt60_s": 0.21957445662622047,
+              "minimum_loop_gain": 0.573243814083611,
+              "maximum_loop_gain": 0.9010357102062465,
+              "feedback_operator_2norm": 0.9010357102062465
+            }
+          }
+        }
+      },
+      {
+        "channel": 3,
+        "source_id": "far_1",
+        "policy": "puresound.path_event_fdn_coupling.v1",
+        "scope": "opt_in_path_event_early_multiband_fdn_late",
+        "sample_rate": 16000,
+        "sample_count": 19200,
+        "seed": 1235910983,
+        "direct_sample": 214,
+        "direct_time_s": 0.013375,
+        "mixing_time_s_after_direct": 0.024,
+        "transition_duration_s": 0.016,
+        "transition_center_sample": 598,
+        "transition_start_sample": 470,
+        "transition_end_sample": 726,
+        "transition_start_s_after_direct": 0.016,
+        "transition_end_s_after_direct": 0.032,
+        "crossfade": "complementary_equal_power_cosine_sine",
+        "injection": "path_event_response_times_early_weight",
+        "post_transition_energy_policy": "positive_quadratic_root_exact_match",
+        "pre_transition_max_abs_error": 0.0,
+        "finite_output": true,
+        "energy": {
+          "target_original_post_transition_energy": 0.05092214597498821,
+          "weighted_coherent_energy": 0.03186231129612309,
+          "weighted_fdn_energy_before_gain": 0.0015251767388996297,
+          "coherent_fdn_cross_inner_product": 3.912120077187251e-05,
+          "fdn_output_gain": 3.5095246690683903,
+          "realized_coupled_post_transition_energy": 0.0509221459749882,
+          "relative_energy_error": 1.362647581136006e-16
+        },
+        "fdn_design": {
+          "policy": "puresound.multiband_fdn.v1",
+          "sample_rate": 16000,
+          "seed": 1235910983,
+          "delay_line_count": 16,
+          "delay_lengths_samples": [
+            53,
+            59,
+            61,
+            67,
+            79,
+            89,
+            101,
+            113,
+            127,
+            139,
+            163,
+            179,
+            197,
+            229,
+            263,
+            283
+          ],
+          "delay_lengths_ms": [
+            3.3125,
+            3.6875,
+            3.8125,
+            4.1875,
+            4.9375,
+            5.5625,
+            6.3125,
+            7.0625,
+            7.9375,
+            8.6875,
+            10.1875,
+            11.1875,
+            12.3125,
+            14.3125,
+            16.4375,
+            17.6875
+          ],
+          "delays_are_distinct_primes": true,
+          "feedback_matrix": "signed_permuted_normalized_hadamard",
+          "feedback_orthogonality_error_2norm": 0.0,
+          "target_mixing_time_s": 0.024,
+          "band_weight_energy_sum": 1.0,
+          "bands": {
+            "500": {
+              "center_hz": 500.0,
+              "target_rt60_s": 0.30251806061648456,
+              "minimum_loop_gain": 0.6677244041111411,
+              "maximum_loop_gain": 0.9271515348102869,
+              "feedback_operator_2norm": 0.9271515348102869
+            },
+            "1000": {
+              "center_hz": 1000.0,
+              "target_rt60_s": 0.2636852140966636,
+              "minimum_loop_gain": 0.6291667106595702,
+              "maximum_loop_gain": 0.9168810939472637,
+              "feedback_operator_2norm": 0.9168810939472637
+            },
+            "2000": {
+              "center_hz": 2000.0,
+              "target_rt60_s": 0.25563805657183836,
+              "minimum_loop_gain": 0.6200563220648182,
+              "maximum_loop_gain": 0.9143799192191117,
+              "feedback_operator_2norm": 0.9143799192191117
+            },
+            "4000": {
+              "center_hz": 4000.0,
+              "target_rt60_s": 0.21957445662622047,
+              "minimum_loop_gain": 0.573243814083611,
+              "maximum_loop_gain": 0.9010357102062465,
+              "feedback_operator_2norm": 0.9010357102062465
+            }
+          }
+        }
+      },
+      {
+        "channel": 4,
+        "source_id": "far_2",
+        "policy": "puresound.path_event_fdn_coupling.v1",
+        "scope": "opt_in_path_event_early_multiband_fdn_late",
+        "sample_rate": 16000,
+        "sample_count": 19200,
+        "seed": 380647086,
+        "direct_sample": 130,
+        "direct_time_s": 0.008125,
+        "mixing_time_s_after_direct": 0.024,
+        "transition_duration_s": 0.016,
+        "transition_center_sample": 514,
+        "transition_start_sample": 386,
+        "transition_end_sample": 642,
+        "transition_start_s_after_direct": 0.016,
+        "transition_end_s_after_direct": 0.032,
+        "crossfade": "complementary_equal_power_cosine_sine",
+        "injection": "path_event_response_times_early_weight",
+        "post_transition_energy_policy": "positive_quadratic_root_exact_match",
+        "pre_transition_max_abs_error": 0.0,
+        "finite_output": true,
+        "energy": {
+          "target_original_post_transition_energy": 0.059326283853551626,
+          "weighted_coherent_energy": 0.00904896164621355,
+          "weighted_fdn_energy_before_gain": 0.0006125314831409408,
+          "coherent_fdn_cross_inner_product": 7.107686987607072e-05,
+          "fdn_output_gain": 8.944572987905412,
+          "realized_coupled_post_transition_energy": 0.05932628385355163,
+          "relative_energy_error": 1.1696154643759682e-16
+        },
+        "fdn_design": {
+          "policy": "puresound.multiband_fdn.v1",
+          "sample_rate": 16000,
+          "seed": 380647086,
+          "delay_line_count": 16,
+          "delay_lengths_samples": [
+            53,
+            59,
+            61,
+            67,
+            79,
+            89,
+            97,
+            109,
+            127,
+            139,
+            157,
+            179,
+            199,
+            229,
+            257,
+            283
+          ],
+          "delay_lengths_ms": [
+            3.3125,
+            3.6875,
+            3.8125,
+            4.1875,
+            4.9375,
+            5.5625,
+            6.0625,
+            6.8125,
+            7.9375,
+            8.6875,
+            9.8125,
+            11.1875,
+            12.4375,
+            14.3125,
+            16.0625,
+            17.6875
+          ],
+          "delays_are_distinct_primes": true,
+          "feedback_matrix": "signed_permuted_normalized_hadamard",
+          "feedback_orthogonality_error_2norm": 0.0,
+          "target_mixing_time_s": 0.024,
+          "band_weight_energy_sum": 1.0,
+          "bands": {
+            "500": {
+              "center_hz": 500.0,
+              "target_rt60_s": 0.30251806061648456,
+              "minimum_loop_gain": 0.6677244041111411,
+              "maximum_loop_gain": 0.9271515348102869,
+              "feedback_operator_2norm": 0.9271515348102869
+            },
+            "1000": {
+              "center_hz": 1000.0,
+              "target_rt60_s": 0.2636852140966636,
+              "minimum_loop_gain": 0.6291667106595702,
+              "maximum_loop_gain": 0.9168810939472637,
+              "feedback_operator_2norm": 0.9168810939472637
+            },
+            "2000": {
+              "center_hz": 2000.0,
+              "target_rt60_s": 0.25563805657183836,
+              "minimum_loop_gain": 0.6200563220648182,
+              "maximum_loop_gain": 0.9143799192191117,
+              "feedback_operator_2norm": 0.9143799192191117
+            },
+            "4000": {
+              "center_hz": 4000.0,
+              "target_rt60_s": 0.21957445662622047,
+              "minimum_loop_gain": 0.573243814083611,
+              "maximum_loop_gain": 0.9010357102062465,
+              "feedback_operator_2norm": 0.9010357102062465
+            }
+          }
+        }
+      }
+    ]
+  },
+  "structural_checks": {
+    "shape_preserved": true,
+    "same_seed_exact_determinism": true,
+    "finite_output": true,
+    "causal_no_prearrival": true,
+    "pre_transition_exact_preservation": true,
+    "post_transition_energy_preserved": true,
+    "channel_seeds_are_distinct": true,
+    "production_default_unchanged": true
+  },
+  "band_checks": {
+    "500": {
+      "center_hz": 500.0,
+      "material_target_rt60_s": 0.30251806061648456,
+      "m4_median_t20_s": 0.31107892591525904,
+      "m4_t20_relative_error": 0.028298691593251563,
+      "t20_passed": true,
+      "m3_median_mixing_time_s": 0.027999999999999997,
+      "m4_median_mixing_time_s": 0.022,
+      "measured_mixing_time_p10_s": 0.01,
+      "measured_mixing_time_p90_s": 0.0362,
+      "mixing_time_passed": true,
+      "measured_median_late_density": 1.0701311633683708,
+      "m3_median_late_density": 0.5596098744219921,
+      "m4_median_late_density": 1.0406780120830028,
+      "m3_late_density_absolute_error": 0.5105212889463787,
+      "m4_late_density_absolute_error": 0.029453151285367962,
+      "late_density_tolerance_passed": true,
+      "late_density_improved_over_m3": true
+    },
+    "1000": {
+      "center_hz": 1000.0,
+      "material_target_rt60_s": 0.2636852140966636,
+      "m4_median_t20_s": 0.2777221889534982,
+      "m4_t20_relative_error": 0.05323383377760729,
+      "t20_passed": true,
+      "m3_median_mixing_time_s": 0.04,
+      "m4_median_mixing_time_s": 0.026,
+      "measured_mixing_time_p10_s": 0.01,
+      "measured_mixing_time_p90_s": 0.062,
+      "mixing_time_passed": true,
+      "measured_median_late_density": 1.0382235828092221,
+      "m3_median_late_density": 0.0,
+      "m4_median_late_density": 1.1094020317488615,
+      "m3_late_density_absolute_error": 1.0382235828092221,
+      "m4_late_density_absolute_error": 0.07117844893963943,
+      "late_density_tolerance_passed": true,
+      "late_density_improved_over_m3": true
+    },
+    "2000": {
+      "center_hz": 2000.0,
+      "material_target_rt60_s": 0.25563805657183836,
+      "m4_median_t20_s": 0.2573944303750378,
+      "m4_t20_relative_error": 0.006870549036214646,
+      "t20_passed": true,
+      "m3_median_mixing_time_s": null,
+      "m4_median_mixing_time_s": 0.03,
+      "measured_mixing_time_p10_s": 0.01,
+      "measured_mixing_time_p90_s": 0.07020000000000001,
+      "mixing_time_passed": true,
+      "measured_median_late_density": 1.0210425778927574,
+      "m3_median_late_density": 0.0,
+      "m4_median_late_density": 0.9915894266073896,
+      "m3_late_density_absolute_error": 1.0210425778927574,
+      "m4_late_density_absolute_error": 0.02945315128536785,
+      "late_density_tolerance_passed": true,
+      "late_density_improved_over_m3": true
+    },
+    "4000": {
+      "center_hz": 4000.0,
+      "material_target_rt60_s": 0.21957445662622047,
+      "m4_median_t20_s": 0.22719275084318918,
+      "m4_t20_relative_error": 0.03469572159724056,
+      "t20_passed": true,
+      "m3_median_mixing_time_s": null,
+      "m4_median_mixing_time_s": 0.034,
+      "measured_mixing_time_p10_s": 0.011800000000000001,
+      "measured_mixing_time_p90_s": 0.0882,
+      "mixing_time_passed": true,
+      "measured_median_late_density": 1.0014071437025123,
+      "m3_median_late_density": 0.0,
+      "m4_median_late_density": 1.0014071437025123,
+      "m3_late_density_absolute_error": 1.0014071437025123,
+      "m4_late_density_absolute_error": 0.0,
+      "late_density_tolerance_passed": true,
+      "late_density_improved_over_m3": true
+    }
+  },
+  "full_hybrid": {
+    "checks": {
+      "exact_before_transition": true,
+      "median_absolute_c50_change_at_most_1db": true,
+      "maximum_absolute_c50_change_at_most_3db": true,
+      "median_early_centroid_change_at_most_1ms": true,
+      "maximum_early_centroid_change_at_most_2_5ms": true
+    },
+    "pre_transition_max_abs_error_by_channel": [
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ],
+    "m3_c50_db_by_channel": [
+      16.160860324977673,
+      16.887241974473852,
+      8.689518725034148,
+      9.096888926571197,
+      10.703173079071778
+    ],
+    "m4_c50_db_by_channel": [
+      15.240046457759586,
+      15.87202777601324,
+      8.892436914328442,
+      8.873846252706128,
+      8.842354524660127
+    ],
+    "absolute_c50_change_db_by_channel": [
+      0.9208138672180866,
+      1.0152141984606118,
+      0.2029181892942944,
+      0.22304267386506815,
+      1.860818554411651
+    ],
+    "m3_early_centroid_ms_by_channel": [
+      12.586866491769237,
+      15.254329710005788,
+      17.248169952454734,
+      18.470173363497477,
+      21.0601213182861
+    ],
+    "m4_early_centroid_ms_by_channel": [
+      12.169165728488732,
+      14.00099431455514,
+      17.522830808538444,
+      19.056191854078524,
+      21.397143430568992
+    ],
+    "absolute_early_centroid_change_ms_by_channel": [
+      0.4177007632805054,
+      1.253335395450648,
+      0.2746608560837096,
+      0.586018490581047,
+      0.3370221122828916
+    ]
+  },
+  "exit": {
+    "structural_checks_passed": true,
+    "qualified_acoustic_checks_passed": true,
+    "full_hybrid_compatibility_checks_passed": true,
+    "passed": true,
+    "limitations": [
+      "This is one deterministic material-first room fixture, not a measured-room exit.",
+      "The late field remains monophonic per source channel; M4.5 owns receiver-array spatial output.",
+      "Metallic coloration still requires controlled listening tests.",
+      "Pyroomacoustics remains the production default; path-events-m4 is explicit opt-in."
+    ]
+  }
+}

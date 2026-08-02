@@ -1,0 +1,148 @@
+{
+  "schema_version": "puresound.m3_measured_exit.v1",
+  "configuration": {
+    "m1_bank": "egs/rir_generation/exp/rir_realism/m1/rir_m1_probe100",
+    "measured_bank": "/work/any_exp_link/puresound_exp/real_rir_16k_heldout_view/items",
+    "synthetic_items": 20,
+    "measured_channels": 100,
+    "path_event_max_order": 8,
+    "seed": 20260731
+  },
+  "comparison_contract": {
+    "m1_candidate": "frozen complete M1 hybrid RIR from paired bank",
+    "m3_candidate": "complete hybrid RIR with the same analytic modal low backend and the opt-in M3 PathEvent high backend",
+    "paired_scene_geometry_and_configuration": true,
+    "measured_timing_metric_role": "distributional direct-excluded 2.5-50 ms early-energy centroid; not annotated reflection-path correspondence"
+  },
+  "summaries": {
+    "m1_paired": {
+      "0-1m": {
+        "channels": 40,
+        "c50_db_median": 8.728920671121504,
+        "dominant_early_reflection_delay_ms_median": 4.1875,
+        "early_reflection_energy_centroid_ms_median": 16.601092698831646,
+        "timing_qualified_channels": 40,
+        "centroid_qualified_channels": 40
+      },
+      "2-3.5m": {
+        "channels": 40,
+        "c50_db_median": 2.341978788816343,
+        "dominant_early_reflection_delay_ms_median": 7.0,
+        "early_reflection_energy_centroid_ms_median": 22.631343984474043,
+        "timing_qualified_channels": 40,
+        "centroid_qualified_channels": 40
+      },
+      "3.5-6m": {
+        "channels": 20,
+        "c50_db_median": 2.1577638090068296,
+        "dominant_early_reflection_delay_ms_median": 7.15625,
+        "early_reflection_energy_centroid_ms_median": 20.76134122804693,
+        "timing_qualified_channels": 20,
+        "centroid_qualified_channels": 20
+      }
+    },
+    "m3_paired": {
+      "0-1m": {
+        "channels": 40,
+        "c50_db_median": 10.826623145393217,
+        "dominant_early_reflection_delay_ms_median": 4.75,
+        "early_reflection_energy_centroid_ms_median": 15.496058635310666,
+        "timing_qualified_channels": 40,
+        "centroid_qualified_channels": 40
+      },
+      "2-3.5m": {
+        "channels": 40,
+        "c50_db_median": 5.582172600640678,
+        "dominant_early_reflection_delay_ms_median": 4.75,
+        "early_reflection_energy_centroid_ms_median": 20.905731419911827,
+        "timing_qualified_channels": 40,
+        "centroid_qualified_channels": 40
+      },
+      "3.5-6m": {
+        "channels": 20,
+        "c50_db_median": 2.9709448519899078,
+        "dominant_early_reflection_delay_ms_median": 9.25,
+        "early_reflection_energy_centroid_ms_median": 21.181029756058972,
+        "timing_qualified_channels": 20,
+        "centroid_qualified_channels": 20
+      }
+    },
+    "measured_heldout": {
+      "0-1m": {
+        "channels": 45,
+        "c50_db_median": 12.51273596140842,
+        "dominant_early_reflection_delay_ms_median": 4.0,
+        "early_reflection_energy_centroid_ms_median": 12.095853803096952,
+        "timing_qualified_channels": 45,
+        "centroid_qualified_channels": 45
+      },
+      "1-2m": {
+        "channels": 13,
+        "c50_db_median": 11.918644723746105,
+        "dominant_early_reflection_delay_ms_median": 3.3125,
+        "early_reflection_energy_centroid_ms_median": 13.48852178969046,
+        "timing_qualified_channels": 13,
+        "centroid_qualified_channels": 13
+      },
+      "2-3.5m": {
+        "channels": 15,
+        "c50_db_median": 8.832161378995778,
+        "dominant_early_reflection_delay_ms_median": 8.3125,
+        "early_reflection_energy_centroid_ms_median": 20.304116112656715,
+        "timing_qualified_channels": 15,
+        "centroid_qualified_channels": 15
+      },
+      "3.5-6m": {
+        "channels": 16,
+        "c50_db_median": 7.751003049813569,
+        "dominant_early_reflection_delay_ms_median": 5.34375,
+        "early_reflection_energy_centroid_ms_median": 18.454859122199288,
+        "timing_qualified_channels": 16,
+        "centroid_qualified_channels": 16
+      },
+      "6m+": {
+        "channels": 11,
+        "c50_db_median": 3.7385104996614937,
+        "dominant_early_reflection_delay_ms_median": 5.6875,
+        "early_reflection_energy_centroid_ms_median": 18.030412738819095,
+        "timing_qualified_channels": 11,
+        "centroid_qualified_channels": 11
+      }
+    }
+  },
+  "aggregate_gap": {
+    "c50_db": {
+      "qualified_buckets": [
+        "0-1m",
+        "2-3.5m",
+        "3.5-6m"
+      ],
+      "m1_mean_absolute_median_gap": 5.289079040424364,
+      "m3_mean_absolute_median_gap": 3.2387199307313215,
+      "relative_improvement": 0.38765900339589826
+    },
+    "early_reflection_energy_centroid_ms": {
+      "qualified_buckets": [
+        "0-1m",
+        "2-3.5m",
+        "3.5-6m"
+      ],
+      "m1_mean_absolute_median_gap": 3.0463162911332216,
+      "m3_mean_absolute_median_gap": 2.2426635911095034,
+      "relative_improvement": 0.26381131281832904
+    },
+    "dominant_early_reflection_delay_ms": {
+      "role": "diagnostic_only_due_to_discontinuous_peak_identity",
+      "m1_mean_absolute_median_gap": 1.1041666666666667,
+      "m3_mean_absolute_median_gap": 2.7395833333333335
+    }
+  },
+  "acceptance": {
+    "paired_synthetic_geometry": true,
+    "heldout_measured_bank_used": true,
+    "c50_gap_improved": true,
+    "early_timing_gap_improved": true,
+    "m3_measured_exit_accepted": true
+  },
+  "decision": "accept_m3_measured_early_timing_and_c50_exit"
+}

@@ -1,4 +1,5 @@
 import random
+from collections import OrderedDict
 from itertools import count
 from typing import List, Optional
 
@@ -47,12 +48,20 @@ class AudioEffectAugmentor:
         self.rir = {}
         self.room_simulator = None
         self.room_bank = None
-        self.simulated_rir = {}
+        self.room_bank_kind = None
+        self.simulated_rir = OrderedDict()
+        self.simulated_rir_cache_size = 32
         self.simulated_rir_counter = count()
         # Set by every apply_rir call so callers (e.g. eval set synthesis)
         # can read per-source RIR metadata such as DRR without changing the
         # public return signature. None for non-simulated RIRs.
         self._last_rir_meta: Optional[dict] = None
+
+    def _cache_simulated_rir(self, rir_id: str, value: dict) -> None:
+        self.simulated_rir[rir_id] = value
+        self.simulated_rir.move_to_end(rir_id)
+        while len(self.simulated_rir) > int(self.simulated_rir_cache_size):
+            self.simulated_rir.popitem(last=False)
 
     def load_bg_noise_from_folder(self, folder: str, suffix: str = ".wav"):
         """load bg-noise from folder path"""
@@ -71,12 +80,56 @@ class AudioEffectAugmentor:
         self.room_simulator = RoomImpulseResponseSimulator(**simulator_config)
 
     def init_room_bank(self, config: dict):
-        """initialize a bank of pre-generated multi-source room RIRs."""
-        from puresound.audio.rir_bank import PreGeneratedRoomBank
+        """Initialize a legacy/M6 room bank or an M6 release recipe.
+
+        ``bank_type`` defaults to ``release`` when ``recipe_id`` is present,
+        otherwise to ``room`` for backward compatibility.
+        """
+        from puresound.audio.rir_bank import (
+            PreGeneratedReleaseBank,
+            PreGeneratedRoomBank,
+        )
 
         bank_config = dict(config)
         bank_config.pop("used", None)
-        self.room_bank = PreGeneratedRoomBank(**bank_config)
+        requested_type = bank_config.pop("bank_type", None)
+        usage_role = bank_config.pop("usage_role", None)
+        bank_type = requested_type or (
+            "release" if "recipe_id" in bank_config else "room"
+        )
+        if bank_type not in {"room", "release"}:
+            raise ValueError("pregenerated bank_type must be 'room' or 'release'")
+        if bank_type == "release":
+            if usage_role not in {"train", "validation", "test"}:
+                raise ValueError(
+                    "release pregenerated bank requires usage_role to be one "
+                    "of train, validation, or test"
+                )
+            if not str(bank_config.get("recipe_id", "")).strip():
+                raise ValueError("release pregenerated bank requires recipe_id")
+            if not str(bank_config.get("split", "")).strip():
+                raise ValueError("release pregenerated bank requires an explicit split")
+            if str(bank_config["split"]) != str(usage_role):
+                raise ValueError(
+                    "release pregenerated split must match its dataset usage_role"
+                )
+            self.room_bank = PreGeneratedReleaseBank(**bank_config)
+        else:
+            release_only = {
+                "recipe_id",
+                "release_manifest_name",
+                "require_production",
+                "production_decision_name",
+                "usage_role",
+            }
+            invalid = sorted(release_only.intersection(bank_config))
+            if invalid:
+                raise ValueError(
+                    "room pregenerated bank received release-only options: "
+                    + ", ".join(invalid)
+                )
+            self.room_bank = PreGeneratedRoomBank(**bank_config)
+        self.room_bank_kind = bank_type
 
     def sample_room_scene(self) -> Optional[dict]:
         if self.room_bank is not None:
@@ -291,11 +344,11 @@ class AudioEffectAugmentor:
                     wav=impaulse, origin_sr=rir_file_sr, target_sr=sr, backend="sox"
                 )
             rir_id = f"bank-{next(self.simulated_rir_counter)}"
-            self.simulated_rir[rir_id] = {
+            self._cache_simulated_rir(rir_id, {
                 "impulse": impaulse,
                 "sample_rate": sr,
                 "metadata": rir_metadata,
-            }
+            })
         elif self.room_simulator is not None and rir_id is None:
             impaulse, rir_metadata = self.room_simulator.generate(
                 sample_rate=sr,
@@ -304,13 +357,14 @@ class AudioEffectAugmentor:
                 distance_range_override=distance_range_override,
             )
             rir_id = f"simulated-{next(self.simulated_rir_counter)}"
-            self.simulated_rir[rir_id] = {
+            self._cache_simulated_rir(rir_id, {
                 "impulse": impaulse,
                 "sample_rate": sr,
                 "metadata": rir_metadata,
-            }
+            })
         elif rir_id in self.simulated_rir:
             cached_rir = self.simulated_rir[rir_id]
+            self.simulated_rir.move_to_end(rir_id)
             impaulse = cached_rir["impulse"]
             rir_metadata = cached_rir["metadata"]
             rir_sr = cached_rir["sample_rate"]

@@ -55,6 +55,12 @@ anna_test.wav
 # of the output patterns above: egs/*/config/exp holds experiment recipes, not runs.
 !egs/*/config/exp/
 !egs/*/config/exp/*.yaml
+
+# Keep the RIR realism artifact index visible while ignoring generated payloads.
+!egs/rir_generation/exp/
+!egs/rir_generation/exp/rir_realism/
+egs/rir_generation/exp/rir_realism/*
+!egs/rir_generation/exp/rir_realism/README.md
 EXPERIMENT_LOG.md
 FAILED_NOTE.md
 NEXT_STEPS.md

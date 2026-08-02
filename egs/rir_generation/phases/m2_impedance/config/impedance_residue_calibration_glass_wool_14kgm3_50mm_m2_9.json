@@ -1,0 +1,120 @@
+{
+  "schema_version": "puresound.impedance_modal_residue_calibration.v1",
+  "reference_id": "glass_wool_14kgm3_50mm_fdtd_residue_m2_9",
+  "boundary_reference_id": "uniform_glass_wool_14kgm3_50mm_miki_relaxation_validation",
+  "complex_scale": {
+    "real": 0.6394071628064306,
+    "imag": 0.06062156638026861
+  },
+  "frequency_exponent": 0.25,
+  "reference_frequency_hz": 100.0,
+  "valid_frequency_range_hz": [
+    60.0,
+    240.0
+  ],
+  "source": {
+    "evidence_tier": "independent_numerical_reference",
+    "reference_solver": "staggered_pressure_velocity_fdtd",
+    "boundary_config": "egs/rir_generation/phases/m2_impedance/config/impedance_reference_glass_wool_14kgm3_50mm.json",
+    "protocol": "m2_9_multi_boundary_room_grid_holdout"
+  },
+  "applicability": {
+    "scope": "controlled_rectangular_room_position_room_grid_transfer",
+    "room_geometry": "shoebox",
+    "boundary_reference_id": "uniform_glass_wool_14kgm3_50mm_miki_relaxation_validation",
+    "production_material_mapping_enabled": false,
+    "measured_room_transfer_validated": false
+  },
+  "fit_summary": {
+    "balanced_train_nrmse": 0.10380965085583795,
+    "aggregate": {
+      "train": {
+        "calibrated": {
+          "case_count": 4,
+          "mean_nrmse": 0.10362395134462431,
+          "mean_correlation": 0.9946235972482235,
+          "mean_energy_ratio": 0.9892210044273028
+        },
+        "baseline_legacy_1_over_f_sine": {
+          "case_count": 4,
+          "mean_nrmse": 0.9946424519027355,
+          "mean_correlation": 0.10273011516885355,
+          "mean_energy_ratio": 0.010677134220774716
+        }
+      },
+      "grid_holdout": {
+        "calibrated": {
+          "case_count": 1,
+          "mean_nrmse": 0.09186772066317786,
+          "mean_correlation": 0.9960612495103089,
+          "mean_energy_ratio": 0.944834531528478
+        },
+        "baseline_legacy_1_over_f_sine": {
+          "case_count": 1,
+          "mean_nrmse": 0.9985125211320675,
+          "mean_correlation": 0.06635864823669113,
+          "mean_energy_ratio": 0.010847478199953261
+        }
+      },
+      "position_holdout": {
+        "calibrated": {
+          "case_count": 2,
+          "mean_nrmse": 0.136590775182381,
+          "mean_correlation": 0.990418173386738,
+          "mean_energy_ratio": 0.9456341824416108
+        },
+        "baseline_legacy_1_over_f_sine": {
+          "case_count": 2,
+          "mean_nrmse": 0.9971628840980146,
+          "mean_correlation": 0.07867498387171937,
+          "mean_energy_ratio": 0.009671372344019734
+        }
+      },
+      "room_holdout": {
+        "calibrated": {
+          "case_count": 2,
+          "mean_nrmse": 0.11867820334336948,
+          "mean_correlation": 0.9929444918276277,
+          "mean_energy_ratio": 0.9787239129110851
+        },
+        "baseline_legacy_1_over_f_sine": {
+          "case_count": 2,
+          "mean_nrmse": 0.9994331939879902,
+          "mean_correlation": 0.056527645061759994,
+          "mean_energy_ratio": 0.010332102803038926
+        }
+      }
+    },
+    "acceptance": {
+      "minimum_mean_holdout_correlation": 0.9,
+      "maximum_mean_holdout_nrmse": 0.35,
+      "requires_improvement_over_baseline": true,
+      "acceptance_splits": [
+        "position_holdout",
+        "room_holdout",
+        "grid_holdout"
+      ],
+      "by_split": {
+        "position_holdout": {
+          "accepted": true,
+          "calibrated_mean_correlation": 0.990418173386738,
+          "calibrated_mean_nrmse": 0.136590775182381,
+          "baseline_mean_nrmse": 0.9971628840980146
+        },
+        "room_holdout": {
+          "accepted": true,
+          "calibrated_mean_correlation": 0.9929444918276277,
+          "calibrated_mean_nrmse": 0.11867820334336948,
+          "baseline_mean_nrmse": 0.9994331939879902
+        },
+        "grid_holdout": {
+          "accepted": true,
+          "calibrated_mean_correlation": 0.9960612495103089,
+          "calibrated_mean_nrmse": 0.09186772066317786,
+          "baseline_mean_nrmse": 0.9985125211320675
+        }
+      },
+      "accepted": true
+    }
+  }
+}

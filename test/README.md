@@ -27,4 +27,4 @@ uv run python test/run_repo_checks.py --suite full --skip-ruff
 
 To audition what a recipe actually trains on, use
 `egs/voice_isolate/scripts/check_training_data.py --dump` (real recipe pipeline)
-or `egs/rir_generation/simulate_room_scene.py` (on-the-fly room simulator).
+or `egs/rir_generation/tools/audition/simulate_room_scene.py` (on-the-fly room simulator).

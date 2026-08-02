@@ -1,0 +1,566 @@
+{
+  "schema_version": "puresound.m5_m4_parameter_mapping_report.v1",
+  "milestone": "M5.2c",
+  "policy": "puresound.m4_parameter_profile_inverse.v1",
+  "scope": "actual_path_event_plus_multiband_fdn_parameter_profile",
+  "sample_rate": 8000,
+  "duration_s": 0.4,
+  "scene": {
+    "scene_id": "m5-2c-m4-parameter-mapping",
+    "room_type": "office",
+    "room_dimensions_m": [
+      5.415182759905218,
+      4.312947718054637,
+      3.4421734416060294
+    ],
+    "path_event_max_order": 4,
+    "train_source_indices": [
+      0,
+      2
+    ],
+    "holdout_source_indices": [
+      1,
+      3
+    ]
+  },
+  "model_mapping": {
+    "discrete_outer_parameter": "mixing_time_s -> prime FDN delay topology",
+    "continuous_inner_parameters": [
+      "coherent_reflection_gain_db proxy",
+      "octave target_rt60_s_by_hz"
+    ],
+    "coupling_policy": "puresound.path_event_fdn_coupling.v1",
+    "production_default_changed": false
+  },
+  "objective": {
+    "policy": "puresound.m4_profile_objective.v1",
+    "implementation": "discrete_topology_plus_finite_difference_inner_solve",
+    "waveform_weight": 0.1,
+    "early_waveform_weight": 0.5,
+    "broadband_decay_weight": 0.5,
+    "octave_decay_weight": 1.0,
+    "early_window_ms": 12.0,
+    "energy_window_ms": 8.0,
+    "noise_margin_db": 15.0
+  },
+  "truth": {
+    "mixing_time_s": 0.024,
+    "coherent_reflection_gain_db": -1.5,
+    "target_rt60_s_by_hz": {
+      "500": 0.68,
+      "1000": 0.54,
+      "2000": 0.42
+    }
+  },
+  "fit": {
+    "policy": "puresound.m4_parameter_profile_inverse.v1",
+    "objective": {
+      "policy": "puresound.m4_profile_objective.v1",
+      "implementation": "discrete_topology_plus_finite_difference_inner_solve",
+      "waveform_weight": 0.1,
+      "early_waveform_weight": 0.5,
+      "broadband_decay_weight": 0.5,
+      "octave_decay_weight": 1.0,
+      "early_window_ms": 12.0,
+      "energy_window_ms": 8.0,
+      "noise_margin_db": 15.0
+    },
+    "initial_parameters": {
+      "mixing_time_s": 0.028,
+      "coherent_reflection_gain_db": 4.0,
+      "target_rt60_s_by_hz": {
+        "500": 0.35,
+        "1000": 0.95,
+        "2000": 0.8
+      }
+    },
+    "best": {
+      "parameters": {
+        "mixing_time_s": 0.024,
+        "coherent_reflection_gain_db": -2.161487563861976,
+        "target_rt60_s_by_hz": {
+          "500": 0.6826642676777297,
+          "1000": 0.5500188910399366,
+          "2000": 0.437779623526298
+        }
+      },
+      "cost": 0.09546228347523077,
+      "evaluations": 8,
+      "success": true,
+      "message": "`ftol` termination condition is satisfied.",
+      "local_identifiability": {
+        "scaled_jacobian_condition_number": 3.137255580952323,
+        "full_column_rank": true
+      },
+      "delay_lengths_by_observation": {
+        "source-0": [
+          29,
+          43,
+          79,
+          139
+        ],
+        "source-2": [
+          29,
+          43,
+          79,
+          139
+        ]
+      }
+    },
+    "profiles": [
+      {
+        "parameters": {
+          "mixing_time_s": 0.02,
+          "coherent_reflection_gain_db": -2.8072564494231282,
+          "target_rt60_s_by_hz": {
+            "500": 0.6352608096697903,
+            "1000": 0.5563406873105721,
+            "2000": 0.44961814329633415
+          }
+        },
+        "cost": 1.163740839663644,
+        "evaluations": 8,
+        "success": true,
+        "message": "`ftol` termination condition is satisfied.",
+        "local_identifiability": {
+          "scaled_jacobian_condition_number": 3.2387471847390343,
+          "full_column_rank": true
+        },
+        "delay_lengths_by_observation": {
+          "source-0": [
+            23,
+            37,
+            67,
+            113
+          ],
+          "source-2": [
+            23,
+            37,
+            67,
+            113
+          ]
+        }
+      },
+      {
+        "parameters": {
+          "mixing_time_s": 0.024,
+          "coherent_reflection_gain_db": -2.161487563861976,
+          "target_rt60_s_by_hz": {
+            "500": 0.6826642676777297,
+            "1000": 0.5500188910399366,
+            "2000": 0.437779623526298
+          }
+        },
+        "cost": 0.09546228347523077,
+        "evaluations": 8,
+        "success": true,
+        "message": "`ftol` termination condition is satisfied.",
+        "local_identifiability": {
+          "scaled_jacobian_condition_number": 3.137255580952323,
+          "full_column_rank": true
+        },
+        "delay_lengths_by_observation": {
+          "source-0": [
+            29,
+            43,
+            79,
+            139
+          ],
+          "source-2": [
+            29,
+            43,
+            79,
+            139
+          ]
+        }
+      },
+      {
+        "parameters": {
+          "mixing_time_s": 0.028,
+          "coherent_reflection_gain_db": -1.516398708079655,
+          "target_rt60_s_by_hz": {
+            "500": 0.6486088020203749,
+            "1000": 0.5854291680604177,
+            "2000": 0.4507663931624166
+          }
+        },
+        "cost": 1.3967652192674123,
+        "evaluations": 8,
+        "success": true,
+        "message": "`ftol` termination condition is satisfied.",
+        "local_identifiability": {
+          "scaled_jacobian_condition_number": 2.8920166525002022,
+          "full_column_rank": true
+        },
+        "delay_lengths_by_observation": {
+          "source-0": [
+            29,
+            53,
+            89,
+            167
+          ],
+          "source-2": [
+            29,
+            47,
+            89,
+            167
+          ]
+        }
+      }
+    ],
+    "best_to_second_cost_ratio": 0.08203053482493769,
+    "warning": "Discrete-profile selection is local to the supplied mixing-time grid."
+  },
+  "parameter_errors": {
+    "mixing_time_absolute_error_ms": 0.0,
+    "coherent_reflection_gain_absolute_error_db": 0.6614875638619759,
+    "rt60_relative_error_by_hz": {
+      "500": 0.0039180407025436,
+      "1000": 0.01855350192580849,
+      "2000": 0.04233243696737626
+    },
+    "maximum_rt60_relative_error": 0.04233243696737626
+  },
+  "perturbations": {
+    "train": [
+      {
+        "nominal_fraction": 0.92,
+        "alternate_fdn_seed": 1070,
+        "noise_seed": 2070,
+        "snr_db": 42.0,
+        "mismatch_relative_norm": 0.03223463740938059,
+        "noise_relative_norm": 0.00794328234724281
+      },
+      {
+        "nominal_fraction": 0.92,
+        "alternate_fdn_seed": 1071,
+        "noise_seed": 2071,
+        "snr_db": 42.0,
+        "mismatch_relative_norm": 0.04566441900970799,
+        "noise_relative_norm": 0.007943282347242812
+      }
+    ],
+    "holdout": [
+      {
+        "nominal_fraction": 0.92,
+        "alternate_fdn_seed": 1170,
+        "noise_seed": 2170,
+        "snr_db": 42.0,
+        "mismatch_relative_norm": 0.03717493534389369,
+        "noise_relative_norm": 0.007943282347242816
+      },
+      {
+        "nominal_fraction": 0.92,
+        "alternate_fdn_seed": 1171,
+        "noise_seed": 2171,
+        "snr_db": 42.0,
+        "mismatch_relative_norm": 0.03601812257982696,
+        "noise_relative_norm": 0.007943282347242814
+      }
+    ]
+  },
+  "independent_m5_1_oracle": {
+    "spatial_weight_disabled_reason": "channels represent different source positions, not synchronized receivers",
+    "initial_holdout": {
+      "policy": "puresound.rir_calibration_loss.v1",
+      "implementation": "numpy_scipy_reference_not_autograd",
+      "total": 3.593666949473297,
+      "terms": {
+        "multiresolution_stft": 2.8473757502429695,
+        "energy_decay": 0.08979126006014373,
+        "arrival_timing": 0.0,
+        "octave_acoustics": 0.6564999391701839,
+        "spatial_coherence": 0.5708360114006652,
+        "causality": 0.0,
+        "decay_regularization": 0.0
+      },
+      "weights": {
+        "multiresolution_stft": 1.0,
+        "energy_decay": 1.0,
+        "arrival_timing": 1.0,
+        "octave_acoustics": 1.0,
+        "spatial_coherence": 0.0,
+        "causality": 10.0,
+        "decay_regularization": 1.0
+      },
+      "diagnostics": {
+        "sample_rate": 8000,
+        "channel_count": 2,
+        "sample_count": 3200,
+        "measured_direct_samples": [
+          15,
+          49
+        ],
+        "synthetic_direct_samples": [
+          15,
+          49
+        ],
+        "physical_first_samples": [
+          15,
+          49
+        ],
+        "multiresolution_stft": {
+          "distance": 2.8473757502429695,
+          "resolutions": {
+            "256": {
+              "fft_size": 256,
+              "spectral_convergence": 1.088801117998114,
+              "log_magnitude_l1": 1.680316960323948,
+              "total": 2.7691180783220624
+            },
+            "512": {
+              "fft_size": 512,
+              "spectral_convergence": 1.2397883462635,
+              "log_magnitude_l1": 1.6858450759003765,
+              "total": 2.9256334221638767
+            }
+          }
+        },
+        "energy_decay": {
+          "distance": 0.08979126006014373,
+          "mean_rmse_db": 7.183300804811498,
+          "channel_rmse_db": [
+            7.678198915917553,
+            6.688402693705444
+          ],
+          "floor_db": -80.0
+        },
+        "arrival_timing": {
+          "distance": 0.0,
+          "difference_ms_by_channel": [
+            0.0,
+            0.0
+          ],
+          "mean_absolute_difference_ms": 0.0,
+          "tolerance_ms": 1.0
+        },
+        "octave_acoustics": {
+          "distance": 0.6564999391701839,
+          "bands": {
+            "500": {
+              "center_hz": 500.0,
+              "mean_absolute_energy_error_db": 2.5072656783986758,
+              "qualified_t20_channels": 2,
+              "mean_absolute_log_t20_ratio": 0.35722423902731854,
+              "distance": 0.4825875229472523
+            },
+            "1000": {
+              "center_hz": 1000.0,
+              "mean_absolute_energy_error_db": 3.368272215852179,
+              "qualified_t20_channels": 2,
+              "mean_absolute_log_t20_ratio": 0.5244132376625401,
+              "distance": 0.6928268484551491
+            },
+            "2000": {
+              "center_hz": 2000.0,
+              "mean_absolute_energy_error_db": 3.049048040338645,
+              "qualified_t20_channels": 2,
+              "mean_absolute_log_t20_ratio": 0.6416330440912181,
+              "distance": 0.7940854461081504
+            }
+          }
+        },
+        "spatial_coherence": {
+          "distance": 0.5708360114006652,
+          "evaluable": true,
+          "reason": "ok",
+          "start_ms": 80.0,
+          "nperseg": 256,
+          "pairs": {
+            "0-1": {
+              "first_channel": 0,
+              "second_channel": 1,
+              "frequency_bin_count": 129,
+              "complex_rmse": 0.5708360114006652
+            }
+          }
+        },
+        "causality": {
+          "distance": 0.0,
+          "prearrival_energy_fraction_by_channel": [
+            0.0,
+            0.0
+          ]
+        },
+        "decay_regularization": {
+          "distance": 0.0,
+          "channel_penalties": [
+            0.0,
+            0.0
+          ],
+          "allowed_growth_db_per_hop": 1.0
+        }
+      }
+    },
+    "recovered_holdout": {
+      "policy": "puresound.rir_calibration_loss.v1",
+      "implementation": "numpy_scipy_reference_not_autograd",
+      "total": 1.01550363390013,
+      "terms": {
+        "multiresolution_stft": 0.9750900284791542,
+        "energy_decay": 0.00634373951331353,
+        "arrival_timing": 0.0,
+        "octave_acoustics": 0.03406986590766222,
+        "spatial_coherence": 0.2587843591280244,
+        "causality": 0.0,
+        "decay_regularization": 0.0
+      },
+      "weights": {
+        "multiresolution_stft": 1.0,
+        "energy_decay": 1.0,
+        "arrival_timing": 1.0,
+        "octave_acoustics": 1.0,
+        "spatial_coherence": 0.0,
+        "causality": 10.0,
+        "decay_regularization": 1.0
+      },
+      "diagnostics": {
+        "sample_rate": 8000,
+        "channel_count": 2,
+        "sample_count": 3200,
+        "measured_direct_samples": [
+          15,
+          49
+        ],
+        "synthetic_direct_samples": [
+          15,
+          49
+        ],
+        "physical_first_samples": [
+          15,
+          49
+        ],
+        "multiresolution_stft": {
+          "distance": 0.9750900284791542,
+          "resolutions": {
+            "256": {
+              "fft_size": 256,
+              "spectral_convergence": 0.06980540681464831,
+              "log_magnitude_l1": 0.9074896618836217,
+              "total": 0.97729506869827
+            },
+            "512": {
+              "fft_size": 512,
+              "spectral_convergence": 0.07017146463445018,
+              "log_magnitude_l1": 0.9027135236255881,
+              "total": 0.9728849882600383
+            }
+          }
+        },
+        "energy_decay": {
+          "distance": 0.00634373951331353,
+          "mean_rmse_db": 0.5074991610650824,
+          "channel_rmse_db": [
+            0.5296689685445302,
+            0.48532935358563467
+          ],
+          "floor_db": -80.0
+        },
+        "arrival_timing": {
+          "distance": 0.0,
+          "difference_ms_by_channel": [
+            0.0,
+            0.0
+          ],
+          "mean_absolute_difference_ms": 0.0,
+          "tolerance_ms": 1.0
+        },
+        "octave_acoustics": {
+          "distance": 0.03406986590766222,
+          "bands": {
+            "500": {
+              "center_hz": 500.0,
+              "mean_absolute_energy_error_db": 0.17494146661126436,
+              "qualified_t20_channels": 2,
+              "mean_absolute_log_t20_ratio": 0.0013528835778438772,
+              "distance": 0.010099956908407096
+            },
+            "1000": {
+              "center_hz": 1000.0,
+              "mean_absolute_energy_error_db": 0.1759403851736304,
+              "qualified_t20_channels": 2,
+              "mean_absolute_log_t20_ratio": 0.022647817369699938,
+              "distance": 0.03144483662838146
+            },
+            "2000": {
+              "center_hz": 2000.0,
+              "mean_absolute_energy_error_db": 0.14973028511377165,
+              "qualified_t20_channels": 2,
+              "mean_absolute_log_t20_ratio": 0.053178289930509534,
+              "distance": 0.060664804186198115
+            }
+          }
+        },
+        "spatial_coherence": {
+          "distance": 0.2587843591280244,
+          "evaluable": true,
+          "reason": "ok",
+          "start_ms": 80.0,
+          "nperseg": 256,
+          "pairs": {
+            "0-1": {
+              "first_channel": 0,
+              "second_channel": 1,
+              "frequency_bin_count": 129,
+              "complex_rmse": 0.2587843591280244
+            }
+          }
+        },
+        "causality": {
+          "distance": 0.0,
+          "prearrival_energy_fraction_by_channel": [
+            0.0,
+            0.0
+          ]
+        },
+        "decay_regularization": {
+          "distance": 0.0,
+          "channel_penalties": [
+            0.0,
+            0.0
+          ],
+          "allowed_growth_db_per_hop": 1.0
+        }
+      }
+    },
+    "relative_total_reduction": 0.7174185454083422
+  },
+  "checks": {
+    "actual_path_event_backend_used": true,
+    "actual_m4_coupling_policy_used": true,
+    "m4_pre_transition_samples_exactly_preserved": true,
+    "true_mixing_profile_selected": true,
+    "best_profile_cost_below_one_fifth_second": true,
+    "all_profile_inner_solves_converged": true,
+    "all_profile_jacobians_locally_full_rank": true,
+    "best_scaled_jacobian_condition_below_100": true,
+    "coherent_gain_recovered_within_0_75_db": true,
+    "all_rt60_recovered_within_5_percent": true,
+    "heldout_m5_1_oracle_total_reduced_50_percent": true,
+    "mixing_candidates_produce_distinct_delay_topologies": true,
+    "all_fitted_outputs_are_physical_arrival_causal": true,
+    "production_default_remains_pyroomacoustics": true
+  },
+  "exit": {
+    "passed": true,
+    "m5_2c_actual_m4_parameter_mapping_complete": true,
+    "measured_inverse_fit_complete": false
+  },
+  "not_claimed": [
+    "measured-room fitting",
+    "individual surface absorption or scattering identification",
+    "continuous differentiability across FDN delay-topology changes",
+    "global identifiability outside the supplied mixing-time grid",
+    "production-default replacement"
+  ],
+  "next_stage": {
+    "milestone": "M5.2d/M5.3",
+    "parallel_model_work": "separate material/path groups and test their identifiability",
+    "measured_fit_blocked_until_controlled_campaign_ready": true
+  },
+  "artifacts": {
+    "holdout_target": "egs/rir_generation/exp/rir_realism/m5/rir_m5_m4_parameter_mapping/m5_2c_holdout_target.wav",
+    "holdout_initial": "egs/rir_generation/exp/rir_realism/m5/rir_m5_m4_parameter_mapping/m5_2c_holdout_initial.wav",
+    "holdout_recovered": "egs/rir_generation/exp/rir_realism/m5/rir_m5_m4_parameter_mapping/m5_2c_holdout_recovered.wav"
+  }
+}

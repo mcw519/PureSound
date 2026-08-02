@@ -1,0 +1,348 @@
+{
+  "schema_version": "puresound.m6_bank_evaluation_validation.v1",
+  "milestone": "M6.5",
+  "scope": "bank_acoustics_throughput_listening_and_downstream_contracts",
+  "fixture": {
+    "release_root": "egs/rir_generation/exp/rir_realism/m6/rir_m6_hardening_validation/evaluation/m6_4/release_a",
+    "release_sha256": "197ebf2f128bf6a75594ffb0b3f52cbf2a3da178c375de45fd2bdcc23fa56023",
+    "listening_and_downstream_are_contract_fixtures": true,
+    "explicitly_not_measured_human_or_trained_model_evidence": true
+  },
+  "evaluation": {
+    "schema_version": "puresound.m6_bank_evaluation.v1",
+    "milestone": "M6.5",
+    "release_id": "puresound-m6.4-validation-candidate",
+    "release_sha256": "197ebf2f128bf6a75594ffb0b3f52cbf2a3da178c375de45fd2bdcc23fa56023",
+    "release_audit": {
+      "schema_version": "puresound.rir_bank_release_audit.v1",
+      "release_id": "puresound-m6.4-validation-candidate",
+      "variant_checks": {
+        "synthetic_calibrated": true,
+        "synthetic_peak_normalized": true
+      },
+      "lineage_checks": {
+        "synthetic_peak_normalized": true
+      },
+      "recipe_checks": {
+        "synthetic_calibrated": true,
+        "synthetic_peak_normalized": true,
+        "real_native": true,
+        "mixed_calibrated_real": true
+      },
+      "checks": {
+        "release_content_hash_matches": true,
+        "all_variant_assets_and_distributions_audit": true,
+        "variant_lineage_preserves_identity_parent_hash_and_transform": true,
+        "all_ready_and_blocked_recipes_are_consistent": true,
+        "at_least_one_ready_recipe_exists": true,
+        "acoustic_spaces_remain_split_disjoint_across_variants": true,
+        "release_does_not_claim_production": true
+      },
+      "valid": true,
+      "ready_recipe_count": 2,
+      "production_ready": false
+    },
+    "acoustic_distribution_evaluation": {
+      "schema_version": "puresound.m6_acoustic_distribution_comparison.v1",
+      "release_sha256": "197ebf2f128bf6a75594ffb0b3f52cbf2a3da178c375de45fd2bdcc23fa56023",
+      "variant_scale_invariance": {
+        "status": "pass",
+        "matched_channel_identities": true,
+        "maximum_absolute_error": {
+          "drr_db": 2.2418950429425877e-07,
+          "c50_db": 7.822423508940801e-08,
+          "c80_db": 6.635614724359584e-08,
+          "t20_s": 1.512366987199698e-08,
+          "mixing_time_s": 0.0
+        },
+        "level_dependent_peak_change_expected": true
+      },
+      "synthetic_to_measured": {
+        "status": "not_evaluable",
+        "reason": "no QC-passed measured variant is present in this release",
+        "distances": null
+      },
+      "comparison_sha256": "3dcdbd18c46aef058911a50e74885bdc7a4ec9ea929ba9b70db78311f055752a"
+    },
+    "throughput_evaluation": {
+      "valid": true,
+      "empirical": true,
+      "checks": {
+        "schema_matches": true,
+        "release_matches": true,
+        "counts_are_consistent": true,
+        "elapsed_time_is_positive": true,
+        "reported_rate_is_consistent": true,
+        "worker_count_is_positive": true,
+        "failure_count_is_explicit": true
+      },
+      "summary": {
+        "task_count": 6,
+        "items_generated": 6,
+        "items_skipped": 0,
+        "items_failed": 0,
+        "elapsed_seconds": 11.596040157601237,
+        "items_per_second": 0.517418008083301
+      }
+    },
+    "listening_evaluation": {
+      "valid": true,
+      "empirical": false,
+      "checks": {
+        "schema_matches": true,
+        "release_matches": true,
+        "evidence_tier_is_declared": true,
+        "randomized_and_double_blind": true,
+        "common_loudness_policy": true,
+        "hidden_reference_and_anchor_present": true,
+        "room_disjoint_stimuli": true,
+        "participant_count_is_declared": true,
+        "empirical_claim_is_not_explicitly_nonhuman": true,
+        "empirical_artifacts_are_parsed_and_content_addressed": true,
+        "empirical_participant_statistics_are_recomputed": true,
+        "analysis_is_complete": true,
+        "noninferiority_is_recomputed": true,
+        "artifacts_are_content_addressed": true
+      },
+      "participant_count": 24,
+      "evidence_tier": "contract_fixture",
+      "artifact_sha256": {
+        "assignment_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+        "responses_sha256": "2222222222222222222222222222222222222222222222222222222222222222",
+        "analysis_sha256": "3333333333333333333333333333333333333333333333333333333333333333"
+      }
+    },
+    "downstream_evaluation": {
+      "valid": true,
+      "empirical": false,
+      "checks": {
+        "schema_matches": true,
+        "release_matches": true,
+        "evidence_tier_is_declared": true,
+        "ready_recipe_is_named": true,
+        "at_least_three_unique_seeds": true,
+        "train_and_test_space_hashes_match_release": true,
+        "room_disjoint_evaluation_is_declared": true,
+        "frozen_training_and_model_recipe": true,
+        "at_least_one_task_result": true,
+        "per_seed_results_are_consistent": true,
+        "all_primary_confidence_bounds_improve": true,
+        "artifacts_are_content_addressed": true
+      },
+      "seed_count": 3,
+      "task_count": 1,
+      "evidence_tier": "contract_fixture",
+      "artifact_sha256": {
+        "training_recipe_sha256": "4444444444444444444444444444444444444444444444444444444444444444",
+        "checkpoints_sha256": "5555555555555555555555555555555555555555555555555555555555555555",
+        "analysis_sha256": "6666666666666666666666666666666666666666666666666666666666666666"
+      },
+      "recomputed_confidence_intervals": [
+        {
+          "confidence_interval_low": 0.017547586864748915,
+          "confidence_interval_high": 0.03245241313525091
+        }
+      ]
+    },
+    "implementation_checks": {
+      "m6_4_release_audit_passed": true,
+      "distribution_comparison_is_content_addressed": true,
+      "level_variant_acoustic_invariance_passed": true,
+      "generation_throughput_and_failures_reported": true,
+      "listening_contract_is_fail_closed": true,
+      "downstream_contract_is_fail_closed": true
+    },
+    "empirical_checks": {
+      "measured_acoustic_distribution_compared": false,
+      "controlled_listening_empirical_passed": false,
+      "room_disjoint_downstream_empirical_passed": false
+    },
+    "implementation_exit": {
+      "passed": true,
+      "m6_5_evaluation_pipeline_complete": true
+    },
+    "empirical_exit": {
+      "passed": false,
+      "missing_evidence": [
+        "measured_acoustic_distribution_compared",
+        "controlled_listening_empirical_passed",
+        "room_disjoint_downstream_empirical_passed"
+      ]
+    },
+    "production_enablement": {
+      "ready": false,
+      "reason": "production requires measured acoustic, controlled listening, and room-disjoint downstream empirical evidence"
+    },
+    "evaluation_sha256": "1ee844f33596074536b63f4a34161586cad9609ce2851759acc06864254e3798"
+  },
+  "negative_controls": {
+    "unblinded_listening": {
+      "valid": false,
+      "empirical": false,
+      "checks": {
+        "schema_matches": true,
+        "release_matches": true,
+        "evidence_tier_is_declared": true,
+        "randomized_and_double_blind": false,
+        "common_loudness_policy": true,
+        "hidden_reference_and_anchor_present": true,
+        "room_disjoint_stimuli": true,
+        "participant_count_is_declared": true,
+        "empirical_claim_is_not_explicitly_nonhuman": true,
+        "empirical_artifacts_are_parsed_and_content_addressed": true,
+        "empirical_participant_statistics_are_recomputed": true,
+        "analysis_is_complete": true,
+        "noninferiority_is_recomputed": true,
+        "artifacts_are_content_addressed": true
+      },
+      "participant_count": 24,
+      "evidence_tier": "contract_fixture",
+      "artifact_sha256": {
+        "assignment_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+        "responses_sha256": "2222222222222222222222222222222222222222222222222222222222222222",
+        "analysis_sha256": "3333333333333333333333333333333333333333333333333333333333333333"
+      }
+    },
+    "downstream_split_tamper": {
+      "valid": false,
+      "empirical": false,
+      "checks": {
+        "schema_matches": true,
+        "release_matches": true,
+        "evidence_tier_is_declared": true,
+        "ready_recipe_is_named": true,
+        "at_least_three_unique_seeds": true,
+        "train_and_test_space_hashes_match_release": false,
+        "room_disjoint_evaluation_is_declared": true,
+        "frozen_training_and_model_recipe": true,
+        "at_least_one_task_result": true,
+        "per_seed_results_are_consistent": true,
+        "all_primary_confidence_bounds_improve": true,
+        "artifacts_are_content_addressed": true
+      },
+      "seed_count": 3,
+      "task_count": 1,
+      "evidence_tier": "contract_fixture",
+      "artifact_sha256": {
+        "training_recipe_sha256": "4444444444444444444444444444444444444444444444444444444444444444",
+        "checkpoints_sha256": "5555555555555555555555555555555555555555555555555555555555555555",
+        "analysis_sha256": "6666666666666666666666666666666666666666666666666666666666666666"
+      },
+      "recomputed_confidence_intervals": [
+        {
+          "confidence_interval_low": 0.017547586864748915,
+          "confidence_interval_high": 0.03245241313525091
+        }
+      ]
+    },
+    "single_seed_downstream": {
+      "valid": false,
+      "empirical": false,
+      "checks": {
+        "schema_matches": true,
+        "release_matches": true,
+        "evidence_tier_is_declared": true,
+        "ready_recipe_is_named": true,
+        "at_least_three_unique_seeds": false,
+        "train_and_test_space_hashes_match_release": true,
+        "room_disjoint_evaluation_is_declared": true,
+        "frozen_training_and_model_recipe": true,
+        "at_least_one_task_result": true,
+        "per_seed_results_are_consistent": false,
+        "all_primary_confidence_bounds_improve": false,
+        "artifacts_are_content_addressed": true
+      },
+      "seed_count": 1,
+      "task_count": 1,
+      "evidence_tier": "contract_fixture",
+      "artifact_sha256": {
+        "training_recipe_sha256": "4444444444444444444444444444444444444444444444444444444444444444",
+        "checkpoints_sha256": "5555555555555555555555555555555555555555555555555555555555555555",
+        "analysis_sha256": "6666666666666666666666666666666666666666666666666666666666666666"
+      },
+      "recomputed_confidence_intervals": []
+    },
+    "forged_positive_downstream_ci": {
+      "valid": false,
+      "empirical": false,
+      "checks": {
+        "schema_matches": true,
+        "release_matches": true,
+        "evidence_tier_is_declared": true,
+        "ready_recipe_is_named": true,
+        "at_least_three_unique_seeds": true,
+        "train_and_test_space_hashes_match_release": true,
+        "room_disjoint_evaluation_is_declared": true,
+        "frozen_training_and_model_recipe": true,
+        "at_least_one_task_result": true,
+        "per_seed_results_are_consistent": false,
+        "all_primary_confidence_bounds_improve": false,
+        "artifacts_are_content_addressed": true
+      },
+      "seed_count": 3,
+      "task_count": 1,
+      "evidence_tier": "contract_fixture",
+      "artifact_sha256": {
+        "training_recipe_sha256": "4444444444444444444444444444444444444444444444444444444444444444",
+        "checkpoints_sha256": "5555555555555555555555555555555555555555555555555555555555555555",
+        "analysis_sha256": "6666666666666666666666666666666666666666666666666666666666666666"
+      },
+      "recomputed_confidence_intervals": [
+        {
+          "confidence_interval_low": -24.818965749119304,
+          "confidence_interval_high": 24.838965749119307
+        }
+      ]
+    },
+    "nonhuman_empirical_listening": {
+      "valid": false,
+      "empirical": false,
+      "checks": {
+        "schema_matches": true,
+        "release_matches": true,
+        "evidence_tier_is_declared": true,
+        "randomized_and_double_blind": true,
+        "common_loudness_policy": true,
+        "hidden_reference_and_anchor_present": true,
+        "room_disjoint_stimuli": true,
+        "participant_count_is_declared": true,
+        "empirical_claim_is_not_explicitly_nonhuman": false,
+        "empirical_artifacts_are_parsed_and_content_addressed": false,
+        "empirical_participant_statistics_are_recomputed": false,
+        "analysis_is_complete": true,
+        "noninferiority_is_recomputed": true,
+        "artifacts_are_content_addressed": true
+      },
+      "participant_count": 24,
+      "evidence_tier": "empirical",
+      "artifact_sha256": {
+        "assignment_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+        "responses_sha256": "2222222222222222222222222222222222222222222222222222222222222222",
+        "analysis_sha256": "3333333333333333333333333333333333333333333333333333333333333333"
+      }
+    }
+  },
+  "checks": {
+    "m6_4_release_dependency_passed": true,
+    "bank_level_distribution_and_scale_invariance_passed": true,
+    "actual_generation_throughput_and_failure_counts_validate": true,
+    "missing_measured_reference_is_not_fabricated": true,
+    "listening_contract_fixture_valid_but_not_empirical": true,
+    "unblinded_listening_report_is_rejected": true,
+    "downstream_contract_fixture_valid_but_not_empirical": true,
+    "downstream_split_identity_tamper_is_rejected": true,
+    "single_seed_downstream_claim_is_rejected": true,
+    "forged_positive_downstream_ci_is_rejected": true,
+    "explicitly_nonhuman_empirical_listening_is_rejected": true,
+    "evaluation_report_is_content_addressed": true,
+    "m6_5_implementation_passes_while_empirical_stays_open": true,
+    "production_enablement_remains_fail_closed": true
+  },
+  "exit": {
+    "passed": true,
+    "m6_5_bank_evaluation_implementation_complete": true,
+    "m6_5_empirical_exit_complete": false,
+    "production_bank_complete": false,
+    "next_milestone": "M6.6 evidence-backed production decision"
+  }
+}

@@ -1,0 +1,52 @@
+{
+  "schema_version": "puresound.mesh_engine_evaluation.v1",
+  "engines": {
+    "pyroomacoustics": {
+      "installed": true,
+      "version": "0.10.1",
+      "smoke_completed": true,
+      "room_dimension": 3,
+      "wall_count": 8,
+      "non_convex_visibility_available": true,
+      "visible_image_count": 1,
+      "rir_sample_count": 176,
+      "rir_all_finite": true,
+      "rir_nonzero": true,
+      "general_3d_polygon_walls": true,
+      "non_convex_outer_room_visibility": true,
+      "frequency_dependent_energy_absorption": true,
+      "controlled_energy_scattering": true,
+      "complex_locally_reacting_pressure_filter": false,
+      "surface_transmission_path_events": false,
+      "edge_diffraction_path_events": false,
+      "interior_solid_furniture_public_contract": false,
+      "path_event_serialization_compatible": false
+    },
+    "trimesh": {
+      "installed": false,
+      "role": "geometry-only ray intersection candidate",
+      "acoustic_path_model": false
+    }
+  },
+  "requirements": {
+    "shoebox_boundary_meshes": true,
+    "interior_furniture_occlusion": true,
+    "ordered_path_interaction_points": true,
+    "complex_causal_material_reflection": true,
+    "surface_transmission": true,
+    "edge_diffraction": true,
+    "deterministic_serialized_path_events": true
+  },
+  "acceptance": {
+    "existing_engine_smoke_accepted": true,
+    "existing_engine_accepted_as_production_path_event_backend": false,
+    "evaluation_completed_before_new_geometry_code": true
+  },
+  "decision": "use_pyroomacoustics_as_visibility_cross_check_and_keep_puresound_path_events_authoritative",
+  "rationale": [
+    "Pyroomacoustics already supplies arbitrary 3D polygon walls and non-convex room visibility, so it is a useful independent cross-check.",
+    "Its public acoustic contract does not expose the ordered complex reflection, furniture transmission, diffraction, and deterministic PathEvent serialization required here.",
+    "The scoped implementation therefore adds exact vertical-prism segment visibility to existing inspectable PathEvents instead of creating another general-purpose ray tracer."
+  ],
+  "next_action": "implement reciprocal source/reflection/receiver segment tests against serialized SceneObject vertical prisms"
+}

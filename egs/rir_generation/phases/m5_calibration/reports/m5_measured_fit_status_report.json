@@ -1,0 +1,75 @@
+{
+  "schema_version": "puresound.m5_measured_room_fit_report.v1",
+  "milestone": "M5.3",
+  "policy": "puresound.m5_measured_room_fit.v1",
+  "campaign_id": "m5-controlled-room-template-not-measurement-evidence",
+  "campaign_root": "egs/rir_generation",
+  "campaign_audit": {
+    "schema_version": "puresound.rir_measurement_campaign_audit.v1",
+    "campaign_id": "m5-controlled-room-template-not-measurement-evidence",
+    "root": "egs/rir_generation",
+    "room_count": 3,
+    "record_count": 3,
+    "unique_asset_count": 16,
+    "records_per_room": {
+      "replace-me-train-room": 1,
+      "replace-me-validation-room": 1,
+      "replace-me-test-room": 1
+    },
+    "unique_configurations_per_room": {
+      "replace-me-train-room": 1,
+      "replace-me-validation-room": 1,
+      "replace-me-test-room": 1
+    },
+    "split_room_counts": {
+      "train": 1,
+      "validation": 1,
+      "test": 1
+    },
+    "synchronized_spatial_record_count": 3,
+    "minimum_records_per_room": 12,
+    "conflicting_asset_paths": [],
+    "missing_asset_paths": [
+      "calibration/receiver_left.wav",
+      "calibration/receiver_right.wav",
+      "calibration/source_response.wav",
+      "captures/replace-me-test-room/position-000/noise.wav",
+      "captures/replace-me-test-room/position-000/rir.wav",
+      "captures/replace-me-test-room/position-000/sweep-repeat-00.wav",
+      "captures/replace-me-test-room/position-000/sweep-repeat-01.wav",
+      "captures/replace-me-train-room/position-000/noise.wav",
+      "captures/replace-me-train-room/position-000/rir.wav",
+      "captures/replace-me-train-room/position-000/sweep-repeat-00.wav",
+      "captures/replace-me-train-room/position-000/sweep-repeat-01.wav",
+      "captures/replace-me-validation-room/position-000/noise.wav",
+      "captures/replace-me-validation-room/position-000/rir.wav",
+      "captures/replace-me-validation-room/position-000/sweep-repeat-00.wav",
+      "captures/replace-me-validation-room/position-000/sweep-repeat-01.wav",
+      "excitation/ess-inverse.wav"
+    ],
+    "hash_mismatch_paths": [],
+    "checks": {
+      "asset_paths_have_no_conflicting_hashes": true,
+      "all_assets_exist": false,
+      "all_retained_asset_hashes_match": true,
+      "train_validation_test_rooms_present": true,
+      "minimum_records_per_room_met": false,
+      "minimum_unique_configurations_per_room_met": false,
+      "every_capture_has_repeated_raw_sweeps": true,
+      "every_capture_retains_noise_and_inverse_filter": true,
+      "at_least_one_synchronized_spatial_record": true
+    },
+    "ready_for_m5_inverse_calibration": false
+  },
+  "checks": {
+    "controlled_campaign_audit_passed": false,
+    "fitting_not_started_with_incomplete_evidence": true
+  },
+  "exit": {
+    "passed": false,
+    "m5_3_measured_fit_executed": false,
+    "blocked": true,
+    "reason": "controlled campaign is not ready for M5 measured-room fitting",
+    "production_enabled": false
+  }
+}

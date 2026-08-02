@@ -1,0 +1,61 @@
+{
+  "schema_version": "puresound.m3_exit.v1",
+  "evidence_reports": {
+    "path_events": "egs/rir_generation/phases/m3_wave_path/reports/path_events_m3_1_report.json",
+    "fdtd_holdouts": "egs/rir_generation/phases/m3_wave_path/reports/fourth_order_fdtd_holdouts_m3_10_report.json",
+    "crossover": "egs/rir_generation/phases/m3_wave_path/reports/full_room_crossover_m3_11_report.json",
+    "attribution": "egs/rir_generation/phases/m3_wave_path/reports/direct_early_later_m3_11_report.json",
+    "mesh": "egs/rir_generation/phases/m3_wave_path/reports/mesh_engine_m3_12_report.json",
+    "scene_interactions": "egs/rir_generation/phases/m3_wave_path/reports/scene_interactions_m3_13_m3_14_report.json",
+    "measured_exit": "egs/rir_generation/phases/m3_wave_path/reports/m3_measured_exit_report.json"
+  },
+  "implementation_steps": {
+    "m3_10_expanded_fdtd_holdouts": true,
+    "m3_11_crossover_interaction_audited": true,
+    "m3_12_existing_mesh_engine_evaluated": true,
+    "m3_13_furniture_visibility_geometry": true,
+    "m3_14_physical_interactions": true
+  },
+  "exit_gate": {
+    "path_delays_match_geometry": true,
+    "nearby_positions_produce_continuous_paths": true,
+    "reciprocity_obeys_expected_scope": true,
+    "early_reflection_timing_improves_against_measured": true,
+    "c50_improves_against_measured": true
+  },
+  "evidence_summary": {
+    "maximum_path_geometry_error_m": 8.881784197001252e-16,
+    "maximum_path_delay_error_s": 3.469446951953614e-18,
+    "maximum_continuity_distance_change_over_displacement": 0.9514770805161277,
+    "maximum_path_reciprocity_error": 8.881784197001252e-16,
+    "maximum_fdtd_plane_mode_complex_error": 0.0004420595554163637,
+    "maximum_reciprocalized_fdtd_nrmse": 0.0,
+    "c50_mean_absolute_median_gap": {
+      "m1": 5.289079040424364,
+      "m3": 3.2387199307313215,
+      "relative_improvement": 0.38765900339589826
+    },
+    "early_energy_centroid_mean_absolute_median_gap_ms": {
+      "m1": 3.0463162911332216,
+      "m3": 2.2426635911095034,
+      "relative_improvement": 0.26381131281832904
+    }
+  },
+  "known_limits": {
+    "full_room_low_high_complex_gate_accepted": false,
+    "dominant_peak_timing_is_exit_metric": false,
+    "dominant_peak_timing_diagnostic": {
+      "role": "diagnostic_only_due_to_discontinuous_peak_identity",
+      "m1_mean_absolute_median_gap": 1.1041666666666667,
+      "m3_mean_absolute_median_gap": 2.7395833333333335
+    },
+    "path_event_backend_is_production_default": false,
+    "late_field_is_m4_scope": true
+  },
+  "acceptance": {
+    "all_m3_implementation_steps_completed": true,
+    "all_m3_exit_gates_accepted": true,
+    "m3_completed": true
+  },
+  "decision": "complete_m3_and_advance_to_m4_late_field"
+}

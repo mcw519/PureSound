@@ -1,9 +1,9 @@
-import math
 from typing import Optional
 
 import torch
 import torchaudio
 
+from puresound.audio.rir_metrics import compute_drr_db as _compute_drr_db
 from puresound.utils import fftconvolve
 
 
@@ -18,18 +18,11 @@ def compute_drr_db(
     after that window is treated as the reverberant tail. Returns ``+inf``
     when the tail carries no energy (e.g. anechoic or trimmed RIR).
     """
-    flat = rir.detach().reshape(-1).float()
-    if flat.numel() == 0:
-        return float("inf")
-    peak = int(torch.argmax(flat.abs()).item())
-    window = max(1, int(round(direct_window_ms * 1e-3 * float(sample_rate))))
-    direct_end = min(peak + window, flat.numel())
-    direct_energy = float(flat[peak:direct_end].pow(2).sum().item())
-    reverb_energy = float(flat[direct_end:].pow(2).sum().item())
-    if reverb_energy <= 0.0:
-        return float("inf")
-    direct_energy = max(direct_energy, 1e-12)
-    return 10.0 * math.log10(direct_energy / reverb_energy)
+    return _compute_drr_db(
+        rir,
+        sample_rate=sample_rate,
+        direct_window_ms=direct_window_ms,
+    )
 
 
 def wav_apply_rir(

@@ -10,8 +10,8 @@ so a room with many RIRs is not over-counted; per-item quantities (distances,
 mic height) use every RIR.
 
 Usage:
-  python inspect_bank.py exp/hybrid_rir_16k
-  python inspect_bank.py exp/hybrid_rir_16k --bins 30
+  python inspect_bank.py egs/rir_generation/exp/rir_realism/m1/hybrid_rir_16k
+  python inspect_bank.py egs/rir_generation/exp/rir_realism/m1/hybrid_rir_16k --bins 30
 """
 import argparse
 import json

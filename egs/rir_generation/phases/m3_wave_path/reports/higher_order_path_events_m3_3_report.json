@@ -1,0 +1,493 @@
+{
+  "schema_version": "puresound.higher_order_path_event_validation.v1",
+  "boundary_config": "egs/rir_generation/phases/m2_impedance/config/impedance_reference_glass_wool_14kgm3_100mm.json",
+  "boundary_reference_id": "uniform_glass_wool_14kgm3_100mm_miki_relaxation_validation",
+  "full_room_report": "egs/rir_generation/phases/m3_wave_path/reports/full_room_crossover_m3_3_report.json",
+  "orders": [
+    1,
+    2,
+    4,
+    8,
+    12
+  ],
+  "frequency_band_hz": [
+    168.0,
+    300.0
+  ],
+  "edge_corner_contract": {
+    "production_policy": "exclude simultaneous face crossings pending a physical edge/corner diffraction model",
+    "legacy_comparison_policy": "group coincident interactions at one point and cascade face filters only to reproduce the old analytic image product",
+    "legacy_policy_promoted_to_production": false
+  },
+  "cases": [
+    {
+      "case_id": "room_a_train_0",
+      "event_count": 2625,
+      "simultaneous_edge_or_corner_event_count": 0,
+      "physical_exclude_policy_event_count": 2625,
+      "orders": {
+        "1": {
+          "event_count": 7,
+          "analytic_image_count": 7,
+          "event_spectrum_vs_same_order_analytic": {
+            "complex_nrmse": 1.0444535595590613e-15,
+            "complex_correlation": 0.9999999999999997,
+            "transfer_energy_ratio": 1.0000000000000007
+          },
+          "same_order_analytic_vs_max_order_analytic": {
+            "complex_nrmse": 7.56225286172345,
+            "complex_correlation": 0.3773238083610273,
+            "transfer_energy_ratio": 7.133164480683881
+          }
+        },
+        "2": {
+          "event_count": 25,
+          "analytic_image_count": 25,
+          "event_spectrum_vs_same_order_analytic": {
+            "complex_nrmse": 1.5252856627213261e-15,
+            "complex_correlation": 0.9999999999999998,
+            "transfer_energy_ratio": 0.9999999999999996
+          },
+          "same_order_analytic_vs_max_order_analytic": {
+            "complex_nrmse": 6.83465714958274,
+            "complex_correlation": 0.32258734531790667,
+            "transfer_energy_ratio": 7.083515611804583
+          }
+        },
+        "4": {
+          "event_count": 129,
+          "analytic_image_count": 129,
+          "event_spectrum_vs_same_order_analytic": {
+            "complex_nrmse": 5.456116546889887e-15,
+            "complex_correlation": 1.0,
+            "transfer_energy_ratio": 1.0000000000000016
+          },
+          "same_order_analytic_vs_max_order_analytic": {
+            "complex_nrmse": 2.955994459542671,
+            "complex_correlation": 0.5164495535291003,
+            "transfer_energy_ratio": 3.336365368920556
+          }
+        },
+        "8": {
+          "event_count": 833,
+          "analytic_image_count": 833,
+          "event_spectrum_vs_same_order_analytic": {
+            "complex_nrmse": 1.698586401525218e-14,
+            "complex_correlation": 0.9999999999999998,
+            "transfer_energy_ratio": 1.0
+          },
+          "same_order_analytic_vs_max_order_analytic": {
+            "complex_nrmse": 1.414558960827789,
+            "complex_correlation": 0.4720604589369958,
+            "transfer_energy_ratio": 1.5783231261349553
+          }
+        },
+        "12": {
+          "event_count": 2625,
+          "analytic_image_count": 2625,
+          "event_spectrum_vs_same_order_analytic": {
+            "complex_nrmse": 2.8549699470091256e-14,
+            "complex_correlation": 1.0000000000000002,
+            "transfer_energy_ratio": 1.000000000000002
+          },
+          "same_order_analytic_vs_max_order_analytic": {
+            "complex_nrmse": 0.0,
+            "complex_correlation": 1.0000000000000002,
+            "transfer_energy_ratio": 1.0
+          }
+        }
+      },
+      "delay_buckets": {
+        "direct": {
+          "event_count": 1,
+          "component_vs_total_transfer": {
+            "complex_nrmse": 4.469594634208228,
+            "complex_correlation": 0.8296786774627872,
+            "transfer_energy_ratio": 5.234611106420721
+          }
+        },
+        "reflections_through_50ms_after_direct": {
+          "event_count": 2584,
+          "component_vs_total_transfer": {
+            "complex_nrmse": 5.245329575475164,
+            "complex_correlation": 0.7516565059300712,
+            "transfer_energy_ratio": 4.484037296663252
+          }
+        },
+        "paths_after_50ms": {
+          "event_count": 40,
+          "component_vs_total_transfer": {
+            "complex_nrmse": 1.0179598289831067,
+            "complex_correlation": 0.10159303369265646,
+            "transfer_energy_ratio": 0.1387690512705146
+          }
+        }
+      },
+      "physical_exclude_vs_legacy_face_product": {
+        "complex_nrmse": 0.0,
+        "complex_correlation": 1.0000000000000002,
+        "transfer_energy_ratio": 1.0
+      },
+      "time_renderer_vs_max_order_analytic": {
+        "complex_nrmse": 0.008531329661368672,
+        "complex_correlation": 0.9999641182464227,
+        "transfer_energy_ratio": 0.9990021812702619
+      }
+    },
+    {
+      "case_id": "room_a_position_holdout_0",
+      "event_count": 2625,
+      "simultaneous_edge_or_corner_event_count": 410,
+      "physical_exclude_policy_event_count": 2215,
+      "orders": {
+        "1": {
+          "event_count": 7,
+          "analytic_image_count": 7,
+          "event_spectrum_vs_same_order_analytic": {
+            "complex_nrmse": 6.778630013845531e-16,
+            "complex_correlation": 1.0000000000000002,
+            "transfer_energy_ratio": 1.0000000000000002
+          },
+          "same_order_analytic_vs_max_order_analytic": {
+            "complex_nrmse": 11.56275880664496,
+            "complex_correlation": 0.572675577714083,
+            "transfer_energy_ratio": 11.394115611461599
+          }
+        },
+        "2": {
+          "event_count": 25,
+          "analytic_image_count": 25,
+          "event_spectrum_vs_same_order_analytic": {
+            "complex_nrmse": 1.7378989350675656e-15,
+            "complex_correlation": 0.9999999999999998,
+            "transfer_energy_ratio": 0.9999999999999998
+          },
+          "same_order_analytic_vs_max_order_analytic": {
+            "complex_nrmse": 8.383126438568823,
+            "complex_correlation": 0.5920709056470485,
+            "transfer_energy_ratio": 8.398347960602417
+          }
+        },
+        "4": {
+          "event_count": 129,
+          "analytic_image_count": 129,
+          "event_spectrum_vs_same_order_analytic": {
+            "complex_nrmse": 5.632068310117115e-15,
+            "complex_correlation": 0.9999999999999998,
+            "transfer_energy_ratio": 0.9999999999999992
+          },
+          "same_order_analytic_vs_max_order_analytic": {
+            "complex_nrmse": 4.714199817576251,
+            "complex_correlation": 0.17769571939778883,
+            "transfer_energy_ratio": 4.493806718315483
+          }
+        },
+        "8": {
+          "event_count": 833,
+          "analytic_image_count": 833,
+          "event_spectrum_vs_same_order_analytic": {
+            "complex_nrmse": 2.0734380937405024e-14,
+            "complex_correlation": 0.9999999999999999,
+            "transfer_energy_ratio": 0.9999999999999984
+          },
+          "same_order_analytic_vs_max_order_analytic": {
+            "complex_nrmse": 1.6523766678685157,
+            "complex_correlation": 0.3530275036824648,
+            "transfer_energy_ratio": 1.7146452398553695
+          }
+        },
+        "12": {
+          "event_count": 2625,
+          "analytic_image_count": 2625,
+          "event_spectrum_vs_same_order_analytic": {
+            "complex_nrmse": 3.5967494740482635e-14,
+            "complex_correlation": 1.0000000000000002,
+            "transfer_energy_ratio": 0.9999999999999931
+          },
+          "same_order_analytic_vs_max_order_analytic": {
+            "complex_nrmse": 0.0,
+            "complex_correlation": 1.0000000000000002,
+            "transfer_energy_ratio": 1.0
+          }
+        }
+      },
+      "delay_buckets": {
+        "direct": {
+          "event_count": 1,
+          "component_vs_total_transfer": {
+            "complex_nrmse": 5.379695181935404,
+            "complex_correlation": 0.379645414032129,
+            "transfer_energy_ratio": 5.563639982665056
+          }
+        },
+        "reflections_through_50ms_after_direct": {
+          "event_count": 2589,
+          "component_vs_total_transfer": {
+            "complex_nrmse": 5.572557308941374,
+            "complex_correlation": 0.29149436956991803,
+            "transfer_energy_ratio": 5.3842113433172365
+          }
+        },
+        "paths_after_50ms": {
+          "event_count": 35,
+          "component_vs_total_transfer": {
+            "complex_nrmse": 0.9885036468204117,
+            "complex_correlation": 0.15372401608313585,
+            "transfer_energy_ratio": 0.166832327613557
+          }
+        }
+      },
+      "physical_exclude_vs_legacy_face_product": {
+        "complex_nrmse": 1.3782453426890586,
+        "complex_correlation": 0.596025489042361,
+        "transfer_energy_ratio": 1.349481091448773
+      },
+      "time_renderer_vs_max_order_analytic": {
+        "complex_nrmse": 0.017513830175103755,
+        "complex_correlation": 0.9999096320369342,
+        "transfer_energy_ratio": 0.9924491175575989
+      }
+    },
+    {
+      "case_id": "room_c_room_holdout_0",
+      "event_count": 2625,
+      "simultaneous_edge_or_corner_event_count": 0,
+      "physical_exclude_policy_event_count": 2625,
+      "orders": {
+        "1": {
+          "event_count": 7,
+          "analytic_image_count": 7,
+          "event_spectrum_vs_same_order_analytic": {
+            "complex_nrmse": 7.255601910484463e-16,
+            "complex_correlation": 1.0000000000000002,
+            "transfer_energy_ratio": 0.9999999999999999
+          },
+          "same_order_analytic_vs_max_order_analytic": {
+            "complex_nrmse": 9.526871634267161,
+            "complex_correlation": 0.23201173798538297,
+            "transfer_energy_ratio": 9.565531904808253
+          }
+        },
+        "2": {
+          "event_count": 25,
+          "analytic_image_count": 25,
+          "event_spectrum_vs_same_order_analytic": {
+            "complex_nrmse": 9.537959613242963e-16,
+            "complex_correlation": 0.9999999999999996,
+            "transfer_energy_ratio": 1.0
+          },
+          "same_order_analytic_vs_max_order_analytic": {
+            "complex_nrmse": 9.06235907129484,
+            "complex_correlation": 0.1600175305103665,
+            "transfer_energy_ratio": 8.914695983421783
+          }
+        },
+        "4": {
+          "event_count": 129,
+          "analytic_image_count": 129,
+          "event_spectrum_vs_same_order_analytic": {
+            "complex_nrmse": 7.298592535046049e-15,
+            "complex_correlation": 1.0000000000000002,
+            "transfer_energy_ratio": 1.0000000000000009
+          },
+          "same_order_analytic_vs_max_order_analytic": {
+            "complex_nrmse": 2.2293757340292277,
+            "complex_correlation": 0.20063538581476753,
+            "transfer_energy_ratio": 2.098057033851867
+          }
+        },
+        "8": {
+          "event_count": 833,
+          "analytic_image_count": 833,
+          "event_spectrum_vs_same_order_analytic": {
+            "complex_nrmse": 9.873849357857493e-15,
+            "complex_correlation": 1.0,
+            "transfer_energy_ratio": 0.9999999999999983
+          },
+          "same_order_analytic_vs_max_order_analytic": {
+            "complex_nrmse": 2.0879243380471246,
+            "complex_correlation": 0.5863146957677748,
+            "transfer_energy_ratio": 2.301316144946463
+          }
+        },
+        "12": {
+          "event_count": 2625,
+          "analytic_image_count": 2625,
+          "event_spectrum_vs_same_order_analytic": {
+            "complex_nrmse": 2.3283458143840174e-14,
+            "complex_correlation": 1.0000000000000002,
+            "transfer_energy_ratio": 1.0000000000000009
+          },
+          "same_order_analytic_vs_max_order_analytic": {
+            "complex_nrmse": 0.0,
+            "complex_correlation": 0.9999999999999999,
+            "transfer_energy_ratio": 1.0
+          }
+        }
+      },
+      "delay_buckets": {
+        "direct": {
+          "event_count": 1,
+          "component_vs_total_transfer": {
+            "complex_nrmse": 4.6778965498565,
+            "complex_correlation": 0.3494625657750195,
+            "transfer_energy_ratio": 4.849514826815895
+          }
+        },
+        "reflections_through_50ms_after_direct": {
+          "event_count": 2611,
+          "component_vs_total_transfer": {
+            "complex_nrmse": 4.848034726427714,
+            "complex_correlation": 0.24047324466080386,
+            "transfer_energy_ratio": 4.680580068225961
+          }
+        },
+        "paths_after_50ms": {
+          "event_count": 13,
+          "component_vs_total_transfer": {
+            "complex_nrmse": 1.0261863716681687,
+            "complex_correlation": 0.2381144106867396,
+            "transfer_energy_ratio": 0.11658249707618341
+          }
+        }
+      },
+      "physical_exclude_vs_legacy_face_product": {
+        "complex_nrmse": 0.0,
+        "complex_correlation": 1.0000000000000004,
+        "transfer_energy_ratio": 1.0
+      },
+      "time_renderer_vs_max_order_analytic": {
+        "complex_nrmse": 0.017067121000055037,
+        "complex_correlation": 0.9999208389403186,
+        "transfer_energy_ratio": 0.9955297514251542
+      }
+    }
+  ],
+  "order_aggregate": {
+    "1": {
+      "event_spectrum_vs_same_order_analytic": {
+        "case_count": 3,
+        "mean_complex_nrmse": 8.159589173306868e-16,
+        "mean_complex_correlation": 1.0,
+        "mean_transfer_energy_ratio": 1.0000000000000002
+      },
+      "same_order_analytic_vs_max_order_analytic": {
+        "case_count": 3,
+        "mean_complex_nrmse": 9.550627767545189,
+        "mean_complex_correlation": 0.3940037080201644,
+        "mean_transfer_energy_ratio": 9.364270665651246
+      }
+    },
+    "2": {
+      "event_spectrum_vs_same_order_analytic": {
+        "case_count": 3,
+        "mean_complex_nrmse": 1.4056601863710626e-15,
+        "mean_complex_correlation": 0.9999999999999997,
+        "mean_transfer_energy_ratio": 0.9999999999999997
+      },
+      "same_order_analytic_vs_max_order_analytic": {
+        "case_count": 3,
+        "mean_complex_nrmse": 8.093380886482134,
+        "mean_complex_correlation": 0.3582252604917739,
+        "mean_transfer_energy_ratio": 8.132186518609595
+      }
+    },
+    "4": {
+      "event_spectrum_vs_same_order_analytic": {
+        "case_count": 3,
+        "mean_complex_nrmse": 6.128925797351017e-15,
+        "mean_complex_correlation": 1.0,
+        "mean_transfer_energy_ratio": 1.0000000000000007
+      },
+      "same_order_analytic_vs_max_order_analytic": {
+        "case_count": 3,
+        "mean_complex_nrmse": 3.2998566703827166,
+        "mean_complex_correlation": 0.2982602195805522,
+        "mean_transfer_energy_ratio": 3.309409707029302
+      }
+    },
+    "8": {
+      "event_spectrum_vs_same_order_analytic": {
+        "case_count": 3,
+        "mean_complex_nrmse": 1.5864698103504898e-14,
+        "mean_complex_correlation": 0.9999999999999999,
+        "mean_transfer_energy_ratio": 0.999999999999999
+      },
+      "same_order_analytic_vs_max_order_analytic": {
+        "case_count": 3,
+        "mean_complex_nrmse": 1.7182866555811431,
+        "mean_complex_correlation": 0.47046755279574515,
+        "mean_transfer_energy_ratio": 1.864761503645596
+      }
+    },
+    "12": {
+      "event_spectrum_vs_same_order_analytic": {
+        "case_count": 3,
+        "mean_complex_nrmse": 2.926688411813802e-14,
+        "mean_complex_correlation": 1.0000000000000002,
+        "mean_transfer_energy_ratio": 0.9999999999999987
+      },
+      "same_order_analytic_vs_max_order_analytic": {
+        "case_count": 3,
+        "mean_complex_nrmse": 0.0,
+        "mean_complex_correlation": 1.0000000000000002,
+        "mean_transfer_energy_ratio": 1.0
+      }
+    }
+  },
+  "full_room_crossover": {
+    "causal_path_event_order_aggregate": {
+      "max_order": 12,
+      "variant": "causal_path_event_order_12",
+      "geometric_aggregate": {
+        "case_count": 3,
+        "mean_complex_nrmse": 1.0017069792043392,
+        "mean_complex_correlation": 0.5042514595779349,
+        "mean_transfer_energy_ratio": 0.7702262830304681
+      },
+      "geometric_highpass_aggregate": {
+        "case_count": 3,
+        "mean_complex_nrmse": 1.203665682954447,
+        "mean_complex_correlation": 0.45500570417521047,
+        "mean_transfer_energy_ratio": 0.3346968268403801
+      },
+      "hybrid_aggregate": {
+        "case_count": 3,
+        "mean_complex_nrmse": 4.3322102252014165,
+        "mean_complex_correlation": 0.7596680681079738,
+        "mean_transfer_energy_ratio": 3.78662768880598
+      },
+      "production_backend_replacement_claimed": false,
+      "scalar_gain_fitted": false
+    },
+    "frozen_gate_accepted": false
+  },
+  "acceptance": {
+    "maximum_spectral_path_nrmse": 1e-10,
+    "maximum_time_renderer_nrmse": 0.025,
+    "minimum_time_renderer_correlation": 0.999,
+    "time_renderer_energy_ratio_range": [
+      0.98,
+      1.02
+    ],
+    "higher_order_spectral_representation_accepted": true,
+    "higher_order_time_renderer_accepted": true,
+    "m3_3_higher_order_representation_accepted": true,
+    "full_room_crossover_accepted": false
+  },
+  "scope": {
+    "validated": [
+      "ordered shoebox surface crossings through order 12",
+      "higher-order complex-gain products",
+      "source-receiver reciprocal image paths",
+      "causal repeated boundary-filter cascades",
+      "order convergence in three frozen M2.12 rooms"
+    ],
+    "physical_edge_or_corner_model_validated": false,
+    "mesh_visibility_validated": false,
+    "production_high_backend_replaced": false,
+    "measured_c50_validated": false
+  },
+  "decision": "accept_m3_3_representation_reject_higher_order_as_full_room_fix",
+  "next_action": "audit direct/early/late complex energy against the FDTD reference and evaluate a mesh engine with explicit visibility; adding image order alone has reproduced, not fixed, the crossover failure"
+}

@@ -1,0 +1,2057 @@
+{
+  "schema_version": "puresound.impedance_modal_residue_calibration_report.v1",
+  "calibration": {
+    "schema_version": "puresound.impedance_modal_residue_calibration.v1",
+    "reference_id": "glass_wool_14kgm3_100mm_fdtd_residue_m2_8",
+    "boundary_reference_id": "uniform_glass_wool_14kgm3_100mm_miki_relaxation_validation",
+    "complex_scale": {
+      "real": 0.4441748956890689,
+      "imag": 0.1291461862944896
+    },
+    "frequency_exponent": 0.35,
+    "reference_frequency_hz": 100.0,
+    "valid_frequency_range_hz": [
+      60.0,
+      240.0
+    ],
+    "source": {
+      "evidence_tier": "independent_numerical_reference",
+      "reference_solver": "staggered_pressure_velocity_fdtd",
+      "source_convention": "unit_peak_ricker_pressure_added_to_one_cell; modal coupling multiplied by FDTD cell volume",
+      "boundary_config": "egs/rir_generation/phases/m2_impedance/config/impedance_reference_glass_wool_14kgm3_100mm.json"
+    },
+    "applicability": {
+      "scope": "controlled_rectangular_room_position_transfer",
+      "room_geometry": "shoebox",
+      "boundary_reference_id": "uniform_glass_wool_14kgm3_100mm_miki_relaxation_validation",
+      "production_material_mapping_enabled": false,
+      "measured_room_transfer_validated": false
+    },
+    "fit_summary": {
+      "balanced_train_nrmse": 0.12997614328474716,
+      "aggregate": {
+        "train": {
+          "calibrated": {
+            "case_count": 4,
+            "mean_nrmse": 0.1299388982395492,
+            "mean_correlation": 0.9915594056841408,
+            "mean_energy_ratio": 0.9831078250793213
+          },
+          "baseline_legacy_1_over_f_sine": {
+            "case_count": 4,
+            "mean_nrmse": 0.9630550109389682,
+            "mean_correlation": 0.27051361392358075,
+            "mean_energy_ratio": 0.072469276247714
+          }
+        },
+        "holdout": {
+          "calibrated": {
+            "case_count": 2,
+            "mean_nrmse": 0.2303566490080896,
+            "mean_correlation": 0.9734203039865907,
+            "mean_energy_ratio": 1.0038871133082958
+          },
+          "baseline_legacy_1_over_f_sine": {
+            "case_count": 2,
+            "mean_nrmse": 0.9703259307875629,
+            "mean_correlation": 0.2466666030188454,
+            "mean_energy_ratio": 0.09130992556098197
+          }
+        }
+      },
+      "acceptance": {
+        "minimum_mean_holdout_correlation": 0.9,
+        "maximum_mean_holdout_nrmse": 0.35,
+        "requires_improvement_over_baseline": true,
+        "acceptance_splits": [
+          "holdout"
+        ],
+        "by_split": {
+          "holdout": {
+            "accepted": true,
+            "calibrated_mean_correlation": 0.9734203039865907,
+            "calibrated_mean_nrmse": 0.2303566490080896,
+            "baseline_mean_nrmse": 0.9703259307875629
+          }
+        },
+        "accepted": true
+      }
+    }
+  },
+  "fit_configuration": {
+    "reference_frequency_hz": 100.0,
+    "valid_frequency_range_hz": [
+      60.0,
+      240.0
+    ],
+    "exponent_candidates": [
+      -0.5,
+      -0.45,
+      -0.4,
+      -0.35,
+      -0.3,
+      -0.25,
+      -0.2,
+      -0.15,
+      -0.1,
+      -0.05,
+      0.0,
+      0.05,
+      0.1,
+      0.15,
+      0.2,
+      0.25,
+      0.3,
+      0.35,
+      0.4,
+      0.45,
+      0.5,
+      0.55,
+      0.6,
+      0.65,
+      0.7,
+      0.75,
+      0.8,
+      0.85,
+      0.9,
+      0.95,
+      1.0,
+      1.05,
+      1.1,
+      1.15,
+      1.2,
+      1.25,
+      1.3,
+      1.35,
+      1.4,
+      1.45,
+      1.5,
+      1.55,
+      1.6,
+      1.65,
+      1.7,
+      1.75,
+      1.8,
+      1.85,
+      1.9,
+      1.95,
+      2.0
+    ],
+    "case_balancing": "unit_analysis_window_rms_per_case",
+    "pole_policy": "fixed_no_refit",
+    "baseline": "fitted_gain_times_1_over_f_times_imaginary_quadrature"
+  },
+  "exponent_search": [
+    {
+      "frequency_exponent": -0.5,
+      "balanced_train_nrmse": 0.23274372508776867
+    },
+    {
+      "frequency_exponent": -0.45,
+      "balanced_train_nrmse": 0.22371364058376314
+    },
+    {
+      "frequency_exponent": -0.4,
+      "balanced_train_nrmse": 0.21480305470350972
+    },
+    {
+      "frequency_exponent": -0.35,
+      "balanced_train_nrmse": 0.20604435793771608
+    },
+    {
+      "frequency_exponent": -0.3,
+      "balanced_train_nrmse": 0.1974744225226855
+    },
+    {
+      "frequency_exponent": -0.25,
+      "balanced_train_nrmse": 0.18913520918737187
+    },
+    {
+      "frequency_exponent": -0.2,
+      "balanced_train_nrmse": 0.18107438538598636
+    },
+    {
+      "frequency_exponent": -0.15,
+      "balanced_train_nrmse": 0.17334589792218036
+    },
+    {
+      "frequency_exponent": -0.1,
+      "balanced_train_nrmse": 0.16601040581338683
+    },
+    {
+      "frequency_exponent": -0.05,
+      "balanced_train_nrmse": 0.1591354304247774
+    },
+    {
+      "frequency_exponent": 0.0,
+      "balanced_train_nrmse": 0.1527950232528407
+    },
+    {
+      "frequency_exponent": 0.05,
+      "balanced_train_nrmse": 0.14706869993530086
+    },
+    {
+      "frequency_exponent": 0.1,
+      "balanced_train_nrmse": 0.1420393681810063
+    },
+    {
+      "frequency_exponent": 0.15,
+      "balanced_train_nrmse": 0.13779002801259357
+    },
+    {
+      "frequency_exponent": 0.2,
+      "balanced_train_nrmse": 0.1343991906390145
+    },
+    {
+      "frequency_exponent": 0.25,
+      "balanced_train_nrmse": 0.1319352701300754
+    },
+    {
+      "frequency_exponent": 0.3,
+      "balanced_train_nrmse": 0.13045060670843547
+    },
+    {
+      "frequency_exponent": 0.35,
+      "balanced_train_nrmse": 0.12997614328474716
+    },
+    {
+      "frequency_exponent": 0.4,
+      "balanced_train_nrmse": 0.130517895873387
+    },
+    {
+      "frequency_exponent": 0.45,
+      "balanced_train_nrmse": 0.132056084176536
+    },
+    {
+      "frequency_exponent": 0.5,
+      "balanced_train_nrmse": 0.13454715861095112
+    },
+    {
+      "frequency_exponent": 0.55,
+      "balanced_train_nrmse": 0.13792822432273988
+    },
+    {
+      "frequency_exponent": 0.6,
+      "balanced_train_nrmse": 0.14212284014518314
+    },
+    {
+      "frequency_exponent": 0.65,
+      "balanced_train_nrmse": 0.14704704541192773
+    },
+    {
+      "frequency_exponent": 0.7,
+      "balanced_train_nrmse": 0.15261470062170124
+    },
+    {
+      "frequency_exponent": 0.75,
+      "balanced_train_nrmse": 0.15874163274872852
+    },
+    {
+      "frequency_exponent": 0.8,
+      "balanced_train_nrmse": 0.16534846168516906
+    },
+    {
+      "frequency_exponent": 0.85,
+      "balanced_train_nrmse": 0.17236224538628542
+    },
+    {
+      "frequency_exponent": 0.9,
+      "balanced_train_nrmse": 0.1797172029923756
+    },
+    {
+      "frequency_exponent": 0.95,
+      "balanced_train_nrmse": 0.18735479363049218
+    },
+    {
+      "frequency_exponent": 1.0,
+      "balanced_train_nrmse": 0.19522339072536535
+    },
+    {
+      "frequency_exponent": 1.05,
+      "balanced_train_nrmse": 0.20327773398076604
+    },
+    {
+      "frequency_exponent": 1.1,
+      "balanced_train_nrmse": 0.21147828492287632
+    },
+    {
+      "frequency_exponent": 1.15,
+      "balanced_train_nrmse": 0.21979056609248485
+    },
+    {
+      "frequency_exponent": 1.2,
+      "balanced_train_nrmse": 0.22818453048353732
+    },
+    {
+      "frequency_exponent": 1.25,
+      "balanced_train_nrmse": 0.23663398515570355
+    },
+    {
+      "frequency_exponent": 1.3,
+      "balanced_train_nrmse": 0.2451160785678896
+    },
+    {
+      "frequency_exponent": 1.35,
+      "balanced_train_nrmse": 0.2536108526372004
+    },
+    {
+      "frequency_exponent": 1.4,
+      "balanced_train_nrmse": 0.262100855855134
+    },
+    {
+      "frequency_exponent": 1.45,
+      "balanced_train_nrmse": 0.27057081155792795
+    },
+    {
+      "frequency_exponent": 1.5,
+      "balanced_train_nrmse": 0.2790073346739998
+    },
+    {
+      "frequency_exponent": 1.55,
+      "balanced_train_nrmse": 0.28739869032245297
+    },
+    {
+      "frequency_exponent": 1.6,
+      "balanced_train_nrmse": 0.29573458811483655
+    },
+    {
+      "frequency_exponent": 1.65,
+      "balanced_train_nrmse": 0.3040060066783691
+    },
+    {
+      "frequency_exponent": 1.7,
+      "balanced_train_nrmse": 0.31220504363488727
+    },
+    {
+      "frequency_exponent": 1.75,
+      "balanced_train_nrmse": 0.32032478696128597
+    },
+    {
+      "frequency_exponent": 1.8,
+      "balanced_train_nrmse": 0.32835920428772486
+    },
+    {
+      "frequency_exponent": 1.85,
+      "balanced_train_nrmse": 0.33630304724515636
+    },
+    {
+      "frequency_exponent": 1.9,
+      "balanced_train_nrmse": 0.34415176845192447
+    },
+    {
+      "frequency_exponent": 1.95,
+      "balanced_train_nrmse": 0.35190144913484084
+    },
+    {
+      "frequency_exponent": 2.0,
+      "balanced_train_nrmse": 0.35954873572074925
+    }
+  ],
+  "cases": [
+    {
+      "case_id": "room_a_train_0",
+      "split": "train",
+      "mode_count": 15,
+      "calibrated": {
+        "nrmse": 0.1330740972776911,
+        "correlation": 0.991115174329636,
+        "energy_ratio": 0.9811779020037759
+      },
+      "baseline_legacy_1_over_f_sine": {
+        "nrmse": 0.970435093624992,
+        "correlation": 0.24394317073457167,
+        "energy_ratio": 0.07672814873817486
+      },
+      "metadata": {
+        "room_id": "room_a",
+        "room_dim_m": [
+          2.0,
+          1.35,
+          1.05
+        ],
+        "requested_source_position_m": [
+          0.43,
+          0.37,
+          0.31
+        ],
+        "requested_receiver_position_m": [
+          1.47,
+          0.96,
+          0.73
+        ],
+        "fdtd_source_cell_center_m": [
+          0.4117647058823529,
+          0.42954545454545456,
+          0.2916666666666667
+        ],
+        "fdtd_receiver_cell_center_m": [
+          1.4705882352941175,
+          0.9204545454545455,
+          0.7583333333333333
+        ],
+        "fdtd_grid_shape_zyx": [
+          9,
+          11,
+          17
+        ],
+        "fdtd_nominal_grid_spacing_m": 0.12,
+        "fdtd_grid_spacing_xyz_m": [
+          0.11764705882352941,
+          0.12272727272727274,
+          0.11666666666666667
+        ],
+        "fdtd_sample_rate_hz": 14842.732968915525,
+        "fdtd_cell_volume_m3": 0.0016844919786096258,
+        "analysis_window_s": [
+          0.055,
+          0.48
+        ],
+        "analysis_filter": {
+          "type": "zero_phase_butterworth_bandpass",
+          "order": 4,
+          "frequency_hz": [
+            60.0,
+            240.0
+          ]
+        }
+      }
+    },
+    {
+      "case_id": "room_a_train_1",
+      "split": "train",
+      "mode_count": 15,
+      "calibrated": {
+        "nrmse": 0.13116386268989227,
+        "correlation": 0.9913706766681486,
+        "energy_ratio": 0.9791911259810044
+      },
+      "baseline_legacy_1_over_f_sine": {
+        "nrmse": 0.9654188187556144,
+        "correlation": 0.261242262052757,
+        "energy_ratio": 0.07396824749887392
+      },
+      "metadata": {
+        "room_id": "room_a",
+        "room_dim_m": [
+          2.0,
+          1.35,
+          1.05
+        ],
+        "requested_source_position_m": [
+          0.62,
+          0.91,
+          0.32
+        ],
+        "requested_receiver_position_m": [
+          1.61,
+          0.42,
+          0.78
+        ],
+        "fdtd_source_cell_center_m": [
+          0.6470588235294118,
+          0.9204545454545455,
+          0.2916666666666667
+        ],
+        "fdtd_receiver_cell_center_m": [
+          1.588235294117647,
+          0.42954545454545456,
+          0.7583333333333333
+        ],
+        "fdtd_grid_shape_zyx": [
+          9,
+          11,
+          17
+        ],
+        "fdtd_nominal_grid_spacing_m": 0.12,
+        "fdtd_grid_spacing_xyz_m": [
+          0.11764705882352941,
+          0.12272727272727274,
+          0.11666666666666667
+        ],
+        "fdtd_sample_rate_hz": 14842.732968915525,
+        "fdtd_cell_volume_m3": 0.0016844919786096258,
+        "analysis_window_s": [
+          0.055,
+          0.48
+        ],
+        "analysis_filter": {
+          "type": "zero_phase_butterworth_bandpass",
+          "order": 4,
+          "frequency_hz": [
+            60.0,
+            240.0
+          ]
+        }
+      }
+    },
+    {
+      "case_id": "room_a_holdout_0",
+      "split": "holdout",
+      "mode_count": 15,
+      "calibrated": {
+        "nrmse": 0.24421828765452241,
+        "correlation": 0.9700001935330844,
+        "energy_ratio": 0.9860416627327654
+      },
+      "baseline_legacy_1_over_f_sine": {
+        "nrmse": 0.9905706364174696,
+        "correlation": 0.18162008968896037,
+        "energy_ratio": 0.09045837375357574
+      },
+      "metadata": {
+        "room_id": "room_a",
+        "room_dim_m": [
+          2.0,
+          1.35,
+          1.05
+        ],
+        "requested_source_position_m": [
+          0.34,
+          0.68,
+          0.76
+        ],
+        "requested_receiver_position_m": [
+          1.72,
+          0.67,
+          0.28
+        ],
+        "fdtd_source_cell_center_m": [
+          0.29411764705882354,
+          0.675,
+          0.7583333333333333
+        ],
+        "fdtd_receiver_cell_center_m": [
+          1.7058823529411764,
+          0.675,
+          0.2916666666666667
+        ],
+        "fdtd_grid_shape_zyx": [
+          9,
+          11,
+          17
+        ],
+        "fdtd_nominal_grid_spacing_m": 0.12,
+        "fdtd_grid_spacing_xyz_m": [
+          0.11764705882352941,
+          0.12272727272727274,
+          0.11666666666666667
+        ],
+        "fdtd_sample_rate_hz": 14842.732968915525,
+        "fdtd_cell_volume_m3": 0.0016844919786096258,
+        "analysis_window_s": [
+          0.055,
+          0.48
+        ],
+        "analysis_filter": {
+          "type": "zero_phase_butterworth_bandpass",
+          "order": 4,
+          "frequency_hz": [
+            60.0,
+            240.0
+          ]
+        }
+      }
+    },
+    {
+      "case_id": "room_b_train_0",
+      "split": "train",
+      "mode_count": 19,
+      "calibrated": {
+        "nrmse": 0.13064297817652756,
+        "correlation": 0.9915176912849656,
+        "energy_ratio": 1.0099599458156858
+      },
+      "baseline_legacy_1_over_f_sine": {
+        "nrmse": 0.9648300395536104,
+        "correlation": 0.2632358111428595,
+        "energy_ratio": 0.07516247244113436
+      },
+      "metadata": {
+        "room_id": "room_b",
+        "room_dim_m": [
+          1.85,
+          1.55,
+          1.15
+        ],
+        "requested_source_position_m": [
+          0.4,
+          0.42,
+          0.35
+        ],
+        "requested_receiver_position_m": [
+          1.48,
+          1.11,
+          0.81
+        ],
+        "fdtd_source_cell_center_m": [
+          0.4316666666666667,
+          0.4173076923076923,
+          0.40249999999999997
+        ],
+        "fdtd_receiver_cell_center_m": [
+          1.5416666666666667,
+          1.1326923076923077,
+          0.8624999999999999
+        ],
+        "fdtd_grid_shape_zyx": [
+          10,
+          13,
+          15
+        ],
+        "fdtd_nominal_grid_spacing_m": 0.12,
+        "fdtd_grid_spacing_xyz_m": [
+          0.12333333333333334,
+          0.11923076923076924,
+          0.11499999999999999
+        ],
+        "fdtd_sample_rate_hz": 14825.830294497971,
+        "fdtd_cell_volume_m3": 0.0016910897435897436,
+        "analysis_window_s": [
+          0.055,
+          0.48
+        ],
+        "analysis_filter": {
+          "type": "zero_phase_butterworth_bandpass",
+          "order": 4,
+          "frequency_hz": [
+            60.0,
+            240.0
+          ]
+        }
+      }
+    },
+    {
+      "case_id": "room_b_train_1",
+      "split": "train",
+      "mode_count": 19,
+      "calibrated": {
+        "nrmse": 0.12487465481408588,
+        "correlation": 0.9922340804538127,
+        "energy_ratio": 0.9621023265168189
+      },
+      "baseline_legacy_1_over_f_sine": {
+        "nrmse": 0.951536091821656,
+        "correlation": 0.31363321176413506,
+        "energy_ratio": 0.06401823631267288
+      },
+      "metadata": {
+        "room_id": "room_b",
+        "room_dim_m": [
+          1.85,
+          1.55,
+          1.15
+        ],
+        "requested_source_position_m": [
+          0.62,
+          1.03,
+          0.36
+        ],
+        "requested_receiver_position_m": [
+          1.6,
+          0.47,
+          0.84
+        ],
+        "fdtd_source_cell_center_m": [
+          0.6783333333333333,
+          1.0134615384615384,
+          0.40249999999999997
+        ],
+        "fdtd_receiver_cell_center_m": [
+          1.5416666666666667,
+          0.4173076923076923,
+          0.8624999999999999
+        ],
+        "fdtd_grid_shape_zyx": [
+          10,
+          13,
+          15
+        ],
+        "fdtd_nominal_grid_spacing_m": 0.12,
+        "fdtd_grid_spacing_xyz_m": [
+          0.12333333333333334,
+          0.11923076923076924,
+          0.11499999999999999
+        ],
+        "fdtd_sample_rate_hz": 14825.830294497971,
+        "fdtd_cell_volume_m3": 0.0016910897435897436,
+        "analysis_window_s": [
+          0.055,
+          0.48
+        ],
+        "analysis_filter": {
+          "type": "zero_phase_butterworth_bandpass",
+          "order": 4,
+          "frequency_hz": [
+            60.0,
+            240.0
+          ]
+        }
+      }
+    },
+    {
+      "case_id": "room_b_holdout_0",
+      "split": "holdout",
+      "mode_count": 19,
+      "calibrated": {
+        "nrmse": 0.21649501036165678,
+        "correlation": 0.976840414440097,
+        "energy_ratio": 1.0217325638838262
+      },
+      "baseline_legacy_1_over_f_sine": {
+        "nrmse": 0.9500812251576564,
+        "correlation": 0.31171311634873045,
+        "energy_ratio": 0.09216147736838821
+      },
+      "metadata": {
+        "room_id": "room_b",
+        "room_dim_m": [
+          1.85,
+          1.55,
+          1.15
+        ],
+        "requested_source_position_m": [
+          0.35,
+          0.77,
+          0.82
+        ],
+        "requested_receiver_position_m": [
+          1.62,
+          0.74,
+          0.31
+        ],
+        "fdtd_source_cell_center_m": [
+          0.30833333333333335,
+          0.775,
+          0.8624999999999999
+        ],
+        "fdtd_receiver_cell_center_m": [
+          1.665,
+          0.775,
+          0.2875
+        ],
+        "fdtd_grid_shape_zyx": [
+          10,
+          13,
+          15
+        ],
+        "fdtd_nominal_grid_spacing_m": 0.12,
+        "fdtd_grid_spacing_xyz_m": [
+          0.12333333333333334,
+          0.11923076923076924,
+          0.11499999999999999
+        ],
+        "fdtd_sample_rate_hz": 14825.830294497971,
+        "fdtd_cell_volume_m3": 0.0016910897435897436,
+        "analysis_window_s": [
+          0.055,
+          0.48
+        ],
+        "analysis_filter": {
+          "type": "zero_phase_butterworth_bandpass",
+          "order": 4,
+          "frequency_hz": [
+            60.0,
+            240.0
+          ]
+        }
+      }
+    }
+  ],
+  "aggregate": {
+    "train": {
+      "calibrated": {
+        "case_count": 4,
+        "mean_nrmse": 0.1299388982395492,
+        "mean_correlation": 0.9915594056841408,
+        "mean_energy_ratio": 0.9831078250793213
+      },
+      "baseline_legacy_1_over_f_sine": {
+        "case_count": 4,
+        "mean_nrmse": 0.9630550109389682,
+        "mean_correlation": 0.27051361392358075,
+        "mean_energy_ratio": 0.072469276247714
+      }
+    },
+    "holdout": {
+      "calibrated": {
+        "case_count": 2,
+        "mean_nrmse": 0.2303566490080896,
+        "mean_correlation": 0.9734203039865907,
+        "mean_energy_ratio": 1.0038871133082958
+      },
+      "baseline_legacy_1_over_f_sine": {
+        "case_count": 2,
+        "mean_nrmse": 0.9703259307875629,
+        "mean_correlation": 0.2466666030188454,
+        "mean_energy_ratio": 0.09130992556098197
+      }
+    }
+  },
+  "acceptance": {
+    "minimum_mean_holdout_correlation": 0.9,
+    "maximum_mean_holdout_nrmse": 0.35,
+    "requires_improvement_over_baseline": true,
+    "acceptance_splits": [
+      "holdout"
+    ],
+    "by_split": {
+      "holdout": {
+        "accepted": true,
+        "calibrated_mean_correlation": 0.9734203039865907,
+        "calibrated_mean_nrmse": 0.2303566490080896,
+        "baseline_mean_nrmse": 0.9703259307875629
+      }
+    },
+    "accepted": true
+  },
+  "boundary_config": {
+    "schema_version": "puresound.rectangular_impedance_boundary.v1",
+    "reference_id": "uniform_glass_wool_14kgm3_100mm_miki_relaxation_validation",
+    "boundaries": {
+      "west": {
+        "model": "first_order_relaxation_admittance",
+        "units": {
+          "surface_impedance": "Pa*s/m",
+          "normalized_admittance": "dimensionless"
+        },
+        "normalized_admittance_infinite": 1.5442743944007489,
+        "normalized_admittance_relaxation": -1.540567216199082,
+        "relaxation_frequency_hz": 614.1309653608779,
+        "normalized_admittance_zero": 0.003707178201666883,
+        "relaxation_time_s": 0.00025915472768641806,
+        "passive": true,
+        "causal": true,
+        "discretization": "bilinear_transform"
+      },
+      "east": {
+        "model": "first_order_relaxation_admittance",
+        "units": {
+          "surface_impedance": "Pa*s/m",
+          "normalized_admittance": "dimensionless"
+        },
+        "normalized_admittance_infinite": 1.5442743944007489,
+        "normalized_admittance_relaxation": -1.540567216199082,
+        "relaxation_frequency_hz": 614.1309653608779,
+        "normalized_admittance_zero": 0.003707178201666883,
+        "relaxation_time_s": 0.00025915472768641806,
+        "passive": true,
+        "causal": true,
+        "discretization": "bilinear_transform"
+      },
+      "south": {
+        "model": "first_order_relaxation_admittance",
+        "units": {
+          "surface_impedance": "Pa*s/m",
+          "normalized_admittance": "dimensionless"
+        },
+        "normalized_admittance_infinite": 1.5442743944007489,
+        "normalized_admittance_relaxation": -1.540567216199082,
+        "relaxation_frequency_hz": 614.1309653608779,
+        "normalized_admittance_zero": 0.003707178201666883,
+        "relaxation_time_s": 0.00025915472768641806,
+        "passive": true,
+        "causal": true,
+        "discretization": "bilinear_transform"
+      },
+      "north": {
+        "model": "first_order_relaxation_admittance",
+        "units": {
+          "surface_impedance": "Pa*s/m",
+          "normalized_admittance": "dimensionless"
+        },
+        "normalized_admittance_infinite": 1.5442743944007489,
+        "normalized_admittance_relaxation": -1.540567216199082,
+        "relaxation_frequency_hz": 614.1309653608779,
+        "normalized_admittance_zero": 0.003707178201666883,
+        "relaxation_time_s": 0.00025915472768641806,
+        "passive": true,
+        "causal": true,
+        "discretization": "bilinear_transform"
+      },
+      "floor": {
+        "model": "first_order_relaxation_admittance",
+        "units": {
+          "surface_impedance": "Pa*s/m",
+          "normalized_admittance": "dimensionless"
+        },
+        "normalized_admittance_infinite": 1.5442743944007489,
+        "normalized_admittance_relaxation": -1.540567216199082,
+        "relaxation_frequency_hz": 614.1309653608779,
+        "normalized_admittance_zero": 0.003707178201666883,
+        "relaxation_time_s": 0.00025915472768641806,
+        "passive": true,
+        "causal": true,
+        "discretization": "bilinear_transform"
+      },
+      "ceiling": {
+        "model": "first_order_relaxation_admittance",
+        "units": {
+          "surface_impedance": "Pa*s/m",
+          "normalized_admittance": "dimensionless"
+        },
+        "normalized_admittance_infinite": 1.5442743944007489,
+        "normalized_admittance_relaxation": -1.540567216199082,
+        "relaxation_frequency_hz": 614.1309653608779,
+        "normalized_admittance_zero": 0.003707178201666883,
+        "relaxation_time_s": 0.00025915472768641806,
+        "passive": true,
+        "causal": true,
+        "discretization": "bilinear_transform"
+      }
+    },
+    "source": {
+      "evidence_tier": "measured_flow_resistivity_plus_miki_model",
+      "prior_id": "glass_wool_14kgm3_100mm_normal",
+      "flow_resistivity_source": "https://doi.org/10.1121/1.1476686",
+      "surface_model_source": "https://doi.org/10.1250/ast.11.19",
+      "fit_frequency_range_hz": [
+        60.0,
+        300.0
+      ],
+      "fit_rms_complex_reflection_error": 0.018881550959243022,
+      "fit_maximum_complex_reflection_error": 0.0570544819728688
+    },
+    "applicability": {
+      "scope": "uniform_six_wall_solver_and_renderer_validation_only",
+      "valid_frequency_range_hz": [
+        60.0,
+        300.0
+      ],
+      "automatic_scene_catalog_mapping": false,
+      "production_default_enabled": false,
+      "reason": "The flow resistivity is measured but complex impedance is generated by a Miki porous-layer model and then approximated by a one-pole fit. Uniform coverage of all six room walls is a controlled validation case, not an ordinary installed room."
+    }
+  },
+  "fdtd_configuration": {
+    "boundary_config": "egs/rir_generation/phases/m2_impedance/config/impedance_reference_glass_wool_14kgm3_100mm.json",
+    "reference_id": "glass_wool_14kgm3_100mm_fdtd_residue_m2_8",
+    "grid_spacing_m": 0.12,
+    "duration_s": 0.52,
+    "source_center_hz": 150.0,
+    "source_delay_s": 0.025,
+    "analysis_start_s": 0.055,
+    "analysis_stop_s": 0.48,
+    "minimum_frequency_hz": 60.0,
+    "maximum_frequency_hz": 240.0,
+    "reference_frequency_hz": 100.0,
+    "mode_index_limit": 5,
+    "continuation_steps": 8,
+    "exponent_minimum": -0.5,
+    "exponent_maximum": 2.0,
+    "exponent_steps": 51
+  },
+  "calibration_sets": [
+    {
+      "room_id": "room_a",
+      "room_dim_m": [
+        2.0,
+        1.35,
+        1.05
+      ],
+      "positions": [
+        {
+          "case_id": "room_a_train_0",
+          "source_position_m": [
+            0.43,
+            0.37,
+            0.31
+          ],
+          "receiver_position_m": [
+            1.47,
+            0.96,
+            0.73
+          ],
+          "split": "train"
+        },
+        {
+          "case_id": "room_a_train_1",
+          "source_position_m": [
+            0.62,
+            0.91,
+            0.32
+          ],
+          "receiver_position_m": [
+            1.61,
+            0.42,
+            0.78
+          ],
+          "split": "train"
+        },
+        {
+          "case_id": "room_a_holdout_0",
+          "source_position_m": [
+            0.34,
+            0.68,
+            0.76
+          ],
+          "receiver_position_m": [
+            1.72,
+            0.67,
+            0.28
+          ],
+          "split": "holdout"
+        }
+      ]
+    },
+    {
+      "room_id": "room_b",
+      "room_dim_m": [
+        1.85,
+        1.55,
+        1.15
+      ],
+      "positions": [
+        {
+          "case_id": "room_b_train_0",
+          "source_position_m": [
+            0.4,
+            0.42,
+            0.35
+          ],
+          "receiver_position_m": [
+            1.48,
+            1.11,
+            0.81
+          ],
+          "split": "train"
+        },
+        {
+          "case_id": "room_b_train_1",
+          "source_position_m": [
+            0.62,
+            1.03,
+            0.36
+          ],
+          "receiver_position_m": [
+            1.6,
+            0.47,
+            0.84
+          ],
+          "split": "train"
+        },
+        {
+          "case_id": "room_b_holdout_0",
+          "source_position_m": [
+            0.35,
+            0.77,
+            0.82
+          ],
+          "receiver_position_m": [
+            1.62,
+            0.74,
+            0.31
+          ],
+          "split": "holdout"
+        }
+      ]
+    }
+  ],
+  "fixed_modes": [
+    {
+      "room_id": "room_a",
+      "room_dim_m": [
+        2.0,
+        1.35,
+        1.05
+      ],
+      "modes": [
+        {
+          "indices": [
+            1,
+            0,
+            0
+          ],
+          "complex_angular_frequency_rad_s": {
+            "real": -11.496898826256759,
+            "imag": 405.6847356451872
+          },
+          "axis_wavenumbers_rad_m": [
+            {
+              "real": 1.438783870867445,
+              "imag": 0.01024262311582176
+            },
+            {
+              "real": 0.02024398607634435,
+              "imag": 0.5441605750140293
+            },
+            {
+              "real": 0.022623744814509038,
+              "imag": 0.6140201374007602
+            }
+          ],
+          "frequency_hz": 64.56673101486037,
+          "amplitude_decay_rate_per_s": 11.496898826256759,
+          "q_factor": 17.64322456759728,
+          "residual": 1.1418146191920592e-12
+        },
+        {
+          "indices": [
+            0,
+            1,
+            0
+          ],
+          "complex_angular_frequency_rad_s": {
+            "real": -23.593990911373623,
+            "imag": 585.4676537399281
+          },
+          "axis_wavenumbers_rad_m": [
+            {
+              "real": 0.03348892830984997,
+              "imag": 0.6751011765976973
+            },
+            {
+              "real": 2.043262861622857,
+              "imag": 0.027889655152990498
+            },
+            {
+              "real": 0.041956547827404565,
+              "imag": 0.9013767910428656
+            }
+          ],
+          "frequency_hz": 93.18007111312374,
+          "amplitude_decay_rate_per_s": 23.593990911373623,
+          "q_factor": 12.407134849274268,
+          "residual": 1.4495167930878236e-11
+        },
+        {
+          "indices": [
+            1,
+            1,
+            0
+          ],
+          "complex_angular_frequency_rad_s": {
+            "real": -33.84791886261705,
+            "imag": 677.6303930182233
+          },
+          "axis_wavenumbers_rad_m": [
+            {
+              "real": 1.1338536082407646,
+              "imag": 0.051976514252027484
+            },
+            {
+              "real": 1.9298224423817918,
+              "imag": 0.04217368326736516
+            },
+            {
+              "real": 0.051745415358569455,
+              "imag": 1.0558331003115635
+            }
+          ],
+          "frequency_hz": 107.84822663815402,
+          "amplitude_decay_rate_per_s": 33.84791886261705,
+          "q_factor": 10.009926987957664,
+          "residual": 6.912903556540681e-13
+        },
+        {
+          "indices": [
+            0,
+            0,
+            1
+          ],
+          "complex_angular_frequency_rad_s": {
+            "real": -38.49545073380038,
+            "imag": 734.6528424226216
+          },
+          "axis_wavenumbers_rad_m": [
+            {
+              "real": 0.05324786642013518,
+              "imag": 0.8816291533737609
+            },
+            {
+              "real": 0.05837022304050827,
+              "imag": 1.034251733052501
+            },
+            {
+              "real": 2.5334496604651933,
+              "imag": 0.052524585192211655
+            }
+          ],
+          "frequency_hz": 116.9236313280715,
+          "amplitude_decay_rate_per_s": 38.49545073380038,
+          "q_factor": 9.542073523217253,
+          "residual": 2.419267160424664e-12
+        },
+        {
+          "indices": [
+            1,
+            0,
+            1
+          ],
+          "complex_angular_frequency_rad_s": {
+            "real": -48.47125823425284,
+            "imag": 797.7305398601942
+          },
+          "axis_wavenumbers_rad_m": [
+            {
+              "real": 0.8771566620361131,
+              "imag": 0.10940479777146063
+            },
+            {
+              "real": 0.06504870068818133,
+              "imag": 1.1386041002770302
+            },
+            {
+              "real": 2.4347727456269297,
+              "imag": 0.06515361167604217
+            }
+          ],
+          "frequency_hz": 126.96275867411616,
+          "amplitude_decay_rate_per_s": 48.47125823425284,
+          "q_factor": 8.228902744848364,
+          "residual": 1.9767261385269488e-12
+        },
+        {
+          "indices": [
+            2,
+            0,
+            0
+          ],
+          "complex_angular_frequency_rad_s": {
+            "real": -41.49626832610587,
+            "imag": 802.0028150913945
+          },
+          "axis_wavenumbers_rad_m": [
+            {
+              "real": 2.8914185686675316,
+              "imag": 0.030293051692712618
+            },
+            {
+              "real": 0.07801815511130884,
+              "imag": 1.1428455258193047
+            },
+            {
+              "real": 0.08353854832427648,
+              "imag": 1.2703571837712289
+            }
+          ],
+          "frequency_hz": 127.64271239541075,
+          "amplitude_decay_rate_per_s": 41.49626832610587,
+          "q_factor": 9.663553464479161,
+          "residual": 1.720425853806824e-12
+        },
+        {
+          "indices": [
+            0,
+            1,
+            1
+          ],
+          "complex_angular_frequency_rad_s": {
+            "real": -60.47448549588802,
+            "imag": 875.5876328931488
+          },
+          "axis_wavenumbers_rad_m": [
+            {
+              "real": 0.07356968642735424,
+              "imag": 1.1037303319729685
+            },
+            {
+              "real": 1.5695159338305138,
+              "imag": 0.10595224341323521
+            },
+            {
+              "real": 2.292123127835009,
+              "imag": 0.08838041520891016
+            }
+          ],
+          "frequency_hz": 139.35409988507644,
+          "amplitude_decay_rate_per_s": 60.47448549588802,
+          "q_factor": 7.239314445698629,
+          "residual": 2.3379853427518855e-11
+        },
+        {
+          "indices": [
+            1,
+            1,
+            1
+          ],
+          "complex_angular_frequency_rad_s": {
+            "real": -69.20724226113906,
+            "imag": 915.734537551465
+          },
+          "axis_wavenumbers_rad_m": [
+            {
+              "real": 0.4430028976279035,
+              "imag": 0.3128795673285777
+            },
+            {
+              "real": 1.4653181859430158,
+              "imag": 0.12342906267885356
+            },
+            {
+              "real": 2.2060389018996958,
+              "imag": 0.09936956836328281
+            }
+          ],
+          "frequency_hz": 145.74367821128652,
+          "amplitude_decay_rate_per_s": 69.20724226113906,
+          "q_factor": 6.6158866300157735,
+          "residual": 2.7760390499165432e-11
+        },
+        {
+          "indices": [
+            2,
+            1,
+            0
+          ],
+          "complex_angular_frequency_rad_s": {
+            "real": -64.01977911308664,
+            "imag": 938.7208503115887
+          },
+          "axis_wavenumbers_rad_m": [
+            {
+              "real": 2.794040426410485,
+              "imag": 0.04222771027756292
+            },
+            {
+              "real": 1.4116675552077809,
+              "imag": 0.1635902196647024
+            },
+            {
+              "real": 0.10612833032143698,
+              "imag": 1.525441874336457
+            }
+          ],
+          "frequency_hz": 149.4020635105165,
+          "amplitude_decay_rate_per_s": 64.01977911308664,
+          "q_factor": 7.331490855766632,
+          "residual": 4.476045384157465e-13
+        },
+        {
+          "indices": [
+            2,
+            0,
+            1
+          ],
+          "complex_angular_frequency_rad_s": {
+            "real": -78.51054220324437,
+            "imag": 1022.2361298248617
+          },
+          "axis_wavenumbers_rad_m": [
+            {
+              "real": 2.7271692041760924,
+              "imag": 0.051337150787533335
+            },
+            {
+              "real": 0.1213067779440063,
+              "imag": 1.5418105731082514
+            },
+            {
+              "real": 1.9469456565468537,
+              "imag": 0.18240377304151775
+            }
+          ],
+          "frequency_hz": 162.6939330687552,
+          "amplitude_decay_rate_per_s": 78.51054220324437,
+          "q_factor": 6.51018386281517,
+          "residual": 3.7305892271201816e-12
+        },
+        {
+          "indices": [
+            2,
+            1,
+            1
+          ],
+          "complex_angular_frequency_rad_s": {
+            "real": -98.07403771389686,
+            "imag": 1101.5976141812841
+          },
+          "axis_wavenumbers_rad_m": [
+            {
+              "real": 2.6577964479960863,
+              "imag": 0.05665866556127072
+            },
+            {
+              "real": 0.7756055406056133,
+              "imag": 0.4536745850442368
+            },
+            {
+              "real": 1.6844881840119759,
+              "imag": 0.24686976176449638
+            }
+          ],
+          "frequency_hz": 175.32470559518995,
+          "amplitude_decay_rate_per_s": 98.07403771389686,
+          "q_factor": 5.616153060787005,
+          "residual": 7.106188630278085e-12
+        },
+        {
+          "indices": [
+            0,
+            2,
+            0
+          ],
+          "complex_angular_frequency_rad_s": {
+            "real": -102.62047307441927,
+            "imag": 1160.0057006484744
+          },
+          "axis_wavenumbers_rad_m": [
+            {
+              "real": 0.2761115336510369,
+              "imag": 1.3595836237883963
+            },
+            {
+              "real": 4.1252093164853285,
+              "imag": 0.07250203532351922
+            },
+            {
+              "real": 0.17036505364345672,
+              "imag": 1.9801205917743807
+            }
+          ],
+          "frequency_hz": 184.62064127298214,
+          "amplitude_decay_rate_per_s": 102.62047307441927,
+          "q_factor": 5.6519214241355655,
+          "residual": 1.9070891960616833e-12
+        },
+        {
+          "indices": [
+            1,
+            2,
+            0
+          ],
+          "complex_angular_frequency_rad_s": {
+            "real": -102.6204730744192,
+            "imag": 1160.0057006484747
+          },
+          "axis_wavenumbers_rad_m": [
+            {
+              "real": 0.27611153365103613,
+              "imag": 1.3595836237883951
+            },
+            {
+              "real": 4.1252093164853285,
+              "imag": 0.0725020353235193
+            },
+            {
+              "real": 0.17036505364345705,
+              "imag": 1.9801205917743803
+            }
+          ],
+          "frequency_hz": 184.62064127298217,
+          "amplitude_decay_rate_per_s": 102.6204730744192,
+          "q_factor": 5.651921424135571,
+          "residual": 1.9138222486137512e-12
+        },
+        {
+          "indices": [
+            3,
+            0,
+            0
+          ],
+          "complex_angular_frequency_rad_s": {
+            "real": -96.94355886147089,
+            "imag": 1175.8634159223998
+          },
+          "axis_wavenumbers_rad_m": [
+            {
+              "real": 4.366428012597826,
+              "imag": 0.050702514266528574
+            },
+            {
+              "real": 0.19294579895743733,
+              "imag": 1.8525929973544664
+            },
+            {
+              "real": 0.19422889618635453,
+              "imag": 2.0083539174851617
+            }
+          ],
+          "frequency_hz": 187.1444750449712,
+          "amplitude_decay_rate_per_s": 96.94355886147089,
+          "q_factor": 6.0646804683675235,
+          "residual": 4.605743501222812e-11
+        },
+        {
+          "indices": [
+            3,
+            1,
+            0
+          ],
+          "complex_angular_frequency_rad_s": {
+            "real": -117.75812687514215,
+            "imag": 1238.3126616163145
+          },
+          "axis_wavenumbers_rad_m": [
+            {
+              "real": 4.327645778686111,
+              "imag": 0.05232209177531571
+            },
+            {
+              "real": 0.48269064426966307,
+              "imag": 1.1971206116262643
+            },
+            {
+              "real": 0.20180569830617717,
+              "imag": 2.156484576723412
+            }
+          ],
+          "frequency_hz": 197.083581189518,
+          "amplitude_decay_rate_per_s": 117.75812687514215,
+          "q_factor": 5.257864974912882,
+          "residual": 5.245409743304576e-11
+        }
+      ]
+    },
+    {
+      "room_id": "room_b",
+      "room_dim_m": [
+        1.85,
+        1.55,
+        1.15
+      ],
+      "modes": [
+        {
+          "indices": [
+            1,
+            0,
+            0
+          ],
+          "complex_angular_frequency_rad_s": {
+            "real": -13.079722744606741,
+            "imag": 441.3238465084201
+          },
+          "axis_wavenumbers_rad_m": [
+            {
+              "real": 1.5408071806438486,
+              "imag": 0.013141083864015855
+            },
+            {
+              "real": 0.022439594616100688,
+              "imag": 0.5566293278678817
+            },
+            {
+              "real": 0.025460080363901686,
+              "imag": 0.6412439613057096
+            }
+          ],
+          "frequency_hz": 70.23887167614396,
+          "amplitude_decay_rate_per_s": 13.079722744606741,
+          "q_factor": 16.870535221795677,
+          "residual": 4.960821030241986e-12
+        },
+        {
+          "indices": [
+            0,
+            1,
+            0
+          ],
+          "complex_angular_frequency_rad_s": {
+            "real": -18.099007563861846,
+            "imag": 520.649205088115
+          },
+          "axis_wavenumbers_rad_m": [
+            {
+              "real": 0.028070971758125538,
+              "imag": 0.612842178063382
+            },
+            {
+              "real": 1.804702387170488,
+              "imag": 0.020627171612852827
+            },
+            {
+              "real": 0.033657712783519186,
+              "imag": 0.7625944583397838
+            }
+          ],
+          "frequency_hz": 82.86389460663949,
+          "amplitude_decay_rate_per_s": 18.099007563861846,
+          "q_factor": 14.38336337644533,
+          "residual": 3.263923044061196e-12
+        },
+        {
+          "indices": [
+            1,
+            1,
+            0
+          ],
+          "complex_angular_frequency_rad_s": {
+            "real": -30.209365819268573,
+            "imag": 647.8513359181057
+          },
+          "axis_wavenumbers_rad_m": [
+            {
+              "real": 1.3171074886444807,
+              "imag": 0.04254875944605761
+            },
+            {
+              "real": 1.6603177305185943,
+              "imag": 0.03910963761257894
+            },
+            {
+              "real": 0.04703890208434067,
+              "imag": 0.9646601375213019
+            }
+          ],
+          "frequency_hz": 103.10874250005449,
+          "amplitude_decay_rate_per_s": 30.209365819268573,
+          "q_factor": 10.722690105346135,
+          "residual": 8.079223763850269e-12
+        },
+        {
+          "indices": [
+            0,
+            0,
+            1
+          ],
+          "complex_angular_frequency_rad_s": {
+            "real": -32.20554010034909,
+            "imag": 683.736887415263
+          },
+          "axis_wavenumbers_rad_m": [
+            {
+              "real": 0.04752620837908597,
+              "imag": 0.8342203928984698
+            },
+            {
+              "real": 0.0497941645990726,
+              "imag": 0.8981731382187343
+            },
+            {
+              "real": 2.337663299167751,
+              "imag": 0.043974160990279766
+            }
+          ],
+          "frequency_hz": 108.82010540640584,
+          "amplitude_decay_rate_per_s": 32.20554010034909,
+          "q_factor": 10.615206037296852,
+          "residual": 7.870147262998086e-13
+        },
+        {
+          "indices": [
+            1,
+            0,
+            1
+          ],
+          "complex_angular_frequency_rad_s": {
+            "real": -44.19443447707141,
+            "imag": 769.8509149180942
+          },
+          "axis_wavenumbers_rad_m": [
+            {
+              "real": 1.0980183301742314,
+              "imag": 0.08432977224203157
+            },
+            {
+              "real": 0.059557396240629897,
+              "imag": 1.031903059674559
+            },
+            {
+              "real": 2.210767904804951,
+              "imag": 0.06112749437578455
+            }
+          ],
+          "frequency_hz": 122.52557855303284,
+          "amplitude_decay_rate_per_s": 44.19443447707141,
+          "q_factor": 8.70981746940898,
+          "residual": 7.282614929382904e-13
+        },
+        {
+          "indices": [
+            0,
+            1,
+            1
+          ],
+          "complex_angular_frequency_rad_s": {
+            "real": -49.26791337411407,
+            "imag": 806.236427442404
+          },
+          "axis_wavenumbers_rad_m": [
+            {
+              "real": 0.06308441997953194,
+              "imag": 1.0193603773229338
+            },
+            {
+              "real": 1.3907105881398287,
+              "imag": 0.08665329134619124
+            },
+            {
+              "real": 2.1489598221225372,
+              "imag": 0.071109987540881
+            }
+          ],
+          "frequency_hz": 128.3165127282088,
+          "amplitude_decay_rate_per_s": 49.26791337411407,
+          "q_factor": 8.182165350907775,
+          "residual": 1.4632760639212229e-12
+        },
+        {
+          "indices": [
+            1,
+            1,
+            1
+          ],
+          "complex_angular_frequency_rad_s": {
+            "real": -60.23496597417806,
+            "imag": 865.9333664581839
+          },
+          "axis_wavenumbers_rad_m": [
+            {
+              "real": 0.8344033211125343,
+              "imag": 0.14945590986486687
+            },
+            {
+              "real": 1.2468391746095269,
+              "imag": 0.1132659032718902
+            },
+            {
+              "real": 2.0333820691685442,
+              "imag": 0.08725230879906491
+            }
+          ],
+          "frequency_hz": 137.8175756600256,
+          "amplitude_decay_rate_per_s": 60.23496597417806,
+          "q_factor": 7.187962609868478,
+          "residual": 4.777717726604273e-12
+        },
+        {
+          "indices": [
+            2,
+            0,
+            0
+          ],
+          "complex_angular_frequency_rad_s": {
+            "real": -48.70752121236522,
+            "imag": 869.9662634517724
+          },
+          "axis_wavenumbers_rad_m": [
+            {
+              "real": 3.101551743492662,
+              "imag": 0.03821296540036109
+            },
+            {
+              "real": 0.09234011579843929,
+              "imag": 1.1929905491131199
+            },
+            {
+              "real": 0.09800310332891869,
+              "imag": 1.341710922849219
+            }
+          ],
+          "frequency_hz": 138.45943115153568,
+          "amplitude_decay_rate_per_s": 48.70752121236522,
+          "q_factor": 8.93051259638847,
+          "residual": 4.214527278834676e-12
+        },
+        {
+          "indices": [
+            2,
+            1,
+            0
+          ],
+          "complex_angular_frequency_rad_s": {
+            "real": -65.98000563623103,
+            "imag": 960.4469272979302
+          },
+          "axis_wavenumbers_rad_m": [
+            {
+              "real": 3.033491001534595,
+              "imag": 0.04579386347594969
+            },
+            {
+              "real": 0.9660308746453767,
+              "imag": 0.2386411745322555
+            },
+            {
+              "real": 0.11192520939727547,
+              "imag": 1.5116218614561465
+            }
+          ],
+          "frequency_hz": 152.85987605688783,
+          "amplitude_decay_rate_per_s": 65.98000563623103,
+          "q_factor": 7.278318014954278,
+          "residual": 3.2302968206154628e-12
+        },
+        {
+          "indices": [
+            0,
+            2,
+            0
+          ],
+          "complex_angular_frequency_rad_s": {
+            "real": -70.73207387585117,
+            "imag": 1019.2614187891648
+          },
+          "axis_wavenumbers_rad_m": [
+            {
+              "real": 0.1327820986150952,
+              "imag": 1.3847538901715934
+            },
+            {
+              "real": 3.6478847780167825,
+              "imag": 0.05687231396871652
+            },
+            {
+              "real": 0.13643791353041923,
+              "imag": 1.623146645489272
+            }
+          ],
+          "frequency_hz": 162.22049310315404,
+          "amplitude_decay_rate_per_s": 70.73207387585117,
+          "q_factor": 7.205086482959421,
+          "residual": 9.05353620979839e-13
+        },
+        {
+          "indices": [
+            2,
+            0,
+            1
+          ],
+          "complex_angular_frequency_rad_s": {
+            "real": -79.97527485164478,
+            "imag": 1037.230497522201
+          },
+          "axis_wavenumbers_rad_m": [
+            {
+              "real": 2.9707795676011126,
+              "imag": 0.05432278923702141
+            },
+            {
+              "real": 0.1268705622026779,
+              "imag": 1.5005725220042627
+            },
+            {
+              "real": 1.597542314012938,
+              "imag": 0.22116948089746616
+            }
+          ],
+          "frequency_hz": 165.0803608063242,
+          "amplitude_decay_rate_per_s": 79.97527485164478,
+          "q_factor": 6.484694797525095,
+          "residual": 3.539858691925993e-12
+        },
+        {
+          "indices": [
+            1,
+            2,
+            0
+          ],
+          "complex_angular_frequency_rad_s": {
+            "real": -82.10361944012347,
+            "imag": 1059.5646326688684
+          },
+          "axis_wavenumbers_rad_m": [
+            {
+              "real": 0.32678342832128865,
+              "imag": 0.8811247838967061
+            },
+            {
+              "real": 3.6127179622781846,
+              "imag": 0.058940523090927385
+            },
+            {
+              "real": 0.1397796954256563,
+              "imag": 1.706722218054664
+            }
+          ],
+          "frequency_hz": 168.63494881459874,
+          "amplitude_decay_rate_per_s": 82.10361944012347,
+          "q_factor": 6.452606108562533,
+          "residual": 2.4580487320812347e-11
+        },
+        {
+          "indices": [
+            2,
+            1,
+            1
+          ],
+          "complex_angular_frequency_rad_s": {
+            "real": -94.79531773821589,
+            "imag": 1092.989620996906
+          },
+          "axis_wavenumbers_rad_m": [
+            {
+              "real": 2.921325337754064,
+              "imag": 0.05756738887458957
+            },
+            {
+              "real": 0.45248014068553083,
+              "imag": 0.7133548627048647
+            },
+            {
+              "real": 1.3891682548143807,
+              "imag": 0.28054270864782754
+            }
+          ],
+          "frequency_hz": 173.95470092979485,
+          "amplitude_decay_rate_per_s": 94.79531773821589,
+          "q_factor": 5.764997929619667,
+          "residual": 2.0925534691908658e-11
+        },
+        {
+          "indices": [
+            0,
+            2,
+            1
+          ],
+          "complex_angular_frequency_rad_s": {
+            "real": -101.22520113032503,
+            "imag": 1144.4586772105636
+          },
+          "axis_wavenumbers_rad_m": [
+            {
+              "real": 0.16349792753383638,
+              "imag": 1.6474312068710282
+            },
+            {
+              "real": 3.535813901878708,
+              "imag": 0.06838387044242607
+            },
+            {
+              "real": 1.1817258035803935,
+              "imag": 0.40072581259651413
+            }
+          ],
+          "frequency_hz": 182.14625564247305,
+          "amplitude_decay_rate_per_s": 101.22520113032503,
+          "q_factor": 5.653032369563288,
+          "residual": 2.154589022991861e-12
+        },
+        {
+          "indices": [
+            1,
+            2,
+            1
+          ],
+          "complex_angular_frequency_rad_s": {
+            "real": -110.25056878239548,
+            "imag": 1169.1562674293552
+          },
+          "axis_wavenumbers_rad_m": [
+            {
+              "real": 0.27911389825382243,
+              "imag": 1.3351009925162705
+            },
+            {
+              "real": 3.5113508332322403,
+              "imag": 0.0684121822244666
+            },
+            {
+              "real": 1.0515771620116106,
+              "imag": 0.4590901585053579
+            }
+          ],
+          "frequency_hz": 186.0769992082518,
+          "amplitude_decay_rate_per_s": 110.25056878239548,
+          "q_factor": 5.302268642880884,
+          "residual": 3.910670706984355e-12
+        },
+        {
+          "indices": [
+            2,
+            2,
+            0
+          ],
+          "complex_angular_frequency_rad_s": {
+            "real": -113.1112787613959,
+            "imag": 1296.015550991218
+          },
+          "axis_wavenumbers_rad_m": [
+            {
+              "real": 2.7390333723302005,
+              "imag": 0.1042980530158498
+            },
+            {
+              "real": 3.3951407877026765,
+              "imag": 0.11010759263097479
+            },
+            {
+              "real": 0.2647399853795763,
+              "imag": 2.2154628863787287
+            }
+          ],
+          "frequency_hz": 206.2672812642187,
+          "amplitude_decay_rate_per_s": 113.1112787613959,
+          "q_factor": 5.728940407990239,
+          "residual": 6.545188469600695e-12
+        },
+        {
+          "indices": [
+            3,
+            0,
+            0
+          ],
+          "complex_angular_frequency_rad_s": {
+            "real": -130.37239596847516,
+            "imag": 1299.344720467172
+          },
+          "axis_wavenumbers_rad_m": [
+            {
+              "real": 4.671612659262577,
+              "imag": 0.05946847745437289
+            },
+            {
+              "real": 0.3864262348071477,
+              "imag": 1.6737558449959098
+            },
+            {
+              "real": 0.23008046567069357,
+              "imag": 2.239513019157613
+            }
+          ],
+          "frequency_hz": 206.79713504270742,
+          "amplitude_decay_rate_per_s": 130.37239596847516,
+          "q_factor": 4.983204883269007,
+          "residual": 8.754482222128343e-12
+        },
+        {
+          "indices": [
+            3,
+            1,
+            0
+          ],
+          "complex_angular_frequency_rad_s": {
+            "real": -130.37239596847465,
+            "imag": 1299.3447204671725
+          },
+          "axis_wavenumbers_rad_m": [
+            {
+              "real": 4.6716126592625775,
+              "imag": 0.05946847745437325
+            },
+            {
+              "real": 0.38642623480714294,
+              "imag": 1.6737558449959085
+            },
+            {
+              "real": 0.23008046567069435,
+              "imag": 2.239513019157612
+            }
+          ],
+          "frequency_hz": 206.79713504270748,
+          "amplitude_decay_rate_per_s": 130.37239596847465,
+          "q_factor": 4.983204883269028,
+          "residual": 8.762266735753021e-12
+        },
+        {
+          "indices": [
+            0,
+            0,
+            2
+          ],
+          "complex_angular_frequency_rad_s": {
+            "real": -152.93062188355486,
+            "imag": 1347.6953743601912
+          },
+          "axis_wavenumbers_rad_m": [
+            {
+              "real": 0.31567668617409755,
+              "imag": 1.9871859523950774
+            },
+            {
+              "real": 0.3545468542045482,
+              "imag": 1.8803894363442686
+            },
+            {
+              "real": 4.744268904354796,
+              "imag": 0.09650796520654849
+            }
+          ],
+          "frequency_hz": 214.4923806115068,
+          "amplitude_decay_rate_per_s": 152.93062188355486,
+          "q_factor": 4.406231262782543,
+          "residual": 4.047709714589577e-10
+        }
+      ]
+    }
+  ]
+}
