@@ -25,8 +25,8 @@ immutable candidate + certificate 晉升模型、QC 三態（拒絕把「算不�
 |---|---|---|---|---|
 | C1 | critical | 預設後端 pyroomacoustics 不可重現（libroom RNG 未播種） | 預設 bank 全部 | 實測 |
 | C2 | critical | 低頻激勵 comb：每個 item 在 390 Hz 有 18.7 dB 固定凹口 | 兩個後端全部 | 實測 |
-| A1 | major | FDN 晚場在 5.66 kHz 以上是空的（16 kHz 下） | `path-events-m4` | 實測 |
-| A2 | major | 晚場能量錨定在 order-truncated tail，長 RT60 位準偏低 | `path-events-m4` | 讀碼＋agent 實測 |
+| ~~A1~~ | ~~major~~ | ~~FDN 晚場高頻空洞~~ — **已撤回，量測用錯模型** | — | 撤回 |
+| ~~A2~~ | design-note | 晚場能量錨定在截斷 tail — **機制真實，量級降級**：實際 rt60_range 內 ≤0.18 dB | `path-events-m4` | 實測 |
 | A3 | major | resume 不綁 `code_revision`，可產生混血 bank ＋ 假 provenance | 全部 | 讀碼 |
 | A4 | major | production certificate 可被「重算 hash 的稱職偽造」通過 | 晉升流程 | 讀碼 |
 | A5 | major | manifest 缺席時靜默退回 legacy，三個 split 全混 | 讀取端 | 實測 |
@@ -231,57 +231,68 @@ stream）、pra、torch、libsndfile 任一升級都可能改變輸出 bytes，�
 
 ### B. 訊號品質與物理
 
-#### A1 — FDN 晚場在 5.66 kHz 以上是空的（`path-events-m4`）
+#### ~~A1 — FDN 晚場在 5.66 kHz 以上是空的~~ ✗ 撤回（2026-08-02）
 
-**位置**：[`rir_metrics.py:786-790`](../../puresound/audio/rir_metrics.py)、
-[`multiband_fdn.py:389`](../../puresound/audio/multiband_fdn.py)、
-`hybrid_rir.py:1441`
+**這條發現是錯的，已撤回。** 原始主張：16 kHz 下 `valid_octave_centers` 只留
+{500, 1000, 2000, 4000}，FDN 輸出是四個 octave bandpass 的和，因此 5.66 kHz 以上
+沒有能量。
 
-`valid_octave_centers` 的條件是 `center * sqrt(2) < nyquist * 0.99`，16 kHz 下
-8000 Hz octave 的上緣 11314 Hz > 7920 Hz 被剔除，FDN 只剩 {500, 1000, 2000, 4000}
-四個 band，而輸出就是這四個 bandpass 的和：
+錯在我沒有讀 `_fdn_partition_sos`，而是**自己重建了一個 octave-bandpass 濾波器組**
+去量測。實作用的是**級聯二元切分**（`multiband_fdn.py:204-242`）：
 
-```python
-combined = np.sum(np.vstack(list(band_rirs.values())), axis=0)
+```text
+L0,  H0·L1,  H0·H1·L2,  ...,  H0·H1·...·Hn
 ```
 
-**實測**（四個 4 階 Butterworth octave bandpass 合成響應，相對 1 kHz）：
+最高帶是純 highpass，沒有上界。程式碼註解本來就寫明這個設計是
+「exactly power-complementary for Butterworth low/high pairs … avoids both the
+gaps of finite octave filters and their accumulated overlap ripple」。
 
-| 頻率 | 5 kHz | 6 kHz | 7 kHz | 7.5 kHz |
-|---|---|---|---|---|
-| 晚場能量 | −0.3 dB | **−11.2 dB** | **−43.0 dB** | **−68.7 dB** |
+**用實作重測**（`_fdn_partition_sos` 合成響應，相對 1 kHz）：
 
-而 coherent 早場是常數增益 taps，一路到 Nyquist 都有能量。結果是每條 RIR 在
-`direct + 約 16 ms` 的 transition 處**高頻突然塌陷**。
+| 頻率 | 500 | 1k | 2k | 4k | 5k | 6k | 7k | 7.9k |
+|---|---|---|---|---|---|---|---|---|
+| 實作 | +1.11 | 0.00 | +0.93 | +1.11 | +0.27 | +0.06 | +0.02 | **+0.02 dB** |
+| 我先前的錯誤模型 | — | — | — | — | −0.3 | −11.2 | −43.0 | −68.7 dB |
 
-更糟的是 energy-preserving gain 以「全頻寬 tail 能量」為 target，會把缺失頻帶的
-能量硬塞回 353 Hz–5.66 kHz，額外造成 tilt 偏差。
+到 Nyquist 都是平的，起伏在 ±1.11 dB 內，正是 power-complementary 該有的樣子。
+一併撤回同一段量測得出的「+2.7 dB 跨帶駝峰」——那也是錯誤模型的產物。
 
-附帶實測：octave 重組在各 crossover 有 **+2.7 dB 駝峰**（707 / 1414 / 2828 Hz），
-tail 頻譜疊了週期性 ripple。`analyze_fdn_coloration` 只看帶內平坦度，看不到跨帶
-這一層。
+**教訓**：量測要打在實作上，不要重建一個「我以為它在做什麼」的模型。同一份審查裡
+C1、C2、A5 都是直接對真實產物量測而成立；A1 是唯一一條靠重建模型得出的，也是唯一
+一條錯的。
 
-**建議**：給最高 band 加 shelf 延伸到 Nyquist，或改用 half-octave / highpass 尾帶；
-新增「coupled tail 在 5.7–8 kHz 對早場的能量比」測試。
+**殘留的、小得多的真實問題**：最高帶是 highpass，所以 4 kHz 的 RT60 target 統治
+2.83–8 kHz 整段。空氣吸收在 8 kHz 遠強於 4 kHz，這會讓最高一個 octave 的殘響略長。
+這是建模簡化，不是頻帶缺失，量級與原主張差好幾個數量級，**不構成 A/B pilot 的阻礙**。
 
-#### A2 — 晚場能量錨定在 order-truncated tail
+#### A2 — 晚場能量錨定在 order-truncated tail（降級為 design-note）
 
-**位置**：[`rir_late_coupling.py:118`](../../puresound/audio/rir_late_coupling.py)
+**位置**：[`rir/render/coupling.py:118`](../../puresound/audio/rir/render/coupling.py)
 
 ```python
 target = float(np.dot(original_tail, original_tail))
 ```
 
-`original` 是 `max_order=12` 的 image render，有有限時間跨度（實測某
-4.2×5.1×2.7 m 房間最遲事件在 184.9 ms，render 窗卻是 1600 ms），之後 target 積分
-為零。FDN 的**斜率是對的**，但總能量被這個截斷上限鎖死，整條晚場往下平移。
+`original` 是 `max_order=12` 的 image render，時間跨度有限；FDN 的總能量被這個
+截斷參考鎖住，晚場因此系統性偏低。**機制屬實**（直接讀碼確認）。
 
-數值實驗：RT60 ≈ 1.67 s（α=0.06）時晚場比物理外插低約 **3.5 dB**；RT60 = 0.33 s
-（α=0.3）時只差 0.9 dB——**偏差隨 RT60 增長**。
+但初版報告的「RT60 1.67 s 時低 3.5 dB」是 agent 用自建模型估的，我沒有覆核就寫進
+文件。用**真實 generator** 的事件時間重算後量級小得多：
 
-方向與已量化的「合成 bank DRR 誇大 4 dB」域差一致。
+| 房間 | 最後事件 | RT60 0.35 s | 0.80 s | 1.67 s |
+|---|---|---|---|---|
+| 4.2×5.1×2.7 m（2621 events） | 184.0 ms | −0.00 dB | −0.18 dB | −1.07 dB |
+| 8.0×7.0×3.6 m（2625 events） | 285.5 ms | −0.00 dB | −0.03 dB | −0.43 dB |
 
-**建議**：能量 target 改用 Sabine / 解析 tail 外插，而非截斷的 reference。
+（截斷參考所含能量占物理指數尾能量的比例；假設尾巴為材質 RT60 的純指數衰減。）
+
+決定性的一點：`HybridRIRConfig.rt60_range = (0.25, 0.8)`，**M6 實際抽樣的範圍內
+虧損 ≤ 0.18 dB**。1.67 s 那一欄是超出生成器取樣範圍的假設情境，即使如此也只有
+約 1 dB，不是 3.5 dB。
+
+**結論**：從 major 降為 design-note。機制值得記著（未來若把 rt60_range 上調到
+1.5 s 以上就會顯現），但**不構成 A/B pilot 的阻礙**，也不值得為它改能量錨定。
 
 #### A9 — 低頻 RT60 被壓平成 mid-band 標量
 
@@ -595,13 +606,24 @@ checkpoint 一側拿不到「這個 run 用了哪個 release/variant」。
 
 ### P0 — 在跑 4,000-item pilot 之前必須處理
 
-1. **`pra.libroom.set_rng_seed(task_seed)`**（C1）——30 秒的修改，解掉預設後端不可
-   重現；同時修正 `--resume` help 文字，並用預設後端重跑 M6.2 gate ＋ 新增 fresh
-   rerun gate。
-2. **低頻激勵 comb**（C2）——影響兩個後端的每一個 item；加激勵頻譜平坦度測試。
-3. **FDN 高頻帶覆蓋（A1）與能量錨定（A2）**——否則 matched A/B pilot 量到的是
-   實作 artifact，不是物理差異。
-4. **兩後端的 directivity / obstacle 不對稱（A10）**——同上理由。
+**已完成（2026-08-02，實測確認）**：
+
+1. ~~`pra.libroom.set_rng_seed`~~ — 已修。相同參數兩次獨立執行，6/6 WAV
+   byte-identical、manifest hash 相同。
+2. ~~低頻激勵 comb~~ — 已修（改用 green-delta 激勵）。390 Hz 凹口從 18.7 dB
+   降到 0.9 dB，與對照頻率同級。
+
+**撤回／降級**：
+
+3. ~~FDN 高頻帶覆蓋（A1）~~ — 撤回，該發現源於我重建錯誤的濾波器模型。
+4. ~~晚場能量錨定（A2）~~ — 降為 design-note，實際 rt60_range 內 ≤0.18 dB。
+
+**仍待處理**：
+
+5. **兩後端的 directivity / obstacle 不對稱（A10）** — 這是 P0 唯一剩下的一項。
+   `pyroomacoustics` 宣告 cardioid 卻渲染 omni、obstacle 縮放整條 RIR 使 DRR 不變；
+   `path-events-m4` 兩者都做對。不處理的話，matched A/B pilot 量到的會是這兩項
+   實作差異，而不是「coherent PathEvents + FDN 是否比 ISM 更接近真實」。
 
 ### P1 — 證據鏈與 split 紀律
 
