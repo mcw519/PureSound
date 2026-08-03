@@ -1,0 +1,308 @@
+{
+  "all_passed": true,
+  "isotropic_reference_rel_w_db": -4.771212547196625,
+  "question": "does early/late coupling disturb the directional balance of the shared plane-wave FOA late field?",
+  "scenes": [
+    {
+      "broadband_max_deviation_db": 0.911495673558627,
+      "checks": {
+        "array_and_foa_gains_agree": true,
+        "broadband_isotropy": true,
+        "early_weight_zero_after_transition": true,
+        "no_channel_zeroed": true,
+        "octave_isotropy": true,
+        "single_shared_gain": true
+      },
+      "coherent_tail_rel_w_db": [
+        0.0,
+        -1.4572196298059978,
+        -18.05097560299904,
+        -6.169162923729466
+      ],
+      "counterfactual_per_channel_gains": [
+        1.1250276175048295,
+        1.4891883543856528,
+        0.24402059270244264,
+        1.3071447004749779
+      ],
+      "diffuseness": 0.9189910600539322,
+      "dimensions_m": [
+        7.498,
+        3.78,
+        2.757
+      ],
+      "energy_policy": "one_shared_array_gain_preserves_spatial_ratios",
+      "gain_agreement_db": 0.10795123651540157,
+      "max_early_weight_after_transition": 6.123233995736766e-17,
+      "octave_max_deviation_db": 1.9325321576826333,
+      "octave_rel_w_db": {
+        "1000": [
+          0.0,
+          -3.3408570877616492,
+          -3.5864170043094177,
+          -3.4269127776985253
+        ],
+        "2000": [
+          0.0,
+          -5.396525785838765,
+          -4.726678541265611,
+          -5.1244883590980885
+        ],
+        "4000": [
+          0.0,
+          -6.317698994058906,
+          -5.209831357184123,
+          -5.186385911836235
+        ],
+        "500": [
+          0.0,
+          -5.94962568508671,
+          -6.703744704879258,
+          -3.4135290889190593
+        ]
+      },
+      "passed": true,
+      "pure_diffuse_rel_w_db": [
+        0.0,
+        -5.682708220755252,
+        -5.177636125894141,
+        -4.67543278504502
+      ],
+      "pure_diffuse_samples": 18664,
+      "scene": "office seed 20260731",
+      "scene_id": "m4-foa-isotropy-office-20260731",
+      "shared_diffuse_gain_ambisonic": 1.1499036053610394,
+      "shared_diffuse_gain_receivers": 1.135700648624313,
+      "transition_end_sample": 536
+    },
+    {
+      "broadband_max_deviation_db": 0.8573827757234644,
+      "checks": {
+        "array_and_foa_gains_agree": true,
+        "broadband_isotropy": true,
+        "early_weight_zero_after_transition": true,
+        "no_channel_zeroed": true,
+        "octave_isotropy": true,
+        "single_shared_gain": true
+      },
+      "coherent_tail_rel_w_db": [
+        0.0,
+        -1.9242791034146274,
+        -33.19233246517163,
+        -6.272343290706384
+      ],
+      "counterfactual_per_channel_gains": [
+        1.1834379446644205,
+        1.4646694893843104,
+        0.03281302165714041,
+        1.3572940417141575
+      ],
+      "diffuseness": 0.9232179730450644,
+      "dimensions_m": [
+        7.498,
+        3.78,
+        2.757
+      ],
+      "energy_policy": "one_shared_array_gain_preserves_spatial_ratios",
+      "gain_agreement_db": -0.13995884075942425,
+      "max_early_weight_after_transition": 6.123233995736766e-17,
+      "octave_max_deviation_db": 2.0955369691431835,
+      "octave_rel_w_db": {
+        "1000": [
+          0.0,
+          -3.270710394611313,
+          -3.5212563966166344,
+          -3.404335490585006
+        ],
+        "2000": [
+          0.0,
+          -5.3267821205546095,
+          -4.711398046225023,
+          -5.043039912927819
+        ],
+        "4000": [
+          0.0,
+          -6.257587673009667,
+          -5.186112488243254,
+          -5.146043185147717
+        ],
+        "500": [
+          0.0,
+          -6.016849844981305,
+          -6.866749516339809,
+          -3.34269827895326
+        ]
+      },
+      "passed": true,
+      "pure_diffuse_rel_w_db": [
+        0.0,
+        -5.62859532292009,
+        -5.1114264847712345,
+        -4.702840524029822
+      ],
+      "pure_diffuse_samples": 18664,
+      "scene": "office seed 20260731 \u2014 vertically symmetric (adversarial)",
+      "scene_id": "m4-foa-isotropy-office-20260731",
+      "shared_diffuse_gain_ambisonic": 1.1801675224685915,
+      "shared_diffuse_gain_receivers": 1.1993380188413463,
+      "transition_end_sample": 536
+    },
+    {
+      "broadband_max_deviation_db": 0.7161938794492544,
+      "checks": {
+        "array_and_foa_gains_agree": true,
+        "broadband_isotropy": true,
+        "early_weight_zero_after_transition": true,
+        "no_channel_zeroed": true,
+        "octave_isotropy": true,
+        "single_shared_gain": true
+      },
+      "coherent_tail_rel_w_db": [
+        0.0,
+        -6.045373816024742,
+        -16.18169895197763,
+        -1.7603492900874176
+      ],
+      "counterfactual_per_channel_gains": [
+        1.459111371631716,
+        1.256566479497359,
+        0.33733674910287453,
+        1.7904877085033304
+      ],
+      "diffuseness": 0.9333997836352392,
+      "dimensions_m": [
+        7.02,
+        5.85,
+        2.685
+      ],
+      "energy_policy": "one_shared_array_gain_preserves_spatial_ratios",
+      "gain_agreement_db": 0.040011908395676664,
+      "max_early_weight_after_transition": 6.123233995736766e-17,
+      "octave_max_deviation_db": 1.7752540842301014,
+      "octave_rel_w_db": {
+        "1000": [
+          0.0,
+          -5.122227366445737,
+          -3.6623559989599315,
+          -4.19169256306388
+        ],
+        "2000": [
+          0.0,
+          -4.665738516492861,
+          -5.204706865015244,
+          -5.549549722754645
+        ],
+        "4000": [
+          0.0,
+          -4.1161570487852135,
+          -4.839433386398672,
+          -3.895128068052815
+        ],
+        "500": [
+          0.0,
+          -3.9889371845215504,
+          -4.372918383450922,
+          -2.9959584629665237
+        ]
+      },
+      "passed": true,
+      "pure_diffuse_rel_w_db": [
+        0.0,
+        -4.293417918807253,
+        -4.742744772714462,
+        -4.055018667747371
+      ],
+      "pure_diffuse_samples": 18657,
+      "scene": "meeting_room seed 4242",
+      "scene_id": "m4-foa-isotropy-meeting_room-4242",
+      "shared_diffuse_gain_ambisonic": 1.3773424894975541,
+      "shared_diffuse_gain_receivers": 1.3710122959286888,
+      "transition_end_sample": 543
+    },
+    {
+      "broadband_max_deviation_db": 0.23205518754140986,
+      "checks": {
+        "array_and_foa_gains_agree": true,
+        "broadband_isotropy": true,
+        "early_weight_zero_after_transition": true,
+        "no_channel_zeroed": true,
+        "octave_isotropy": true,
+        "single_shared_gain": true
+      },
+      "coherent_tail_rel_w_db": [
+        0.0,
+        -4.769266939566082,
+        -9.933450492225374,
+        -3.3856360951695406
+      ],
+      "counterfactual_per_channel_gains": [
+        1.1103988597953052,
+        0.9179892122627026,
+        0.5281659867075998,
+        1.4763954985009233
+      ],
+      "diffuseness": 0.9674219677534511,
+      "dimensions_m": [
+        7.037,
+        5.429,
+        2.693
+      ],
+      "energy_policy": "one_shared_array_gain_preserves_spatial_ratios",
+      "gain_agreement_db": 0.45474951880415737,
+      "max_early_weight_after_transition": 6.123233995736766e-17,
+      "octave_max_deviation_db": 1.2619348331516127,
+      "octave_rel_w_db": {
+        "1000": [
+          0.0,
+          -5.041873837536284,
+          -4.376571155333825,
+          -3.97014723629123
+        ],
+        "2000": [
+          0.0,
+          -5.706903963686928,
+          -5.3459657085796675,
+          -5.29442634054071
+        ],
+        "4000": [
+          0.0,
+          -4.7731461519488505,
+          -4.743230545188576,
+          -4.996798964542684
+        ],
+        "500": [
+          0.0,
+          -3.5092777140450124,
+          -3.869208924615614,
+          -3.7462398119484632
+        ]
+      },
+      "passed": true,
+      "pure_diffuse_rel_w_db": [
+        0.0,
+        -4.899981205043364,
+        -4.81299985764154,
+        -5.003267734738035
+      ],
+      "pure_diffuse_samples": 18661,
+      "scene": "living_room seed 77",
+      "scene_id": "m4-foa-isotropy-living_room-77",
+      "shared_diffuse_gain_ambisonic": 1.0789841102565536,
+      "shared_diffuse_gain_receivers": 1.0239472244380083,
+      "transition_end_sample": 539
+    }
+  ],
+  "settings": {
+    "duration_s": 1.2,
+    "max_order": 4,
+    "plane_wave_count": 128,
+    "receiver_spacing_m": 0.17,
+    "sample_rate": 16000
+  },
+  "tolerances_db": {
+    "array_foa_gain_agreement": 1.0,
+    "broadband": 1.5,
+    "octave": 3.0
+  },
+  "validator": "m4_foa_diffuse_isotropy"
+}

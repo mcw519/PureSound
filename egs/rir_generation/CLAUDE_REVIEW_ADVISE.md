@@ -35,7 +35,7 @@ immutable candidate + certificate 晉升模型、QC 三態（拒絕把「算不�
 | A8 | major | QC `direct_arrival_timing` gate 是死碼 | M6.3 | 讀碼 |
 | ~~A9~~ | ~~major~~ | ~~低頻 RT60 壓平~~ — **已撤回**：M6 預設就是 `pytard-material` | — | 撤回 |
 | ~~A10~~ | ~~major~~ | ~~兩後端物理不對稱~~ — **已撤回**：兩點皆實測否證 | — | 撤回 |
-| A11 | major | FOA per-channel 縫合破壞 diffuse isotropy | M4.5 spatial | 讀碼 |
+| ~~A11~~ | ~~major~~ | ~~FOA per-channel 縫合破壞 diffuse isotropy~~ — **已撤回**：實際是單一 shared gain，isotropy 實測保住 | — | 撤回 |
 | A12 | major | `simulated_rir` dict 無界成長 | 訓練整合 | 讀碼 |
 | A13 | major | release/variant/split provenance 在 dataset 層被 drop | 訓練整合 | 讀碼 |
 | A14 | major | M5.3 收斂 gate 斷言 scipy `success`，新地貌下永遠達不到 | M5.3 validator | 實測 |
@@ -43,14 +43,14 @@ immutable candidate + certificate 晉升模型、QC 三態（拒絕把「算不�
 **最重要的一句話**：M6 宣稱的「deterministic bank」在預設後端上不成立，而且每個
 item 都帶著同一個合成簽名凹口。
 
-> **2026-08-02 更新 — 四條撤回，請先讀這段**
+> **2026-08-03 更新 — render-chain 那份報告整份作廢，請先讀這段**
 >
 > C1、C2 均已修復並實測確認（決定性：兩次執行 6/6 byte-identical；390 Hz 凹口
 > 18.7 → 0.9 dB）。
 >
-> **A1、A9、A10 撤回，A2 降級。** 四條都出自同一份 render-chain 深審報告，我
-> 轉述時沒有對實作驗證。錯誤型態一致：**量測或引述「我以為它在做什麼」，而不是
-> 實作本身**。
+> **A1、A9、A10、A11 撤回，A2 降級——這是該報告 major 發現的全部五條。** 我轉述
+> 時沒有對實作驗證。錯誤型態一致：**量測或引述「我以為它在做什麼」，而不是實作
+> 本身**。
 >
 > | 原主張 | 實測結果 |
 > |---|---|
@@ -58,14 +58,17 @@ item 都帶著同一個合成簽名凹口。
 > | A2 長 RT60 晚場低 3.5 dB | 實際 `rt60_range` 內 ≤0.18 dB |
 > | A9 M6 預設走 scalar RT60 envelope | 預設是 `pytard-material`，per-mode 阻尼 |
 > | A10 pyroom 渲染 omni／obstacle 不降 DRR | cardioid 差 4.3–5.8 dB；DRR 降 1.20 dB |
+> | A11 FOA per-channel 縫合破壞 isotropy | 單一 shared gain；純擴散區 isotropy 偏差 ≤0.91 dB |
 >
-> 對照組：C1、C2、A5 是直接對真實產物量測而成立的，全部站得住。
+> 同一份報告的「design notes」抽查兩條，也都是錯的（見 [§A11 後](#其他訊號面-design-notes)）：
+> Cayley boundary filter 與空氣吸收都**有**在 M6 路徑上作用，e454c08 當時就有。
+> **檢查到的七條全錯**，剩下三條 design note 未覆核，不得直接採信。
+>
+> 對照組：C1、C2、A5 是直接對真實產物量測而成立的，全部站得住。其餘 major
+> （A3、A4、A6、A7、A8、A12、A13）出自契約層與讀取端的深審——不同來源——我另外
+> 親自讀碼確認過關鍵片段。
 >
 > **A/B pilot 已無剩餘的資料品質阻礙。**
->
-> 尚未覆核的同源發現只剩 **A11**（FOA per-channel 縫合破壞 isotropy），在動手前
-> 應比照辦理先實測。其餘 major（A3、A4、A6、A7、A8、A12、A13）出自契約層與讀取端
-> 的深審，我另外親自讀碼確認過關鍵片段。
 
 ---
 
@@ -79,7 +82,7 @@ item 都帶著同一個合成簽名凹口。
 - 實跑三次完整 M6 pipeline（6 rooms × 1 RIR）對照決定性；
 - 對實際生成的 bank 做頻譜量測與 reader 行為驗證。
 
-重現指令見 [§7](#7-重現本次驗證)。
+重現指令見 [§8](#8-重現本次驗證)。
 
 ---
 
@@ -378,35 +381,88 @@ out[source_idx, direct_idx:recovery_end] *= gain
 
 **結論**：A10 不存在，**A/B pilot 沒有剩餘的資料品質阻礙**。
 
-#### A11 — FOA per-channel 縫合破壞 diffuse isotropy
+#### ~~A11~~ — FOA per-channel 縫合破壞 diffuse isotropy（**已撤回，2026-08-03**）
 
-**位置**：`spatial_late_field.py:418-445`、`rir_late_coupling.py:123-127`、
-`spatial_rir.py:247-254`
+**原主張**：`couple_receiver_array_early_late` 把 W/Y/Z/X 當四個獨立 receiver 逐一
+解 `energy_preserving_diffuse_gain`，Y/Z/X 的 diffuse 位準改由幾何 tail 的方向能量
+決定；又因該函式在 `target <= tiny` 時回傳 `gain = 0.0`，對稱場景的 Z 分量會被整支
+歸零。
 
-`couple_receiver_array_early_late` 把 W/Y/Z/X 當四個獨立 receiver 逐一解
-`energy_preserving_diffuse_gain`。晚場本是同一組 plane waves 的投影（isotropic 時
-`E[Y²] ≈ E[W²]/3`），per-channel 縫合後 Y/Z/X 的 diffuse 位準改由「幾何 tail 的
-方向能量」決定。
+**實際實作**（`render/spatial_late_field.py:477-502`，e454c08 當時即如此）：四個
+channel 的 tail 先**串接**成一條，只解**一個** gain，再乘回全部 channel——
 
-更麻煩的是該函式在 `target <= tiny` 時 `gain = 0.0`：coherent tail 近乎為零的
-channel，其 diffuse 成分會被**整支歸零**——對稱場景的 Z 分量直接消失，晚場失去
-垂直分量，diffuseness/IACC 統計變成幾何 artifact；FOA 晚場與 receiver-array 晚場也
-不再是同一個場的兩個視圖。
+```python
+shared_gain, aggregate_energy = energy_preserving_diffuse_gain(
+    original_tails, coherent_tails, diffuse_tails, 0,
+    target_energy=float(sum(target_energies)),
+)
+diffuse_components *= shared_gain
+```
+
+metadata 也照實命名：`energy_policy = "one_shared_array_gain_preserves_spatial_ratios"`。
+單一純量乘上所有 channel，依定義保住 W:Y:Z:X 比例。原主張描述的機制不存在。
+
+**實測**（四個場景，`transition_end_sample` 之後的**純擴散區**，early weight 實測
+為 6.1e-17）：
+
+| 場景 | Y | Z | X | 距 isotropic −4.77 dB 最大偏差 | FOA diffuseness |
+|---|---|---|---|---|---|
+| office | −5.68 | −5.18 | −4.68 | 0.91 dB | 0.919 |
+| 垂直對稱 | −5.63 | −5.11 | −4.70 | 0.86 dB | 0.923 |
+| meeting_room | −4.29 | −4.74 | −4.06 | 0.72 dB | 0.933 |
+| living_room | −4.90 | −4.81 | −5.00 | **0.23 dB** | 0.967 |
+
+（單位 dB，相對 W。SN3D 一階 isotropic 期望值 `E[Y²]=E[W²]/3` → −4.77 dB。
+per-octave 500/1k/2k/4k Hz 最大偏差 0.23–2.10 dB，隨頻帶隨機跳動而非單向偏移，
+是 128 方向 quadrature 與有限 tail 統計的殘差。）
+
+**針對「Z 歸零」直接設計的反例**：把音源與接收器放在房間半高、天花板材質強制等同
+地板，讓 image source 在垂直方向成對抵消——coherent Z tail 實測比 W 低 **33.19 dB**，
+正是原主張說會觸發 `gain = 0` 的條件。結果 Z 的 diffuse 能量**完全正常**（−5.63 dB，
+比 isotropic 期望值只差 0.86 dB）。四個場景中沒有任何 channel 的 diffuse 能量為零。
+
+**反事實量化**：如果真的照原主張逐 channel 解，Z 會被壓掉——
+
+| 場景 | W | Y | Z | X |
+|---|---|---|---|---|
+| office | −0.19 | +2.25 | **−13.46** | +1.11 |
+| 垂直對稱 | +0.02 | +1.88 | **−31.12** | +1.21 |
+| meeting_room | +0.50 | −0.80 | **−12.22** | +2.28 |
+
+（dB，相對實際 shared gain。）所以**物理顧慮本身是對的**，只是實作早就用具名
+policy 擋掉了。
+
+**「FOA 與 array 不再是同一個場的兩個視圖」**：兩者確實各解一次
+（`render/spatial.py:297` 與 `:306`），但實測兩個 gain 落在
+Δ 0.04 / 0.11 / 0.14 / 0.46 dB 之內——同一個場，半 dB 以內的一致性。
+
+**為什麼 aggregate 正規化是對的**（撤回時順帶確認的設計性質）：SN3D 一階基底滿足
+`y²+z²+x² = 1`，所以對 isotropic 擴散場與對「到達時刻互異的 path event 集合」，
+都有 `E_Y+E_Z+E_X = E_W`，兩邊的 4-channel 總和都等於 `2·E_W`。正規化總和因此等價
+於正規化 W。實測 coherent 側 `sum(YZX)/W` = 0.97 / 0.94，與該恆等式相符。
+
+**重現**：本次量測已收成常駐 validator，見
+[§8](#8-重現本次驗證) 第 6 項。
 
 #### 其他訊號面 design notes
 
-- **Cayley boundary filter 在 M6 路徑上是死路徑**：
-  `PathEventHighFrequencyBackend.simulate` 與 `render_path_events_ambisonic` 呼叫
-  `render_path_events` 時都不傳 `surface_admittance_models`，`_gain_spectrum` 得到
-  常數實 gain → 走 `constant_real_value()` 分支。M3.2 花大量篇幅驗證的 passive
-  causal filter，**在實際 bank 生成裡沒有參與**。
-- **材質頻變在早場被折疊成 1 kHz 單點**（`absorption.at(reference)`），吸收頻譜只
-  影響 FDN 的 per-octave RT60。早／晚場看到兩套不同的材質視圖。
-- **整條高頻鏈無空氣吸收**：4–8 kHz、長距離與長 tail 會偏亮。與 A1 方向相反但
-  **無法互抵**（一個是頻帶消失、一個是帶內偏亮）。
-- **scattering 只在一階折損**：僅 `len(surface_ids) == 1` 的 path 被拆
+⚠️ **這五條與 A1/A2/A9/A10/A11 同源。抽查的兩條都是錯的**，其餘三條未覆核，
+採信前請比照 §A11 先實測。
+
+- ~~**Cayley boundary filter 在 M6 路徑上是死路徑**~~ — **錯**。
+  `render/high_frequency/path_event.py:120` 確實傳了
+  `surface_admittance_models=surface_models`；`render/spatial.py:165,235` 同樣有傳。
+  e454c08 當時就在（`hybrid_rir.py:1472`）。M3.2 驗證的 passive causal filter **有**
+  參與 bank 生成。
+- ~~**整條高頻鏈無空氣吸收**~~ — **錯**。同一個 backend 的
+  `air_absorption: bool = True` 是預設值，`apply_air_absorption` 實際被呼叫
+  （`path_event.py:133-169`），並寫進 `last_air_absorption_metadata`。e454c08 當時
+  就在（`hybrid_rir.py:1398,1485-1499`）。
+- **（未覆核）材質頻變在早場被折疊成 1 kHz 單點**（`absorption.at(reference)`），
+  吸收頻譜只影響 FDN 的 per-octave RT60。早／晚場看到兩套不同的材質視圖。
+- **（未覆核）scattering 只在一階折損**：僅 `len(surface_ids) == 1` 的 path 被拆
   `(1−s) + s`，≥2 階 path 等效 s=0 → diffuse 比例低估、多次反射 specular 偏亮。
-- **RT60 長尾在 1.6 s 硬切無 fade**：classroom 類材質組合有明顯機率
+- **（未覆核）RT60 長尾在 1.6 s 硬切無 fade**：classroom 類材質組合有明顯機率
   RT60(1k) > 2 s，尾端在 −30~−40 dB 處出現階梯，bank RT60 分佈右截尾。
 
 ---
@@ -661,9 +717,9 @@ checkpoint 一側拿不到「這個 run 用了哪個 release/variant」。
 3. ~~FDN 高頻帶覆蓋（A1）~~ — 撤回，發現本身是錯的。
 4. ~~晚場能量錨定（A2）~~ — 降為 design-note，實際 rt60_range 內 ≤0.18 dB。
 5. ~~兩後端物理不對稱（A10）~~ — 撤回，directivity 與 obstacle 兩點皆實測否證。
+6. ~~FOA isotropy（A11）~~ — 撤回，shared gain 保住比例，純擴散區偏差 ≤0.91 dB。
 
-**pilot 可以開跑。** 建議跑之前先確認 A11（唯一還沒覆核的同源發現）——它只影響
-M4.5 spatial 輸出，不影響 mono bank 的 A/B，所以也可以並行。
+**pilot 可以開跑，沒有前置條件。** 同源發現已全部覆核完畢。
 
 ### P1 — 證據鏈與 split 紀律
 
@@ -724,10 +780,12 @@ cd /tmp/m6_smoke_a/pyroomacoustics_bank && find . -name '*.wav' | sort | xargs s
 ```
 
 ```bash
-# 4) FDN 高頻空洞（A1）：檢查 16 kHz 下的有效 octave centers
+# 4) FDN 高頻覆蓋（A1，已撤回）：valid_octave_centers 最高只到 4000 Hz，但
+#    _fdn_partition_sos 的最高頻帶是 cascaded binary split 的 highpass，一路到
+#    Nyquist。要看實際覆蓋必須量實際濾波器，不能從 octave centers 推論——這正是
+#    A1 出錯的地方。
 PYTHONPATH=. .venv/bin/python -c \
-  "from puresound.audio.rir_metrics import valid_octave_centers; print(valid_octave_centers(16000))"
-# 應輸出 [63.0, 125.0, 250.0, 500.0, 1000.0, 2000.0, 4000.0]，最高僅到 4000 Hz
+  "from puresound.audio.rir.metrics import valid_octave_centers; print(valid_octave_centers(16000))"
 ```
 
 ```bash
@@ -736,11 +794,26 @@ PYTHONPATH=. .venv/bin/python -c \
 # 應觀察到三個 split 被靜默混合載入，無任何警告
 ```
 
+```bash
+# 6) FOA diffuse isotropy（A11，已撤回）：四個場景（含一個刻意讓 coherent Z
+#    幾乎為零的垂直對稱反例），量 transition_end 之後純擴散區的 W/Y/Z/X 平衡，
+#    並印出「若真的逐 channel 解」的反事實 gain。PASS 為 exit 0。
+PYTHONPATH=. .venv/bin/python \
+  egs/rir_generation/phases/m4_spatial_late_field/scripts/validate_foa_diffuse_isotropy.py
+```
+
 ---
 
 ## 附註
 
 本審查對「M6 是否是一套好的工程契約」與「M6 產出的 RIR 是否物理正確」分開評價：
-前者水準之上，後者有兩個 critical 與數個落在域差軸上的 major。兩者的共通風險是
+前者水準之上；後者原本記了兩個 critical 與五個 major，覆核後**兩個 critical 都是
+真的（已修）、五個 major 全數撤回**。訊號鏈比初版審查所述健康得多。
+
+剩下的 major 集中在契約與證據鏈側（A3–A8、A12–A14），共通風險是
 **validator 的證據力被 fixture 選擇稀釋**——這比任何單一 bug 都值得優先修正，
 因為它決定了未來的問題會不會再次無聲通過。
+
+而這次審查自己就示範了同一個失效模式：**五條撤回全部來自「量測我以為的實作」而
+非實作本身**。判準與 fixture 一樣，錯的判準會給出乾淨的假訊號。凡是要據以行動的
+發現，先問一句「我量的是程式，還是我對程式的複述？」
