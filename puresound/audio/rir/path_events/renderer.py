@@ -112,6 +112,26 @@ def render_path_events(
                 "maximum boundary-filter tail samples must be a positive integer"
             )
     output = np.zeros(length, dtype=np.float64)
+    # Discretizing one boundary reflection costs a root solve and an
+    # eigenvalue check, and the same (surface model, incidence angle) pair
+    # recurs across image paths that strike a wall at the same angle — about
+    # half the calls on a shoebox.  The models are frozen value-equal
+    # dataclasses, so caching on the value is safe.  Scoped to this call so
+    # nothing accumulates across scenes.
+    boundary_filters: dict[tuple[Any, float, float], Any] = {}
+
+    def boundary_filter_for(model, incidence_cosine: float):
+        key = (model, float(incidence_cosine), sample_rate)
+        cached = boundary_filters.get(key)
+        if cached is None:
+            cached = digital_locally_reacting_reflection_filter(
+                model,
+                incidence_cosine,
+                sample_rate,
+            )
+            boundary_filters[key] = cached
+        return cached
+
     for event in events:
         if not event.visible:
             continue
@@ -192,11 +212,7 @@ def render_path_events(
                 interaction_models,
                 event.incidence_cosines,
             ):
-                boundary_filter = digital_locally_reacting_reflection_filter(
-                    model,
-                    incidence_cosine,
-                    sample_rate,
-                )
+                boundary_filter = boundary_filter_for(model, incidence_cosine)
                 local_signal = boundary_filter.filter_signal(local_signal)
             output[start : start + local_signal.size] += (
                 direction_gain

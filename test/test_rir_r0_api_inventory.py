@@ -65,10 +65,21 @@ HYBRID_PUBLIC_SURFACE: frozenset[str] = frozenset({"generate_hybrid_rir"})
 #: for a module reaching across a package boundary.
 #:
 #: The M6.5 validator reuses this statistical helper directly.  It is the last
-#: one left — the migration turned the other fifteen into real public names.
+#: production one left — the migration turned the other fifteen into real
+#: public names.
+#:
+#: The two geometry helpers are reached by a test, not by shipping code.
+#: ``apply_scene_object_visibility`` short-circuits on axis-aligned bounds
+#: before the exact prism test, and that is only sound if the cheap test never
+#: rejects a real intersection.  Asserting that invariant means calling the
+#: cheap test and the exact test on the same input, which needs both names.
+#: Promoting them would put an implementation detail in the public surface;
+#: testing only through the public function would not isolate the property.
 CROSS_PACKAGE_PRIVATE_IMPORTS: frozenset[tuple[str, str]] = frozenset(
     {
         ("puresound.audio.rir.bank.evaluation", "_paired_t_confidence_interval"),
+        ("puresound.audio.rir.path_events.geometry", "_object_bounds"),
+        ("puresound.audio.rir.path_events.geometry", "_segment_misses_bounds"),
     }
 )
 

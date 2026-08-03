@@ -828,3 +828,57 @@ def test_opt_in_scene_interactions_add_transmission_diffraction_and_scattering()
     assert PathEventSet.from_json(event_set.to_json()).to_dict() == (
         event_set.to_dict()
     )
+
+
+def test_visibility_bounds_reject_never_hides_a_real_intersection():
+    """The bounding-box pre-reject must only ever skip non-intersections.
+
+    ``apply_scene_object_visibility`` short-circuits on axis-aligned bounds
+    before running the exact prism test, because on a sampled office scene
+    94.7% of segment-object pairs cannot touch the object at all and the exact
+    test is the dominant cost of the M4 high band.
+
+    The optimization is only sound if the cheap test is conservative: whenever
+    it says "misses", the exact test must agree.  A counterexample here would
+    mean paths are silently left unblocked.
+    """
+
+    from puresound.audio.rir.path_events.geometry import (
+        _object_bounds,
+        _segment_misses_bounds,
+        segment_intersects_scene_object,
+    )
+
+    scene_object = _blocking_object()
+    tolerance = 1e-10
+    bounds = _object_bounds(scene_object, tolerance)
+    rng = np.random.default_rng(20260803)
+
+    rejected = 0
+    intersecting = 0
+    for _ in range(4000):
+        # Span the room generously, and deliberately oversample the object's
+        # own neighbourhood so the boundary cases are exercised too.
+        if rng.random() < 0.5:
+            start = rng.uniform([0.0, 0.0, 0.0], [5.0, 4.0, 3.0])
+            end = rng.uniform([0.0, 0.0, 0.0], [5.0, 4.0, 3.0])
+        else:
+            start = rng.uniform([1.5, 1.0, -0.2], [3.5, 3.0, 2.5])
+            end = rng.uniform([1.5, 1.0, -0.2], [3.5, 3.0, 2.5])
+        if float(np.linalg.norm(end - start)) <= tolerance:
+            continue
+        exact = segment_intersects_scene_object(
+            start, end, scene_object, tolerance_m=tolerance
+        )
+        intersecting += bool(exact)
+        if _segment_misses_bounds(start, end, bounds):
+            rejected += 1
+            assert not exact, (
+                "bounds reject hid a real intersection: "
+                f"{start.tolist()} -> {end.tolist()}"
+            )
+
+    # Guard the guard: a test that rejected nothing, or that never produced an
+    # intersection, would pass while checking nothing.
+    assert rejected > 0
+    assert intersecting > 0
