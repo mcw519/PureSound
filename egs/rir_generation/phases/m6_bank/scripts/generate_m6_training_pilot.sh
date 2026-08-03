@@ -18,10 +18,16 @@
 #   PURESOUND_M6_PILOT_WORKERS       generator workers        (default 8)
 #   PURESOUND_M6_PILOT_QC_WORKERS    QC / release workers     (default 1)
 #   PURESOUND_M6_PILOT_SEED          shared scene seed        (default 1337)
+#   PURESOUND_M6_PILOT_LOW_BACKEND   low band  (default: generate_m6_bank.py's)
+#   PURESOUND_M6_PILOT_GPU_DEVICES   CUDA devices, e.g. "0,1" (default: none)
 #
 # The seed must be identical across the two arms: it is what makes the scenes
 # matched, and therefore what makes the comparison an A/B rather than two
-# unrelated banks.
+# unrelated banks.  The low backend must be identical for the same reason — it
+# is the shared half of the renderer, and the crossover sits between the two.
+#
+# Only the low band can use the GPU; the high band is always CPU.  Set
+# LOW_BACKEND=pytard-cupy-material together with GPU_DEVICES to use it.
 set -euo pipefail
 
 backend="${1:-pyroomacoustics}"
@@ -31,6 +37,16 @@ rir_per_room="${PURESOUND_M6_PILOT_RIR_PER_ROOM:-4}"
 pilot_workers="${PURESOUND_M6_PILOT_WORKERS:-8}"
 qc_workers="${PURESOUND_M6_PILOT_QC_WORKERS:-1}"
 pilot_seed="${PURESOUND_M6_PILOT_SEED:-1337}"
+low_backend="${PURESOUND_M6_PILOT_LOW_BACKEND:-}"
+gpu_devices="${PURESOUND_M6_PILOT_GPU_DEVICES:-}"
+
+extra_args=()
+if [[ -n "${low_backend}" ]]; then
+  extra_args+=(--low-backend "${low_backend}")
+fi
+if [[ -n "${gpu_devices}" ]]; then
+  extra_args+=(--gpu-devices "${gpu_devices}")
+fi
 
 case "${backend}" in
   pyroomacoustics|path-events-m4) ;;
@@ -61,6 +77,7 @@ PYTHONPATH=. .venv/bin/python egs/rir_generation/generate_m6_bank.py \
   --seed "${pilot_seed}" \
   --m6-bank-id "puresound-m6-pilot-${backend}-${pilot_seed}" \
   --release-id "puresound-m6-pilot-${backend}-${pilot_seed}" \
+  "${extra_args[@]}" \
   --resume
 
 echo "M6 pilot release ready: ${release_dir}"
