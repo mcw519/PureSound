@@ -33,8 +33,8 @@ immutable candidate + certificate 晉升模型、QC 三態（拒絕把「算不�
 | A6 | major | 訓練 YAML 可誤拿 `split: test`，無 role 交叉檢查 | 訓練整合 | 讀碼 |
 | A7 | major | downstream CI lower bound 不重算；listening 為申報制 | M6.5 | 讀碼 |
 | A8 | major | QC `direct_arrival_timing` gate 是死碼 | M6.3 | 讀碼 |
-| A9 | major | 低頻 RT60 被壓平成 mid-band 標量 | 預設後端 | 讀碼 |
-| A10 | major | 兩後端物理不對稱（directivity、obstacle） | A/B pilot | 讀碼 |
+| ~~A9~~ | ~~major~~ | ~~低頻 RT60 壓平~~ — **已撤回**：M6 預設就是 `pytard-material` | — | 撤回 |
+| ~~A10~~ | ~~major~~ | ~~兩後端物理不對稱~~ — **已撤回**：兩點皆實測否證 | — | 撤回 |
 | A11 | major | FOA per-channel 縫合破壞 diffuse isotropy | M4.5 spatial | 讀碼 |
 | A12 | major | `simulated_rir` dict 無界成長 | 訓練整合 | 讀碼 |
 | A13 | major | release/variant/split provenance 在 dataset 層被 drop | 訓練整合 | 讀碼 |
@@ -43,10 +43,29 @@ immutable candidate + certificate 晉升模型、QC 三態（拒絕把「算不�
 **最重要的一句話**：M6 宣稱的「deterministic bank」在預設後端上不成立，而且每個
 item 都帶著同一個合成簽名凹口。
 
-> **2026-08-02 更新**：C1、C2 均已修復並實測確認（決定性：兩次執行 6/6
-> byte-identical；390 Hz 凹口 18.7 → 0.9 dB）。A1 已撤回、A2 已降級——兩者都是
-> 我量測「自己重建的模型」而非實作所致，更正見各該小節。A/B pilot 的資料品質
-> 阻礙目前只剩 A10。
+> **2026-08-02 更新 — 四條撤回，請先讀這段**
+>
+> C1、C2 均已修復並實測確認（決定性：兩次執行 6/6 byte-identical；390 Hz 凹口
+> 18.7 → 0.9 dB）。
+>
+> **A1、A9、A10 撤回，A2 降級。** 四條都出自同一份 render-chain 深審報告，我
+> 轉述時沒有對實作驗證。錯誤型態一致：**量測或引述「我以為它在做什麼」，而不是
+> 實作本身**。
+>
+> | 原主張 | 實測結果 |
+> |---|---|
+> | A1 FDN 晚場 5.66 kHz 以上是空的 | 到 Nyquist 都平（+0.02 dB @ 7.9 kHz） |
+> | A2 長 RT60 晚場低 3.5 dB | 實際 `rt60_range` 內 ≤0.18 dB |
+> | A9 M6 預設走 scalar RT60 envelope | 預設是 `pytard-material`，per-mode 阻尼 |
+> | A10 pyroom 渲染 omni／obstacle 不降 DRR | cardioid 差 4.3–5.8 dB；DRR 降 1.20 dB |
+>
+> 對照組：C1、C2、A5 是直接對真實產物量測而成立的，全部站得住。
+>
+> **A/B pilot 已無剩餘的資料品質阻礙。**
+>
+> 尚未覆核的同源發現只剩 **A11**（FOA per-channel 縫合破壞 isotropy），在動手前
+> 應比照辦理先實測。其餘 major（A3、A4、A6、A7、A8、A12、A13）出自契約層與讀取端
+> 的深審，我另外親自讀碼確認過關鍵片段。
 
 ---
 
@@ -299,41 +318,65 @@ target = float(np.dot(original_tail, original_tail))
 **結論**：從 major 降為 design-note。機制值得記著（未來若把 rt60_range 上調到
 1.5 s 以上就會顯現），但**不構成 A/B pilot 的阻礙**，也不值得為它改能量錨定。
 
-#### A9 — 低頻 RT60 被壓平成 mid-band 標量
+#### ~~A9 — 低頻 RT60 被壓平成 mid-band 標量~~ ✗ 撤回（2026-08-02）
 
-**位置**：`hybrid_rir.py:387-399, 2175-2190`、`rir_scene.py:699-703`
+原始主張：M6 預設 `material_modal_damping=False, apply_rt60_decay=True`，
+整個 20–1000 Hz 套單一 `scene.rt60` 指數包絡。
 
-M6 預設 `material_modal_damping=False, apply_rt60_decay=True`：整個 20–1000 Hz 帶
-套用單一 `scene.rt60`（材質 Sabine 在 500/1000 Hz 的中位數）指數包絡。
+**兩個前提都不成立。** `generate_m6_bank.py` 的 `--low-backend` 預設在
+commit e454c08（審查當時）就已經是 **`pytard-material`**，而
+`material_damping = args["low_backend"].endswith("-material")` 因此為真，
+走的是 per-mode 材質阻尼，global envelope 被停用。
 
-- brickwork α(125)=0.01 vs α(1k)=0.03 → 低頻 RT60 實應約 3× mid-band（衰減被砍太快）
-- plasterboard α(125)=0.15 > α(1k)=0.04 → 方向相反
+**實際生成的 bank metadata**：
 
-無論哪個方向，低頻 RT60 對頻率恆平坦，且與高頻帶（pra per-band 材質）在 crossover
-兩側衰減律不連續。metadata 有誠實記 `global_rt60_envelope_applied: true`，修正機制
-（`pytard-material` per-mode damping）也存在，只是不是預設。
+```json
+"boundary_model": "per_mode_surface_material_damping",
+"global_rt60_envelope_applied": false
+```
 
-#### A10 — 兩個後端物理不對稱
+標量包絡的程式碼路徑存在，但**不是 M6 預設會走的路徑**。
 
-計畫的下一步是 1000 rooms × 4 RIR 的 matched A/B pilot，「兩組固定相同 scene、
-seed、level，只改 high backend」。但兩者的差異目前不只是預期中的物理模型差異：
+#### ~~A10 — 兩個後端物理不對稱（directivity、obstacle）~~ ✗ 撤回（2026-08-02）
 
-| 面向 | `pyroomacoustics`（預設） | `path-events-m4`（候選） |
-|---|---|---|
-| Source directivity | scene 宣告 `speech_cardioid` 與隨機朝向，**實際渲染 omni**（`hybrid_rir.py:1310` 只做 `room.add_source(pos)`） | 真的渲染 cardioid |
-| Obstacle | 整條 RIR（含殘響尾）乘上衰減 → **DRR 不變**（物理上應下降） | per-path visibility（正確） |
-| 高頻晚場 | 完整 | 5.66 kHz 以上空洞（A1） |
-| 晚場總能量 | — | 長 RT60 偏低（A2） |
-| 距離慣例 | `1/(4πd)` | `1/r`（差約 22 dB，由 calibrated 層吸收；**兩種 bank 未經校準不可直接混用**） |
-| 390 Hz comb | 有（共用低頻帶） | 有（共用低頻帶） |
+原始主張兩點，**兩點都錯**，且在 commit e454c08（審查當時）就已經是錯的。
 
-也就是說，這場 A/B 目前量到的會是這些實作差異，而不是「coherent PathEvents + FDN
-是否比 ISM 更接近真實」。**建議在跑 pilot 之前先處理 A1、A2 與 directivity/obstacle
-的不對稱**，否則對照被汙染。
+**(a) 「pyroomacoustics 宣告 cardioid 卻渲染 omni」** — 不成立。
+`_v2_source_directivity`（`render/high_frequency/pyroomacoustics.py:91-116`）
+把 `speech_cardioid` 映到 `CardioidFamily(p=0.5)`（真正的心形），並以
+`orientation_forward_unit` 取場景朝向；`simulate` 對 `RoomSceneV2` 場景以
+`room.add_source(pos, directivity=...)` 傳入，只有 legacy `HybridRIRScene`
+才傳 `None`——而 M6 用的是 v2。原報告引用的行號沒有涵蓋 `directivity=` 這個參數。
 
-附帶：`obstacle_effects` metadata 對 `path-events-m4` 變體記錄了從未套用的模型
-（`high_frequency_post_occlusion_scatter` 含逐事件 attenuation_db），m4 bank 的 JSON
-消費者會讀到不存在的衰減事件。
+**實測**（同場景、同 seed，cardioid vs 強制 omni）：
+
+| | ch0 | ch1 | ch2 | ch3 | ch4 |
+|---|---|---|---|---|---|
+| 能量差 | −4.34 | −5.16 | −5.79 | −4.94 | −4.48 dB |
+
+相對 L2 差 1.11。directivity 確實在渲染。
+
+**(b) 「obstacle 縮放整條 RIR，DRR 不變」** — 不成立。
+`apply_obstacle_high_frequency_effects`（`render/high_frequency/obstacles.py:181-199`）
+不是 `out[source_idx] *= attenuation`，而是
+
+```python
+gain = np.linspace(float(event["attenuation"]), 1.0, recovery_end - direct_idx)
+out[source_idx, direct_idx:recovery_end] *= gain
+```
+
+從遮蔽衰減沿 `obstacle_occlusion_recovery_ms`（預設 80 ms）斜坡回復到 1.0，
+只作用在 direct/early 區間。**實測**（attenuation 0.725）：
+
+| 量 | 變化 |
+|---|---|
+| DRR | −6.26 → −7.46 dB（**Δ −1.20 dB**） |
+| 整體 channel level | −1.77 dB |
+| recovery 之後的晚場 | **+0.000 dB（完全不變）** |
+
+遮蔽壓 direct、不動殘響尾——正是物理上該有的行為，與原主張相反。
+
+**結論**：A10 不存在，**A/B pilot 沒有剩餘的資料品質阻礙**。
 
 #### A11 — FOA per-channel 縫合破壞 diffuse isotropy
 
@@ -609,26 +652,18 @@ checkpoint 一側拿不到「這個 run 用了哪個 release/variant」。
 
 ## 7. 建議優先序
 
-### P0 — 在跑 4,000-item pilot 之前必須處理
+### P0 — 已清空
 
-**已完成（2026-08-02，實測確認）**：
+跑 4,000-item pilot 之前需要處理的項目**目前是空的**：
 
-1. ~~`pra.libroom.set_rng_seed`~~ — 已修。相同參數兩次獨立執行，6/6 WAV
-   byte-identical、manifest hash 相同。
-2. ~~低頻激勵 comb~~ — 已修（改用 green-delta 激勵）。390 Hz 凹口從 18.7 dB
-   降到 0.9 dB，與對照頻率同級。
-
-**撤回／降級**：
-
-3. ~~FDN 高頻帶覆蓋（A1）~~ — 撤回，該發現源於我重建錯誤的濾波器模型。
+1. ~~`pra.libroom.set_rng_seed`（C1）~~ — 已修，實測兩次執行 byte-identical。
+2. ~~低頻激勵 comb（C2）~~ — 已修，390 Hz 凹口 18.7 → 0.9 dB。
+3. ~~FDN 高頻帶覆蓋（A1）~~ — 撤回，發現本身是錯的。
 4. ~~晚場能量錨定（A2）~~ — 降為 design-note，實際 rt60_range 內 ≤0.18 dB。
+5. ~~兩後端物理不對稱（A10）~~ — 撤回，directivity 與 obstacle 兩點皆實測否證。
 
-**仍待處理**：
-
-5. **兩後端的 directivity / obstacle 不對稱（A10）** — 這是 P0 唯一剩下的一項。
-   `pyroomacoustics` 宣告 cardioid 卻渲染 omni、obstacle 縮放整條 RIR 使 DRR 不變；
-   `path-events-m4` 兩者都做對。不處理的話，matched A/B pilot 量到的會是這兩項
-   實作差異，而不是「coherent PathEvents + FDN 是否比 ISM 更接近真實」。
+**pilot 可以開跑。** 建議跑之前先確認 A11（唯一還沒覆核的同源發現）——它只影響
+M4.5 spatial 輸出，不影響 mono bank 的 A/B，所以也可以並行。
 
 ### P1 — 證據鏈與 split 紀律
 

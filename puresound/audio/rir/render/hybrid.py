@@ -18,7 +18,6 @@ from typing import Any, Optional
 import numpy as np
 import torch
 
-from puresound.audio.rir.bank.storage import write_hybrid_rir_dataset_item
 from puresound.audio.rir.contracts import HybridRIRConfig
 from puresound.audio.rir.metrics import analyze_rir, valid_octave_centers
 from puresound.audio.rir.render.backend import RIRBackend
@@ -37,10 +36,7 @@ from puresound.audio.rir.render.low_frequency import (
     ImpedanceModalLowFrequencyBackend,
     material_modal_damping_metadata,
 )
-from puresound.audio.rir.scene.sampling import (
-    HybridRIRScene,
-    sample_hybrid_rir_scene,
-)
+from puresound.audio.rir.scene.sampling import HybridRIRScene, sample_hybrid_rir_scene
 from puresound.audio.rir.scene.schema import RoomSceneV2
 
 
@@ -89,9 +85,7 @@ def generate_hybrid_rir(
         ).reshape(-1, 1)
         low = np.asarray(low, dtype=np.float64) * gains
         high = np.asarray(high, dtype=np.float64) * gains
-    material_low_damping = bool(
-        getattr(low_backend, "material_modal_damping", False)
-    )
+    material_low_damping = bool(getattr(low_backend, "material_modal_damping", False))
     impedance_low_boundary = bool(
         getattr(low_backend, "impedance_boundary_model", False)
     )
@@ -103,9 +97,7 @@ def generate_hybrid_rir(
             False,
         )
     )
-    energy_matching_requested = bool(
-        effective_config.match_crossover_energy
-    )
+    energy_matching_requested = bool(effective_config.match_crossover_energy)
     preserve_source_convention = bool(
         source_convention_matched
         and effective_config.preserve_source_convention_at_crossover
@@ -126,9 +118,7 @@ def generate_hybrid_rir(
         {
             "energy_matching_requested": energy_matching_requested,
             "energy_matching_applied": energy_matching_applied,
-            "source_convention_matched_before_crossover": (
-                source_convention_matched
-            ),
+            "source_convention_matched_before_crossover": (source_convention_matched),
             "source_convention_preservation_enabled": bool(
                 effective_config.preserve_source_convention_at_crossover
             ),
@@ -216,9 +206,7 @@ def generate_hybrid_rir(
                 if config.output_mode == "peak_normalized"
                 else None
             ),
-            "reference_source_spl_db": float(
-                config.calibrated_reference_source_spl_db
-            ),
+            "reference_source_spl_db": float(config.calibrated_reference_source_spl_db),
             "per_item_peak_normalized": config.output_mode == "peak_normalized",
         },
         "crossover": crossover_metadata,
@@ -236,49 +224,35 @@ def generate_hybrid_rir(
         None,
     )
     if isinstance(boundary_metadata, dict):
-        metadata["bands"]["high"]["surface_boundary_prior"] = (
-            boundary_metadata
-        )
+        metadata["bands"]["high"]["surface_boundary_prior"] = boundary_metadata
     air_absorption_metadata = getattr(
         high_backend,
         "last_air_absorption_metadata",
         None,
     )
     if isinstance(air_absorption_metadata, dict):
-        metadata["bands"]["high"]["air_absorption"] = (
-            air_absorption_metadata
-        )
+        metadata["bands"]["high"]["air_absorption"] = air_absorption_metadata
     if isinstance(low_backend, AnalyticModalLowFrequencyBackend):
         metadata["bands"]["low"]["analytic_mode_index_limit"] = int(
             low_backend.num_modes_per_axis
         )
         metadata["bands"]["low"]["analytic_max_modes"] = (
-            int(low_backend.max_modes)
-            if low_backend.max_modes is not None
-            else None
+            int(low_backend.max_modes) if low_backend.max_modes is not None else None
         )
     if isinstance(low_backend, ImpedanceModalLowFrequencyBackend):
         metadata["bands"]["low"]["analytic_mode_index_limit"] = int(
             low_backend.num_modes_per_axis
         )
         metadata["bands"]["low"]["analytic_max_modes"] = (
-            int(low_backend.max_modes)
-            if low_backend.max_modes is not None
-            else None
+            int(low_backend.max_modes) if low_backend.max_modes is not None else None
         )
-        metadata["bands"]["low"]["impedance_modes"] = (
-            low_backend.last_modal_metadata
-        )
+        metadata["bands"]["low"]["impedance_modes"] = low_backend.last_modal_metadata
     if material_low_damping and isinstance(scene, RoomSceneV2):
-        modal_loss_scale = float(
-            getattr(low_backend, "material_modal_loss_scale", 1.0)
-        )
-        metadata["bands"]["low"]["modal_damping"] = (
-            material_modal_damping_metadata(
-                scene,
-                effective_config,
-                loss_scale=modal_loss_scale,
-            )
+        modal_loss_scale = float(getattr(low_backend, "material_modal_loss_scale", 1.0))
+        metadata["bands"]["low"]["modal_damping"] = material_modal_damping_metadata(
+            scene,
+            effective_config,
+            loss_scale=modal_loss_scale,
         )
     if isinstance(scene, RoomSceneV2) and config.record_realized_metrics:
         metadata["realized_acoustics"] = _realized_acoustics_metadata(
@@ -327,105 +301,11 @@ def _realized_acoustics_metadata(
     }
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 def _config_metadata(config: HybridRIRConfig) -> dict[str, Any]:
     data = asdict(config)
     data["num_samples"] = config.num_samples
     data["num_sources"] = config.num_sources
     return data
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 __all__ = ["generate_hybrid_rir"]
