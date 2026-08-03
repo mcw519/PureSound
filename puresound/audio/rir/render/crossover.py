@@ -47,11 +47,17 @@ def match_low_band_to_high_band(
     low_band: np.ndarray,
     high_band: np.ndarray,
     config: HybridRIRConfig,
-) -> tuple[np.ndarray, np.ndarray]:
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Scale the low band to the high band's level across the match band.
+
+    Returns the scaled band, the applied gain, and the gain *before* clipping.
+    The two differ whenever ``crossover_match_gain_range`` binds, and that has
+    to stay visible: see the note at the clip.
+    """
     lo_hz, hi_hz = effective_crossover_match_band(config)
     if hi_hz <= lo_hz:
         gain = np.ones((low_band.shape[0], 1), dtype=np.float64)
-        return low_band, gain
+        return low_band, gain, gain
 
     sos_bp = butter(
         2,
@@ -69,7 +75,12 @@ def match_low_band_to_high_band(
     raw_gain = high_rms * target_ratio / np.maximum(low_rms, 1e-12)
     gain_min, gain_max = config.crossover_match_gain_range
     gain = np.clip(raw_gain, float(gain_min), float(gain_max))
-    return low_band * gain, gain
+    # Hitting the bound is not a detail.  The pytARD low band is
+    # peak-normalized, so this match is the only thing setting its level
+    # against the high band; a clipped gain ships a low band that is under- or
+    # over-level by an amount nothing else records.  Carry the raw value out so
+    # the caller can report it instead of leaving the truncation silent.
+    return low_band * gain, gain, raw_gain
 
 
 def hybrid_crossover(
@@ -114,9 +125,10 @@ def hybrid_crossover_with_metadata(
     low_band = sosfilt(sos_lp, sosfilt(sos_lp, low, axis=-1), axis=-1)
     high_band = sosfilt(sos_hp, sosfilt(sos_hp, high, axis=-1), axis=-1)
     low_gain = np.ones((low_band.shape[0], 1), dtype=np.float64)
+    raw_low_gain = low_gain
     effective_match_band_hz = effective_crossover_match_band(config)
     if config.match_crossover_energy:
-        low_band, low_gain = match_low_band_to_high_band(
+        low_band, low_gain, raw_low_gain = match_low_band_to_high_band(
             low_band,
             high_band,
             config,
@@ -156,6 +168,22 @@ def hybrid_crossover_with_metadata(
         ],
         "low_band_gain_by_channel": [
             float(value) for value in low_gain[:, 0]
+        ],
+        "low_band_gain_requested_by_channel": [
+            float(value) for value in raw_low_gain[:, 0]
+        ],
+        "low_band_gain_range": [
+            float(config.crossover_match_gain_range[0]),
+            float(config.crossover_match_gain_range[1]),
+        ],
+        "low_band_gain_clipped_channels": [
+            index
+            for index, (applied, requested) in enumerate(
+                zip(low_gain[:, 0], raw_low_gain[:, 0])
+            )
+            if not math.isclose(
+                float(applied), float(requested), rel_tol=1e-9, abs_tol=1e-12
+            )
         ],
         "post_sum_peak_normalization_gain": float(normalization_gain),
         "tail_fade": {

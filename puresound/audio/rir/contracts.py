@@ -355,7 +355,19 @@ class HybridRIRConfig:
     match_crossover_energy: bool = True
     crossover_match_band_hz: Optional[tuple[float, float]] = None
     crossover_match_target_db: float = 0.0
-    crossover_match_gain_range: tuple[float, float] = (1e-4, 2.0)
+    #: Bounds on the low-band crossover match gain.
+    #:
+    #: The upper bound was 2.0 and that was below the median requirement: the
+    #: pytARD low band is peak-normalized (``calibrate_pytard_signal`` divides
+    #: out the solver's own amplitude and re-imposes 1/r by hand), so this match
+    #: is the only thing that gives it a level relative to the high band.
+    #: Measured over 24 scenes x 5 sources on both high backends, the required
+    #: gain runs 0.76-5.27 with a median of 2.0-2.4, so a 2.0 ceiling clipped
+    #: 53-68% of channels and left their low band under-level by an unrecorded
+    #: amount.  8.0 covers the observed maximum with headroom and still bounds a
+    #: degenerate near-silent low band.  Saturation is now reported in the
+    #: crossover metadata rather than being silent.
+    crossover_match_gain_range: tuple[float, float] = (1e-4, 8.0)
     preserve_source_convention_at_crossover: bool = True
 
     @property

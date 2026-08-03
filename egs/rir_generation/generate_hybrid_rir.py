@@ -312,8 +312,13 @@ def _parse_args(argv=None):
     parser.add_argument(
         "--crossover-max-gain",
         type=float,
-        default=2.0,
-        help="Maximum gain allowed during low-band crossover matching.",
+        default=8.0,
+        help=(
+            "Maximum gain allowed during low-band crossover matching. The "
+            "measured requirement reaches 5.3x because the pytARD low band is "
+            "peak-normalized, so this match sets its level; a ceiling below "
+            "that silently ships an under-level low band."
+        ),
     )
     parser.add_argument(
         "--preserve-crossover-source-convention",
