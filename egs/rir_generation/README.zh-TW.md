@@ -200,9 +200,26 @@ PYTHONPATH=. .venv/bin/python egs/rir_generation/generate_m6_bank.py \
 - 右側：M4 PathEvent early response 加上 FDN late field。
 
 兩個版本的 scene metadata hash 都是
-`5564ef77c1630b54f2deaa2ccc156e450c898640bf0482b8a1eba68df6bb50c7`，因此波形
+`6bb48bb7b7f5bca0c61a7765544d8568ac946faf955ca87a358d43dd9a69d1df`，因此波形
 與 Schroeder decay 顯示的是 matched backend ablation，而不是兩個不同房間的
 獨立抽樣結果。
+
+重新產生這些圖：
+
+```bash
+for backend in pyroomacoustics path-events-m4; do
+  PYTHONPATH=. .venv/bin/python egs/rir_generation/generate_hybrid_rir.py \
+    --output-dir /tmp/readme_assets/$backend --n-rooms 1 --rir-per-room 1 \
+    --sample-rate 16000 --duration 1.6 --scene-version v1 --room-type mixed \
+    --output-mode calibrated --low-backend pytard-material \
+    --high-backend $backend --seed 1423 --record-realized-metrics
+done
+```
+
+seed 用 1423 而非 pipeline 預設，是為了讓圖中的房間落在 bank 的殘響中位數而不
+是長尾：100 房間 pilot 的 scalar scene RT60 中位數是 0.56 s，但 95 百分位是
+2.34 s。這個 scene 是 0.55 s，且 RT60 隨頻率下降（與中位數一致）。seed 1337 的
+第一個房間恰好是 2.82 s 的全硬表面離群值，當示意圖會誤導讀者。
 
 ![Pyroomacoustics 與 M4 的同 scene 比較](assets/overview.png)
 
@@ -212,6 +229,28 @@ modal pressure slice，所以兩個高頻 variant 共用同一份動畫。
 ![同 scene 的反射路徑](assets/paths_ch2.png)
 
 ![低頻 modal 壓力場動畫](assets/field_ch2.gif)
+
+### 聽一個 M4 item
+
+RIR 本身聽起來只是一個 click。以下是同一段 LibriSpeech 乾淨語音，分別與上圖那
+個 M4 item 的近場與遠場 channel 卷積，所以這一對是**同一個房間內的距離比較**：
+
+| 檔案 | 內容 |
+|---|---|
+| [`m4_sample_dry.wav`](assets/m4_sample_dry.wav) | 乾淨源，無房間 |
+| [`m4_sample_near_near_0.wav`](assets/m4_sample_near_near_0.wav) | 經 `near_0`，0.45 m |
+| [`m4_sample_far_far_2.wav`](assets/m4_sample_far_far_2.wav) | 經 `far_2`，3.89 m |
+| [`m4_sample_rir.wav`](assets/m4_sample_rir.wav) | 五通道 RIR 本身，float32，calibrated 位準 |
+
+兩個卷積檔共用同一個增益，以保留彼此的位準關係；乾淨參考另外縮放，因為
+calibrated RIR 的振幅編碼的是參考 SPL 而不是聆聽音量。可聽出的距離線索主要來自
+direct-to-reverberant ratio 而不是音量——在這麼殘響的房間裡擴散場幾乎與距離無
+關，所以兩者 RMS 只差約 1 dB，聽感卻差很多。
+
+```bash
+PYTHONPATH=. .venv/bin/python egs/rir_generation/build_readme_sample.py \
+  --rir /tmp/readme_assets/path-events-m4/room_000000/room_000000_000000.wav
+```
 
 ### 使用 GPU 生成低頻部分
 

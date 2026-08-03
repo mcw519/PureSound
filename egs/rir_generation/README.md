@@ -218,9 +218,28 @@ renderer changes:
 - right: M4 PathEvent early response plus FDN late field.
 
 The scene metadata hash is
-`5564ef77c1630b54f2deaa2ccc156e450c898640bf0482b8a1eba68df6bb50c7` in both
+`6bb48bb7b7f5bca0c61a7765544d8568ac946faf955ca87a358d43dd9a69d1df` in both
 versions. The waveform and Schroeder decay panels therefore show a matched
 backend ablation rather than two independently sampled rooms.
+
+Regenerate the figures with:
+
+```bash
+for backend in pyroomacoustics path-events-m4; do
+  PYTHONPATH=. .venv/bin/python egs/rir_generation/generate_hybrid_rir.py \
+    --output-dir /tmp/readme_assets/$backend --n-rooms 1 --rir-per-room 1 \
+    --sample-rate 16000 --duration 1.6 --scene-version v1 --room-type mixed \
+    --output-mode calibrated --low-backend pytard-material \
+    --high-backend $backend --seed 1423 --record-realized-metrics
+done
+```
+
+The seed is 1423 rather than the pipeline default, chosen so the pictured room
+sits at the bank's median reverberation instead of in its long tail: across the
+100-room pilot the scalar scene RT60 has a median of 0.56 s but a 95th
+percentile of 2.34 s, and this scene is 0.55 s with an RT60 that falls with
+frequency like the median. Seed 1337's first room happens to be a 2.82 s
+all-hard-surface outlier and made a misleading illustration.
 
 ![Matched Pyroomacoustics versus M4 overview](assets/overview.png)
 
@@ -231,6 +250,31 @@ so it is shared by both high-band variants.
 ![Matched scene reflection paths](assets/paths_ch2.png)
 
 ![Low-frequency modal pressure-field animation](assets/field_ch2.gif)
+
+### Hear one M4 item
+
+A RIR on its own is a click. These are one dry LibriSpeech utterance convolved
+with a near and a far channel of the same M4 item pictured above, so the pair is
+a distance comparison inside one room:
+
+| File | Content |
+|---|---|
+| [`m4_sample_dry.wav`](assets/m4_sample_dry.wav) | dry source, no room |
+| [`m4_sample_near_near_0.wav`](assets/m4_sample_near_near_0.wav) | through `near_0` at 0.45 m |
+| [`m4_sample_far_far_2.wav`](assets/m4_sample_far_far_2.wav) | through `far_2` at 3.89 m |
+| [`m4_sample_rir.wav`](assets/m4_sample_rir.wav) | the five-channel RIR itself, float32, calibrated levels |
+
+The two convolved files share one gain so their level relationship survives;
+the dry reference is scaled separately, because a calibrated RIR's amplitude
+encodes a reference SPL rather than a listening level. Most of the audible
+distance cue is the direct-to-reverberant ratio, not level: in a room this
+reverberant the diffuse field is nearly distance-independent, so the two land
+within about a dB of each other in RMS while sounding very different.
+
+```bash
+PYTHONPATH=. .venv/bin/python egs/rir_generation/build_readme_sample.py \
+  --rir /tmp/readme_assets/path-events-m4/room_000000/room_000000_000000.wav
+```
 
 ### Use a GPU for the low band
 
