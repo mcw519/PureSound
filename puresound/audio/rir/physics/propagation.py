@@ -9,7 +9,11 @@ import numpy as np
 from scipy.signal import firwin2, lfilter, minimum_phase
 
 
-AIR_ABSORPTION_POLICY = "puresound.iso9613_1.minimum_phase_direct.v1"
+#: Bumped to v2 when the humidity unit error below was fixed.  Anything whose
+#: metadata records ``…v1`` was rendered with atmospheric absorption roughly 5x
+#: too weak at 4 kHz, so the two are not comparable and the version has to say
+#: so.
+AIR_ABSORPTION_POLICY = "puresound.iso9613_1.minimum_phase_direct.v2"
 
 
 def atmospheric_absorption_db_per_m(
@@ -26,10 +30,10 @@ def atmospheric_absorption_db_per_m(
         raise ValueError("air-absorption frequencies must be finite and non-negative")
     temperature_k = float(temperature_c) + 273.15
     pressure_ratio = float(pressure_pa) / 101325.0
-    humidity_fraction = float(relative_humidity_percent) / 100.0
+    relative_humidity = float(relative_humidity_percent)
     if not 223.15 <= temperature_k <= 333.15:
         raise ValueError("temperature is outside the supported ISO range")
-    if not 0.0 <= humidity_fraction <= 1.0:
+    if not 0.0 <= relative_humidity <= 100.0:
         raise ValueError("relative humidity must lie in [0, 100] percent")
     if not math.isfinite(pressure_ratio) or pressure_ratio <= 0.0:
         raise ValueError("pressure must be finite and positive")
@@ -38,8 +42,15 @@ def atmospheric_absorption_db_per_m(
     saturation_pressure_ratio = 10.0 ** (
         -6.8346 * (273.16 / temperature_k) ** 1.261 + 4.6151
     )
+    # ISO 9613-1 works in *percent* throughout: relative humidity enters as a
+    # percentage and h comes out as the molar water-vapour concentration in
+    # percent.  Converting to a fraction first made h 100x too small, which
+    # dropped the oxygen relaxation frequency from 35.4 kHz to 60.5 Hz and so
+    # switched the molecular relaxation terms off across the whole audio band,
+    # leaving only the classical f^2 term: 5x too little attenuation at 4 kHz,
+    # 7.8x at 8 kHz, and a 250 Hz to 8 kHz span of 4.3x where ISO gives 80x.
     molar_water_concentration = (
-        humidity_fraction * saturation_pressure_ratio / pressure_ratio
+        relative_humidity * saturation_pressure_ratio / pressure_ratio
     )
     oxygen_relaxation_hz = pressure_ratio * (
         24.0
