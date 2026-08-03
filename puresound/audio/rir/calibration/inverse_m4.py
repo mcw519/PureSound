@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
-from typing import Any, Mapping, Sequence
+from typing import Any, Mapping, Optional, Sequence
 
 import numpy as np
 from scipy.optimize import least_squares
@@ -23,6 +23,29 @@ from puresound.audio.rir.metrics import octave_band_rir, valid_octave_centers
 
 
 M4_PARAMETER_PROFILE_INVERSE_POLICY = "puresound.m4_parameter_profile_inverse.v1"
+
+#: How "converged" is decided for the inner continuous solve.
+#:
+#: ``least_squares`` sets ``success`` only when it trips ``ftol``/``xtol``/
+#: ``gtol``.  Those are statements about the solver's own step bookkeeping, not
+#: about whether the answer is a minimum, and the two came apart here: the
+#: measured objective is locally rough, so the trust region collapses and the
+#: budget runs out at a point no further optimization improves.  Measured on
+#: the M5.3 fixture, the reported first-order optimality is 6.2e-2 while no
+#: coordinate step of 1e-3, 1e-2 or 1e-1 of the bound span lowers the cost at
+#: all — the gradient is reading the roughness, not a descent direction.
+#:
+#: So convergence is decided by asking the question directly: restart the solve
+#: from its own answer, which resets the trust region, and see whether it can
+#: still make material progress.
+M4_PROFILE_CONVERGENCE_POLICY = "puresound.m4_profile_convergence.stable_minimum.v1"
+
+#: A restart may not lower the cost by more than this fraction before the
+#: previous point stops counting as a minimum.  0.1% of a sum-of-squares
+#: calibration cost is far below any acoustically meaningful difference, and
+#: comfortably above the objective's own numerical roughness (1.9e-4 relative
+#: on the M5.3 fixture).
+M4_PROFILE_STABLE_MINIMUM_RELATIVE_TOLERANCE = 1e-3
 
 
 def _finite_band_mapping(
@@ -232,6 +255,54 @@ class M4ProfileBounds:
 
 
 @dataclass(frozen=True)
+class M4ProfileConvergence:
+    """Why one inner solve does or does not count as having found a minimum.
+
+    ``initial_*`` describes the solve as first run; ``restart_*`` describes the
+    confirmation solve started from its answer, and is absent when the first
+    solve already declared a termination condition.  Keeping both means a
+    reader can see that a fit exhausted its budget *and* that restarting it
+    could not improve on where it stopped — which is the whole basis for
+    calling it converged.
+    """
+
+    converged: bool
+    initial_success: bool
+    initial_termination_status: int
+    initial_cost: float
+    first_order_optimality: float
+    restart_success: Optional[bool] = None
+    restart_termination_status: Optional[int] = None
+    restart_cost: Optional[float] = None
+    restart_relative_improvement: Optional[float] = None
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "policy": M4_PROFILE_CONVERGENCE_POLICY,
+            "converged": bool(self.converged),
+            "stable_minimum_relative_tolerance": (
+                M4_PROFILE_STABLE_MINIMUM_RELATIVE_TOLERANCE
+            ),
+            "first_order_optimality": float(self.first_order_optimality),
+            "initial_solve": {
+                "solver_declared_success": bool(self.initial_success),
+                "termination_status": int(self.initial_termination_status),
+                "cost": float(self.initial_cost),
+            },
+            "restart_solve": (
+                None
+                if self.restart_cost is None
+                else {
+                    "solver_declared_success": bool(self.restart_success),
+                    "termination_status": int(self.restart_termination_status),
+                    "cost": float(self.restart_cost),
+                    "relative_improvement": float(self.restart_relative_improvement),
+                }
+            ),
+        }
+
+
+@dataclass(frozen=True)
 class M4MixingProfilePoint:
     """One fixed-topology inner optimization result."""
 
@@ -243,6 +314,11 @@ class M4MixingProfilePoint:
     scaled_jacobian_condition_number: float
     locally_full_rank: bool
     delay_lengths_by_observation: Mapping[str, tuple[int, ...]]
+    convergence: "M4ProfileConvergence"
+
+    @property
+    def converged(self) -> bool:
+        return self.convergence.converged
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -251,6 +327,8 @@ class M4MixingProfilePoint:
             "evaluations": int(self.evaluations),
             "success": bool(self.success),
             "message": self.message,
+            "converged": bool(self.convergence.converged),
+            "convergence": self.convergence.to_dict(),
             "local_identifiability": {
                 "scaled_jacobian_condition_number": float(
                     self.scaled_jacobian_condition_number
@@ -289,6 +367,61 @@ class M4ProfileFit:
                 "Discrete-profile selection is local to the supplied mixing-time grid."
             ),
         }
+
+
+def _resolve_stable_minimum(result, solve):
+    """Decide whether a finished solve is sitting at a minimum, by restarting it.
+
+    ``result.success`` answers "did the solver trip one of its tolerances",
+    which is not the same question as "is this a minimum".  When the objective
+    is locally rough the trust region collapses and the evaluation budget runs
+    out at a point that is nonetheless stationary in every direction that
+    matters — see :data:`M4_PROFILE_CONVERGENCE_POLICY`.
+
+    Restarting from ``result.x`` resets the trust region, so the restart is
+    free to descend if there is anywhere left to go.  If it cannot lower the
+    cost by more than
+    :data:`M4_PROFILE_STABLE_MINIMUM_RELATIVE_TOLERANCE`, the original point is
+    a minimum the solver could not certify.  If it can, the original fit was
+    truncated mid-descent and must not be reported as converged.
+
+    Returns the better of the two solves, the convergence record, and the
+    total evaluations spent.
+    """
+
+    if result.success:
+        return (
+            result,
+            M4ProfileConvergence(
+                converged=True,
+                initial_success=True,
+                initial_termination_status=int(result.status),
+                initial_cost=float(result.cost),
+                first_order_optimality=float(result.optimality),
+            ),
+            int(result.nfev),
+        )
+
+    restart = solve(result.x)
+    initial_cost = float(result.cost)
+    improvement = (initial_cost - float(restart.cost)) / max(
+        initial_cost, np.finfo(np.float64).tiny
+    )
+    # Keep whichever point is actually better; a restart that improved the fit
+    # without clearing the tolerance still produced the answer worth reporting.
+    kept = restart if restart.cost < result.cost else result
+    convergence = M4ProfileConvergence(
+        converged=bool(improvement <= M4_PROFILE_STABLE_MINIMUM_RELATIVE_TOLERANCE),
+        initial_success=False,
+        initial_termination_status=int(result.status),
+        initial_cost=initial_cost,
+        first_order_optimality=float(kept.optimality),
+        restart_success=bool(restart.success),
+        restart_termination_status=int(restart.status),
+        restart_cost=float(restart.cost),
+        restart_relative_improvement=float(improvement),
+    )
+    return kept, convergence, int(result.nfev) + int(restart.nfev)
 
 
 def _scaled_path_event(
@@ -534,22 +667,30 @@ def fit_m4_parameter_profile(
     )
     profiles = []
     for mixing_time_s in candidates:
-        result = least_squares(
-            _profile_residual,
-            initial,
-            bounds=(lower, upper),
-            args=(
-                mixing_time_s,
-                centers,
-                observations,
-                target_features,
-                active_objective,
-            ),
-            x_scale=upper - lower,
-            max_nfev=int(maximum_evaluations),
-            ftol=1e-9,
-            xtol=1e-9,
-            gtol=1e-9,
+        solve_arguments = (
+            mixing_time_s,
+            centers,
+            observations,
+            target_features,
+            active_objective,
+        )
+
+        def solve(start):
+            return least_squares(
+                _profile_residual,
+                start,
+                bounds=(lower, upper),
+                args=solve_arguments,
+                x_scale=upper - lower,
+                max_nfev=int(maximum_evaluations),
+                ftol=1e-9,
+                xtol=1e-9,
+                gtol=1e-9,
+            )
+
+        result, convergence, evaluations = _resolve_stable_minimum(
+            solve(initial),
+            solve,
         )
         scaled_jacobian = np.asarray(result.jac) * (upper - lower)
         singular_values = np.linalg.svd(scaled_jacobian, compute_uv=False)
@@ -574,9 +715,10 @@ def fit_m4_parameter_profile(
             M4MixingProfilePoint(
                 parameters=parameters,
                 cost=float(result.cost),
-                evaluations=int(result.nfev),
+                evaluations=int(evaluations),
                 success=bool(result.success),
                 message=str(result.message),
+                convergence=convergence,
                 scaled_jacobian_condition_number=float(
                     min(
                         np.finfo(np.float64).max,

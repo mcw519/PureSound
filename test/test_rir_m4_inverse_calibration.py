@@ -4,6 +4,7 @@ import numpy as np
 import pytest
 
 from puresound.audio.rir.calibration.inverse_m4 import (
+    M4_PROFILE_CONVERGENCE_POLICY,
     M4InverseObservation,
     M4InverseParameters,
     M4ProfileObjectiveConfig,
@@ -69,6 +70,53 @@ def test_m4_inner_profile_recovers_exact_continuous_parameters():
         TRUTH.continuous_vector(), abs=2e-6
     )
     json.dumps(fit.to_dict(), allow_nan=False)
+
+
+def test_m4_profile_convergence_separates_a_stable_minimum_from_a_truncated_fit():
+    """The convergence verdict must still be able to say no.
+
+    ``converged`` replaced ``least_squares``'s ``success`` flag because a
+    rough objective can exhaust the budget at a point no further optimization
+    improves.  The replacement is only worth anything if a genuinely truncated
+    fit — one still descending when the budget ran out — is still rejected.
+    """
+
+    observations = (_observation("a", 10), _observation("b", 11))
+    targets = tuple(
+        render_m4_inverse_observation(observation, TRUTH).rir
+        for observation in observations
+    )
+
+    truncated = fit_m4_parameter_profile(
+        observations,
+        targets,
+        INITIAL,
+        (TRUTH.mixing_time_s,),
+        maximum_evaluations=2,
+    ).best
+    settled = fit_m4_parameter_profile(
+        observations,
+        targets,
+        INITIAL,
+        (TRUTH.mixing_time_s,),
+        maximum_evaluations=50,
+    ).best
+
+    assert truncated.converged is False, (
+        "a fit stopped two evaluations in is still descending and must not "
+        "count as a stable minimum"
+    )
+    record = truncated.to_dict()["convergence"]
+    assert record["policy"] == M4_PROFILE_CONVERGENCE_POLICY
+    assert record["initial_solve"]["solver_declared_success"] is False
+    assert (
+        record["restart_solve"]["relative_improvement"]
+        > record["stable_minimum_relative_tolerance"]
+    )
+
+    assert settled.converged is True
+    assert settled.cost < truncated.cost
+    assert settled.to_dict()["convergence"]["converged"] is True
 
 
 def test_m4_inverse_render_preserves_fractional_causality_and_direct_path():

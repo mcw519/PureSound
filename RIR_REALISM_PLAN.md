@@ -1312,6 +1312,19 @@ M5.3 measured runner implementation (2026-08-01):
   implementation gates pass.
 - [x] Ran the same CLI against the current campaign template. It exits blocked
   before fitting because assets/hashes and acquisition evidence are absent.
+- [x] Defined what `all_train_room_m4_profiles_converged` asserts
+  (2026-08-03, `puresound.m4_profile_convergence.stable_minimum.v1`). The M6
+  excitation fix moved the optimization landscape: the fit now reaches a
+  *lower* cost (0.0333 against the frozen 0.0404) while no longer tripping
+  `ftol`. Measured on the fixture, the point is stationary in every direction
+  that matters — no coordinate step of 1e-3, 1e-2 or 1e-1 of the bound span
+  lowers the cost — while the reported first-order optimality reads 6.2e-2
+  because the objective is locally rough. `success` and `optimality` are
+  therefore both wrong criteria. Convergence is now decided by restarting the
+  solve from its own answer, which resets the collapsed trust region: the
+  point counts as a minimum only if the restart cannot lower the cost by more
+  than 1e-3 relative. A deliberately truncated fit is still rejected, and both
+  solves are recorded in the report rather than a single boolean.
 - [ ] Execute the runner on a real controlled repeated-ESS campaign. Current
   legacy banks remain ineligible (`0/64` for all nine required evidence groups).
 

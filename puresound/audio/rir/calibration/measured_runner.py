@@ -504,8 +504,11 @@ def run_measured_campaign_fit(
             for room in campaign.rooms
             if campaign.room_splits[room.room_id] == "train"
         ),
+        # "converged" means the fit reached a stable minimum, not that
+        # ``least_squares`` tripped one of its own tolerances.  See
+        # M4_PROFILE_CONVERGENCE_POLICY for why the two came apart.
         "all_train_room_m4_profiles_converged": all(
-            result.m4_profile["best"]["success"] for result in train_results
+            result.m4_profile["best"]["converged"] for result in train_results
         ),
         "all_train_room_grouped_fits_converged": all(
             result.grouped_fit["success"] for result in train_results

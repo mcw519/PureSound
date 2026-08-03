@@ -1,4 +1,4 @@
-# M6 RIR Generation — 現況與待決事項
+# M6 RIR Generation — 現況
 
 **更新日期**：2026-08-03
 **範圍**：M6.1–M6.6 全鏈（契約、生成、QC、release、evaluation、production decision）
@@ -16,17 +16,16 @@
 | critical | 2 | 都是真的，**都已修復並實測確認** |
 | major | 1 | 真實（晚場能量錨定），**已修復** |
 | major | 12 | **實測不成立，已刪除** |
-| major | 1 | **仍開著**，需要一個人為決定（[§3](#3-唯一的待決事項m53-收斂-gate-的定義)） |
+| major | 1 | 判準需要人為決定，**2026-08-03 已決定並實作**（[§3](#3-m53-收斂判準已改為擬合達到穩定極小)） |
 
 被刪掉的條目不再列在這裡。**留著壞掉的發現比沒有發現更糟**——它會讓下一個人去修
 一個不存在的問題，或是繞過一個其實好的機制。要查它們寫過什麼，看 git 歷史
 （`git log -p egs/rir_generation/CLAUDE_REVIEW_ADVISE.md`）。
 
-本文件只保留三件事：**現在為真且經量測的性質**（§2，pilot 的地基）、**唯一的待決
-事項**（§3）、**怎麼重跑這些量測**（§5）。
+本文件只保留三件事：**現在為真且經量測的性質**（§2，pilot 的地基）、**M5.3 收斂
+判準的決定與實作**（§3）、**怎麼重跑這些量測**（§5）。
 
-全套測試現況佐證這個結論：`.venv/bin/python -m pytest -q test/` →
-**578 passed, 1 failed (311 s)**，而唯一的紅燈正是 §3 那條。
+全套測試現況：`.venv/bin/python -m pytest -q test/` → **580 passed (326 s)**，全綠。
 
 > **有一條方法論結論值得留下。** 12 條被推翻的發現有同一個成因：**量測或引述
 > 「我以為程式在做什麼」，而不是實作本身**。對照組很乾淨——直接對真實產物量測而
@@ -135,40 +134,52 @@ numpy（NEP 19 不凍結 `Generator` stream）、pra、torch、libsndfile 任一
 
 ---
 
-## 3. 唯一的待決事項：M5.3 收斂 gate 的定義
+## 3. M5.3 收斂判準：已改為「擬合達到穩定極小」
 
-**位置**：[calibration/measured_runner.py:507](../../puresound/audio/rir/calibration/measured_runner.py)
-（`all_train_room_m4_profiles_converged`）、
-[calibration/inverse_m4.py:537-552](../../puresound/audio/rir/calibration/inverse_m4.py)（`least_squares` 設定）
+**決定（2026-08-03）**：M5.3 的 `converged` 定義為**擬合達到穩定極小**，不是
+「scipy 宣告了終止條件」。
 
-`test_m5_3_runner_executes_complete_non_evidence_fixture` **目前紅著**。追下去不是路徑
-問題，也不是重構造成的：
+**背景**：C2 的激勵修正改變了最佳化地貌。凍結報告（e454c08）記錄 `success: true`、
+6 次評估、`ftol` 收斂、cost 0.040368；修正後同一個 fixture 變成 `success: false`、
+40 次用盡、cost **0.033323**——成本更低，只是不再觸發終止條件。
 
-- 凍結報告 `m5_measured_runner_validation_report.json`（commit e454c08）記錄
-  `success: true`、**6 次評估**、`ftol` 收斂、cost 0.040368；
-- 現在同一個 fixture 是 `success: false`、**40 次用盡**、cost 0.033323。
+**為什麼 `success` 是錯的判準**（實測，不是推論）：
 
-成本**更低**了——擬合找到更好的解，只是不再滿足終止條件。實測佐證：
+| 量 | 值 | 讀法 |
+|---|---|---|
+| 參數數量 | 4 | |
+| nfev / njev | 40 / 28 | 跑了 28 輪 Jacobian，不是「才剛起步」 |
+| first-order optimality | 0.0619 | 梯度說「非駐點」 |
+| 座標步進 1e-1 / 1e-2 / 1e-3（相對 bound span） | **改善 0** | 沒有任何方向能降低成本 |
+| 座標步進 1e-4 | 相對改善 1.9e-4 | 只有最細尺度找得到一點 |
 
-| 預算 | 40 | 80 | 120 | 200 | 600 |
-|---|---|---|---|---|---|
-| cost | 0.033323 | 0.033323 | 0.033323 | 0.033323 | 0.033322 |
-| success | false | false | false | false | false |
+粗尺度全無改善、最細尺度才有一點——這是**目標函數局部粗糙**的簽名。`optimality`
+量到的是粗糙度，不是下降方向。所以 `success` 與 `optimality` **都不能**當判準。
 
-15 倍預算換來第 6 位小數的改善——**加預算無效**。另外驗證目標函數是決定性的
-（339 次呼叫，重複的 `(x, mixing_time)` 組合成本完全相同），成本序列確實 plateau
-（最後一次 == 最小值）。也就是說擬合**實質上收斂了**，只是
-`ftol=xtol=gtol=1e-9` 這組判準在新地貌下達不到。
+**實作**（[calibration/inverse_m4.py](../../puresound/audio/rir/calibration/inverse_m4.py)，
+policy `puresound.m4_profile_convergence.stable_minimum.v1`）：直接問字面問題——
+**再優化下去還會不會變好**。當 `least_squares` 用盡預算時，**從它自己的答案重啟**
+（重設 trust region），若重啟無法把成本降低超過 **1e-3 相對容許值**，該點就是求解器
+無法認證的極小；若能，原本的擬合是被截斷的，不算收斂。
 
-最可能的成因是 C2 的激勵修正：低頻訊號改變 → M4 observation/target 改變 → 最佳化
-地貌改變。**這是正確修正的副作用，不是回歸。**
+容許值 1e-3 的依據：sum-of-squares 校準成本的 0.1% 遠低於任何聲學上有意義的差異
+（約 0.004 dB），且明顯高於目標函數自身的數值粗糙度（實測 1.9e-4）。
 
-**為什麼沒有直接改掉**：把 gate 從 `result.success` 改成「成本已 plateau」會讓測試
-變綠，但那正是[附註](#附註fixture-與判準的選擇)講的模式——調整判準以迎合結果。
+**fixture 上的結果**——重啟後 scipy 自己就宣告收斂了，證實塌掉的是 trust region
+而非目標函數：
 
-**需要的決定**：M5.3 的「converged」要定義成
-**(a)** scipy 宣告了終止條件，還是 **(b)** 擬合達到穩定極小？兩者現在不等價。
-該由負責 M5 的人選一個並寫下理由。在那之前，這個測試如實地紅著。
+| | 初解 | 重啟 | 相對改善 |
+|---|---|---|---|
+| 最佳 profile | status 0（預算用盡）cost 0.0333229 | status 3（xtol）cost 0.033314 | **2.69e-4** ✓ |
+| 次佳 profile | status 0，cost 4.90678 | status 3，cost 4.90632 | 9.47e-05 ✓ |
+| 第三 profile | status 2（ftol）——不需重啟 | — | — |
+
+**這個判準還能說「不」**：`test_m4_profile_convergence_separates_a_stable_minimum_from_a_truncated_fit`
+用 `maximum_evaluations=2` 造一個確實還在下降的擬合，判定為**未收斂**。沒有這個
+負控制，新判準就只是把 gate 改成恆真。
+
+報告裡記的是完整證據（`initial_solve` 與 `restart_solve` 各自的 status／cost／改善
+幅度），不是一個布林值——讀的人能自己判斷邊際有多少。
 
 ---
 
@@ -179,7 +190,7 @@ numpy（NEP 19 不凍結 `Generator` stream）、pra、torch、libsndfile 任一
 | `render_multiband_fdn` | **0.155 s** / 1.6 s channel @ 16 kHz（`.venv`，3 次取最小） |
 | 預設 bank 的 FDN 總量 | 1000 rooms × 4 RIR × 5 sources = 20000 channels → **約 0.86 CPU-hr** |
 | M6 契約測試（13 檔） | **30 passed / 133 s** |
-| 全套測試 | **578 passed / 1 failed / 311 s**（紅的是 §3） |
+| 全套測試 | **580 passed / 326 s**（全綠） |
 | filtered boundary branch | 對每 event × interaction 重建 filter（含 `np.roots` 與 JSON canonicalization），同一 2580-event render **207 s vs 0.83 s（約 250×）**。M2/M3 validator 會踩到 |
 
 FDN 不是瓶頸。若要提速，`np.roots` 那條路徑的價值遠高於 FDN。
@@ -247,4 +258,9 @@ diff <(jq -S . /tmp/m6_det_a/*_bank/rir_bank_manifest.json) \
   得到正確結論。
 
 **建議**：每個 gate 都要能回答一句話——**「如果這個性質是壞的，這個 fixture 會不會
-抓到？」** 判準也一樣：§3 那條之所以不直接改綠，就是因為改的是判準而不是性質。
+抓到？」**
+
+判準也一樣。§3 是這條原則的正面示範：判準確實改了，但改之前先量出
+`success` 為什麼是錯的判準，改之後補上一個**確實會失敗**的負控制
+（`maximum_evaluations=2` 的截斷擬合判為未收斂）。**沒有負控制的判準變更，跟
+把 gate 改成恆真沒有分別。**
