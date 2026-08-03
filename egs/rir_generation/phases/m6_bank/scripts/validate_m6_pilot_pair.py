@@ -218,11 +218,28 @@ def main() -> int:
     checks["every_split_populated_in_both_arms"] = all(
         {"train", "validation", "test"} <= set(_qc_counts(arm)) for arm in arms.values()
     )
-    checks["no_quarantine_in_either_arm"] = all(
-        counts.get("fail", 0) == 0
-        for arm in arms.values()
-        for counts in _qc_counts(arm).values()
-    )
+
+    # QC yield is an outcome, not part of the pairing contract.  If one backend
+    # quarantines items the other does not, the arms are still matched and the
+    # difference is precisely what the pilot is measuring — so it is reported
+    # as a finding and must not suppress the comparison.
+    quarantined = {
+        name: {
+            split: counts["fail"]
+            for split, counts in _qc_counts(arm).items()
+            if counts.get("fail", 0)
+        }
+        for name, arm in arms.items()
+    }
+    details["quarantined_by_split"] = quarantined
+    details["quarantined_items"] = {
+        name: sorted(
+            record["item"].item_id
+            for record in arm["items"].values()
+            if record["item"].qc_status != "pass"
+        )
+        for name, arm in arms.items()
+    }
 
     if not args.skip_release_audit:
         audits = {}
@@ -261,6 +278,17 @@ def main() -> int:
 
     for name, ok in checks.items():
         print(f"check\t{name}\t{'PASS' if ok else 'FAIL'}")
+
+    print("\nQC yield (an outcome, not a pairing check):")
+    for name in arms:
+        counts = details["qc"][name]
+        total = sum(row["total"] for row in counts.values())
+        passed = sum(row["pass"] for row in counts.values())
+        gap = details["quarantined_by_split"][name]
+        print(
+            f"  {name:<17} {passed}/{total} pass"
+            + (f"   quarantined {gap} -> {details['quarantined_items'][name]}" if gap else "")
+        )
     print()
     for name, summary in details["realized_acoustics_by_distance"].items():
         print(f"{name}:")
