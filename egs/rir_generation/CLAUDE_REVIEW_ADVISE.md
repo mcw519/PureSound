@@ -22,10 +22,15 @@
 一個不存在的問題，或是繞過一個其實好的機制。要查它們寫過什麼，看 git 歷史
 （`git log -p egs/rir_generation/CLAUDE_REVIEW_ADVISE.md`）。
 
-本文件只保留三件事：**現在為真且經量測的性質**（§2，pilot 的地基）、**M5.3 收斂
-判準的決定與實作**（§3）、**怎麼重跑這些量測**（§5）。
+本文件保留：**現在為真且經量測的性質**（§2，pilot 的地基）、**M5.3 收斂判準的決定
+與實作**（§3）、**100 房間 A/B pilot 的結果與由它挖出的問題**（§4）、**效能**（§5）、
+**怎麼重跑這些量測**（§6）。
 
-全套測試現況：`.venv/bin/python -m pytest -q test/` → **580 passed (326 s)**，全綠。
+全套測試現況：`.venv/bin/python -m pytest -q test/` → **581 passed**，全綠。
+
+> **2026-08-03 下半場更新。** A/B pilot 跑完了（100 房間 × 4 RIR × 兩臂），結果與
+> 它挖出的三個新問題寫在 [§4](#4-ab-pilot-的結果與由它挖出的問題)。一句話：
+> **原初版審查完全沒提到的問題，比它列的 14 條 major 加起來更實質。**
 
 > **有一條方法論結論值得留下。** 12 條被推翻的發現有同一個成因：**量測或引述
 > 「我以為程式在做什麼」，而不是實作本身**。對照組很乾淨——直接對真實產物量測而
@@ -183,21 +188,129 @@ policy `puresound.m4_profile_convergence.stable_minimum.v1`）：直接問字面
 
 ---
 
-## 4. 效能實測（pilot 規劃用）
+## 4. A/B pilot 的結果與由它挖出的問題
 
-| 項目 | 實測 |
-|---|---|
-| `render_multiband_fdn` | **0.155 s** / 1.6 s channel @ 16 kHz（`.venv`，3 次取最小） |
-| 預設 bank 的 FDN 總量 | 1000 rooms × 4 RIR × 5 sources = 20000 channels → **約 0.86 CPU-hr** |
-| M6 契約測試（13 檔） | **30 passed / 133 s** |
-| 全套測試 | **580 passed / 326 s**（全綠） |
-| filtered boundary branch | 對每 event × interaction 重建 filter（含 `np.roots` 與 JSON canonicalization），同一 2580-event render **207 s vs 0.83 s（約 250×）**。M2/M3 validator 會踩到 |
+**設定**：100 房間 × 4 RIR = 400 items/臂，兩臂唯一差異是高頻後端。配對契約由
+`validate_m6_pilot_pair.py` 驗過：acoustic space 集合相同、每個 item 的
+scene_sha256／split／seed／shape 逐一吻合、低頻帶同組態、release audit 皆過。
+**比較可歸因於後端。**
 
-FDN 不是瓶頸。若要提速，`np.roots` 那條路徑的價值遠高於 FDN。
+### 4.1 對照 600 個真實 RIR channel 的成績
+
+| bucket | | DRR | C50 | T30 | T30擬合% | tilt dB/oct |
+|---|---|---|---|---|---|---|
+| 0–1m | **實測** | **−1.83** | **13.90** | **0.33** | 60.2 | **−2.19** |
+| | pyro | −0.06 | 8.54 | 0.99 | 68.2 | +0.81 |
+| | m4 | +1.93 | 12.59 | 0.50 | 100 | +0.91 |
+| 2–3.5m | **實測** | **−4.32** | **12.26** | **0.36** | 76.4 | **−2.74** |
+| | pyro | −6.58 | 4.64 | 0.93 | 69.0 | +0.32 |
+| | m4 | −5.16 | 8.66 | 0.55 | 100 | +0.10 |
+| 3.5–6m | **實測** | **−7.85** | **5.70** | **0.31** | 52.1 | **−2.66** |
+| | pyro | −7.91 | 3.41 | 0.96 | 75.0 | +0.37 |
+| | m4 | −5.97 | 8.12 | 0.66 | 100 | +0.11 |
+
+平均絕對誤差：**C50** pyro 5.09 / m4 **2.44**；**T30** pyro 0.63 s / m4 **0.24 s**；
+**DRR** pyro **1.36** / m4 2.16；**tilt** pyro 3.03 / m4 2.90（兩個都錯）。
+
+QC 良率：pyro **399/400**（`room_000022_000001` 因 `decay_fit_coverage` 被隔離），
+m4 **400/400**。那個 item 的 pyro 版 5 個 channel T20 是 0.45–2.85 s（6.4 倍離散），
+m4 版是 0.21–0.35 s，而場景預測 RT60 是 0.32–0.44 s。QC 抓對了。
+
+**兩個容易誤讀的地方：**
+
+- **M4 貼合場景預測 RT60 不是獨立證據**——M4 的 FDN 就是照那個數字設計的，它在複述
+  自己的輸入。打破循環的只有實測那一欄。
+- **M4 的 T30 擬合覆蓋率 100% 不是優點**。實測只有 52–76% 能擬合單斜率；pyro 的
+  68–75% 反而落在正確區間。per-band 指數衰減的 FDN 依定義就是單斜率，那是合成簽名。
+
+**兩者共有、換後端不會改善的**：tilt 符號錯（差約 3 dB/oct）、完全沒有噪音地板
+（實測動態範圍 45–63 dB、35% 需要 Lundeby 截斷；合成是 `nan` / 0%）。
+
+### 4.2 crossover 增益夾限太低（已修）
+
+追 tilt 時發現的。`crossover_match_gain_range` 上限是 2.0，而**實際需求的中位數就在
+它之上**：拿掉夾限後量 24 場景 × 5 source × 兩後端，需求是 0.76–5.27，中位數
+2.0–2.4。所以 pilot 裡 **pyro 70.2% / M4 45.6% 的 channel 卡在 2.000**。
+
+這比一個調參常數嚴重，因為低頻帶的位準是誰給的：
+
+```python
+# calibrate_pytard_signal
+peak = float(np.max(np.abs(signal)))
+calibrated = signal / peak * target_peak * (1.0 / distance_m)
+```
+
+`signal / peak` 把模態解的物理振幅**整個丟掉**，1/r 是手動補的。所以
+**低頻帶沒有物理絕對位準，這個 crossover 匹配是它唯一的位準來源**，而
+`target_peak / peak(房間模態響應)` 隨場景變動（1.5–3.2 倍散佈就是這樣來的）。
+被夾住的 channel 因此帶著一個沒有任何地方記錄的位準誤差出貨。
+
+**已修**：上限改 8.0（重測飽和率 0.4%），且 match 回傳夾限前的原始增益，metadata
+新增 `low_band_gain_requested_by_channel` / `low_band_gain_range` /
+`low_band_gain_clipped_channels`。無聲的夾限就是它能藏起來的原因。
+
+**對 tilt 的效果，同場景配對量測**：六格裡五格往正確方向動 **約 0.5 dB/oct**。
+原缺口約 3 dB/oct，所以這是**約五分之一，不是解決**。其他指標（C50/DRR/T30）在
+n=15–27 的樣本下兩臂方向不一致，讀不出來。
+
+**根因仍在**：pytARD 應該帶出物理位準，讓匹配從「修正」變成「驗證」（應 ≈1.0）。
+M2 的 `rir_source_convention` 機器只接在 `analytic-impedance` 上，
+`direct_path_source_convention_matched` 對 M6 預設的 `pytard-material` 永遠是 false，
+所以 `preserve_source_convention_at_crossover` 雖然開著卻從不觸發。
+
+### 4.3 材質抽樣有 25% 的房間 RT60 隨頻率上升（未修）
+
+選 README 示意場景時發現的。100 房間 pilot 的分佈：
+
+| | p05 | 中位數 | p95 | max |
+|---|---|---|---|---|
+| `scene.rt60`（標量） | 0.27 | **0.56** | **2.34** | **3.27** |
+| predicted RT60 @250 Hz | 0.34 | 0.64 | 1.59 | 2.54 |
+| predicted RT60 @4 kHz | 0.24 | 0.44 | **3.93** | **5.22** |
+
+- **RT60(4k)/RT60(250) 中位數 0.76**（正確地隨頻率下降），但 **25% 的 item 大於 1**，
+  p95 達 2.86。**真實房間做不到這件事**——光空氣吸收就禁止 RT60 隨頻率上升。
+- **只有 80% 落在文件記載的 `rt60_range = (0.25, 0.8)` 內，12% 超過 1.5 s。**
+  v1 場景會從抽到的材質重新推導 RT60，不會約束回設定的範圍。
+
+seed 1337 的 `room_000000` 就是這個尾巴的樣本：2.82 s、每個表面都是硬材質、predicted
+RT60 從 250 Hz 的 1.53 s **上升**到 4 kHz 的 4.37 s。它當了 README 示意圖很久，
+Schroeder 面板幾乎不衰減。
+
+**這是 §4.1 那個殘留 tilt 誤差最大的候選**——四分之一的 item 帶著隨頻率上升的殘響，
+會把整批的 tilt 中位數往正的方向拉。
+
+### 4.4 追 tilt 之前必須先驗證目標
+
+實測那 −2.2 到 −2.7 dB/oct 是**房間**還是**量測喇叭**？ACE、BUT 這類語料發佈的 RIR
+除非做過反捲積，否則含有量測用喇叭的響應。2.2 dB/oct 是個大數字，若其中一半來自
+別人的喇叭，照它調合成鏈等於把 artifact 烤進訓練語料。
+
+便宜的判別法：**跨語料拆 tilt**。每個語料用不同喇叭，一致就偏向房間物理，分散就是
+量測鏈。**這應該排在 §4.3 的修正之前。**
 
 ---
 
-## 5. 重現
+## 5. 效能實測
+
+| 項目 | 實測 |
+|---|---|
+| M4 高頻帶（優化後） | **24.9 s** / item（優化前 60.1 s，**2.41×**，輸出 bit-identical） |
+| ↳ 物件遮蔽 | 31.4 → **5.1 s**（AABB 預排除；526,304 次測試裡 94.7% 可用幾個浮點比較擋掉，真正相交 0.63%） |
+| ↳ boundary 濾波器 | 16.1 → **7.5 s**（`(model, cosine, fs)` 記憶化，約半數呼叫重複） |
+| pyroomacoustics 高頻帶 | 3.2 s / item |
+| 低頻帶 pytARD | CPU **39.2 s** / GPU **6.5 s**（6.1×，GPU 跑三次 bit-identical） |
+| `render_multiband_fdn` | 0.155 s / 1.6 s channel（**FDN 不是瓶頸，約 1%**） |
+| 400-item 臂（GPU 16 workers） | pyro **9 min** / M4 **25 min**（優化前 44 min） |
+| M6 契約測試（13 檔） | **30 passed / 133 s** |
+| 全套測試 | **581 passed** |
+
+**只有低頻帶能上 GPU，高頻帶永遠 CPU。** 所以兩臂受益差很多：pyro 93% 的成本在低頻
+帶，M4 的主成本是 path event 生成。
+
+---
+
+## 6. 重現
 
 ```bash
 # M6 契約測試（13 檔，30 tests，約 133 秒）— 注意 .venv
@@ -234,6 +347,33 @@ for tag in a b; do
 done
 diff <(jq -S . /tmp/m6_det_a/*_bank/rir_bank_manifest.json) \
      <(jq -S . /tmp/m6_det_b/*_bank/rir_bank_manifest.json)
+```
+
+```bash
+# A/B pilot 一臂（GPU；兩臂的 seed / low backend / GPU 設定必須完全相同）
+PURESOUND_M6_PILOT_ROOMS=100 PURESOUND_M6_PILOT_RIR_PER_ROOM=4 \
+PURESOUND_M6_PILOT_WORKERS=16 PURESOUND_M6_PILOT_QC_WORKERS=8 \
+PURESOUND_M6_PILOT_LOW_BACKEND=pytard-cupy-material \
+PURESOUND_M6_PILOT_GPU_DEVICES=0,1 \
+  bash egs/rir_generation/phases/m6_bank/scripts/generate_m6_training_pilot.sh \
+    path-events-m4 <pilot-root>
+```
+
+```bash
+# pilot 配對契約 + 良率 + 分距離聲學（PAIRING HOLDS 為 exit 0）
+.venv/bin/python egs/rir_generation/phases/m6_bank/scripts/validate_m6_pilot_pair.py \
+  --pilot-root <pilot-root>
+```
+
+```bash
+# 獨立量 WAV，三方對照（§4.1 那張表就是這樣來的）
+.venv/bin/python egs/rir_generation/compare_bank_acoustics.py \
+  pyro=<pilot-root>/pyroomacoustics_bank \
+  m4=<pilot-root>/path-events-m4_bank \
+  measured=/work/any_exp_link/puresound_exp/real_rir_16k_train_view \
+  --per-bank 400
+# pair validator 報的是 generator 自己記在 metadata 的 realized_acoustics；
+# 這一支直接量 WAV。兩個來源獨立，對得上才算數。
 ```
 
 ---
