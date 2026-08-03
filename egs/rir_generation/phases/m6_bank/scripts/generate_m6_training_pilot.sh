@@ -1,4 +1,27 @@
 #!/usr/bin/env bash
+#
+# One arm of the matched Pyroomacoustics / PathEvents-M4 training pilot.
+#
+# This delegates to generate_m6_bank.py rather than driving the generator, QC,
+# and release steps itself.  It used to duplicate them, and the copy drifted:
+# it passed --low-backend pytard while M6 ships pytard-material, so both pilot
+# arms would have been rendered on a low band with a global RT60 envelope
+# instead of per-mode material damping.  Delegating keeps the pilot on
+# whatever M6 actually defaults to.
+#
+# What this script adds over calling generate_m6_bank.py directly: a refusal to
+# overwrite an existing release, and stable pilot bank/release identifiers.
+#
+# Environment knobs:
+#   PURESOUND_M6_PILOT_ROOMS         rooms per arm            (default 1000)
+#   PURESOUND_M6_PILOT_RIR_PER_ROOM  RIRs per room            (default 4)
+#   PURESOUND_M6_PILOT_WORKERS       generator workers        (default 8)
+#   PURESOUND_M6_PILOT_QC_WORKERS    QC / release workers     (default 1)
+#   PURESOUND_M6_PILOT_SEED          shared scene seed        (default 1337)
+#
+# The seed must be identical across the two arms: it is what makes the scenes
+# matched, and therefore what makes the comparison an A/B rather than two
+# unrelated banks.
 set -euo pipefail
 
 backend="${1:-pyroomacoustics}"
@@ -6,6 +29,7 @@ output_root="${2:-egs/rir_generation/exp/rir_realism/m6/training_pilot}"
 pilot_rooms="${PURESOUND_M6_PILOT_ROOMS:-1000}"
 rir_per_room="${PURESOUND_M6_PILOT_RIR_PER_ROOM:-4}"
 pilot_workers="${PURESOUND_M6_PILOT_WORKERS:-8}"
+qc_workers="${PURESOUND_M6_PILOT_QC_WORKERS:-1}"
 pilot_seed="${PURESOUND_M6_PILOT_SEED:-1337}"
 
 case "${backend}" in
@@ -17,7 +41,6 @@ case "${backend}" in
 esac
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../../.." && pwd)"
-bank_dir="${output_root}/${backend}_bank"
 release_dir="${output_root}/${backend}_release"
 
 if [[ -e "${release_dir}" ]]; then
@@ -28,31 +51,17 @@ fi
 
 cd "${repo_root}"
 
-PYTHONPATH=. .venv/bin/python egs/rir_generation/generate_hybrid_rir.py \
-  --output-dir "${bank_dir}" \
+PYTHONPATH=. .venv/bin/python egs/rir_generation/generate_m6_bank.py \
+  --output-dir "${output_root}" \
+  --backend "${backend}" \
   --n-rooms "${pilot_rooms}" \
   --rir-per-room "${rir_per_room}" \
-  --sample-rate 16000 \
-  --duration 1.6 \
-  --scene-version v1 \
-  --room-type mixed \
-  --output-mode calibrated \
-  --record-realized-metrics \
-  --low-backend pytard \
-  --high-backend "${backend}" \
   --num-workers "${pilot_workers}" \
+  --qc-workers "${qc_workers}" \
   --seed "${pilot_seed}" \
-  --emit-m6-manifest \
   --m6-bank-id "puresound-m6-pilot-${backend}-${pilot_seed}" \
+  --release-id "puresound-m6-pilot-${backend}-${pilot_seed}" \
   --resume
-
-PYTHONPATH=. .venv/bin/python egs/rir_generation/phases/m6_bank/scripts/run_m6_item_qc.py \
-  --bank "${bank_dir}"
-
-PYTHONPATH=. .venv/bin/python egs/rir_generation/phases/m6_bank/scripts/build_m6_variant_release.py \
-  --source-bank "${bank_dir}" \
-  --output-dir "${release_dir}" \
-  --release-id "puresound-m6-pilot-${backend}-${pilot_seed}"
 
 echo "M6 pilot release ready: ${release_dir}"
 echo "training recipe: synthetic_calibrated, split: train"
