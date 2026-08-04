@@ -7,6 +7,7 @@ import platform
 import random
 import subprocess
 import sys
+import time
 from concurrent.futures import FIRST_COMPLETED, ProcessPoolExecutor, wait
 from dataclasses import asdict
 from multiprocessing import get_context
@@ -1001,7 +1002,9 @@ def _build_m6_items(output_dir, tasks, config):
     return tuple(items)
 
 
-def _emit_m6_manifest(output_dir, tasks, config, args, context, *, skipped):
+def _emit_m6_manifest(
+    output_dir, tasks, config, args, context, *, skipped, elapsed_seconds=None
+):
     output_root = Path(output_dir)
     items = _build_m6_items(output_root, tasks, config)
     split_indexes = write_split_indexes(output_root, items)
@@ -1043,6 +1046,15 @@ def _emit_m6_manifest(output_dir, tasks, config, args, context, *, skipped):
         "items_skipped_as_complete": int(skipped),
         "items_generated": len(tasks) - int(skipped),
         "num_workers": int(args.num_workers),
+        "elapsed_seconds": (
+            None if elapsed_seconds is None else float(elapsed_seconds)
+        ),
+        # A worker exception propagates through ``future.result()`` and aborts the
+        # run before this manifest is written, so a run that gets here generated
+        # every task it attempted.  Recorded explicitly because M6.5's throughput
+        # contract requires the failure count to be stated rather than inferred.
+        "items_failed": 0,
+        "items_failed_policy": "any_item_failure_aborts_the_run_before_manifest_emit",
     }
     audit_path = output_root / "rir_bank_generation_audit.json"
     audit_path.write_text(
@@ -1257,6 +1269,7 @@ def main():
             )
         tasks = pending
 
+    generation_started = time.perf_counter()
     if tasks:
         worker_args = vars(args).copy()
         plan = _worker_plan(args.num_workers, gpu_devices)
@@ -1281,6 +1294,7 @@ def main():
                 plan,
                 initial=skipped,
             )
+    generation_elapsed_s = time.perf_counter() - generation_started
     if args.emit_m6_manifest:
         manifest, audit = _emit_m6_manifest(
             args.output_dir,
@@ -1289,6 +1303,7 @@ def main():
             args,
             m6_context,
             skipped=skipped,
+            elapsed_seconds=generation_elapsed_s,
         )
         print(
             f"[generate_hybrid_rir] M6 manifest {manifest.manifest_sha256}; "

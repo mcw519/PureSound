@@ -24,9 +24,10 @@
 
 本文件保留：**現在為真且經量測的性質**（§2，pilot 的地基）、**M5.3 收斂判準的決定
 與實作**（§3）、**100 房間 A/B pilot 的結果與由它挖出的問題**（§4）、**real_native
-解封與實測 RIR 的時間原點**（§5）、**效能**（§6）、**怎麼重跑這些量測**（§7）。
+解封與實測 RIR 的時間原點**（§5）、**M6.6 證據鏈**（§6）、**效能**（§7）、
+**怎麼重跑這些量測**（§8）。
 
-全套測試現況：`.venv/bin/python -m pytest -q test/` → **640 passed**，全綠。
+全套測試現況：`.venv/bin/python -m pytest -q test/` → **666 passed**，全綠。
 
 > **2026-08-04 更新。** `real_native` / `mixed_calibrated_real` 兩條寫死 blocked 的
 > recipe 已解封（[§5](#5-real_native-已解封實測-rir-的時間原點)）。實測 RIR 過不了
@@ -36,6 +37,12 @@
 > peak−20 dB 讓它只差 1 樣本（2.1 cm、99% 在 ±2 內），而所有「噪音地板以上第一個
 > 樣本」的變體都差 13–66 樣本。**這次的三個錯誤又是同一型**：掃描方向、淡入位置、
 > 以及第三次的「量到的東西不是我命名的那個概念」（拿位準去判「更早的到達」）。
+>
+> 同日補上 M6.6 的**證據產生器**（[§6](#6-m66-證據鏈13-項檢查-10-項已過)）。M6 一直
+> 有完整的驗證器卻沒有產生器，決策因此 blocked 在「做不出來的檔案」上。13 項檢查現在
+> **10 項通過**，剩下三項全部指向真人聽測與下游訓練——兩者都在 codebase 之外。
+> **沒有偽造任何聽測資料**：無真人回應時走 `contract_fixture` 乾跑，驗證器接受它是
+> 格式正確的契約並正確拒絕當成 empirical 證據。
 
 > **2026-08-03 下半場更新。** A/B pilot 跑完了（100 房間 × 4 RIR × 兩臂），結果與
 > 它挖出的問題寫在 [§4](#4-ab-pilot-的結果與由它挖出的問題)。兩個要點：
@@ -610,7 +617,87 @@ real_and_mixed_recipe_semantics_are_valid False →     True
 
 ---
 
-## 6. 效能實測
+## 6. M6.6 證據鏈：13 項檢查 10 項已過
+
+M6 有完整的**驗證器**卻幾乎沒有**產生器**：`audit_m6_production_evidence` 會查 bundle、
+三份角色簽核、每個 renderer profile 一份核准記錄，但 repo 裡沒有任何東西寫得出這些檔案。
+所以那個檢查是永久 blocked 在「做不出來的檔案」上。現在補上了產生器。
+
+現況（`build_m6_evidence.py --pass attest`）：
+
+| | 檢查 | 說明 |
+|---|---|---|
+| PASS | candidate_release_audit_passed | |
+| PASS | source_release_is_immutable_candidate | |
+| PASS | all_required_recipes_are_ready | §5 measured variant |
+| PASS | real_and_mixed_recipe_semantics_are_valid | §5 |
+| PASS | all_variant_items_are_qc_passed | |
+| PASS | all_generator_revisions_are_pinned | |
+| **PASS** | **all_renderer_profiles_are_production_approved** | 新：核准記錄 |
+| PASS | evaluation_schema_and_content_hash_match | |
+| PASS | evaluation_targets_this_release | |
+| **PASS** | **m6_5_implementation_exit_passed** | 新：throughput + listening 契約 |
+| ---- | m6_5_empirical_exit_passed | **需真人聽測 + 下游訓練** |
+| ---- | m6_5_production_enablement_passed | = implementation AND empirical |
+| ---- | external_evidence_bundle_audits | **需下游三個 artifact** |
+
+**剩下三項全部指向同兩件事**：真人聽測（≥20 人）與下游訓練。兩者都在這個 codebase 之外，
+機制已建好、已驗證，資料一到就能算。
+
+### 6.1 核准必須在 QC 之前 → 兩趟流程
+
+`manifest_hash_matches_summary` 把 bank 的 QC summary 綁在 manifest hash 上，而蓋
+`production_approved` 會改變 manifest hash。**QC 之後才核准，會讓被核准的 release 自己
+失效。** 所以：
+
+1. **pass evaluate** — 生成 → QC → release → 評估。profile 停在 `development`，產出證據。
+2. **pass approve** — 用第 1 趟的 `evaluation_sha256` 當核准依據 → 蓋章 → 重跑 QC → 重建
+   release。核准因此在 hash 鏈**之內**，不是旁邊。
+3. **pass attest** — 聽測 assignment、簽核、bundle、決策，全部綁到重建後的 release。
+
+核准記錄引用的是第 1 趟的評估——那正是它據以決定的東西。
+
+### 6.2 不偽造：機制與資料分離
+
+`validate_listening_report` 本來就很嚴：`evidence_tier: empirical` 時它會從逐受試者原始
+記錄**重算** estimate 與 paired-t CI 並要求申報值吻合，且 <20 人不算 empirical。缺的只是
+產生器——所以過去要滿足它只能手寫數字，也就是編造。
+
+現在兩端都補上，且刻意分開：`build_listening_assignment` 設計實驗（room-disjoint 配對、
+盲化標籤、hidden reference / degraded anchor），`ingest_listening_responses` 只讀真實回應
+並計分。**這裡沒有任何函式會產生回應。** 無真人資料時走 `build_dry_run_report`，發出
+`evidence_tier: contract_fixture` + `explicitly_not_human_responses: true`——驗證器接受它
+是格式正確的契約，並正確地拒絕把它當 empirical 證據。
+
+三個實作上的坑，都是實測踩出來的：
+
+- **兩個不同的 `EVIDENCE_TIERS`**。renderer profile 用
+  `(development, empirical_candidate, production_approved)`，listening 契約用
+  `(contract_fixture, empirical)`。用錯會掛在 `evidence_tier_is_declared`，而錯誤訊息
+  完全不提是哪個字彙表。兩個 tier 現在都有具名常數。
+- **anchor 不能留在 `response_records` 裡**。驗證器從它拿到的**每一筆**記錄重算 estimate，
+  所以 hidden reference / degraded anchor 若留在那個 list，就會被摺進主要 endpoint。
+  它們現在放進 analysis 的 `validity_screening`，是受試者篩選而非 endpoint。
+- **核准記錄要的是「檔案 hash」不是「內容 hash」**。bundle 驗 `sha256_file(path)` 並要求
+  它等於 profile 的 `approval_report_sha256`；canonical-JSON 內容 hash 在縮排與換行之後
+  就不一樣了，而這個不一致只會在最後決策時才浮現。
+
+### 6.3 產生器全部 fail-closed
+
+- `build_throughput_report` 只從 generator 自己的 audit 取數，**沒有計時或沒有申報失敗數
+  就拒絕產出**（缺量測不會變成預設值）。為此在 generator 補了 `elapsed_seconds`；
+  `items_failed: 0` 是設計事實而非未驗證的宣稱——worker 例外會經 `future.result()` 中止
+  整個 run，走不到寫 manifest。
+- `RendererApproval` / `write_production_signoff` 沒有具名核准者與 scope 就 raise，並且
+  **只抄它被交付的證據 hash，不自己算、不給預設**。
+- `build_evidence_bundle` 逐檔案 hash，declared 但不存在就 raise，並把缺哪幾個 required
+  kind 講出來（否則只會在 audit 裡靜靜地掛掉）。
+- `approve_bank_renderer_profiles` 要求 bank 內**每一個** profile 都有核准，部分過只會把
+  失敗推到更難查的地方。
+
+---
+
+## 7. 效能實測
 
 | 項目 | 實測 |
 |---|---|
@@ -622,14 +709,14 @@ real_and_mixed_recipe_semantics_are_valid False →     True
 | `render_multiband_fdn` | 0.155 s / 1.6 s channel（**FDN 不是瓶頸，約 1%**） |
 | 400-item 臂（GPU 16 workers） | pyro **9 min** / M4 **25 min**（優化前 44 min） |
 | M6 契約測試（13 檔） | **30 passed / 133 s** |
-| 全套測試 | **640 passed** |
+| 全套測試 | **666 passed** |
 
 **只有低頻帶能上 GPU，高頻帶永遠 CPU。** 所以兩臂受益差很多：pyro 93% 的成本在低頻
 帶，M4 的主成本是 path event 生成。
 
 ---
 
-## 7. 重現
+## 8. 重現
 
 ```bash
 # M6 契約測試（13 檔，30 tests，約 133 秒）— 注意 .venv
@@ -716,6 +803,35 @@ PYTHONPATH=. .venv/bin/python \
 
 # 對位與 recipe 的測試（19 tests；含 BRUDEX 不變量與前向掃描回歸守衛）
 .venv/bin/python -m pytest -q test/test_rir_measured_ingest.py
+```
+
+```bash
+# §6：M6.6 證據鏈，三趟。核准必須在 QC 之前，所以不能只跑一趟。
+# 1) 評估：產 throughput + 第一趟 evaluation（核准的依據）
+PYTHONPATH=. .venv/bin/python \
+  egs/rir_generation/phases/m6_bank/scripts/build_m6_evidence.py \
+  --release <release_1> --evidence-root <ev> \
+  --generation-audit <synth-bank>/rir_bank_generation_audit.json --pass evaluate
+
+# 2) 核准：蓋章進 bank（會重跑 QC）→ 重建 release
+PYTHONPATH=. .venv/bin/python \
+  egs/rir_generation/phases/m6_bank/scripts/build_m6_evidence.py \
+  --release <release_1> --evidence-root <ev> --pass approve \
+  --synthetic-bank <synth-bank> --measured-bank <measured_pruned> \
+  --rebuild-release <release_2> --approver-id "<誰核准的>" --qc-workers 8
+
+# 3) 見證：聽測 assignment、簽核、bundle、決策，全部綁到 release_2
+#    有真人回應就加 --listening-responses <responses.jsonl>；沒有就是 contract_fixture
+#    乾跑，controlled_listening_empirical_passed 會（正確地）維持 False。
+PYTHONPATH=. .venv/bin/python \
+  egs/rir_generation/phases/m6_bank/scripts/build_m6_evidence.py \
+  --release <release_2> --evidence-root <ev> --pass attest \
+  --generation-audit <synth-bank>/rir_bank_generation_audit.json \
+  --reviewer-id "<誰簽的>" --participants 24 --report <ev>/summary.json
+# exit 0 = production_ready；exit 3 = 仍 blocked（會逐條印出 13 項檢查）
+
+# 證據產生器與聽測的測試（26 tests）
+.venv/bin/python -m pytest -q test/test_rir_m6_evidence.py
 ```
 
 ---
