@@ -4,7 +4,7 @@
 [`rir_realism_algorithm_zh-TW.md`](rir_realism_algorithm_zh-TW.md)。
 
 M2 introduces an explicit experimental low-frequency path in
-`puresound.audio.hybrid_rir`. Select it with one of:
+`puresound.audio.rir.render.low_frequency`. Select it with one of:
 
 ```text
 analytic-material

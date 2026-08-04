@@ -1,6 +1,6 @@
 # Material-first RIR scene schema
 
-`puresound.audio.rir_scene` defines the versioned `rir_scene.v2` metadata used
+`puresound.audio.rir.scene.schema` defines the versioned `rir_scene.v2` metadata used
 by the M1 generator. The scene stores physical inputs rather than a requested
 broadband RT60:
 
@@ -36,7 +36,7 @@ or copied from the v0 requested-RT60 field.
 
 ## Material catalog
 
-`puresound.audio.rir_materials` contains `puresound-materials.v1`. The initial
+`puresound.audio.rir.scene.materials` contains `puresound-materials.v1`. The initial
 absorption priors are an inspectable subset of the Pyroomacoustics 0.10.1
 materials database. PureSound adds explicit uncertainty, scattering, and
 transmission engineering priors. These are population priors for simulation,
@@ -126,7 +126,7 @@ backend; unsupported patterns raise instead of silently falling back to omni.
 
 With `record_realized_metrics=True`, every output sidecar records broadband and
 valid octave-band DRR, C50/C80, EDT, T20, T30, fit quality, and spectral tilt
-using `puresound.audio.rir_metrics`. Predicted material decay and realized RIR
+using `puresound.audio.rir.metrics`. Predicted material decay and realized RIR
 decay are separate fields.
 
 ## Calibrated output

@@ -123,19 +123,7 @@ Release status 分為 `draft`、`candidate`、`production`。若要宣稱 produc
 
 ## 7. M6.1 正式結果
 
-`validate_m6_bank_contract.py` 建立一個明確標記為 non-evidence 的三 split fixture，
-並執行 12 個 gates：
-
-- strict schema round-trip 與 deterministic manifest digest；
-- train／validation／test 皆存在；
-- deterministic acoustic-space assignment；
-- acoustic-space／room split disjoint；
-- asset、manifest、scene 與 audio-header integrity；
-- unsafe relative path rejection；
-- development renderer 的 false production claim rejection；
-- 舊 `PreGeneratedRoomBank` layout 相容。
-
-正式結果為 **M6.1 implementation PASS**；這不代表 production bank 已完成。
+（本節原為結果紀錄，已遷至 [`RIR_EXP_LOG.md`](../../RIR_EXP_LOG.md) 附錄。）
 
 ## 8. M6.2：接到真正的 generator
 
@@ -298,7 +286,7 @@ Ready recipe 的 train／validation／test JSONL 都有 item count 與 file hash
 `PreGeneratedReleaseBank` 可直接消費：
 
 ```python
-from puresound.audio.rir_bank import PreGeneratedReleaseBank
+from puresound.audio.rir.bank.loader import PreGeneratedReleaseBank
 
 bank = PreGeneratedReleaseBank(
     "exp/my_m6_release",
@@ -448,35 +436,7 @@ train/validation/test 三個 split）。訓練範例在
 
 ### 12.2 強化後 matched backend preflight（2026-08-02）
 
-在進行完整 4,000-item pilot 前，先完成一個可稽核的 30-room preflight：每個
-room 生成 2 items，兩個 backend 各有 60 items／300 channels；scene `v1/mixed`、
-seed `1337`、calibrated `16 kHz / 1.6 s` 與 GPU low backend
-`pytard-cupy-material` 完全相同。Pyroomacoustics 與 PathEvents-M4 的 60/60
-scene／room／acoustic-space／split／seed／shape identity 全部匹配，兩邊都是
-60/60 QC PASS、0 quarantine、release audit PASS；兩個實際 release reader 也各
-成功載入 56 個 train items。
-
-配對聲學摘要：
-
-| 指標中位數 | Pyroomacoustics | PathEvents-M4 | 解讀 |
-|---|---:|---:|---|
-| DRR | -4.83 dB | -3.24 dB | M4 早期／直達能量較強 |
-| C50 | 6.10 dB | 10.28 dB | M4 +4.18 dB |
-| C80 | 8.03 dB | 15.01 dB | M4 +6.97 dB |
-| T20 | 0.99 s | 0.47 s | M4 短 0.52 s |
-| `|T20 − scene RT60|` | 0.327 s | 0.080 s | M4 在此樣本較貼近材料目標 |
-
-因果到達、exact-zero 尾端、390 Hz comb regression 與 M4 高頻尾場 coverage
-均通過。結論是：M4 的 PathEvent + FDN 實作確實改變了 early／late 能量與衰減
-機制，不是只調 Pyroomacoustics 參數；但這仍是 **candidate preflight PASS**，
-不是 realism 或 production PASS。validation/test 各只有 2 items，generation
-使用 dirty code revision；Pyroomacoustics 的 air absorption 雖在 renderer 內
-套用，現行 high-band metadata 沒有像 M4 一樣完整序列化 policy／coefficients。
-目前也沒有 measured reference、真人聆聽或 downstream model 結果，故 Pyroomacoustics
-仍保持預設，完整 4,000-item matched pilot 與後續 empirical gate 尚未完成。
-
-完整、可重算的結論與 hash 見
-[`preflight_validation_summary.json`](../../egs/rir_generation/exp/rir_realism/m6/rir_m6_hardened_preflight_20260802/preflight_validation_summary.json)。
+（本節原為結果紀錄，已遷至 [`RIR_EXP_LOG.md`](../../RIR_EXP_LOG.md) 附錄。）
 
 ## 13. 如何重現
 

@@ -3751,3 +3751,322 @@ R0 完成並通過後，才開始 R1 的實際檔案拆分。這樣可以先確�
 - `hybrid_rir.py` 已收斂為 497 行的 orchestration facade。
 - R3（path-event pipeline）尚未開始。`rir_path_events.py`、`rir_metrics.py` 與
   bank 相關模組仍在舊位置。
+
+---
+
+## 附錄：自產品文件遷出的結果紀錄
+
+2026-08-04 文件重整時，自 `docs/audio/rir_bank_v2_zh-TW.md` 與
+`docs/audio/rir_measurement_campaign_zh-TW.md` 遷出的結果段落，原文照錄（heading 降兩級）。
+
+#### 7. M6.1 正式結果
+
+`validate_m6_bank_contract.py` 建立一個明確標記為 non-evidence 的三 split fixture，
+並執行 12 個 gates：
+
+- strict schema round-trip 與 deterministic manifest digest；
+- train／validation／test 皆存在；
+- deterministic acoustic-space assignment；
+- acoustic-space／room split disjoint；
+- asset、manifest、scene 與 audio-header integrity；
+- unsafe relative path rejection；
+- development renderer 的 false production claim rejection；
+- 舊 `PreGeneratedRoomBank` layout 相容。
+
+正式結果為 **M6.1 implementation PASS**；這不代表 production bank 已完成。
+
+##### 12.2 強化後 matched backend preflight（2026-08-02）
+
+在進行完整 4,000-item pilot 前，先完成一個可稽核的 30-room preflight：每個
+room 生成 2 items，兩個 backend 各有 60 items／300 channels；scene `v1/mixed`、
+seed `1337`、calibrated `16 kHz / 1.6 s` 與 GPU low backend
+`pytard-cupy-material` 完全相同。Pyroomacoustics 與 PathEvents-M4 的 60/60
+scene／room／acoustic-space／split／seed／shape identity 全部匹配，兩邊都是
+60/60 QC PASS、0 quarantine、release audit PASS；兩個實際 release reader 也各
+成功載入 56 個 train items。
+
+配對聲學摘要：
+
+| 指標中位數 | Pyroomacoustics | PathEvents-M4 | 解讀 |
+|---|---:|---:|---|
+| DRR | -4.83 dB | -3.24 dB | M4 早期／直達能量較強 |
+| C50 | 6.10 dB | 10.28 dB | M4 +4.18 dB |
+| C80 | 8.03 dB | 15.01 dB | M4 +6.97 dB |
+| T20 | 0.99 s | 0.47 s | M4 短 0.52 s |
+| `|T20 − scene RT60|` | 0.327 s | 0.080 s | M4 在此樣本較貼近材料目標 |
+
+因果到達、exact-zero 尾端、390 Hz comb regression 與 M4 高頻尾場 coverage
+均通過。結論是：M4 的 PathEvent + FDN 實作確實改變了 early／late 能量與衰減
+機制，不是只調 Pyroomacoustics 參數；但這仍是 **candidate preflight PASS**，
+不是 realism 或 production PASS。validation/test 各只有 2 items，generation
+使用 dirty code revision；Pyroomacoustics 的 air absorption 雖在 renderer 內
+套用，現行 high-band metadata 沒有像 M4 一樣完整序列化 policy／coefficients。
+目前也沒有 measured reference、真人聆聽或 downstream model 結果，故 Pyroomacoustics
+仍保持預設，完整 4,000-item matched pilot 與後續 empirical gate 尚未完成。
+
+完整、可重算的結論與 hash 見
+[`preflight_validation_summary.json`](../../egs/rir_generation/exp/rir_realism/m6/rir_m6_hardened_preflight_20260802/preflight_validation_summary.json)。
+
+#### 6. M5.1 已完成的實作
+
+主要入口：
+
+- `puresound/audio/rir_measurement_campaign.py`：schema、strict JSON、hash
+  與 campaign audit；
+- `puresound/audio/rir_calibration.py`：七項 reference loss 與 term-level
+  diagnostics；
+- `egs/rir_generation/phases/m5_calibration/scripts/validate_m5_measurement_contract.py`：deterministic
+  loss probes、template 與 legacy bank readiness audit；
+- `egs/rir_generation/phases/m5_calibration/config/m5_measurement_campaign_template.json`：只有結構
+  範例，不是實測證據；
+- `egs/rir_generation/phases/m5_calibration/reports/m5_measurement_contract_report.json`：正式
+  M5.1 report。
+
+驗證 probe 確認：identity fidelity terms 為零、8-sample delay 可被偵測、
+pre-arrival energy 會受罰、spatial perturbation 可被偵測，而且 mono spatial
+term 明確不可評估。針對 schema、hash corruption、同步語意與 loss 的 10 個
+測試全數通過。
+
+#### 7. 現有 measured bank 的真實狀態
+
+Validator 分別抽查既有 train 與 held-out view 各 64 個 metadata。兩者目前
+只保存 `channel_map`、distance、`origin=real` 與 RT60 類資訊；以下九類 M5
+證據在抽樣中都是 0/64：
+
+1. 穩定實體 room identity；
+2. geometry／mesh；
+3. source position 加 orientation；
+4. receiver position 加 orientation；
+5. source／receiver response calibration；
+6. temperature／humidity／pressure；
+7. repeated raw ESS；
+8. deconvolution inverse／config／noise；
+9. synchronized receiver channel semantics。
+
+結論不是「舊資料沒用」。它仍可做 DRR、C50、decay、頻譜與 echo-density
+distribution reference；但缺失的 acquisition evidence 無法從最後 RIR WAV
+逆推出來，所以不能被升格成 M5 controlled inverse-calibration dataset。
+
+#### 8. M5.2 synthetic recovery 已完成什麼
+
+在等待／規劃受控量測時，M5.2 先完成第一個 synthetic recovery baseline：
+
+1. 從已知 scene 生成 target RIR；
+2. 隱藏 material、mixing-time、late-decay 等一小組參數；
+3. 從錯誤初值開始最小化同一 loss；
+4. 在未參與 fitting 的 source／receiver positions 比較 recovery；
+5. 用 multi-start 與 scaled Jacobian singular values 檢查局部不可識別方向；
+6. 只有能在 synthetic holdout 穩定找回的參數，才進 M5.3 measured fit。
+
+實作 `puresound.rir_synthetic_recovery.v1` 是一個刻意簡化、保持因果的
+approximate renderer。Geometry 與 direct response 視為已知，只開放十個
+shared-room parameters：
+
+- 一個 mixing time；
+- 一個 coherent early-reflection gain；
+- 500／1000／2000／4000 Hz 四個 RT60；
+- 同四個 octave bands 的 late gain。
+
+Direct component 永遠不被 crossfade；early 與 late 使用連續 equal-power
+transition。每個 late band 的 pressure envelope 為
+
+\[
+a_b(t)=10^{-3t/T_{60,b}},
+\]
+
+所有 mixing time、gain 與 RT60 都受明確 box bounds 限制。三個 train
+positions 共用同一組房間參數，但各有不同 distance、early path fixture 與
+deterministic band-limited late excitation，因此 optimizer 必須找出可跨位置
+解釋資料的參數。
+
+正式 validator 從三組差異很大的初值做 bounded nonlinear least squares。
+三次都回到同一組隱藏 ground truth，最大 parameter spread 為
+`2.35e-12`；scaled Jacobian condition number 是 `17.22`，且具有完整 local
+column rank。獨立 M5.1 oracle 在兩個 unseen positions 的 mean loss 由
+`2.26933` 降到 `1.69e-14`，所有輸出保持 direct arrival 前嚴格為零。
+
+這個結果是必要但很弱的第一關，屬於 **inverse-crime baseline**：target 與
+fitter 使用同一個 noise-free model family，所以精確 recovery 是預期結果。
+它證明的是 parameter serialization／bounds、multi-position objective、
+multi-start、local sensitivity、holdout 與 M5.1 oracle 接線都正確；它沒有
+證明：
+
+- measurement noise 或 clock drift 下仍穩定；
+- approximate renderer 能吸收完整 M4 renderer 的 model mismatch；
+- 真實材料、scattering 或 directivity 已被找回；
+- global identifiability；
+- measured-room fit 已完成。
+
+報告為 `egs/rir_generation/phases/m5_calibration/reports/m5_synthetic_recovery_report.json`；同一
+holdout position 的 target／錯誤初值／recovered WAV 位於
+`egs/rir_generation/exp/rir_realism/m5/rir_m5_synthetic_recovery/`。下一個可平行開發切片是加入 controlled
+noise/model mismatch；下一節已完成這個 robust synthetic gate。真正的
+M5.3 仍必須等待符合前述契約的 controlled campaign。
+
+##### 8.1 M5.2b：噪聲、已知 nuisance 與未知 model mismatch
+
+M5.2b 不再讓 fitter 看到乾淨 target。每個 train／holdout position 都加入：
+
+- 32–38 dB SNR 的 broadband acquisition noise；
+- -0.8 至 +1.2 dB 的 per-position gain calibration error；
+- -6 至 +11 samples 的 deconvolution latency offset；
+- nominal model 沒有的 early taps；
+- 一個獨立 stochastic late component，其 RT60 為 nominal band 的 1.25 倍。
+
+系統同時保存 `raw_rir` 和 `corrected_rir`。只有 campaign metadata 已知的 gain
+與 latency 會被移除；noise、extra paths 和 secondary decay 刻意留在 fitting
+target。這是在測 robust estimation，不是用 ground truth 把所有誤差清乾淨。
+
+新的 `puresound.rir_robust_recovery_objective.v1` 使用四組 smooth residual：
+
+\[
+r(\theta)=
+\left[
+\sqrt{w_w}r_{\mathrm{wave}},
+\sqrt{w_e}r_{\mathrm{early}},
+\sqrt{w_b}r_{\mathrm{broadband\ decay}},
+\sqrt{w_o}r_{\mathrm{octave\ decay}}
+\right].
+\]
+
+Decay residual 以 8 ms window 的 log energy 計算；只有高於估計 noise energy
+20 dB 的 windows 參與 fitting。這個門檻非常重要：若把已進入 noise floor 的
+高頻尾端也當成房間衰減，optimizer 會把 noise plateau 解讀成較長 RT60。
+
+它稱為 M4-consistent proxy，是因為 direct／coherent early／broadband late／
+octave late 的分工與 M4 相同；但目前仍以 SciPy finite-difference least
+squares 最佳化 surrogate，不是 autograd，也尚未對完整 PathEvent＋FDN
+renderer 求導。
+
+正式結果：
+
+- mixing time absolute error：`0.0235 ms`；
+- early gain error：`0.0214 dB`；
+- 最大 octave RT60 relative error：`1.43%`；
+- 最大 late gain error：`0.106 dB`；
+- 兩個遠距初值的最大 parameter spread：`1.03e-6`；
+- scaled-Jacobian condition number：`8.12`，local full rank；
+- held-out M5.1 total：相對初始值下降 `61.4%`；
+- held-out octave error：robust objective `0.00846`，waveform-only ablation
+  `0.03341`。
+
+另外，五個擾動案例中有兩個的 global absolute peak 並不是 direct arrival。
+這不是小細節：高 DRR 以外的 RIR、未建模反射或 noise spike 都可能比 direct
+大。正式量測應以 geometry (d/c) 建立 arrival search window，或使用另行
+驗證的 onset detector；不能直接 `argmax(abs(rir))`。
+
+M5.2b 的 15/15 gates 全數通過，報告位於
+`egs/rir_generation/phases/m5_calibration/reports/m5_robust_recovery_report.json`，六個 holdout
+RIR artifacts 位於 `egs/rir_generation/exp/rir_realism/m5/rir_m5_robust_recovery/`。它仍不是 measured-room fit；
+下一節已把第一組參數映射到 actual M4 renderer。
+
+##### 8.2 M5.2c：actual PathEvent＋multiband FDN parameter profile
+
+M5.2c 不再用 smooth surrogate 產生 candidate，而是直接通過 M4 的
+`PathEvent -> equal-power transition -> multiband FDN`。由於 mixing time 會
+離散改變 prime delay topology，演算法以 `20/24/28 ms` 做 outer profile；每個
+profile 內再以 bounded least squares 估 coherent-reflection aggregate gain 和
+500／1000／2000 Hz RT60。
+
+Target 保留 8% alternate-FDN-seed mismatch 與 42 dB SNR noise。兩個 order-4
+PathEvent positions 用於 fitting，另兩個 positions 只做 holdout。14/14 gates
+通過：正確選到 hidden `24 ms`、best／second cost ratio `0.0820`、best
+Jacobian condition number `3.14`、coherent gain error `0.661 dB`、最大 RT60
+error `4.23%`，held-out M5.1 total 下降 `71.7%`。所有 candidate 維持
+physical-arrival causality，M4 transition 前樣本完全不變，Pyroomacoustics
+production default 也沒有改動。
+
+報告位於
+`egs/rir_generation/phases/m5_calibration/reports/m5_m4_parameter_mapping_report.json`，三個 holdout
+RIR artifacts 位於 `egs/rir_generation/exp/rir_realism/m5/rir_m5_m4_parameter_mapping/`。這只識別 aggregate
+coherent gain，不代表已從 RIR 分離出單一牆面的 absorption／scattering；
+也不是 measured-room fit。下一個 M5.2d 是逐 material／path group 的
+identifiability ablation。
+
+##### 8.3 M5.2d：哪些 material/path groups 真的可辨識
+
+每條 PathEvent 都保留撞到的 surface sequence。M5.2d 對每次 boundary hit
+施加一個 effective pressure adjustment，因此同一參數會一致影響所有包含該
+牆面的高階路徑。三個 order-4 train positions 可找回 west／east／south／
+north／floor／ceiling 六組：condition number `2.74`、最大 gain error
+`0.00123 dB`、held-out M5.1 total 下降 `64.8%`。
+
+但若把每面牆同時開放 `absorption loss` 和 `specular scattering loss`，兩者在
+mono coherent amplitude 上的 Jacobian columns 完全相同；rank 由應有的 12
+只有 6。演算法因此保留六個 `effective_reflection`，拒絕六個 scattering
+duplicates。這不是最佳化失敗，而是資料本身沒有足夠觀測；scattering 必須等
+M5.4 的 synchronized receiver evidence。
+
+##### 8.4 M5.3：runner 已完成，但不合格資料不會開始 fitting
+
+`fit_m5_measured_campaign.py` 的執行順序是：
+
+1. 驗全部 retained assets 與 SHA-256；
+2. 確認每個 room 的 repeated ESS、noise、inverse、calibration、geometry、
+   environment 與 synchronized channel semantics；
+3. 以 `campaign_id + room_id + measurement_id` 的 SHA-256 固定選出
+   train-room position holdout；
+4. 只在 `position_fit` 估每個 train room 的 M4 topology、RT60 與六面
+   effective reflection；
+5. 分開回報 train-position、position-holdout、validation-room 與 test-room；
+6. 未見房間只用 train-room population median parameters，不偷 fit test room。
+
+完整 synthetic campaign fixture 已走通 runner 的所有階段與 8/8 gates，而且
+metadata 明確標成 `qualifies_as_measured_evidence=false`。現有 template／legacy
+bank 則在 readiness 階段退出，M4 optimizer 完全不會被呼叫。正式狀態報告為
+`m5_measured_fit_status_report.json`：M5.3 runner implementation PASS，真實
+measured fit 仍 BLOCKED。
+
+目前 reference runner 支援有 `dimensions_m` 的 shoebox campaign。只有 mesh 的
+campaign 必須先註冊能產生 PathEvent 的 mesh backend，不能把 mesh 悄悄縮成
+shoebox。
+
+##### 8.5 M5.4：同步 receiver 才能校正 spatial groups
+
+`select_spatial_calibration_candidate` 至少要求兩個同步 channel。它用同一份
+M5.1 loss 比較 actual M4 的 scattering、receiver directivity 與 late-field
+candidates；mono 直接拋錯，不會得到假的 spatial zero loss。四候選 fixture
+正確選回 hidden scattering＋opposed-cardioid 組合，11/11 gates 通過。
+
+證據邊界也要保留：現行 M4 scattering 只分配 first-order coherent PathEvent
+energy，80 ms 後的 FDN field 尚未依 scattering 改變。因此 scattering 是由
+synchronized early／spectral／octave total 選中；late spatial coherence 主要
+驗 shared field 與 directivity，不能把相同的 late term 說成 scattering 證據。
+
+##### 8.6 M5.5：learn residual，不重學 basic physics
+
+新的 residual model 先算 `target - physical`，再把每條 residual 對齊自己的
+direct arrival，除以 physical tail norm，從多個 train rooms 取 robust median。
+它受到三個硬限制：
+
+- direct arrival 前永遠為零；
+- 50 ms 後每 10 ms block 不得比最大 `RT60=0.8 s` 的 pressure decay 更慢；
+- normalized residual energy 不得超過 physical energy 的 `0.15`。
+
+M5.5 同時輸出 physical-only、residual-only、combined，避免只報最好的一條。
+在完全未參與 fitting 的第三個 synthetic room，combined total 相對
+physical-only 下降 `67.9%`，residual-only 明顯較差；causality、decay、energy
+budget 與 parameter interpolation 共 12/12 gates 通過。這證明 residual
+contract／ablation plumbing 可用，尚不代表已在真實房間訓練 neural model。
+
+##### 8.7 M5.6：完成的是 implementation，不是捏造 empirical PASS
+
+`validate_m5_exit.py` 彙整 M5.1、M5.2／2b／2c／2d、M5.3 runner、M5.4、
+M5.5、必要 WAV/campaign artifacts 與禁止 false claim 的 invariants。結果為：
+
+- **M5 implementation exit：PASS**；
+- **M5 empirical／production exit：OPEN**；
+- production enablement：`ready=false`，Pyroomacoustics default 不變。
+
+empirical exit 還缺：合格 repeated-ESS campaign、measured position holdout、
+measured physical-room holdout、measured synchronized spatial calibration、
+measured residual training、controlled listening 與 room-disjoint downstream
+task。這些是必須真的取得／執行的外部證據，不能由 synthetic fixture 生成。
+
+近期 inverse-acoustic rendering 研究也採用 differentiable rendering 與稀疏
+觀測來估 room parameters，例如
+[AV-DAR](https://openaccess.thecvf.com/content/ICCV2025/html/Jin_Differentiable_Room_Acoustic_Rendering_with_Multi-View_Vision_Priors_ICCV_2025_paper.html)
+與 [DiffRIR / Hearing Anything Anywhere](https://masonlwang.com/hearinganythinganywhere/)。
+PureSound 的策略更保守：先用現有可稽核物理 renderer 做 recovery baseline，
+確認 identifiability，最後才加入 learned residual。
+

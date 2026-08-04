@@ -22,15 +22,15 @@ Audio processing sub-package providing primitives for I/O, digital signal proces
 | [複數阻抗量測與共振邊界](impedance_measurements.md) | SI／normalized 契約、真實 liner、被動 fitting、FDTD、1D 與 separable 3D 複數模態 |
 | [正入射阻抗管量測流程（繁體中文）](impedance_tube_protocol_zh-TW.md) | repeated H12、換麥校正、有效頻帶、coherence、不確定度與匯入 CLI |
 | [複數阻抗公開資料審核](complex_impedance_source_audit.md) | complex phase、樣品條件與授權的接受／拒絕記錄 |
-| [audio.rir_metrics](rir_metrics.md) | Broadband and octave-band RIR acoustic metrics |
-| [audio.multiband_fdn](multiband_fdn.md) | Deterministic internally contractive M4.3 multiband FDN core and validation contract |
-| [audio.rir_late_coupling](rir_late_coupling.md) | Opt-in M4.4 causal PathEvent-early/FDN-late transition and energy contract |
+| [rir.metrics](rir_metrics.md) | Broadband and octave-band RIR acoustic metrics |
+| [rir.render.multiband_fdn](multiband_fdn.md) | Deterministic internally contractive M4.3 multiband FDN core and validation contract |
+| [rir.render.coupling](rir_late_coupling.md) | Opt-in M4.4 causal PathEvent-early/FDN-late transition and energy contract |
 | [M4 空間 RIR 與 BRIR](spatial_rir.md) | 同步 receiver array、ACN/SN3D FOA、directivity、HRTF FIR decoder 與 evidence boundary |
-| [audio.rir_scene](rir_scene_v2.md) | Versioned material-first scene, material catalog, environment, and transducer calibration |
-| `audio.rir_path_events` | Versioned ordered paths, exact folded geometry, furniture visibility, transmission, diffraction, controlled scattering, fractional delay, and causal boundary rendering |
-| `audio.rir_attribution` | Exactly reconstructive direct-anchor/early/later decomposition with complementary raised-cosine masks |
-| [audio.hybrid_rir modal damping](modal_damping.md) | Experimental M2 per-mode low-frequency material loss and exact damped recurrence |
+| [rir.scene](rir_scene_v2.md) | Versioned material-first scene, material catalog, environment, and transducer calibration |
+| `rir.path_events` | Versioned ordered paths, exact folded geometry, furniture visibility, transmission, diffraction, controlled scattering, fractional delay, and causal boundary rendering |
+| `rir.attribution`（歷史名） | Exactly reconstructive direct-anchor/early/later decomposition with complementary raised-cosine masks |
+| [rir.render.low_frequency modal damping](modal_damping.md) | Experimental M2 per-mode low-frequency material loss and exact damped recurrence |
 | [audio low-frequency modal validation](modal_validation.md) | Independent 3D FDTD reference, experimental wall-face pressure schemes, discrete oblique-boundary phase, and modal frequency/Q metrics |
-| [audio.rir_bank](rir_bank.md) | Pre-generated room bank 與 M6.4 release recipe serving（split、variant、origin provenance） |
+| [rir.bank](rir_bank.md) | Pre-generated room bank 與 M6.4 release recipe serving（split、variant、origin provenance） |
 | [audio.room_simulator](room_simulator.md) | Physics-based shoebox room simulator |
-| [audio.hybrid_rir](hybrid_rir.md) | Hybrid wave/geometric 5-channel RIR dataset generation |
+| [rir.render（hybrid）](hybrid_rir.md) | Hybrid wave/geometric 5-channel RIR dataset generation |
