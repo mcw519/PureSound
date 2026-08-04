@@ -35,9 +35,9 @@
 >   少 5 倍（§4.3b）。舊測試只驗曲線上升、不驗上升幅度，所以它活了下來。
 > - **我在 §4.1 記的兩條「合成 vs 實測」缺陷都已撤回**：tilt（§4.4）與噪音地板
 >   （§4.5）。兩次都是同一個成因——**實測參照不是物理量，是五條量測鏈的加權平均**。
->   而且 **ACE 語料在兩條軸上都站在合成這一側**，這不像巧合：要嘛合成已經和處理得
->   最乾淨的語料一致，要嘛 ACE 被處理得最多。**先驗證目標再追它，救回了兩條錯誤的
->   工作方向。**
+>   讀完語料自己的文件後定案：**ACE 是被處理得最多的那一個**（發佈未等化的 AIR、
+>   噪音地板人工淡掉），而**沒有任何語料發佈喇叭已補償的 RIR**。**先驗證目標再追
+>   它，救回了兩條錯誤的工作方向。**
 
 > **有一條方法論結論值得留下。** 12 條被推翻的發現有同一個成因：**量測或引述
 > 「我以為程式在做什麼」，而不是實作本身**。對照組很乾淨——直接對真實產物量測而
@@ -468,14 +468,42 @@ tilt 缺口」這個說法失去了參照。
 | tilt dB/oct | **+0.69** | +0.2 … +0.6 | −1.45 … −2.99 |
 | flatness | **0.91** | 0.70 … 1.40 | 0.03 … 0.27 |
 
-兩種讀法，**我無法從音訊本身分辨**：
+**已定案（2026-08-04，讀語料自己的文件）：ACE 是被處理得最多的那一個，不是最乾淨的。**
+它兩條軸上的「像合成」都有各自記載明確的後處理成因：
 
-- **ACE 是最乾淨的參照**（量測鏈已反捲積、噪音已移除）→ 合成 bank 在兩條軸上都已經
-  和處理得最好的語料一致，**兩條軸都沒有缺陷**。
-- **ACE 是被處理得最多的**（最不像麥克風實際收到的東西）→ 另外四個語料才對。
+| 觀察 | 成因（ACE 論文原文） |
+|---|---|
+| flatness 0.91（無地板） | 「The tail of each AIR was **faded down to zero** over 10,000 samples once the level fell below **−70 dB**」（§2.4）——**噪音地板是人工淡掉的** |
+| tilt +0.69 | 「The location of the direct path was found by convolving the AIR with the equalisation filter for the source… Equation (3) was then applied to the **unequalized AIR**」（§2.6）——**等化濾波器存在，但發佈的 AIR 沒套用**，含 Fostex 6301B（100 mm 驅動器個人監聽）的響應 |
 
-要分辨得**去讀各語料記載的處理流程**（有沒有反捲積、有沒有去噪、有沒有截尾）。這是
-文件工作，不是量測工作，也是這一整條線目前最該做的下一步。
+**而且沒有任何一個語料發佈喇叭已補償的 RIR：**
+
+| 語料 | 喇叭補償 | 尾巴處理 | 對應觀測 |
+|---|---|---|---|
+| ACE | **未等化**（明文） | 低於 −70 dB 起淡到零 | tilt +0.69、flatness 0.91 |
+| dEchorate | 直達音反捲積**只是標註工具**，發佈的是 ESS 估計的 RIR | 固定長度、無 level-triggered 淡出 | tilt −2.54、flatness 0.13 |
+| BRUDEX | 只提 inverse sweep 卷積 | Hanning 淡出**只在檔尾** 2400 樣本 | tilt −1.60、flatness 0.15 |
+
+dEchorate §3.1 給了 tilt 另一端的直接機制證據：
+
+> For the octave bands centred at 125 Hz and 250 Hz, the measured RIRs did not exhibit
+> sufficient dynamic range for a reliable estimation. This observation found confirmation
+> in **the frequency response provided by the loudspeakers' manufacturer, which decays
+> exponentially from 300 Hz downwards.**
+
+作者用**喇叭自己的低頻滾降**解釋資料的限制——若喇叭已被反捲積，那個滾降不會在資料
+裡。而我的 tilt 量測窗是 **200 Hz–4 kHz**，正好把低端放在那個滾降裡 → 200 Hz 能量被
+壓低 → 擬合斜率變得更負。**dEchorate 的 −2.54 與 ACE 的 +0.69 因此各有記載明確的
+喇叭成因，不是房間差異。**
+
+**結論**：tilt 目標在這批語料上**無法驗證**，而且理由比 §4.4 原本寫的更強——不是
+「語料互相矛盾所以不知道」，而是**各語料自己的論文都記載了喇叭仍在資料裡**。§4.4 的
+撤回成立。
+
+**但這不是死路。** 建構一個與鏈無關的參照是可行的：**對每一個 RIR 做直達音反捲積**
+（把孤立出來的直達音當逆濾波器），同時除掉喇叭與麥克風響應，留下房間。dEchorate 已
+經在標註流程裡這樣做過，ACE 也說了 source 的等化濾波器存在。這是標準做法，也是重建
+tilt 參照唯一站得住的路。
 
 #### 而且對這條訓練管線來說，缺噪音地板不是缺陷
 
