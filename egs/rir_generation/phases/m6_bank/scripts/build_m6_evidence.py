@@ -56,6 +56,7 @@ from puresound.audio.rir.bank.production import (
 from puresound.audio.rir.bank.release import (
     RIRBankReleaseManifest,
     build_m6_variant_release,
+    prune_bank_to_qc_passed,
 )
 from puresound.audio.rir.bank.schema import RIRBankManifest
 
@@ -173,15 +174,34 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
         approval_dir = evidence_root / "approvals"
         records = []
-        banks = [args.synthetic_bank]
+        # Prune before stamping. A release variant must be all-pass, because the
+        # production decision checks every item in every variant manifest, and a
+        # real 100-room pilot arrives with quarantine to shed just as a measured
+        # bank does — one item in 400 failed decay_fit_coverage. Pruning also
+        # copies, which keeps the source banks untouched by the stamping below.
+        synthetic_target = args.rebuild_release.parent / "synthetic_approved"
+        if synthetic_target.exists():
+            shutil.rmtree(synthetic_target)
+        pruned_synthetic = prune_bank_to_qc_passed(
+            args.synthetic_bank, synthetic_target, qc_workers=args.qc_workers
+        )
+        print(
+            f"[m6_evidence] pruned synthetic kept={pruned_synthetic['kept_item_count']} "
+            f"dropped={pruned_synthetic['dropped_item_count']}"
+        )
+        banks = [synthetic_target]
         measured_target = None
         if args.measured_bank is not None:
-            # Copy before stamping: the source measured bank may be shared, and
-            # approval mutates the manifest it is applied to.
             measured_target = args.rebuild_release.parent / "measured_approved"
             if measured_target.exists():
                 shutil.rmtree(measured_target)
-            shutil.copytree(args.measured_bank, measured_target)
+            pruned_measured = prune_bank_to_qc_passed(
+                args.measured_bank, measured_target, qc_workers=args.qc_workers
+            )
+            print(
+                f"[m6_evidence] pruned measured kept={pruned_measured['kept_item_count']} "
+                f"dropped={pruned_measured['dropped_item_count']}"
+            )
             banks.append(measured_target)
         for bank in banks:
             manifest = RIRBankManifest.from_json(
@@ -210,7 +230,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 f"in {bank}"
             )
         release = build_m6_variant_release(
-            args.synthetic_bank,
+            synthetic_target,
             args.rebuild_release,
             release_id="puresound-m6-candidate",
             measured_bank_root=measured_target,

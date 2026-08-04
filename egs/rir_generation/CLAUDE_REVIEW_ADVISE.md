@@ -43,6 +43,12 @@
 > **10 項通過**，剩下三項全部指向真人聽測與下游訓練——兩者都在 codebase 之外。
 > **沒有偽造任何聽測資料**：無真人回應時走 `contract_fixture` 乾跑，驗證器接受它是
 > 格式正確的契約並正確拒絕當成 empirical 證據。
+>
+> 並且用**真實 pilot 實跑過一次完整證據鏈**（§6.4，400 合成 item + 1465 measured）。
+> 舊 pilot 被 fail-closed 正當地拒收（沒計時、且早於兩個物理修正）。實跑揭出**合成 bank
+> 也需要剪枝**（1/400 掛 `decay_fit_coverage` 就足以擋掉整個 release）。
+> **§6.5 記了我第四次同型錯誤**：差點把「寬帶 T20 對中頻 Sabine 預測長 1.71×」寫成渲染器
+> 超標，實際上那兩個量根本不同。逐 octave 對齊後真正的觀察是交越兩側的 0.75× / 2.07×。
 
 > **2026-08-03 下半場更新。** A/B pilot 跑完了（100 房間 × 4 RIR × 兩臂），結果與
 > 它挖出的問題寫在 [§4](#4-ab-pilot-的結果與由它挖出的問題)。兩個要點：
@@ -694,6 +700,75 @@ M6 有完整的**驗證器**卻幾乎沒有**產生器**：`audit_m6_production_
   kind 講出來（否則只會在 audit 裡靜靜地掛掉）。
 - `approve_bank_renderer_profiles` 要求 bank 內**每一個** profile 都有核准，部分過只會把
   失敗推到更難查的地方。
+
+### 6.4 真實 pilot 實跑（100 房 × 4 = 400 item + 1465 measured）
+
+`evidence_pilot_20260804`，用**當前 HEAD 重新生成**的 pilot 跑完整三趟。
+
+**為什麼不能用舊的 pilot**（`pilot_100room_20260803`）：兩個獨立理由。
+
+1. 它的 `generation_run` 沒有 `elapsed_seconds`（今天才加），所以
+   `build_throughput_report` **直接拒絕**——這正是 fail-closed 設計在真實資料上生效：
+   *缺量測不會變成預設值*。
+2. 它的 `code_revision=a24691e9` **早於** crossover 夾限修正（`368a545`）與 ISO 9613-1
+   濕度修正（`3f146da`）。拿它去核准，等於為已被取代的物理蓋章。
+
+實跑結果：
+
+| | 值 |
+|---|---|
+| 生成 | 400 item / 100 房，**1310.7 s**、**0.305 item/s**、失敗 0（GPU 低頻帶 + 16 workers） |
+| 合成 QC | **399/400**（1 個掛 `decay_fit_coverage`） |
+| measured ingest | 2000 抽樣 → 1762 對位 → QC **1465** pass |
+| release | synthetic 399 / real 1465 / mixed 1864 |
+| 決策 | **10/13 PASS**，exit 3 |
+
+**新發現：合成 bank 也需要剪枝。** `all_variant_items_are_qc_passed` 檢查**每一個** item，
+所以那 1/400 讓整個 release 過不了。`prune_bank_to_qc_passed` 因此不是 measured 專用的
+——它是通用的 bank 手術，已從 `measured_ingest` **搬到 `release.py`**，並接進 evidence CLI
+的 approve 趟。
+
+BRUDEX 校正標準在 400 item/語料的規模下依然成立：shift p50 = **+4**（= 淡入偏移，原始誤差 0）。
+
+### 6.5 400 vs 1465 channel 的聲學分佈——以及我差點記錯的一條
+
+`synthetic_to_measured` 的 normalized Wasserstein（距離 ÷ 實測 p05–p95 跨距）：
+
+| 指標 | 距離 |
+|---|---|
+| **t20_s** | **4.581** |
+| **mixing_time_s** | **1.685** |
+| spectral_tilt_db_per_octave | 0.316 |
+| c80_db / c50_db / drr_db | 0.312 / 0.266 / 0.248 |
+| distance_m | 0.159 |
+| late_median_normalized_density | 0.104 |
+
+**我差點把 t20 記成「渲染器超出自己的目標 1.71×」。那是錯的，第四次同型錯誤。**
+`scene.rt60` 的 `rt60_origin` 是 `surface_material_sabine_prediction`，而且它等於
+**500/1k 中頻帶**預測的平均；realized `t20_s` 是**寬帶**。該 bank 的 octave 預測隨頻率
+大幅上升（樣本：125 Hz 1.08 s → 8 kHz 4.46 s），所以寬帶 T20 比中頻預測長是**預期物理**，
+不是超標。**又是拿兩個不同的量去比，然後給差值取了個名字。**
+
+逐 octave 對齊之後（同頻帶、fit R²≥0.70，n≈1900–2000/帶）：
+
+| 頻帶 | realized T20 / predicted RT60 p50 |
+|---|---|
+| 250 Hz | 0.78 |
+| 500 Hz | 0.75 |
+| 1000 Hz | **1.94** |
+| 2000 Hz | **2.07** |
+
+pooled median 0.93。**分界正好落在 1 kHz 的 hybrid crossover 上**：交越以下實現得比預測短
+約 ¼，以上長約 2×。這是內部可查、與實測參照無關的觀察，**但成因尚未隔離**——crossover 只是
+最可疑的嫌疑者，不是已證明的原因。列為待查，不是已知缺陷。
+
+至於 t20 那個 4.581 的**分佈**距離，主因是合成**族群**本身：`scene.rt60` 實際跨
+**0.214–3.271 s**，完全不受 `rt60_range = (0.25, 0.8)` 約束（即先前已知未修的
+「`rt60_range` 不 constraining v1 scenes」，現在有了規模化的量化）。合成 T20 p50 = 0.99 s
+對實測 0.46 s。**這是抽樣問題，不是渲染器沒打中目標。**
+
+`mixing_time_s` 的 1.685 要當心：實測 p05–p95 跨距只有 **0.043 s**，很窄的跨距會把
+normalized 距離放大。合成 p50 0.058 對實測 0.022——差 36 ms，不是 1.7 個「單位」。
 
 ---
 

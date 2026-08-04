@@ -32,6 +32,7 @@ from puresound.audio.rir.bank.qc import (
 
 RIR_BANK_RELEASE_SCHEMA_VERSION = "puresound.rir_bank_release.v1"
 RIR_BANK_DISTRIBUTION_SCHEMA_VERSION = "puresound.rir_bank_distribution.v1"
+RIR_BANK_QC_PRUNE_SCHEMA_VERSION = "puresound.rir_bank_qc_prune.v1"
 RELEASE_RECIPE_STATUSES = ("ready", "blocked")
 DEFAULT_RELEASE_MANIFEST_NAME = "rir_bank_release.json"
 
@@ -713,6 +714,110 @@ def _ready_recipe(
         origin_weights=origin_weights,
         split_indexes=indexes,
     )
+
+
+def prune_bank_to_qc_passed(
+    source_root: str | Path,
+    output_root: str | Path,
+    *,
+    bank_id_suffix: str = "-qc-passed",
+    qc_policy: RIRBankQCPolicy | None = None,
+    qc_workers: int = 1,
+) -> dict[str, Any]:
+    """Copy a bank's QC-passed items into a bank with no quarantine.
+
+    A release variant has to hold only passing items, because M6's production
+    decision checks every item in every variant manifest. Both kinds of bank
+    reach that gate with quarantine to shed: a measured bank because some
+    published rooms genuinely fail the acoustic gates, and — measured on a real
+    100-room pilot — a synthetic one too, where a single item failed
+    ``decay_fit_coverage`` out of 400. Forcing either through is the one thing
+    this pipeline must not do, so the release takes a pruned copy and the
+    unpruned bank stays as the record of what was dropped and why.
+
+    Renderer profiles are kept even when every one of their items was dropped, so
+    a chain that contributed nothing is still visible in the manifest rather than
+    silently absent.
+    """
+
+    source = Path(source_root)
+    output = Path(output_root)
+    if output.exists() and any(output.iterdir()):
+        raise FileExistsError(f"pruned bank output already exists: {output}")
+    manifest = RIRBankManifest.from_json(
+        (source / "rir_bank_manifest.json").read_text(encoding="utf-8")
+    )
+    passed = [item for item in manifest.items if item.qc_status == "pass"]
+    if not passed:
+        raise ValueError(f"no QC-passed item in {source}")
+    empty = [
+        split for split in BANK_SPLITS if not any(item.split == split for item in passed)
+    ]
+    if empty:
+        raise ValueError(
+            f"pruning to QC-passed items left {', '.join(empty)} empty; "
+            "ingest more rooms before building a release variant"
+        )
+
+    output.mkdir(parents=True, exist_ok=True)
+    kept: list[RIRBankItem] = []
+    for item in passed:
+        for relative in (item.rir_path, item.metadata_path):
+            destination = output / relative
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(source / relative, destination)
+        kept.append(
+            replace(
+                item,
+                qc_status="pending",
+                qc_report_path=None,
+                qc_report_sha256=None,
+            )
+        )
+    kept_tuple = tuple(sorted(kept, key=lambda value: value.item_id))
+    split_indexes = write_split_indexes(output, kept_tuple)
+    transform = {
+        "schema_version": "puresound.rir_bank_variant_transform.v1",
+        "parent_manifest_sha256": manifest.manifest_sha256,
+        "transform": "drop_quarantined_items",
+        "dropped_item_count": len(manifest.items) - len(kept_tuple),
+    }
+    pruned = RIRBankManifest(
+        bank_id=f"{manifest.bank_id}{bank_id_suffix}",
+        release_status="draft",
+        split_policy=manifest.split_policy,
+        generator=BankGeneratorProvenance(
+            generator_id="puresound.audio.rir.bank.release",
+            generator_version=RIR_BANK_QC_PRUNE_SCHEMA_VERSION,
+            code_revision=manifest.generator.code_revision,
+            config_sha256=canonical_json_sha256(transform),
+            task_plan_sha256=canonical_json_sha256(task_plan_rows(kept_tuple)),
+            seed=manifest.generator.seed,
+        ),
+        renderer_profiles=manifest.renderer_profiles,
+        items=kept_tuple,
+        split_indexes=split_indexes,
+    ).with_content_sha256()
+    manifest_path = output / "rir_bank_manifest.json"
+    temporary = manifest_path.with_suffix(manifest_path.suffix + ".tmp")
+    temporary.write_text(pruned.to_json() + "\n", encoding="utf-8")
+    temporary.replace(manifest_path)
+    summary = run_rir_bank_qc(output, policy=qc_policy, workers=int(qc_workers))
+    audit = audit_rir_bank_qc_release(output)
+    return {
+        "schema_version": RIR_BANK_QC_PRUNE_SCHEMA_VERSION,
+        "source_root": str(source),
+        "bank_root": str(output),
+        "source_item_count": len(manifest.items),
+        "kept_item_count": len(kept_tuple),
+        "dropped_item_count": len(manifest.items) - len(kept_tuple),
+        "dropped_item_ids": sorted(
+            item.item_id for item in manifest.items if item.qc_status != "pass"
+        ),
+        "qc_counts": summary["counts"],
+        "qc_audit_valid": bool(audit["valid"]),
+    }
+
 
 
 #: Sampling proportions for ``mixed_calibrated_real``. Equal weighting is a

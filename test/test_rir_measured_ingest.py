@@ -15,7 +15,6 @@ from puresound.audio.rir.bank.measured_ingest import (
     MeasuredAlignmentPolicy,
     align_measured_channel,
     build_measured_m6_bank,
-    prune_bank_to_qc_passed,
     scan_measured_corpus_view,
 )
 from puresound.audio.rir.bank.production import (
@@ -26,6 +25,7 @@ from puresound.audio.rir.bank.qc import run_rir_bank_qc
 from puresound.audio.rir.bank.release import (
     audit_m6_variant_release,
     build_m6_variant_release,
+    prune_bank_to_qc_passed,
 )
 from puresound.audio.rir.bank.schema import RIRBankManifest
 

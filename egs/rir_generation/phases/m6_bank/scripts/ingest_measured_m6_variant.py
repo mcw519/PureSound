@@ -26,9 +26,9 @@ from typing import Sequence
 from puresound.audio.rir.bank.measured_ingest import (
     MeasuredAlignmentPolicy,
     build_measured_m6_bank,
-    prune_bank_to_qc_passed,
 )
 from puresound.audio.rir.bank.qc import RIRBankQCPolicy
+from puresound.audio.rir.bank.release import prune_bank_to_qc_passed
 
 
 def main(argv: Sequence[str] | None = None) -> int:

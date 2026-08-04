@@ -352,12 +352,12 @@ def release(tmp_path_factory):
     from egs.rir_generation.phases.m6_bank.scripts.validate_m6_reproducible_generation import (
         _run_generator,
     )
-    from puresound.audio.rir.bank.measured_ingest import (
-        build_measured_m6_bank,
+    from puresound.audio.rir.bank.measured_ingest import build_measured_m6_bank
+    from puresound.audio.rir.bank.qc import run_rir_bank_qc
+    from puresound.audio.rir.bank.release import (
+        build_m6_variant_release,
         prune_bank_to_qc_passed,
     )
-    from puresound.audio.rir.bank.qc import run_rir_bank_qc
-    from puresound.audio.rir.bank.release import build_m6_variant_release
 
     from test_rir_measured_ingest import _write_corpus_view
 
@@ -552,7 +552,10 @@ def test_renderer_approval_closes_its_production_check(release):
     """
     from puresound.audio.rir.bank.production import _production_decision_components
     from puresound.audio.rir.bank.qc import audit_rir_bank_qc_release
-    from puresound.audio.rir.bank.release import build_m6_variant_release
+    from puresound.audio.rir.bank.release import (
+        build_m6_variant_release,
+        prune_bank_to_qc_passed,
+    )
 
     root = release["root"]
     evaluation = evaluate_m6_release(
