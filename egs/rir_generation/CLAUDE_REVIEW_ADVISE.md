@@ -1,6 +1,6 @@
 # M6 RIR Generation — 現況
 
-**更新日期**：2026-08-03
+**更新日期**：2026-08-04
 **範圍**：M6.1–M6.6 全鏈（契約、生成、QC、release、evaluation、production decision）
 ＋ M6 實際使用的渲染演算法鏈（scene 抽樣、hybrid crossover、PathEvents/FDN/spatial）
 ＋ 讀取端與訓練整合
@@ -23,10 +23,19 @@
 （`git log -p egs/rir_generation/CLAUDE_REVIEW_ADVISE.md`）。
 
 本文件保留：**現在為真且經量測的性質**（§2，pilot 的地基）、**M5.3 收斂判準的決定
-與實作**（§3）、**100 房間 A/B pilot 的結果與由它挖出的問題**（§4）、**效能**（§5）、
-**怎麼重跑這些量測**（§6）。
+與實作**（§3）、**100 房間 A/B pilot 的結果與由它挖出的問題**（§4）、**real_native
+解封與實測 RIR 的時間原點**（§5）、**效能**（§6）、**怎麼重跑這些量測**（§7）。
 
-全套測試現況：`.venv/bin/python -m pytest -q test/` → **621 passed**，全綠。
+全套測試現況：`.venv/bin/python -m pytest -q test/` → **640 passed**，全綠。
+
+> **2026-08-04 更新。** `real_native` / `mixed_calibrated_real` 兩條寫死 blocked 的
+> recipe 已解封（[§5](#5-real_native-已解封實測-rir-的時間原點)）。實測 RIR 過不了
+> M6 item QC 的原因是**時間原點不同**（40/40 全掛在 `prearrival_energy`），不是資料
+> 壞掉；把語料移除掉的傳播延遲放回去之後 **313/313 channel 通過因果 gate**。
+> BRUDEX 因為本來就帶著傳播延遲，成了選 onset 判準的**客觀校正標準**——ISO 3382-1 的
+> peak−20 dB 讓它只差 1 樣本（2.1 cm、99% 在 ±2 內），而所有「噪音地板以上第一個
+> 樣本」的變體都差 13–66 樣本。**這次的三個錯誤又是同一型**：掃描方向、淡入位置、
+> 以及第三次的「量到的東西不是我命名的那個概念」（拿位準去判「更早的到達」）。
 
 > **2026-08-03 下半場更新。** A/B pilot 跑完了（100 房間 × 4 RIR × 兩臂），結果與
 > 它挖出的問題寫在 [§4](#4-ab-pilot-的結果與由它挖出的問題)。兩個要點：
@@ -516,7 +525,92 @@ RIR，**再**加背景噪音。所以訓練混音的噪音地板是由顯式的�
 
 ---
 
-## 5. 效能實測
+## 5. real_native 已解封：實測 RIR 的時間原點
+
+`real_native` 與 `mixed_calibrated_real` 兩條 recipe 過去是**寫死 blocked** 的，理由是
+「沒有通過 QC 的 measured M6 variant」。先量了一次到底差多遠：**把五個語料打包成 M6
+item 直接跑真實 QC，40/40 全掛，而且掛在同一個地方**——每個語料 23–34 個 channel 的
+`prearrival_energy`，外加 `sound_speed_is_physical: not_evaluable`。
+
+**成因是時間原點不同，不是資料壞掉。** M6 定義 `t=0` 是聲源發聲時刻，所以
+`floor(distance/c·fs)` 之前必須是零。發佈的 RIR 以自己的直達音為原點。判別兩者的量測：
+**實測的 pre-arrival 能量比噪音地板高 44–74 dB**（p95 到 0.0 dB，即直達音峰值本身就落在
+幾何窗內）——那是直達音掉進窗裡的簽名，不是噪音漏進窗裡。
+
+所以 ingest 做的事是**把語料移除掉的傳播延遲放回去**：每個 channel 平移，使它的
+ISO 3382-1 起點落在該 channel 距離對應的幾何到達樣本上，前面的區間靜音。房間響應本身
+一個樣本都沒改。
+
+### 5.1 BRUDEX 是這件事的校正標準
+
+BRUDEX 的 onset 隨距離的斜率是 **+1.00**（其餘語料 ≈ 0），即傳播延遲本來就在資料裡。
+**正確的 onset 判準必須向 BRUDEX 要求零平移**，這給了一個客觀的選法：
+
+| onset 門檻 | BRUDEX median \|shift\| | ±2 樣本內 |
+|---|---|---|
+| **peak−20 dB（ISO 3382-1）** | **1.0 樣本（2.1 cm）** | **99%** |
+| peak−40 dB | 3.0 | 38% |
+| noise+30 dB | 13.0 | 1% |
+| noise+20 dB | 26.0 | 0% |
+| noise+10 dB | 66.5 | 0% |
+
+**每一個「噪音地板以上第一個樣本」的變體都差 13–66 樣本**，因為掃頻解捲積留下的
+acausal pre-ringing 就坐在噪音地板之上、直達音之前。ISO 的 peak-relative 門檻贏。
+
+實作上有兩個容易寫錯的地方，兩個都踩過並被上表抓出來：
+
+- **掃描方向**。ISO 的規則是**從頭往前找第一次越過門檻**。從峰值往回找會得到「峰值前
+  最後一個安靜的樣本」，那會把所有更早的真實響應留在「起點之前」，於是 muting 吃掉
+  真訊號。改對之後 `removed_energy` 從 p95 ≈ 0.5 掉到 2–4e-3。
+- **淡入位置**。ramp 必須落在起點**之前**的次門檻樣本上。原本讓它從幾何到達點開始，
+  結果衰減掉直達音峰值本身，近場 channel 一半的能量就這樣沒了，而所有 gate 都還報成功。
+  代價是刻意的 4 樣本（0.25 ms）到達偏移，均勻施加於全部 channel，且在 QC 的 1 ms 容忍內。
+
+### 5.2 拒收而不硬對
+
+`earlier_arrival` 擋的是 ISO 門檻的盲區：直達音比某個晚期反射弱 20 dB 以上時，前向掃描
+會跨過它。**判別依據是「間隔」，不是位準**——pre-onset 區間本來就有直達音自己的上升緣，
+比噪音高 40 dB 以上，所以拿位準去比會 100% 誤判（這是第三次同型錯誤：**量到的東西不是
+我命名的那個概念**）。改成「pre-onset 最大短窗 RMS 高於噪音，且與 onset 之間有空隙」。
+
+### 5.3 實測結果
+
+`--limit-per-corpus 60`，300 個 item：
+
+| 語料 | aligned | rejected | shift p50 | 拒收原因 |
+|---|---|---|---|---|
+| brudex | 60 | 0 | **+4**（= 淡入偏移，原始誤差 0） | — |
+| reverb | 60 | 0 | −2111（拿掉它 131 ms 的前導 pad） | — |
+| diffrir | 59 | 1 | +5 | earlier_arrival |
+| ace | 56 | 4 | +5 | earlier_arrival 3、removed_energy 2 |
+| dech | 28 | **32** | +2 | earlier_arrival |
+
+- **313/313 channel 通過因果 gate**，arrival error 最大 0.19 ms（容忍 1.0 ms）。
+- QC **217/263 pass**；被隔離的全是 DIFFRIR，掛在 `implausible_t20` /
+  `decay_fit_coverage`——就是 §4.5 量到的 flatness 0.03、尾巴被淡掉。**那是真實資料的
+  性質，不是對位問題，讓 QC 正當地隔離它們才對。**
+- dech 拒收率最高（53%），與 dEchorate 自己文件承認的喇叭低頻滾降一致。
+
+**沒有為了通過而放寬任何 QC 門檻。** release variant 需要 100% pass（production decision
+逐 item 檢查），所以取一份**剪枝副本**；未剪枝的 bank 留著當「丟了什麼、為什麼」的紀錄。
+
+兩個 production decision 檢查因此從 False 翻成 True：
+
+```
+                                    無 measured    有 measured
+all_required_recipes_are_ready         False    →     True
+real_and_mixed_recipe_semantics_are_valid False →     True
+```
+
+不給 `--measured-bank` 時行為與過去完全相同（blocked，blocker 文字不變）。
+
+**`sound_speed_m_s` 是假設，不是量測**：沒有任何語料發佈氣溫濕度，所以用
+`EnvironmentConfig(20 °C, 50% RH)` → 344.04 m/s，寫進每個 item 的 scene（QC 會用同一個
+數字重算到達時刻，兩邊才對得上），並在 `provenance` 欄標明是假設。
+
+---
+
+## 6. 效能實測
 
 | 項目 | 實測 |
 |---|---|
@@ -528,14 +622,14 @@ RIR，**再**加背景噪音。所以訓練混音的噪音地板是由顯式的�
 | `render_multiband_fdn` | 0.155 s / 1.6 s channel（**FDN 不是瓶頸，約 1%**） |
 | 400-item 臂（GPU 16 workers） | pyro **9 min** / M4 **25 min**（優化前 44 min） |
 | M6 契約測試（13 檔） | **30 passed / 133 s** |
-| 全套測試 | **581 passed** |
+| 全套測試 | **640 passed** |
 
 **只有低頻帶能上 GPU，高頻帶永遠 CPU。** 所以兩臂受益差很多：pyro 93% 的成本在低頻
 帶，M4 的主成本是 path event 生成。
 
 ---
 
-## 6. 重現
+## 7. 重現
 
 ```bash
 # M6 契約測試（13 檔，30 tests，約 133 秒）— 注意 .venv
@@ -599,6 +693,29 @@ PURESOUND_M6_PILOT_GPU_DEVICES=0,1 \
   --per-bank 400
 # pair validator 報的是 generator 自己記在 metadata 的 realized_acoustics；
 # 這一支直接量 WAV。兩個來源獨立，對得上才算數。
+```
+
+```bash
+# §5：實測 RIR ingest。--limit-per-corpus 是跨房間取樣（不是取前 N 個，
+# 否則抽到的會是同一個房間，room-disjoint split 會塌掉）。
+PYTHONPATH=. .venv/bin/python \
+  egs/rir_generation/phases/m6_bank/scripts/ingest_measured_m6_variant.py \
+  --source /work/any_exp_link/puresound_exp/real_rir_16k_train_view/items \
+  --bank <out>/measured_bank --pruned-bank <out>/measured_pruned \
+  --limit-per-corpus 60 --workers 8 --code-revision "$(git rev-parse --short HEAD)" \
+  --report <out>/measured_ingest.json
+# 盯兩個數字：brudex 的 shift p50 必須等於 fade_in_samples（4），
+# 那是「onset 判準真的找到直達音」的校正標準；以及 audit=PASS。
+
+# 把它接成 release，讓 real_native / mixed_calibrated_real 變 ready
+PYTHONPATH=. .venv/bin/python \
+  egs/rir_generation/phases/m6_bank/scripts/build_m6_variant_release.py \
+  --source-bank <synthetic-qc-bank> --output-dir <out>/release \
+  --measured-bank <out>/measured_pruned --mixed-synthetic-weight 0.5 --qc-workers 8
+# 不給 --measured-bank 則兩條 recipe 維持 blocked，與過去行為完全相同。
+
+# 對位與 recipe 的測試（19 tests；含 BRUDEX 不變量與前向掃描回歸守衛）
+.venv/bin/python -m pytest -q test/test_rir_measured_ingest.py
 ```
 
 ---

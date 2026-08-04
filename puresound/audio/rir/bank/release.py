@@ -715,6 +715,13 @@ def _ready_recipe(
     )
 
 
+#: Sampling proportions for ``mixed_calibrated_real``. Equal weighting is a
+#: neutral default, not a measured optimum: no downstream experiment has compared
+#: mixtures yet, and the two pools differ in size by orders of magnitude, so any
+#: other split would encode an assumption nothing has tested.
+DEFAULT_MIXED_ORIGIN_WEIGHTS = {"synthetic": 0.5, "real": 0.5}
+
+
 def build_m6_variant_release(
     source_bank_root: str | Path,
     output_root: str | Path,
@@ -722,16 +729,36 @@ def build_m6_variant_release(
     release_id: str = "puresound-m6-candidate",
     normalized_peak: float = 0.98,
     qc_workers: int = 1,
+    measured_bank_root: str | Path | None = None,
+    mixed_origin_weights: Mapping[str, float] | None = None,
 ) -> RIRBankReleaseManifest:
-    """Build calibrated and peak-normalized synthetic candidate variants."""
+    """Build the synthetic candidate variants, and a measured one when supplied.
+
+    Without ``measured_bank_root`` the real and mixed recipes stay blocked, which
+    is the honest state of a release that has no measured data in it. Supplying a
+    QC-passed measured bank — see
+    :func:`puresound.audio.rir.bank.measured_ingest.build_measured_m6_bank` —
+    adds a ``measured_native`` variant and makes both recipes ready.
+    """
 
     source_root = Path(source_bank_root)
     release_root = Path(output_root)
+    measured_root = Path(measured_bank_root) if measured_bank_root else None
+    weights = dict(mixed_origin_weights or DEFAULT_MIXED_ORIGIN_WEIGHTS)
     if release_root.exists():
         raise FileExistsError(f"release output already exists: {release_root}")
     source_audit = audit_rir_bank_qc_release(source_root)
     if not source_audit["valid"]:
         raise ValueError("source bank is not a valid M6.3 QC release")
+    if measured_root is not None:
+        if not audit_rir_bank_qc_release(measured_root)["valid"]:
+            raise ValueError("measured bank is not a valid M6.3 QC release")
+        if set(weights) != {"synthetic", "real"} or any(
+            value <= 0.0 for value in weights.values()
+        ):
+            raise ValueError(
+                "mixed_origin_weights needs a positive synthetic and real weight"
+            )
     release_root.mkdir(parents=True)
     calibrated_root = release_root / "variants" / "calibrated"
     normalized_root = release_root / "variants" / "peak_normalized"
@@ -756,7 +783,54 @@ def build_m6_variant_release(
         transform="one_common_item_gain_to_peak",
         parent_variant_id=calibrated.variant_id,
     )
-    variants = {item.variant_id: item for item in (calibrated, normalized)}
+    built = [calibrated, normalized]
+    measured: ReleaseVariant | None = None
+    if measured_root is not None:
+        measured_variant_root = release_root / "variants" / "measured_native"
+        shutil.copytree(measured_root, measured_variant_root)
+        measured = _variant_reference(
+            release_root,
+            measured_variant_root,
+            variant_id="measured_native",
+            transform="iso3382_onset_aligned_copy_of_measured_qc_release",
+            parent_variant_id=None,
+        )
+        built.append(measured)
+    variants = {item.variant_id: item for item in built}
+    if measured is None:
+        real_and_mixed = (
+            ReleaseRecipe(
+                recipe_id="real_native",
+                status="blocked",
+                variant_ids=(),
+                origin_weights={},
+                blockers=("no QC-passed measured M6 variant was supplied",),
+            ),
+            ReleaseRecipe(
+                recipe_id="mixed_calibrated_real",
+                status="blocked",
+                variant_ids=(),
+                origin_weights={},
+                blockers=("real_native recipe is unavailable",),
+            ),
+        )
+    else:
+        real_and_mixed = (
+            _ready_recipe(
+                release_root,
+                variants,
+                recipe_id="real_native",
+                variant_ids=(measured.variant_id,),
+                origin_weights={"real": 1.0},
+            ),
+            _ready_recipe(
+                release_root,
+                variants,
+                recipe_id="mixed_calibrated_real",
+                variant_ids=(calibrated.variant_id, measured.variant_id),
+                origin_weights=weights,
+            ),
+        )
     recipes = (
         _ready_recipe(
             release_root,
@@ -772,20 +846,7 @@ def build_m6_variant_release(
             variant_ids=(normalized.variant_id,),
             origin_weights={"synthetic": 1.0},
         ),
-        ReleaseRecipe(
-            recipe_id="real_native",
-            status="blocked",
-            variant_ids=(),
-            origin_weights={},
-            blockers=("no QC-passed measured M6 variant was supplied",),
-        ),
-        ReleaseRecipe(
-            recipe_id="mixed_calibrated_real",
-            status="blocked",
-            variant_ids=(),
-            origin_weights={},
-            blockers=("real_native recipe is unavailable",),
-        ),
+        *real_and_mixed,
     )
     release = RIRBankReleaseManifest(
         release_id=release_id,

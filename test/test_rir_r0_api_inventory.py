@@ -75,9 +75,17 @@ HYBRID_PUBLIC_SURFACE: frozenset[str] = frozenset({"generate_hybrid_rir"})
 #: cheap test and the exact test on the same input, which needs both names.
 #: Promoting them would put an implementation detail in the public surface;
 #: testing only through the public function would not isolate the property.
+#:
+#: ``_recipe_semantics_valid`` is reached by a test, not by shipping code.  The
+#: measured ingest exists to turn M6's ``real_native`` and
+#: ``mixed_calibrated_real`` recipes from blocked into ready, and this predicate
+#: is the production decision's own definition of whether they are ready.
+#: Re-implementing the rule in the test would let the two drift apart, which is
+#: exactly the failure the test is there to catch.
 CROSS_PACKAGE_PRIVATE_IMPORTS: frozenset[tuple[str, str]] = frozenset(
     {
         ("puresound.audio.rir.bank.evaluation", "_paired_t_confidence_interval"),
+        ("puresound.audio.rir.bank.production", "_recipe_semantics_valid"),
         ("puresound.audio.rir.path_events.geometry", "_object_bounds"),
         ("puresound.audio.rir.path_events.geometry", "_segment_misses_bounds"),
     }
