@@ -15,7 +15,7 @@ def test_m6_wrapper_defaults_to_the_higher_fidelity_backend(tmp_path):
 
     Against 1465 measured RIRs the octave decay shape of path-events-m4 sits
     8x closer than pyroomacoustics, whose high-frequency reverberation runs
-    about 2.2x long (CLAUDE_REVIEW_ADVISE.md 6.6.6). Only the wrapper default
+    about 2.2x long (RIR_EXP_LOG.md 6.6.6). Only the wrapper default
     changes: generate_hybrid_rir stays on pyroomacoustics — the M4/M5 exit
     gates pin that layer, and the test above is one of them — and the wrapper
     always passes --high-backend explicitly.

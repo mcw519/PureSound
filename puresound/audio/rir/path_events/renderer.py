@@ -3,7 +3,7 @@
 Samples before the discrete arrival bin ``floor(delay * fs)`` are exactly zero,
 which is the causality contract the rest of the pipeline and M6 QC rely on.
 Moved out of ``puresound.audio.rir.path_events`` in R3 of
-``RIR_MODULARIZATION_PLAN.md``.
+``RIR_EXP_LOG.md``.
 """
 
 from __future__ import annotations

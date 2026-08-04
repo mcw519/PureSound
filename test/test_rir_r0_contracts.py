@@ -1,6 +1,6 @@
 """Unit tests for the frozen R0 contracts.
 
-``RIR_MODULARIZATION_PLAN.md`` §8 item 4 asks for ``RIRArray``,
+``RIR_EXP_LOG.md`` §8 item 4 asks for ``RIRArray``,
 ``RenderContext``, ``BackendCapabilities`` and a metadata contract.  These
 tests cover the behaviour the later stages will rely on, including the
 sound-speed precedence that decides where the causality boundary falls.

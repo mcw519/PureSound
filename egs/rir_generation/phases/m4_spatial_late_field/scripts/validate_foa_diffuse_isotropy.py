@@ -15,7 +15,7 @@ implementation avoids this by solving a single shared gain over the
 concatenated channels — ``energy_policy`` names it
 ``one_shared_array_gain_preserves_spatial_ratios``.
 
-Written to settle review finding A11 (``CLAUDE_REVIEW_ADVISE.md``), which
+Written to settle review finding A11 (``RIR_EXP_LOG.md``), which
 claimed the per-channel behaviour.  It is kept as a validator rather than a
 one-off because the property is worth re-checking whenever the coupling policy
 changes: the counterfactual it reports shows a per-channel solve would attenuate

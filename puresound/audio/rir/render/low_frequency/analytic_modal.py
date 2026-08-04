@@ -2,7 +2,7 @@
 
 Reciprocal source/receiver modal coupling with causal onset, used as a fast
 probe alongside the pytARD solver.  Moved out of
-``puresound.audio.rir.render.hybrid`` in R2 of ``RIR_MODULARIZATION_PLAN.md``.
+``puresound.audio.rir.render.hybrid`` in R2 of ``RIR_EXP_LOG.md``.
 """
 
 from __future__ import annotations

@@ -7,7 +7,7 @@
 這份文件用繁體中文說明 PureSound 正在解決什麼問題、目前的 RIR
 生成器如何運作、各項公式代表什麼，以及現有實驗支持或否決了哪些
 假設。完整里程碑與驗收條件見
-[`RIR_REALISM_PLAN.md`](../../RIR_REALISM_PLAN.md)。
+[`RIR_REALISM_PLAN.md`](../../RIR_EXP_LOG.md)。
 
 一句話版本：我們正在打造一個 **material-first、位置相關、保持因果、
 可被量測反駁** 的混合 RIR 生成器。M1 已建立場景與材料基礎；M2 已修正
@@ -543,7 +543,7 @@ loss physics。
 材料損失假設。
 
 完整 development/heldout 數據與決策記錄見
-[`RIR_REALISM_PLAN.md` 第 10 節](../../RIR_REALISM_PLAN.md#10-m2-modal-validation-and-corrected-probe)。
+[`RIR_REALISM_PLAN.md` 第 10 節](../../RIR_EXP_LOG.md#10-m2-modal-validation-and-corrected-probe)。
 
 ## 10. 下一個算法：低頻複數阻抗
 

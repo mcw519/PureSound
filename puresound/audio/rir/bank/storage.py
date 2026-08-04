@@ -2,7 +2,7 @@
 
 Writes the WAV/JSON pair that every downstream reader expects.  Kept apart
 from the renderer so ``render`` stays free of filesystem concerns; moved out of
-``puresound.audio.rir.render.hybrid`` in R2 of ``RIR_MODULARIZATION_PLAN.md``.
+``puresound.audio.rir.render.hybrid`` in R2 of ``RIR_EXP_LOG.md``.
 
 The WAV is 32-bit float (``encoding="PCM_F"``), matching
 ``puresound.audio.rir.contracts.RIR_WAV_SUBTYPE``.

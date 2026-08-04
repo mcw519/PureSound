@@ -3,7 +3,7 @@
 Turns a specular path set into one that also carries object transmission,
 bounded knife-edge detours, and an exact ``(1 - s)`` / ``s / N`` energy split.
 Moved out of ``puresound.audio.rir.path_events`` in R3 of
-``RIR_MODULARIZATION_PLAN.md``; kept apart from ``geometry`` because the
+``RIR_EXP_LOG.md``; kept apart from ``geometry`` because the
 interaction model is 500+ lines on its own.
 """
 

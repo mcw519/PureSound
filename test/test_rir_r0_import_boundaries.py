@@ -1,6 +1,6 @@
 """R0 import boundaries: enforce the layering before code starts moving.
 
-``RIR_MODULARIZATION_PLAN.md`` §3.1 defines the dependency direction::
+``RIR_EXP_LOG.md`` §3.1 defines the dependency direction::
 
     api / CLI adapter  ->  render, calibration, bank  ->  path_events, scene,
     metrics  ->  physics, contracts  ->  numpy / scipy

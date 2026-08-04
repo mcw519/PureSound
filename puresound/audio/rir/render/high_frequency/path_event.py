@@ -2,7 +2,7 @@
 
 Renders ordered image-source path events with causal fractional delays and
 angle-aware boundary gains.  Moved out of ``puresound.audio.rir.render.hybrid`` in R2
-of ``RIR_MODULARIZATION_PLAN.md``.
+of ``RIR_EXP_LOG.md``.
 """
 
 from __future__ import annotations

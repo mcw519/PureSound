@@ -3,7 +3,7 @@
 Subclasses the M3 PathEvent backend and replaces the sparse late field with a
 deterministic feedback-delay-network tail, crossfaded at the estimated mixing
 time.  Moved out of ``puresound.audio.rir.render.hybrid`` in R2 of
-``RIR_MODULARIZATION_PLAN.md``.
+``RIR_EXP_LOG.md``.
 """
 
 from __future__ import annotations

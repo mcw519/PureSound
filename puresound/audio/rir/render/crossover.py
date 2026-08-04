@@ -3,7 +3,7 @@
 The causal Linkwitz-Riley crossover, the M2.11 energy-matching policy, the
 Pyroomacoustics fixed-delay removal, and the ``floor(distance / c * fs)``
 causality clip.  Moved out of ``puresound.audio.rir.render.hybrid`` in R2 of
-``RIR_MODULARIZATION_PLAN.md``.
+``RIR_EXP_LOG.md``.
 
 The clip preserves the arrival sample itself and zeroes everything strictly
 before it; ``puresound.audio.rir.contracts.RIRArray.violates_causality``

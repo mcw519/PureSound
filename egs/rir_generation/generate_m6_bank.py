@@ -49,7 +49,7 @@ def _build_parser() -> argparse.ArgumentParser:
             "High-frequency renderer used for this M6 candidate. Defaults to "
             "path-events-m4: against 1465 measured RIRs its octave decay "
             "shape sits 8x closer than pyroomacoustics, whose high-frequency "
-            "reverberation runs ~2.2x long (CLAUDE_REVIEW_ADVISE.md 6.6.6). "
+            "reverberation runs ~2.2x long (RIR_EXP_LOG.md 6.6.6). "
             "pyroomacoustics remains available for speed and as the A/B arm."
         ),
     )

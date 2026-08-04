@@ -2,7 +2,7 @@
 
 ``PathEvent`` keeps the physical delay separate from the complex pressure gain
 so propagation phase cannot be counted twice.  Moved out of
-``puresound.audio.rir.path_events`` in R3 of ``RIR_MODULARIZATION_PLAN.md``.
+``puresound.audio.rir.path_events`` in R3 of ``RIR_EXP_LOG.md``.
 """
 
 from __future__ import annotations

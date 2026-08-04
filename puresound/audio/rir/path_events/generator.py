@@ -3,7 +3,7 @@
 Enumerates the ordered image-source lattice, attaches angle-aware complex
 boundary gains, and applies visibility, interactions and directivity for a
 material-first scene.  Moved out of ``puresound.audio.rir.path_events`` in R3
-of ``RIR_MODULARIZATION_PLAN.md``.
+of ``RIR_EXP_LOG.md``.
 """
 
 from __future__ import annotations

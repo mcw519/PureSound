@@ -3,7 +3,7 @@
 Wraps the vendored pytARD solver: an exact sampled modal recurrence, the
 Green-delta excitation, level calibration and the optional broadband RT60
 envelope.  Moved out of ``puresound.audio.rir.render.hybrid`` in R2 of
-``RIR_MODULARIZATION_PLAN.md``.
+``RIR_EXP_LOG.md``.
 
 pytARD and CuPy are imported lazily so this module stays importable without
 them.

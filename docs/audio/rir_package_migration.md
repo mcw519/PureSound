@@ -2,7 +2,7 @@
 
 The RIR code moved from flat modules under `puresound/audio/` into the
 `puresound.audio.rir` domain package, following
-[`RIR_MODULARIZATION_PLAN.md`](../../RIR_MODULARIZATION_PLAN.md) stages R0–R7.
+[`RIR_EXP_LOG.md`](../../RIR_EXP_LOG.md) stages R0–R7.
 
 The flat modules are **gone**, and so are the compatibility shims that briefly
 stood in for them: every caller in `egs/`, `test/` and `puresound/` now imports

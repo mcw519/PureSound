@@ -429,4 +429,4 @@ Further reading:
 - [`docs/audio/rir_bank_v2_zh-TW.md`](../../docs/audio/rir_bank_v2_zh-TW.md) — M6 contract and evidence rules.
 - [`docs/audio/hybrid_rir.md`](../../docs/audio/hybrid_rir.md) — hybrid renderer details.
 - [`docs/audio/rir_scene_v2.md`](../../docs/audio/rir_scene_v2.md) — M1 scene/material schema.
-- [`RIR_REALISM_PLAN.md`](../../RIR_REALISM_PLAN.md) — project roadmap.
+- [`RIR_EXP_LOG.md`](../../RIR_EXP_LOG.md) — project roadmap.

@@ -1,12 +1,12 @@
 """Post-hoc obstacle occlusion and scatter for the geometric backend.
 
 Applied by the Pyroomacoustics backend after rendering.  Moved out of
-``puresound.audio.rir.render.hybrid`` in R2 of ``RIR_MODULARIZATION_PLAN.md``.
+``puresound.audio.rir.render.hybrid`` in R2 of ``RIR_EXP_LOG.md``.
 
 Scope note: this model scales the *whole* channel, reverberant tail included,
 so it lowers level without lowering DRR.  The PathEvent backends instead treat
 furniture as real visibility geometry.  The two are not equivalent; see the
-review notes in ``egs/rir_generation/CLAUDE_REVIEW_ADVISE.md``.
+review notes in ``RIR_EXP_LOG.md``.
 """
 
 from __future__ import annotations

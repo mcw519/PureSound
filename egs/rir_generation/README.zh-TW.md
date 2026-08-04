@@ -389,4 +389,4 @@ pilot 不需要 GPU。
 - [`docs/audio/rir_bank_v2_zh-TW.md`](../../docs/audio/rir_bank_v2_zh-TW.md)：M6 bank 契約與證據規則。
 - [`docs/audio/hybrid_rir.md`](../../docs/audio/hybrid_rir.md)：hybrid renderer 細節。
 - [`docs/audio/rir_scene_v2.md`](../../docs/audio/rir_scene_v2.md)：M1 scene/material schema。
-- [`RIR_REALISM_PLAN.md`](../../RIR_REALISM_PLAN.md)：整體 roadmap。
+- [`RIR_EXP_LOG.md`](../../RIR_EXP_LOG.md)：整體 roadmap。

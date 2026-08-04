@@ -2,7 +2,7 @@
 
 Every backend and the crossover agree on ``[channels, samples]`` float64;
 these two helpers are what enforce it.  Moved out of
-``puresound.audio.rir.render.hybrid`` in R2 of ``RIR_MODULARIZATION_PLAN.md``.
+``puresound.audio.rir.render.hybrid`` in R2 of ``RIR_EXP_LOG.md``.
 """
 
 from __future__ import annotations

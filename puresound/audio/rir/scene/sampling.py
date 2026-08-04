@@ -2,7 +2,7 @@
 
 Layer 2 of the RIR package.  Everything here is deterministic given a seeded
 ``numpy.random.Generator``; nothing renders audio.  Moved out of
-``puresound.audio.rir.render.hybrid`` in R1 of ``RIR_MODULARIZATION_PLAN.md``, which
+``puresound.audio.rir.render.hybrid`` in R1 of ``RIR_EXP_LOG.md``, which
 also gave the externally-used private helpers real names.  ``hybrid_rir``
 re-exports every one of them under the original name.
 """

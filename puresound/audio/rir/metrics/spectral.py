@@ -3,7 +3,7 @@
 ``valid_octave_centers`` is the gate that decides which octave bands a sample
 rate can carry: a band survives only when its whole nominal width stays below
 Nyquist, so 16 kHz stops at the 4 kHz band.  Moved out of
-``puresound.audio.rir.metrics`` in R4 of ``RIR_MODULARIZATION_PLAN.md``.
+``puresound.audio.rir.metrics`` in R4 of ``RIR_EXP_LOG.md``.
 """
 
 from __future__ import annotations

@@ -1,7 +1,7 @@
 """PureSound RIR domain package.
 
 This package is the destination of the modularization described in
-``RIR_MODULARIZATION_PLAN.md``.  It is being populated in stages; during the
+``RIR_EXP_LOG.md``.  It is being populated in stages; during the
 migration the existing flat ``puresound.audio.*`` modules remain the canonical
 implementations and keep working unchanged.
 
@@ -28,7 +28,7 @@ Stage status
 ------------
 
 - **R0 (current)** — contracts frozen, no algorithm code moved.
-- R1..R7 — see ``RIR_MODULARIZATION_PLAN.md``.
+- R1..R7 — see ``RIR_EXP_LOG.md``.
 """
 
 from puresound.audio.rir.contracts import (

@@ -1,7 +1,7 @@
 """RIR API inventory: the package's public surface, frozen and enforced.
 
 Started life as the R0 pre-migration freeze of ``puresound.audio.hybrid_rir``
-(``RIR_MODULARIZATION_PLAN.md`` §8 items 1 and 5).  That module is gone: the
+(``RIR_EXP_LOG.md`` §8 items 1 and 5).  That module is gone: the
 migration finished, the compatibility shims were removed, and every caller now
 imports from ``puresound.audio.rir``.  The file kept its job and changed its
 subject.

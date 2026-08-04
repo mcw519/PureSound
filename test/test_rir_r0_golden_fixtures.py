@@ -1,6 +1,6 @@
 """R0 golden fixtures: pin the serialized form of the core RIR contracts.
 
-``RIR_MODULARIZATION_PLAN.md`` §8 item 2 requires contract fixtures for
+``RIR_EXP_LOG.md`` §8 item 2 requires contract fixtures for
 ``RoomSceneV2``, ``PathEventSet`` and the M6 manifest before any code moves.
 §5 then requires that after each migration stage the same seed still produces
 the same scene, path events and metadata.

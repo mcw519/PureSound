@@ -1,12 +1,12 @@
 """Pyroomacoustics image-source / ray-tracing high-frequency backend.
 
 The production default.  Moved out of ``puresound.audio.rir.render.hybrid`` in R2 of
-``RIR_MODULARIZATION_PLAN.md``.
+``RIR_EXP_LOG.md``.
 
 Determinism caveat: libroom keeps its own process-global RNG for ray tracing,
 which the generator's per-task seeding does not reach, so this backend is not
 byte-reproducible for a fixed seed.  See ``BackendCapabilities`` and the
-review notes in ``egs/rir_generation/CLAUDE_REVIEW_ADVISE.md``.
+review notes in ``RIR_EXP_LOG.md``.
 """
 
 from __future__ import annotations

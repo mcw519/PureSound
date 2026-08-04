@@ -1,7 +1,7 @@
 """First-order source and receiver directivity.
 
 Moved out of ``puresound.audio.rir.path_events`` in R3 of
-``RIR_MODULARIZATION_PLAN.md``.
+``RIR_EXP_LOG.md``.
 """
 
 from __future__ import annotations

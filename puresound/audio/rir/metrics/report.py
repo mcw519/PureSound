@@ -1,7 +1,7 @@
 """``analyze_rir``: the one report facade every bank tool consumes.
 
 Moved out of ``puresound.audio.rir.metrics`` in R4 of
-``RIR_MODULARIZATION_PLAN.md``.
+``RIR_EXP_LOG.md``.
 """
 
 from __future__ import annotations

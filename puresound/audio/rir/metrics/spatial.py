@@ -3,7 +3,7 @@
 These require genuinely synchronized receivers.  Source-indexed multichannel
 banks must report them as not-applicable rather than correlating unrelated
 source channels.  Moved out of ``puresound.audio.rir.metrics`` in R4 of
-``RIR_MODULARIZATION_PLAN.md``.
+``RIR_EXP_LOG.md``.
 """
 
 from __future__ import annotations
