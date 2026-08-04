@@ -1,0 +1,75 @@
+{
+  "between_corpus_sd_db": 9.189353768882835,
+  "existence_is_universal": false,
+  "level_is_poolable": false,
+  "level_pooling_tolerance_db": 4.0,
+  "measured": {
+    "ace": {
+      "channels": 349,
+      "floor_found_fraction": 0.25501432664756446,
+      "median_dynamic_range_db": 61.58571585858192,
+      "median_late_decay_flatness": 0.9099521485869189,
+      "room_sd_db": 5.532019462456564,
+      "rooms": 6,
+      "rooms_with_floor": 6
+    },
+    "brudex": {
+      "channels": 389,
+      "floor_found_fraction": 0.017994858611825194,
+      "median_dynamic_range_db": 85.12031653994106,
+      "median_late_decay_flatness": 0.15098618178230355,
+      "room_sd_db": NaN,
+      "rooms": 3,
+      "rooms_with_floor": 1
+    },
+    "dech": {
+      "channels": 383,
+      "floor_found_fraction": 0.6814621409921671,
+      "median_dynamic_range_db": 64.74056286755095,
+      "median_late_decay_flatness": 0.1310569387083672,
+      "room_sd_db": 2.6368958990132594,
+      "rooms": 9,
+      "rooms_with_floor": 9
+    },
+    "diffrir": {
+      "channels": 380,
+      "floor_found_fraction": 0.05263157894736842,
+      "median_dynamic_range_db": 43.94697374213755,
+      "median_late_decay_flatness": 0.03108262417767275,
+      "room_sd_db": 3.9566666858529906,
+      "rooms": 11,
+      "rooms_with_floor": 8
+    },
+    "reverb": {
+      "channels": 380,
+      "floor_found_fraction": 0.6236842105263158,
+      "median_dynamic_range_db": 58.46347613478245,
+      "median_late_decay_flatness": 0.2722941537197674,
+      "room_sd_db": 1.878385038368044,
+      "rooms": 5,
+      "rooms_with_floor": 5
+    }
+  },
+  "schema_version": "puresound.noise_floor_by_corpus.v1",
+  "synthetic": {
+    "path-events-m4_bank": {
+      "channels": 350,
+      "floor_found_fraction": 0.0,
+      "median_dynamic_range_db": null,
+      "median_late_decay_flatness": 0.7029875678170112,
+      "room_sd_db": NaN,
+      "rooms": 54,
+      "rooms_with_floor": 0
+    },
+    "pyroomacoustics_bank": {
+      "channels": 350,
+      "floor_found_fraction": 0.0,
+      "median_dynamic_range_db": null,
+      "median_late_decay_flatness": 1.3967232970126424,
+      "room_sd_db": NaN,
+      "rooms": 54,
+      "rooms_with_floor": 0
+    }
+  },
+  "within_corpus_room_sd_db": 3.5009917714227146
+}
