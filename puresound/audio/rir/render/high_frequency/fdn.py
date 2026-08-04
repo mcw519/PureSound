@@ -150,6 +150,10 @@ class PathEventFDNHighFrequencyBackend(PathEventHighFrequencyBackend):
         self.last_late_field_metadata = {
             "policy": PATH_EVENT_FDN_COUPLING_POLICY,
             "renderer": "path_event_early_multiband_fdn_late",
+            # Both fields describe the generate_hybrid_rir layer, whose default
+            # the M4/M5 exit gates pin to pyroomacoustics. The M6 wrapper
+            # (generate_m6_bank.py) selects this backend by default since
+            # 2026-08-04, and does so by passing --high-backend explicitly.
             "opt_in": True,
             "production_default_changed": False,
             "target_rt60_origin": "scene_material_predicted_octave_rt60_s",

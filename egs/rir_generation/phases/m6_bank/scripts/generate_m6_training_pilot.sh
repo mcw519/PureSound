@@ -30,7 +30,7 @@
 # LOW_BACKEND=pytard-cupy-material together with GPU_DEVICES to use it.
 set -euo pipefail
 
-backend="${1:-pyroomacoustics}"
+backend="${1:-path-events-m4}"
 output_root="${2:-egs/rir_generation/exp/rir_realism/m6/training_pilot}"
 pilot_rooms="${PURESOUND_M6_PILOT_ROOMS:-1000}"
 rir_per_room="${PURESOUND_M6_PILOT_RIR_PER_ROOM:-4}"

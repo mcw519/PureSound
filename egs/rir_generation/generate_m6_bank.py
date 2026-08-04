@@ -44,8 +44,14 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--backend",
         choices=("pyroomacoustics", "path-events-m4"),
-        default="pyroomacoustics",
-        help="High-frequency renderer used for this M6 candidate.",
+        default="path-events-m4",
+        help=(
+            "High-frequency renderer used for this M6 candidate. Defaults to "
+            "path-events-m4: against 1465 measured RIRs its octave decay "
+            "shape sits 8x closer than pyroomacoustics, whose high-frequency "
+            "reverberation runs ~2.2x long (CLAUDE_REVIEW_ADVISE.md 6.6.6). "
+            "pyroomacoustics remains available for speed and as the A/B arm."
+        ),
     )
     parser.add_argument("--n-rooms", type=int, default=1000)
     parser.add_argument("--rir-per-room", type=int, default=4)

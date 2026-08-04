@@ -10,6 +10,23 @@ def test_m6_emission_is_opt_in_and_default_backend_is_unchanged(tmp_path):
     assert args.high_backend == "pyroomacoustics"
 
 
+def test_m6_wrapper_defaults_to_the_higher_fidelity_backend(tmp_path):
+    """The M6 default is a measured decision, so it is pinned like one.
+
+    Against 1465 measured RIRs the octave decay shape of path-events-m4 sits
+    8x closer than pyroomacoustics, whose high-frequency reverberation runs
+    about 2.2x long (CLAUDE_REVIEW_ADVISE.md 6.6.6). Only the wrapper default
+    changes: generate_hybrid_rir stays on pyroomacoustics — the M4/M5 exit
+    gates pin that layer, and the test above is one of them — and the wrapper
+    always passes --high-backend explicitly.
+    """
+    args = generate_m6_bank._build_parser().parse_args(
+        ["--output-dir", str(tmp_path)]
+    )
+
+    assert args.backend == "path-events-m4"
+
+
 def test_m6_wrapper_defaults_to_material_modal_damping(tmp_path):
     args = generate_m6_bank._build_parser().parse_args(
         ["--output-dir", str(tmp_path)]

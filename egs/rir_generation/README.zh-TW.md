@@ -129,7 +129,7 @@ worker 不會讓 M4 高頻變成 GPU-bound。
 | Scene | `--scene-version v1 --room-type mixed` | 使用 material-first 且相關的房間／裝修／障礙物成因。 |
 | 輸出 | `--output-mode calibrated --record-realized-metrics` | level 語意穩定，並保留可稽核聲學指標。 |
 | 低頻 | `--low-backend pytard-material` | CPU 波／模態 solver；使用材料頻率相關模態阻尼與因果 delta 激勵，不再帶有舊版固定 comb 特徵。 |
-| 高頻 | `--backend pyroomacoustics` | 現階段最穩定、最容易控制的幾何 baseline。 |
+| 高頻 | `--backend path-events-m4` | 預設：八度衰減形狀比 pyroomacoustics 貼近實測 8 倍（pyro 高頻殘響約 2.2 倍長）。要速度或 A/B 對照時再指定 `--backend pyroomacoustics`。 |
 | 取樣率／長度 | `16 kHz / 1.6 s` | 符合目前語音增強 bank 的建議設定。 |
 | Bank 大小 | `1000 rooms × 4 items = 4000 items` | 適合作為第一個訓練 pilot，且保留 room-disjoint split。 |
 | Seed／workers | `1337 / 8` | 內容可重現，worker 數不會改變 item identity。 |
@@ -147,7 +147,7 @@ backend（`path-events-m4`）可以用來做 matched ablation，但第一輪訓�
 PYTHONPATH=. .venv/bin/python \
   egs/rir_generation/generate_m6_bank.py \
   --output-dir egs/rir_generation/exp/rir_realism/m6/training_pilot \
-  --backend pyroomacoustics \
+  --backend path-events-m4 \
   --n-rooms 1000 \
   --rir-per-room 4 \
   --num-workers 8 \
@@ -261,7 +261,7 @@ uv pip install cupy-cuda12x
 
 PYTHONPATH=. .venv/bin/python egs/rir_generation/generate_m6_bank.py \
   --output-dir egs/rir_generation/exp/rir_realism/m6/training_pilot_gpu \
-  --backend pyroomacoustics \
+  --backend path-events-m4 \
   --n-rooms 1000 --rir-per-room 4 \
   --num-workers 1 --gpu-devices 0 \
   --low-backend pytard-cupy-material \
@@ -284,7 +284,7 @@ M6 必須同時具備三個 split，因此至少準備幾個 room。下面只用
 PYTHONPATH=. .venv/bin/python \
   egs/rir_generation/generate_m6_bank.py \
   --output-dir egs/rir_generation/exp/rir_realism/m6/smoke \
-  --backend pyroomacoustics \
+  --backend path-events-m4 \
   --n-rooms 6 \
   --rir-per-room 1 \
   --num-workers 1 \

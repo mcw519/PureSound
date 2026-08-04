@@ -64,6 +64,10 @@
 > 這裡有第五與第六次同型錯誤。§6.6.4：Pearson r 對兩臂都給 +0.6~0.7，只看 r 會誤判「兩臂
 > 都抓到了」，實際效應大小差 20 倍。§6.6.6 是新形狀——**每個量測都對，錯在由一連串正確
 > 量測推出一個沒被量的結論**（從「Sabine 不足」跨到「pra 更完整」）。
+>
+> 依此，**M6 預設 backend 已切換為 path-events-m4**（§6.6.6 決策記錄）。速度依決定不重測，
+> pyro 留作顯式 A/B 臂；底層 `generate_hybrid_rir` 的預設由 M4/M5 出口 gate 錨定、不動。
+> 新預設組合的可重現性已補量（§2.1）。
 
 > **2026-08-03 下半場更新。** A/B pilot 跑完了（100 房間 × 4 RIR × 兩臂），結果與
 > 它挖出的問題寫在 [§4](#4-ab-pilot-的結果與由它挖出的問題)。兩個要點：
@@ -112,7 +116,7 @@ PATH 上是 conda 的直譯器，它缺 `pyroomacoustics` 與 `rir_generator`，
 
 | 性質 | 證據 |
 |---|---|
-| **預設後端已可重現** | C1 修復後兩次執行 6/6 WAV byte-identical、manifest hash 相同（實測） |
+| **預設後端已可重現** | C1 修復後兩次執行 6/6 WAV byte-identical、manifest hash 相同（實測；當時預設高頻帶為 pyroomacoustics）。2026-08-04 預設切為 path-events-m4 後**重量一次**：同參數兩次 fresh run `manifest_sha256` 相同、QC 6/6、status=candidate（實測，6 rooms × 1 item / 0.4 s / pytard-material + path-events-m4） |
 | scene 抽樣本身決定性 | 三次執行 `scene_sha256` 完全相同；非決定性只曾出現在渲染層（實測） |
 | **resume 綁 `code_revision`** | `task["m6"]` 含 `code_revision`（[generate_hybrid_rir.py:572](generate_hybrid_rir.py)），`_task_is_complete`（`:834-838`）逐 key 比對 → 換 revision 續跑會重做，不會產生混血 bank |
 | canonical JSON hash 鏈同源 | `canonical_json_sha256` 單一來源，`sort_keys` + 固定 separators + `allow_nan=False` |
@@ -966,9 +970,30 @@ pyro 9 min / M4 25 min（約 2.7×）也與這次乾淨數字不合，**尚未�
 兩條新線索（都未查）：
 
 - **M4 為什麼還是太平**（2000/500 = 1.089，實測 0.656–0.898）。`_target_rt60_s_by_hz`
-  **已經**做了空氣吸收修正，卻仍偏平——修正量不足或施加位置不對。
-- **pyro 為什麼過衝**。懷疑 pra 的 `set_air_absorption()` 用的是它自己（較弱）的空氣吸收
-  模型，而不是 §4.3b 剛修好的 ISO 9613-1。若是，這兩條線索是同一個成因的兩面。
+  **已經**做了空氣吸收修正，卻仍偏平——修正量不足或施加位置不對。後續用已有數字歸因：
+  M4 在 2 kHz 命中目標（1.002）、在 500 Hz 只有 0.704，而 500 Hz 八度是**純低頻帶**——
+  所以「偏平」多半是 §6.6.7 低頻帶偏快換座標的再現，歸併進那條，不另立案。
+- **pyro 為什麼過衝**。曾懷疑 pra 的 `set_air_absorption()` 用它自己（較弱）的模型而非
+  ISO 9613-1（兩臂確實用不同模型：pyro 走 pra 內建、M4 走我們的 ISO）。但用正確機制估
+  （空氣吸收加在衰減**率**上）：2 kHz 約 3.4 dB/s，對 60 dB/s 的衰減率是 ~5% 的效應，
+  **解釋不了 2.2×**；4–8 kHz 才放大。主因仍未知（scattering、ISM order、能量守恆方式都
+  是候選），估算未經量測驗證。
+
+**決策（2026-08-04）：M6 預設 backend 已切換為 path-events-m4。**
+
+- 改的是 `generate_m6_bank.py --backend` 預設與 pilot script 的預設臂；依據即本節
+  0.081 vs 0.628。README 兩份的表列與範例指令已同步。
+- **速度依決定不重測**；pyro 保留為顯式選項與 A/B 對照臂，過衝成因列未解。
+- **底層 `generate_hybrid_rir.py` 的預設沒動**（仍 pyroomacoustics）。三個既有 gate
+  明文錨定那一層——M5 的 `production_default_remains_pyroomacoustics`（檢查預設 backend
+  實例型別）、M4 coupling validator 的 `production_default_unchanged`（讀 fdn metadata）、
+  以及 `test_m6_emission_is_opt_in_and_default_backend_is_unchanged`——而 M6 wrapper
+  每次都顯式傳 `--high-backend`（[generate_m6_bank.py:186](phases/../generate_m6_bank.py)）。
+  改那一層等於改寫已結案里程碑的出口契約，不屬於這個決定的範圍。
+- 新預設由新測試釘住：`test_m6_wrapper_defaults_to_the_higher_fidelity_backend`。
+- fdn metadata 的 `opt_in: true / production_default_changed: false` 描述的是
+  generate_hybrid_rir 那一層，仍為真；已加註解錨定語意，防止之後被「修正」成謊話或
+  被誤讀成 M6 的狀態。
 
 ### 6.6.7 還沒查的：低頻帶偏快
 

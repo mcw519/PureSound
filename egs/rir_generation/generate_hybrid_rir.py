@@ -253,7 +253,10 @@ def _parse_args(argv=None):
         default="pyroomacoustics",
         help=(
             "Use the existing Pyroomacoustics backend, the opt-in M3 coherent "
-            "PathEvent backend, or the opt-in M4 PathEvent-early/FDN-late backend."
+            "PathEvent backend, or the M4 PathEvent-early/FDN-late backend. "
+            "This low-level default stays pyroomacoustics because the M4/M5 "
+            "exit gates pin it; the M6 wrapper (generate_m6_bank.py) selects "
+            "path-events-m4 by default and always passes this flag explicitly."
         ),
     )
     parser.add_argument(

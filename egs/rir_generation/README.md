@@ -143,7 +143,7 @@ The closest current simulation to something usable as training data is:
 | Scene | `--scene-version v1 --room-type mixed` | Material-first, correlated room/finish/obstacle causes. |
 | Output | `--output-mode calibrated --record-realized-metrics` | Stable level semantics and auditable acoustic metrics. |
 | Low band | `--low-backend pytard-material` | CPU wave/modal solver with material-frequency-dependent modal damping and a causal delta excitation without the former fixed comb signature. |
-| High band | `--backend pyroomacoustics` | Default geometric renderer; best-controlled baseline today. |
+| High band | `--backend path-events-m4` | Default: its octave decay shape sits 8x closer to measured rooms than pyroomacoustics, whose high-frequency reverberation runs ~2.2x long. Pass `--backend pyroomacoustics` for the faster geometric A/B arm. |
 | Sample rate / duration | `16 kHz / 1.6 s` | Matches the recommended speech-augmentation bank setup. |
 | Bank size | `1000 rooms × 4 items = 4000 items` | Enough for a first training pilot while preserving room-disjoint splits. |
 | Seed / workers | `1337 / 8` | Reproducible content; worker count does not change item identity. |
@@ -162,7 +162,7 @@ Run from the repository root:
 PYTHONPATH=. .venv/bin/python \
   egs/rir_generation/generate_m6_bank.py \
   --output-dir egs/rir_generation/exp/rir_realism/m6/training_pilot \
-  --backend pyroomacoustics \
+  --backend path-events-m4 \
   --n-rooms 1000 \
   --rir-per-room 4 \
   --num-workers 8 \
@@ -286,7 +286,7 @@ uv pip install cupy-cuda12x
 
 PYTHONPATH=. .venv/bin/python egs/rir_generation/generate_m6_bank.py \
   --output-dir egs/rir_generation/exp/rir_realism/m6/training_pilot_gpu \
-  --backend pyroomacoustics \
+  --backend path-events-m4 \
   --n-rooms 1000 --rir-per-room 4 \
   --num-workers 1 --gpu-devices 0 \
   --low-backend pytard-cupy-material \
@@ -309,7 +309,7 @@ check, not a training configuration:
 PYTHONPATH=. .venv/bin/python \
   egs/rir_generation/generate_m6_bank.py \
   --output-dir egs/rir_generation/exp/rir_realism/m6/smoke \
-  --backend pyroomacoustics \
+  --backend path-events-m4 \
   --n-rooms 6 \
   --rir-per-room 1 \
   --num-workers 1 \
