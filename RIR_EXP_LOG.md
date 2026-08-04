@@ -13,6 +13,7 @@
 > | M6 審查與現況 | `egs/rir_generation/CLAUDE_REVIEW_ADVISE.md` | 審查結論、pilot 結果、逐項發現與撤回 |
 > | Realism 計畫 | `RIR_REALISM_PLAN.md` | M0–M6 milestone 計畫與進度 |
 > | 模組化重構 | `RIR_MODULARIZATION_PLAN.md` | R0–R7 重構計畫與結果 |
+> | 附錄 | 產品文件遷出段落 | bank_v2 / campaign / README 的結果紀錄 |
 
 ---
 
@@ -4070,3 +4071,68 @@ task。這些是必須真的取得／執行的外部證據，不能由 synthetic
 PureSound 的策略更保守：先用現有可稽核物理 renderer 做 recovery baseline，
 確認 identifiability，最後才加入 learned residual。
 
+### 自 egs/rir_generation/README.md 遷出（2026-08-04）
+
+##### Post-review hardening (2026-08-02)
+
+The bank path now seeds both NumPy and libroom for Pyroomacoustics ray tracing,
+binds resume identity to the code revision and runtime package versions, and
+tests serial, parallel, fresh-run, and resume reproducibility on the actual
+default high backend. The low-frequency production recommendation uses a
+single-sample causal excitation rather than the former bipolar excitation that
+created fixed spectral comb nulls.
+
+The M4 alternative now covers DC through Nyquist with an endpoint-complete FDN
+filterbank, derives late-tail energy from material RT60 instead of the
+order-truncated path tail, preserves one shared spatial-field gain, and applies
+material boundary phase priors, air absorption, source directivity, and
+path-local obstacle effects. These are renderer changes, not merely parameter
+tuning of Pyroomacoustics.
+
+M6 admission and evidence validation were also tightened: late-arrival and
+octave-decay gates are active, calibrated float RIRs no longer inherit a false
+unit-peak limit, unsafe item paths and manifestless M6 layouts fail closed,
+variant audio lineage is sample-verified, downstream confidence intervals are
+recomputed, and production certificates re-run the bound release/evidence
+audits. Existing banks generated before these fixes must not be presented as
+post-hardening results; generate a new output directory.
+
+##### Hardened matched preflight result (2026-08-02)
+
+The first post-hardening smoke campaign is complete in
+[`exp/rir_realism/m6/rir_m6_hardened_preflight_20260802/`](exp/rir_realism/m6/rir_m6_hardened_preflight_20260802/).
+It used 30 matched rooms × 2 items (60 items / 300 channels per backend),
+`v1/mixed`, seed `1337`, calibrated `16 kHz / 1.6 s` output, and the GPU low
+backend `pytard-cupy-material`. Every scene hash, room/acoustic-space ID,
+split, seed, and audio shape matched across Pyroomacoustics and M4; both banks
+had 60/60 QC PASS, zero quarantines, and passing release audits. The actual
+calibrated train readers also loaded 56 PASS items from each release.
+
+The paired medians show what the backends currently change:
+
+| Metric | Pyroomacoustics | PathEvents-M4 | M4 − Pyroom |
+|---|---:|---:|---:|
+| DRR | -4.83 dB | -3.24 dB | +1.59 dB |
+| C50 | 6.10 dB | 10.28 dB | +4.18 dB |
+| C80 | 8.03 dB | 15.01 dB | +6.97 dB |
+| T20 | 0.99 s | 0.47 s | -0.52 s |
+| absolute T20 − scene RT60 error | 0.327 s | 0.080 s | M4 closer |
+
+M4 is drier and more early-energy dominant in this sample, while its broadband
+T20 tracks the sampled scene RT60 more closely. Causal arrival, exact-zero final
+sample, the fixed 390 Hz comb check, and M4 high-tail coverage all passed. This
+is evidence that the hardened pipeline and M4 algorithm exercise the intended
+mechanisms; it is not a measured-room realism winner. Validation and test each
+contain only two items per backend, the code revision is dirty, and no measured
+RIR, human listening, or downstream-model result is included. Both releases are
+therefore **candidate** only, Pyroomacoustics remains the default, and the full
+4,000-item pilot is still required.
+
+The observed aggregate generation cost was about 6.5 s/item for Pyroomacoustics
+with two workers and 8.2 s/item for M4 with eight workers after resume. M4 is
+currently CPU PathEvent/material-boundary limited; the GPU mainly accelerates
+the shared low-frequency solve, so adding workers does not make the M4 high band
+GPU-bound.
+
+The machine-readable conclusion, including manifest/QC/release hashes and
+provenance warnings, is [`preflight_validation_summary.json`](exp/rir_realism/m6/rir_m6_hardened_preflight_20260802/preflight_validation_summary.json).
