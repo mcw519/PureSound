@@ -228,7 +228,6 @@ training job at an unsplit bank root when an M6 manifest is present.
 | `inspect_bank.py` | Metadata distributions for one RIR folder. |
 | `compare_bank_acoustics.py` | DRR/C50/decay/spectral statistics across banks. |
 | `compare_modal_acoustics.py` | Low-frequency modal peak/spacing/Q statistics. |
-| `build_readme_sample.py` | Render the listenable dry/near/far sample set. |
 
 All support `--help`. The low-band pressure-field animation replays one item's
 modal state:
@@ -281,7 +280,8 @@ listening level.
 | [`m4_sample_rir.wav`](assets/m4_sample_rir.wav) | the five-channel RIR itself |
 
 ```bash
-PYTHONPATH=. .venv/bin/python egs/rir_generation/build_readme_sample.py \
+PYTHONPATH=. .venv/bin/python \
+  egs/rir_generation/tools/audition/build_readme_sample.py \
   --rir /tmp/readme_assets/path-events-m4/room_000000/room_000000_000000.wav
 ```
 
@@ -295,13 +295,20 @@ egs/rir_generation/
 ├── plot_rir.py                  # plots and field animation
 ├── inspect_bank.py              # folder statistics
 ├── compare_*_acoustics.py       # bank comparisons
-├── build_readme_sample.py       # listenable sample set
+├── assets/                      # figures and samples this README links to
 ├── examples/                    # reproducible recipes
-├── tools/                       # audition and bank helpers
+├── tools/                       # internal helpers, not a public interface
+│   ├── audition/                # convolution, preview banks, README samples
+│   ├── bank/                    # symlink-only bank views
+│   └── measured/                # measured-corpus scanning and bank emission
 ├── exp/                         # experiment outputs (not tracked)
 └── phases/                      # per-milestone validators, configs, reports
     └── m6_bank/scripts/         # QC, release, ingest, evidence, pilot CLIs
 ```
+
+A script that generates or inspects RIRs belongs here, a one-off tied to one milestone belongs in that phase's `scripts/` beside
+the `reports/` it writes, a helper reused across phases but not offered to users
+belongs under `tools/`, and a long-running bank recipe belongs in `examples/`.
 
 ## Dependencies
 

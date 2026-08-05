@@ -451,7 +451,8 @@ RT60 縮 6–20%，對應 0.3–1 dB 的能量差。
 語料內的房間在尺寸、材質、家具上都不同，所以真實的房間物理會表現為**組內**離散；
 量測鏈每個語料固定，會表現為**組間**偏移。
 
-實測（`compare_measured_tilt_by_corpus.py`，3784 channel / 34 房間 / 5 語料）：
+實測（`egs/rir_generation/phases/m6_bank/scripts/compare_measured_tilt_by_corpus.py`，
+3784 channel / 34 房間 / 5 語料）：
 
 | 語料 | 房間數 | tilt 中位數 | 房間之間 sd |
 |---|---|---|---|

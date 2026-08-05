@@ -214,7 +214,6 @@ validation/test 房間。M6.6 憑證未結案前 `require_production: false` 是
 | `inspect_bank.py` | 單一 RIR 資料夾的 metadata 分佈 |
 | `compare_bank_acoustics.py` | 跨 bank 的 DRR/C50/衰減/頻譜統計 |
 | `compare_modal_acoustics.py` | 低頻模態峰值/間距/Q 統計 |
-| `build_readme_sample.py` | 產生可試聽的 dry/near/far 樣本組 |
 
 皆支援 `--help`。低頻壓力場動畫重放單一 item 的模態狀態：
 
@@ -262,7 +261,8 @@ calibrated RIR 的振幅編碼的是參考 SPL 而非聆聽音量。
 | [`m4_sample_rir.wav`](assets/m4_sample_rir.wav) | 五聲道 RIR 本體 |
 
 ```bash
-PYTHONPATH=. .venv/bin/python egs/rir_generation/build_readme_sample.py \
+PYTHONPATH=. .venv/bin/python \
+  egs/rir_generation/tools/audition/build_readme_sample.py \
   --rir /tmp/readme_assets/path-events-m4/room_000000/room_000000_000000.wav
 ```
 
@@ -276,13 +276,20 @@ egs/rir_generation/
 ├── plot_rir.py                  # 圖與壓力場動畫
 ├── inspect_bank.py              # 資料夾統計
 ├── compare_*_acoustics.py       # bank 對照
-├── build_readme_sample.py       # 試聽樣本
+├── assets/                      # 本 README 連結的圖與試聽樣本
 ├── examples/                    # 可重現 recipe
-├── tools/                       # audition 與 bank 輔助
+├── tools/                       # 內部輔助，不是公開介面
+│   ├── audition/                # 卷積、預覽 bank、README 樣本
+│   ├── bank/                    # 純 symlink 的 bank view
+│   └── measured/                # 實測語料掃描與 bank 產出
 ├── exp/                         # 實驗輸出（不入版控）
 └── phases/                      # 各里程碑 validator、config、report
     └── m6_bank/scripts/         # QC、release、ingest、evidence、pilot CLI
 ```
+
+生成或檢視 RIR 的腳本放這裡；綁單一里程碑的一次性腳本放該 phase 的 `scripts/`，與它寫出的
+`reports/` 相鄰；跨 phase 重用但不對外的輔助放 `tools/`；長跑的 bank recipe
+放 `examples/`。
 
 ## 相依套件
 

@@ -24,7 +24,7 @@ belongs here or under the supporting `tools/` and `examples/` directories.
 | `m3_wave_path` | coherent PathEvents and low-frequency wave-path validation |
 | `m4_spatial_late_field` | spatial rendering and multiband late field |
 | `m5_calibration` | measured-room inverse calibration and constrained residuals |
-| `m6_bank` | deterministic bank, QC, release, evaluation, and production evidence |
+| `m6_bank` | deterministic bank, QC, release, evaluation, production evidence, and measured-reference target validity |
 
 Reports are intentionally kept beside the phase that produced them. Paths in
 reports and documentation should use this layout rather than the removed flat
