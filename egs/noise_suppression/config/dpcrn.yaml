@@ -146,7 +146,7 @@ optimizer:
 
 scheduler:
   type: StepLR
-  warmpup_step: 1
+  warmup_step: 1
   args:
     step_size: 10
     gamma: 0.5
