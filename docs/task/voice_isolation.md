@@ -1,5 +1,7 @@
 # puresound.task.voice_isolation
 
+繁體中文版本：[`voice_isolation.zh-TW.md`](voice_isolation.zh-TW.md)
+
 Near-field foreground voice isolation dataset: keep the speaker within ~1 m,
 suppress everything further away. Specializes the
 [NoiseSuppressionDataset](ns.md) synthesis skeleton through its row-type hooks —

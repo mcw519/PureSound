@@ -1,8 +1,10 @@
 # Phase-aware low-frequency impedance priors
 
-`puresound.audio.impedance_priors` contains experimental references for
-validating the M2 complex-boundary path. It does not automatically attach an
-impedance to production scene materials.
+繁體中文版本：`impedance_priors.zh-TW.md`
+
+`puresound.audio.rir.physics.impedance.priors` contains experimental
+references for validating the M2 complex-boundary path. It does not
+automatically attach an impedance to production scene materials.
 
 ## Evidence contract
 
@@ -98,6 +100,19 @@ The high instantaneous admittance also exposed a corner/edge stability limit
 not covered by the interior CFL condition. The FDTD solver now reduces its time
 step until the summed normalized boundary Courant number is below 0.9 and
 serializes both the interior and boundary time-step limits.
+
+## Code entry points
+
+The old flat `puresound/audio/impedance_priors.py` module was removed during
+the RIR package migration (see
+[`rir_package_migration.md`](rir_package_migration.md)); the catalog now
+lives under the `physics.impedance` sub-package.
+
+| File | Responsibility |
+|------|------|
+| `puresound/audio/rir/physics/impedance/priors.py` | this module: `MikiPorousLayerPrior`, `reference_impedance_priors()`, `fit_first_order_relaxation()` |
+| `puresound/audio/rir/physics/impedance/admittance.py` | `FirstOrderRelaxationAdmittance`, the passive causal boundary fit by `fit_first_order_relaxation()` |
+| `test/test_impedance_priors.py` | provenance/validity, passivity, fitting, and FDTD modal-diagnostic tests |
 
 ## Remaining gate
 

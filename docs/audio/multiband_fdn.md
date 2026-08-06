@@ -1,8 +1,10 @@
 # Multiband FDN — `puresound.audio.rir.render.multiband_fdn`
 
+繁體中文版本：[`multiband_fdn.zh-TW.md`](multiband_fdn.zh-TW.md)
+
 Deterministic passive feedback delay network with per-octave RT60 control.
 The late-field engine behind the M4 backend; design map in
-[`rir_realism_algorithm_zh-TW.md`](rir_realism_algorithm_zh-TW.md) §4.3.
+[`rir_realism_algorithm.zh-TW.md`](rir_realism_algorithm.zh-TW.md) §4.3.
 
 ## Design contract
 

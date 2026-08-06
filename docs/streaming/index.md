@@ -1,5 +1,7 @@
 # puresound.streaming
 
+繁體中文版本：[index.zh-TW.md](index.zh-TW.md)
+
 Streaming inference utilities for low-latency deployment. Python owns audio
 buffering, STFT/iSTFT and ONNX Runtime state; ORT runs one feature frame at a
 time.

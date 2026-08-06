@@ -8,7 +8,7 @@ per-item QC, and release packaging in one command.
 繁體中文版本：[`README.zh-TW.md`](README.zh-TW.md)
 
 This README covers **usage**. How each algorithm maps to the code is in
-[`docs/audio/rir_realism_algorithm_zh-TW.md`](../../docs/audio/rir_realism_algorithm_zh-TW.md);
+[`docs/audio/rir_realism_algorithm.md`](../../docs/audio/rir_realism_algorithm.md);
 experiment records, review findings, and plans are in
 [`RIR_EXP_LOG.md`](../../RIR_EXP_LOG.md).
 
@@ -323,7 +323,7 @@ uv pip install cupy-cuda12x   # GPU low band, optional
 
 ## Further reading
 
-- [`docs/audio/rir_realism_algorithm_zh-TW.md`](../../docs/audio/rir_realism_algorithm_zh-TW.md) — algorithm ↔ code map.
-- [`docs/audio/rir_bank_v2_zh-TW.md`](../../docs/audio/rir_bank_v2_zh-TW.md) — M6 contract and evidence rules.
+- [`docs/audio/rir_realism_algorithm.md`](../../docs/audio/rir_realism_algorithm.md) — algorithm ↔ code map.
+- [`docs/audio/rir_bank_v2.md`](../../docs/audio/rir_bank_v2.md) — M6 contract and evidence rules.
 - [`docs/audio/rir_bank.md`](../../docs/audio/rir_bank.md) — training-side loaders.
 - [`RIR_EXP_LOG.md`](../../RIR_EXP_LOG.md) — experiment records, review findings, plans.

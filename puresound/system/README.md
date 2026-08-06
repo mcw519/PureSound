@@ -1,5 +1,7 @@
 # puresound.system
 
+繁體中文版本：[`README.zh-TW.md`](README.zh-TW.md)
+
 Trainers, all built on [PyTorch Lightning](https://lightning.ai/docs/pytorch/stable/).
 
 | class | file | status | use |

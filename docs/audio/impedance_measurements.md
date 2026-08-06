@@ -1,16 +1,21 @@
-# 複數聲學阻抗：真實量測、被動共振擬合、FDTD 與模態
+# Complex acoustic impedance: real measurements, passive resonant fitting, FDTD, and modes
 
-本文件說明 M2.4–M2.5 的垂直切片：如何把保留相位的 complex
-impedance 量測，轉成一個可追溯、被動、因果，而且能同時供時域 FDTD
-與複數模態方程使用的邊界模型。
+繁體中文版本：`impedance_measurements.zh-TW.md`
 
-這條路徑目前是研究與驗證基礎設施，不會把量測結果自動套用到 production
-材料 catalog。材料名稱相同，不代表厚度、背板、空氣層、安裝方式或入射
-條件相同。
+This document describes the M2.4–M2.5 vertical slice: how a phase-preserving
+complex impedance measurement becomes a traceable, passive, causal boundary
+model usable by both the time-domain FDTD solver and the complex modal
+equations.
 
-## 1. 為什麼不能只讀 absorption
+This path is currently research and validation infrastructure; it does not
+automatically apply measurement results to the production material catalog.
+An identical material name does not imply identical thickness, backing, air
+gap, mounting, or incidence condition.
 
-法向入射的壓力反射係數與表面阻抗為：
+## 1. Why absorption alone is not enough
+
+The normal-incidence pressure reflection coefficient and surface impedance
+are related by:
 
 \[
 \Gamma(f)=\frac{Z(f)-Z_0}{Z(f)+Z_0},
@@ -22,31 +27,35 @@ Z_0=\rho c
 \alpha(f)=1-|\Gamma(f)|^2
 \]
 
-吸收率只保留 \(|\Gamma|\)，沒有 \(\angle\Gamma\)。因此同一個
-\(\alpha\) 可以對應許多不同的複數阻抗，而這些邊界會產生不同的反射
-延遲、模態頻率和 Q。匯入格式所以直接要求
-\(\operatorname{Re}Z\) 與 \(\operatorname{Im}Z\)，不接受用
-diffuse-field absorption 補猜相位。
+Absorption keeps only \(|\Gamma|\), not \(\angle\Gamma\). The same \(\alpha\)
+can therefore correspond to many different complex impedances, and those
+boundaries produce different reflection delays, modal frequencies, and Qs.
+The ingestion contract accordingly requires \(\operatorname{Re}Z\) and
+\(\operatorname{Im}Z\) directly; it does not accept guessing a phase from
+diffuse-field absorption.
 
-SI contract 支援法向入射、兩麥克風 transfer-function 類型的 complex
-impedance 資料。ISO 10534-2 的適用範圍正是由此類量測取得法向入射
-吸收率與複數表面阻抗；它和 reverberation-room 的 diffuse-incidence
-吸收率不是可直接互換的量。M2.5 另加入 normalized \(Z/(\rho c)\)
-contract，保留公開 liner eduction 資料原本的無因次表示與量測幾何，
-不把 grazing duct 假稱為 normal-incidence tube。
+The SI contract supports normal-incidence, two-microphone
+transfer-function-type complex impedance data. ISO 10534-2's scope is
+exactly this: obtaining normal-incidence absorption and complex surface
+impedance from such measurements. It is not directly interchangeable with a
+reverberation room's diffuse-incidence absorption. M2.5 additionally adds a
+normalized \(Z/(\rho c)\) contract that preserves the original dimensionless
+representation and measurement geometry of public liner-eduction data,
+rather than mislabeling a grazing duct as a normal-incidence tube.
 
 - [ISO 10534-2:2023 overview](https://www.iso.org/standard/81294.html)
 
-## 2. 檔案契約
+## 2. File contract
 
-`ComplexImpedanceMeasurement.from_csv_and_metadata()` 同時讀取：
+`ComplexImpedanceMeasurement.from_csv_and_metadata()` reads two files
+together:
 
-1. 一個逐頻率 CSV；
-2. 一個記錄環境、樣品與來源的 JSON sidecar。
+1. one per-frequency CSV;
+2. one JSON sidecar recording environment, sample, and provenance.
 
 ### 2.1 CSV
 
-必要欄位與單位：
+Required columns and units:
 
 ```csv
 frequency_hz,impedance_real_pa_s_m,impedance_imag_pa_s_m
@@ -55,25 +64,25 @@ frequency_hz,impedance_real_pa_s_m,impedance_imag_pa_s_m
 120.0,376.5,-402.8
 ```
 
-可選的不確定度欄位必須成對出現：
+The optional uncertainty columns must appear as a pair:
 
 ```text
 impedance_real_std_pa_s_m
 impedance_imag_std_pa_s_m
 ```
 
-loader 會拒絕：
+The loader rejects:
 
-- 少於三個頻率點；
-- 非有限、非正或未嚴格遞增的頻率；
-- NaN/Inf impedance；
-- \(\operatorname{Re}Z<0\)；
-- 只有一個不確定度欄位；
-- 由資料算出的 \(|\Gamma|>1\)。
+- fewer than three frequency points;
+- non-finite, non-positive, or non-strictly-increasing frequencies;
+- NaN/Inf impedance;
+- \(\operatorname{Re}Z<0\);
+- only one of the two uncertainty columns;
+- data whose implied \(|\Gamma|>1\).
 
 ### 2.2 JSON metadata
 
-最小 sidecar：
+Minimal sidecar:
 
 ```json
 {
@@ -98,34 +107,36 @@ loader 會拒絕：
 }
 ```
 
-目前 schema 強制要求：
+The schema currently enforces:
 
-- 精確的 schema version；
-- `measurement_id`、`method` 與 `incidence: "normal"`；
-- 正值的 air density 與 sound speed；
-- `sample.material_label`；
-- `provenance.source_url` 與 `provenance.license`。
+- an exact schema version;
+- `measurement_id`, `method`, and `incidence: "normal"`;
+- positive air density and sound speed;
+- `sample.material_label`;
+- `provenance.source_url` and `provenance.license`.
 
-production 資料還應記錄 tube 直徑、麥克風間距、樣品批次、厚度公差、
-背板、air gap、溫濕度、校正方式與重複量測統計。這些欄位尚未全部設為
-schema 的硬性要求，但材料映射時不可省略。
+Production data should additionally record tube diameter, microphone
+spacing, sample batch, thickness tolerance, backing, air gap, temperature and
+humidity, calibration method, and repeatability statistics. These fields are
+not yet all mandatory in the schema, but they must not be omitted when
+mapping to materials.
 
 ### 2.3 Normalized complex impedance contract
 
-有些文獻直接發表：
+Some literature publishes directly:
 
 \[
 z(f)=\frac{Z(f)}{\rho c}
 \]
 
-卻沒有在資料檔逐筆保存 normalization 使用的精確 \(\rho,c\)。這種資料
-使用另一個 schema：
+without preserving, per record, the exact \(\rho,c\) used for
+normalization. This kind of data uses a separate schema:
 
 ```text
 puresound.normalized_complex_impedance_measurement.v1
 ```
 
-CSV 必須包含：
+The CSV must contain:
 
 ```csv
 frequency_hz,normalized_impedance_real,normalized_impedance_imag
@@ -133,27 +144,30 @@ frequency_hz,normalized_impedance_real,normalized_impedance_imag
 600,0.474,-3.213
 ```
 
-JSON 必須明列：
+The JSON must state explicitly:
 
-- `acoustic_field_geometry`：`normal_incidence_tube` 或 `grazing_duct`；
-- `phasor_convention`：目前固定為 `exp(+i*omega*t)`；
-- mean-flow Mach 與 source SPL；
-- 樣品、來源、license 與用途限制。
+- `acoustic_field_geometry`: `normal_incidence_tube` or `grazing_duct`;
+- `phasor_convention`: currently fixed to `exp(+i*omega*t)`;
+- mean-flow Mach number and source SPL;
+- sample, provenance, license, and applicability limits.
 
-loader 使用
+The loader uses
+
 \[
 \mathcal C(z)=\frac{z-1}{z+1}
 \]
-作為 bounded fitting coordinate，並檢查
-\(\operatorname{Re}z\ge0\) 與 \(|\mathcal C(z)|\le1\)。
-只有 locally reacting、normal-incidence 解讀成立時，
-\(\mathcal C(z)\) 才等於實際的 normal-incidence pressure reflection；
-對 grazing-duct 資料，它首先是一個數值穩定的 Cayley transform。
 
-## 3. 被動 rational admittance
+as a bounded fitting coordinate and checks \(\operatorname{Re}z\ge0\) and
+\(|\mathcal C(z)|\le1\). \(\mathcal C(z)\) equals the actual normal-incidence
+pressure reflection only when a locally reacting, normal-incidence
+interpretation holds; for grazing-duct data it is, first and foremost, a
+numerically stable Cayley transform.
 
-匯入的離散頻率資料不能直接放進 time-domain solver。M2.4 使用固定實數
-pole 的 rational normalized admittance：
+## 3. Passive rational admittance
+
+Imported discrete-frequency data cannot be dropped directly into a
+time-domain solver. M2.4 uses a rational normalized admittance with fixed
+real poles:
 
 \[
 y(s)=g_s
@@ -169,17 +183,18 @@ Z(s)=\frac{\rho c}{y(s)},
 \Gamma(s)=\frac{1-y(s)}{1+y(s)}
 \]
 
-其中所有係數都限制為：
+where every coefficient is constrained to:
 
 \[
 g_s\ge0,\qquad g_{L,k}\ge0,\qquad g_{H,k}\ge0
 \]
 
-每個 low-pass 與 high-pass branch 在右半 \(s\)-plane 都是
-positive-real；非負平行和仍為 positive-real。因此模型由結構保證被動，
-不是在擬合後才抽樣幾個頻率檢查 \(|\Gamma|\)。
+Every low-pass and high-pass branch is positive-real over the right half
+\(s\)-plane; a non-negative parallel sum remains positive-real. The model is
+therefore passive by construction, not verified after the fact by sampling
+\(|\Gamma|\) at a few frequencies.
 
-低、高頻端點為：
+The low- and high-frequency endpoints are:
 
 \[
 y(0)=g_s+\sum_k g_{L,k},
@@ -187,29 +202,32 @@ y(0)=g_s+\sum_k g_{L,k},
 y(\infty)=g_s+\sum_k g_{H,k}
 \]
 
-`fit_passive_multi_pole_admittance()` 固定 \(f_{p,k}\)，以有界
-least-squares 在複數壓力反射域同時最小化實部與虛部誤差。輸出會記錄：
+`fit_passive_multi_pole_admittance()` fixes \(f_{p,k}\) and minimizes real
+and imaginary error jointly in the complex pressure-reflection domain with
+bounded least squares. The output records:
 
-- RMS 與最大 complex reflection error；
-- 最大 magnitude error；
-- 最大 phase error；
-- fit band、pole strategy、passivity strategy；
-- 來源 measurement id 與 acceptance gate。
+- RMS and maximum complex reflection error;
+- maximum magnitude error;
+- maximum phase error;
+- fit band, pole strategy, passivity strategy;
+- source measurement id and acceptance gate.
 
-這不是完整的 vector fitting。固定 pole 可避免 pole relocation、unstable
-pole 翻轉與擬合後 passivity repair，代價是可能需要較多 pole，或在 pole
-位置不合適時無法達到誤差門檻。若資料通不過 gate，正確處理方式是調整
-模型階數、pole placement 或量測範圍，而不是關掉 passivity constraint。
+This is not full vector fitting. Fixed poles avoid pole relocation, unstable
+pole flips, and post-fit passivity repair, at the cost of possibly needing
+more poles, or being unable to reach the error threshold when pole placement
+is unsuitable. If data fails the gate, the correct response is to adjust
+model order, pole placement, or measurement range — not to disable the
+passivity constraint.
 
-### 3.1 為什麼真實 liner 需要共軛 pole
+### 3.1 Why a real liner needs a conjugate pole
 
-Zenodo liner 的 reactance 在約 1.6 kHz 由負穿越零再變正，這是
-Helmholtz／series-RLC resonance。只有實數 relaxation pole 的模型無法
-表示這個符號翻轉；初次嘗試的 held-out complex error 接近 0.9，明確
-不合格。
+The Zenodo liner's reactance crosses zero from negative to positive around
+1.6 kHz — a Helmholtz/series-RLC resonance. A model with only real
+relaxation poles cannot represent this sign flip; the first attempt's
+held-out complex error was near 0.9, clearly unacceptable.
 
-M2.5 因此加入被動 series-RLC admittance branch。令
-\(u=s/\omega_0\)：
+M2.5 therefore adds a passive series-RLC admittance branch. With
+\(u=s/\omega_0\):
 
 \[
 y_k(s)=
@@ -217,7 +235,7 @@ y_k(s)=
 \frac{u}{u^2+u/Q_k+1}
 \]
 
-實作等價地把上式兩個因子相乘：
+The implementation equivalently multiplies the two factors above:
 
 \[
 y_k(s)=
@@ -227,18 +245,21 @@ y_k(s)=
 {(s/\omega_0)^2+s/(Q_k\omega_0)+1}
 \]
 
-其中 \(f_0>0,Q>0,g_{\mathrm{peak}}\ge0\)。它就是被動 series RLC 的
-admittance；在 \(f_0\) 的 conductance 為 \(g_{\mathrm{peak}}\)，pole
-必定在左半平面。再和平行的非負 static conductance 相加，仍是
-positive-real。
+where \(f_0>0,Q>0,g_{\mathrm{peak}}\ge0\). This is exactly the admittance of
+a passive series RLC circuit; its conductance at \(f_0\) is
+\(g_{\mathrm{peak}}\), and its pole is necessarily in the left half-plane.
+Added in parallel to a non-negative static conductance, it remains
+positive-real.
 
-`fit_passive_single_resonance_admittance()` 同時擬合 static、\(f_0\)、
-\(Q\) 與 peak admittance。預設以偶數位置的頻率 bin 訓練、奇數位置的
-bin held out，避免只報告 training interpolation。
+`fit_passive_single_resonance_admittance()` fits static admittance,
+\(f_0\), \(Q\), and peak admittance simultaneously. By default it trains on
+even-indexed frequency bins and holds out odd-indexed bins, to avoid
+reporting only training interpolation.
 
-## 4. 多極點如何進入 FDTD
+## 4. How multiple poles enter the FDTD
 
-每個 pole 都維護一個 bilinear-transform low-pass state \(u_k[n]\)：
+Every pole maintains its own bilinear-transform low-pass state
+\(u_k[n]\):
 
 \[
 u_k[n]
@@ -252,15 +273,15 @@ a_{1,k}=\frac{1-2\tau_k/\Delta t}
               {1+2\tau_k/\Delta t}
 \]
 
-因為
+Because
 
 \[
 \frac{s\tau_k}{1+s\tau_k}
 =1-\frac{1}{1+s\tau_k},
 \]
 
-high-pass branch 不需要第二組濾波器 state，直接使用 \(p[n]-u_k[n]\)。
-牆面法向速度為：
+the high-pass branch needs no second filter state; it uses
+\(p[n]-u_k[n]\) directly. The wall-normal velocity is:
 
 \[
 v_n[n]=\frac{
@@ -270,43 +291,47 @@ g_sp[n]
 }{\rho c}
 \]
 
-`simulate_fdtd_reference()` 在每一面牆、每一個 wall cell、每一個 pole
-保存獨立 state。舊的一階 relaxation 是這個表示法的特例；靜態實數
-admittance 仍會退化到原本的 boundary update。
+`simulate_fdtd_reference()` keeps independent state per wall, per wall
+cell, and per pole. The old first-order relaxation is a special case of
+this representation; a static real admittance still degenerates to the
+original boundary update.
 
-RLC branch 則由 bilinear transform 變成二階 biquad：
+The RLC branch becomes a second-order biquad via the bilinear transform:
 
 \[
 w_k[n]=b_0p[n]+b_1p[n-1]+b_2p[n-2]
 -a_1w_k[n-1]-a_2w_k[n-2]
 \]
 
-每個 branch 都在自己的 \(f_0\) prewarp，讓 analog 與 digital resonance
-對齊。solver 的 boundary time-step gate 不再只看 DC/無限頻端點；它使用
-`static + sum(g_peak)` 的 conservative all-frequency admittance bound，
-避免窄頻高 admittance resonance 躲過穩定檢查。
+Each branch is prewarped at its own \(f_0\) so the analog and digital
+resonance align. The solver's boundary time-step gate no longer looks only
+at the DC/infinite-frequency endpoints; it uses a conservative
+all-frequency admittance bound of `static + sum(g_peak)`, so a narrow-band
+high-admittance resonance cannot slip past the stability check.
 
-顯式求解器除了 3D interior CFL，也使用
-\(\max(y(0),y(\infty))\) 估計 edge/corner 累積的 boundary time-step
-上限。完整 metadata 同時序列化 interior limit、boundary limit、實際
-sample rate 與每個 pole 的數位係數。
+Beyond the 3D interior CFL condition, the explicit solver also uses
+\(\max(y(0),y(\infty))\) to estimate the boundary time-step limit
+accumulated at edges/corners. The full metadata serializes the interior
+limit, the boundary limit, the actual sample rate, and each pole's digital
+coefficients.
 
-## 5. 複數模態最小連接點
+## 5. Minimal complex-mode connection point
 
-在把 boundary 接入完整 3D pytARD eigenproblem 之前，M2.4 先建立一個
-兩端使用相同 locally reacting boundary 的 1D cavity。往返自洽條件為：
+Before wiring the boundary into the full 3D pytARD eigenproblem, M2.4 first
+builds a 1D cavity whose two ends share the same locally reacting boundary.
+The round-trip self-consistency condition is:
 
 \[
 F(s)=1-\Gamma(s)^2e^{-2sL/c}=0
 \]
 
-求得的 pole 定義為：
+The resulting pole is defined as:
 
 \[
 s_n=-\gamma_n+j\omega_n
 \]
 
-因此：
+so that:
 
 \[
 f_n=\frac{\omega_n}{2\pi},
@@ -314,9 +339,10 @@ f_n=\frac{\omega_n}{2\pi},
 Q_n=\frac{\omega_n}{2\gamma_n}
 \]
 
-`solve_1d_impedance_cavity_modes()` 直接在複數 \(s\)-plane 解
-\(\operatorname{Re}F=\operatorname{Im}F=0\)。靜態實數反射的回歸測試會
-對照解析解：
+`solve_1d_impedance_cavity_modes()` solves
+\(\operatorname{Re}F=\operatorname{Im}F=0\) directly in the complex
+\(s\)-plane. The regression test for a static real reflection checks
+against the closed-form solution:
 
 \[
 f_n=\frac{nc}{2L},
@@ -324,25 +350,28 @@ f_n=\frac{nc}{2L},
 \gamma_n=-\frac{c}{L}\ln|\Gamma|
 \]
 
-另一個測試則固定參考頻率上的 \(|\Gamma|\)，比較 phase-aware 多極點
-邊界與 zero-phase 實數邊界，確認兩者產生不同的複數模態頻率。
+A second test fixes \(|\Gamma|\) at a reference frequency and compares a
+phase-aware multi-pole boundary against a zero-phase real boundary,
+confirming the two produce different complex modal frequencies.
 
-這個 1D solver 已證明同一份 rational boundary 可以供 FDTD 與非線性
-eigenvalue equation 共用，但它不是完整房間求解器。3D 六面材料、
-斜入射、非矩形幾何、mode coupling 與 production renderer 的替換仍待
-後續完成。
+This 1D solver has demonstrated that the same rational boundary can be
+shared by the FDTD solver and the nonlinear eigenvalue equation, but it is
+not a full room solver. 3D six-surface materials, oblique incidence,
+non-rectangular geometry, mode coupling, and swapping into the production
+renderer are still pending.
 
-## 6. M2.5 真實資料結果
+## 6. M2.5 real-data results
 
-第一份接受資料是
-[Zenodo 15195587](https://zenodo.org/records/15195587) 的 NASA GFIT
-無流、130 dB、KT eduction；UFSC nominally identical sample 作獨立
-cross-rig 比較。來源 HDF5 是 CC BY 4.0，轉換保留 500–2500 Hz 的原始
-normalized resistance/reactance，不做插值。
+The first accepted dataset is
+[Zenodo 15195587](https://zenodo.org/records/15195587)'s NASA GFIT
+no-flow, 130 dB, KT eduction, with the UFSC nominally identical sample used
+as an independent cross-rig comparison. The source HDF5 is CC BY 4.0; the
+conversion preserves the original normalized resistance/reactance over
+500–2500 Hz with no interpolation.
 
-NASA 的 alternating-frequency fit 得到：
+NASA's alternating-frequency fit obtains:
 
-| 參數／gate | 結果 |
+| Parameter/gate | Result |
 |-------------|------|
 | resonance \(f_0\) | 1646.66 Hz |
 | branch \(Q\) | 11.69 |
@@ -352,14 +381,16 @@ NASA 的 alternating-frequency fit 得到：
 | dense 4096-point max \(|\mathcal C|\) | 0.9178 |
 | NASA–UFSC cross-rig RMS difference | 0.1182 |
 
-held-out error 小於 NASA–UFSC 兩個 nominally identical samples／rigs 的
-差異，且 4096 點 dense sweep 全部保持 positive-real 與
-\(|\mathcal C|\le1\)。在以 resonance 設定第一軸模態的 1D diagnostic
-中，phase-aware RLC boundary 的 \(Q=17.73\)，參考頻率匹配
-\(|\mathcal C|\) 的實數 boundary 為 \(Q=6.04\)，比值 2.94。這再次顯示
-只匹配 absorption magnitude 不足以預測 modal decay。
+The held-out error is smaller than the difference between the two
+NASA–UFSC nominally identical samples/rigs, and the 4096-point dense sweep
+stays entirely positive-real with \(|\mathcal C|\le1\). In the 1D
+diagnostic that sets the first axial mode at resonance, the phase-aware RLC
+boundary gives \(Q=17.73\), while the real boundary matched to \(|\mathcal
+C|\) at the reference frequency gives \(Q=6.04\) — a ratio of 2.94. This
+again shows that matching absorption magnitude alone does not predict modal
+decay.
 
-可重現報告：
+Reproducible report:
 
 ```bash
 python egs/rir_generation/phases/m2_impedance/scripts/validate_impedance_measurement.py \
@@ -370,143 +401,169 @@ python egs/rir_generation/phases/m2_impedance/scripts/validate_impedance_measure
   --output egs/rir_generation/exp/rir_realism/m2/rir_benchmark_m2/impedance_zenodo_15195587_validation.json
 ```
 
-完整來源接受／拒絕理由見
-[`complex_impedance_source_audit.md`](complex_impedance_source_audit.md)。
+The full source acceptance/rejection rationale is in
+[`complex_impedance_source_audit.md`](complex_impedance_source_audit.md).
 
-這份資料是高聲壓穿孔 aircraft liner 的 grazing-duct eduction，只用來
-驗證 phase-aware pipeline、共振模型、FDTD 與 eigenproblem。sidecar
-明確設為 `automatic_scene_catalog_mapping: false`；它不會被當成一般牆面、
-地毯或天花板。
+This dataset is a high-SPL perforated aircraft liner's grazing-duct
+eduction, used only to validate the phase-aware pipeline, the resonance
+model, the FDTD solver, and the eigenproblem. Its sidecar explicitly sets
+`automatic_scene_catalog_mapping: false`; it is not treated as a generic
+wall, carpet, or ceiling.
 
-## 7. M2.6 正入射阻抗管 acquisition
+## 7. M2.6 normal-incidence impedance tube acquisition
 
-第二輪公開來源審核沒有找到可直接接受的 room-finish complex dataset。
-因此新增：
+A second round of public-source review did not find a directly acceptable
+room-finish complex dataset. This phase therefore adds:
 
-- `puresound.impedance_tube_transfer_measurement.v1` 原始 H12 契約；
-- repeated \(H_{12}=P(x_2)/P(x_1)\) long-form CSV；
-- microphone-switch complex channel calibration；
-- 圓管第一 transverse mode cutoff 與
-  \(|\sin(ks)|\) microphone-spacing conditioning gate；
-- mean coherence、被動性與跨安裝 repeatability uncertainty；
-- 阻抗不確定度經
-  \(\partial\Gamma/\partial Z=2Z_0/(Z+Z_0)^2\) 傳播後的
-  inverse-uncertainty fit weighting；
-- 可直接讀回 `ComplexImpedanceMeasurement` 的 reduction CLI。
+- the `puresound.impedance_tube_transfer_measurement.v1` raw H12 contract;
+- a repeated \(H_{12}=P(x_2)/P(x_1)\) long-form CSV;
+- microphone-switch complex channel calibration;
+- the circular tube's first transverse-mode cutoff and a
+  \(|\sin(ks)|\) microphone-spacing conditioning gate;
+- mean coherence, passivity, and cross-installation repeatability
+  uncertainty;
+- inverse-uncertainty fit weighting after propagating impedance
+  uncertainty through
+  \(\partial\Gamma/\partial Z=2Z_0/(Z+Z_0)^2\);
+- a reduction CLI that reads directly back into
+  `ComplexImpedanceMeasurement`.
 
-完整推導、CSV/JSON 格式和實驗 checklist 見
-[`impedance_tube_protocol_zh-TW.md`](impedance_tube_protocol_zh-TW.md)。
-目前 synthetic H12／複數通道失配／換麥校正 round-trip 已通過，但
-room-finish 實體 specimen 尚待量測。
+The full derivation, CSV/JSON formats, and experiment checklist are in
+[`impedance_tube_protocol.md`](impedance_tube_protocol.md). The synthetic
+H12/complex-channel-mismatch/microphone-swap-calibration round trip
+currently passes, but physical room-finish specimen measurements are still
+pending.
 
-## 8. M2.7 六面 rational impedance 的 3D 模態
+## 8. M2.7 3D modes for six-surface rational impedance
 
-矩形房間每一面都可以在 explicit boundary JSON 中指定
-`FirstOrderRelaxationAdmittance`、`PassiveMultiPoleAdmittance` 或
-`PassiveResonantAdmittance`。程式不從 scene absorption 自動產生這份
-JSON。
+Every face of a rectangular room can specify a
+`FirstOrderRelaxationAdmittance`, `PassiveMultiPoleAdmittance`, or
+`PassiveResonantAdmittance` in an explicit boundary JSON. The code does not
+auto-generate this JSON from scene absorption.
 
-令 \(s=-\gamma+j\omega\)，每個牆面的 normalized admittance 為
-\(y(s)\)。由 momentum equation 得到 Robin boundary：
+With \(s=-\gamma+j\omega\), let each wall's normalized admittance be
+\(y(s)\). The momentum equation gives a Robin boundary:
 
 \[
 \partial_n p+\frac{s}{c}y(s)p=0.
 \]
 
-沿一個長度為 \(L\) 的軸，令 \(h_\pm=(s/c)y_\pm(s)\)，其 complex
-wavenumber \(k\) 必須滿足：
+Along one axis of length \(L\), let \(h_\pm=(s/c)y_\pm(s)\); the complex
+wavenumber \(k\) must satisfy:
 
 \[
 (h_-h_+-k^2)\sin(kL)+k(h_-+h_+)\cos(kL)=0.
 \]
 
-三軸還必須共用同一個 temporal pole：
+All three axes must additionally share the same temporal pole:
 
 \[
 k_x^2+k_y^2+k_z^2+\left(\frac{s}{c}\right)^2=0.
 \]
 
-因此不是先算 rigid frequency 再附加 Q，而是同時解四個 complex
-equations。這會一起改變 modal frequency、decay 和 complex spatial
-eigenfunction。
+So it is not "compute the rigid frequency, then attach a Q" — the four
+complex equations are solved simultaneously. This jointly changes the modal
+frequency, decay, and complex spatial eigenfunction.
 
-驗證結果：
+Validation results:
 
-- 只有 x 軸兩面有 static admittance 時，3D 解和 exact 1D
-  frequency／decay／Q 一致；
-- 均勻立方體的三個 axial modes 保持 permutation degeneracy；
-- 2.0 × 1.2 × 1.0 m phase-aware controlled case：
-  3D 解為 63.8846 Hz、Q 17.32；獨立 FDTD 為 64.0049 Hz、Q 15.78；
-- generator 的 `analytic-impedance` backend 已通過完整 CLI smoke。
-- fixed-pole modal residue 已用兩個 controlled rooms、四組 training
-  positions 與兩組 position holdout 的 independent FDTD 校正；
-- position holdout mean correlation 0.9734、NRMSE 0.2304、energy ratio
-  1.0039，通過預先固定的 0.90／0.35 gate；
-- 校正 JSON 已接入 `analytic-impedance` backend，且完整 generator CLI
-  smoke 通過。
-- M2.9 加入同一 measured flow resistivity 的 50/100 mm rigid-backed
-  thickness variants，並把 position、unseen-room、fine-grid holdout 分開；
-- 兩個 thickness variants 的三種 holdout 全部通過 correlation ≥0.90、
-  NRMSE ≤0.35 gate；跨兩個 variants 的 shared residue 也通過；
-- 這只支持 tested thickness scope，report 仍明確設定
-  `general_boundary_invariance_established=false`。
+- when only the two x-axis faces have a static admittance, the 3D solution
+  matches the exact 1D frequency/decay/Q;
+- a uniform cube's three axial modes retain permutation degeneracy;
+- for a 2.0 × 1.2 × 1.0 m phase-aware controlled case: the 3D solution
+  gives 63.8846 Hz, \(Q\) 17.32; an independent FDTD gives 64.0049 Hz,
+  \(Q\) 15.78;
+- the generator's `analytic-impedance` backend passes a full CLI smoke
+  test;
+- the fixed-pole modal residue has been calibrated against an independent
+  FDTD using two controlled rooms, four sets of training positions, and two
+  position-holdout sets;
+- position-holdout mean correlation 0.9734, NRMSE 0.2304, energy ratio
+  1.0039, passing the pre-registered 0.90/0.35 gate;
+- the calibration JSON is wired into the `analytic-impedance` backend, and
+  the full generator CLI smoke test passes;
+- M2.9 adds 50/100 mm rigid-backed thickness variants sharing the same
+  measured flow resistivity, and separates position, unseen-room, and
+  fine-grid holdouts;
+- both thickness variants pass all three holdout types at correlation
+  ≥0.90, NRMSE ≤0.35; the shared residue across both variants also passes;
+- this only supports the tested thickness scope — the report still
+  explicitly sets `general_boundary_invariance_established=false`.
 
-範例 boundary：
+Example boundary:
 
 `egs/rir_generation/phases/m2_impedance/config/impedance_reference_glass_wool_14kgm3_100mm.json`
 
-它只在 60–300 Hz 有效，且是 measured flow resistivity + Miki model +
-one-pole fit；不是直接 complex measurement，也不是一般房間六面全鋪
-玻璃棉的 production recipe。
+It is valid only over 60–300 Hz and is a measured-flow-resistivity +
+Miki-model + one-pole fit — not a direct complex measurement, and not a
+production recipe for a room with all six faces carpeted in glass wool.
 
-## 9. 驗證與使用邊界
+## 9. Validation and scope of use
 
-目前自動測試涵蓋：
+Automated tests currently cover:
 
-- CSV/JSON round-trip、uncertainty 與 provenance；
-- active、diffuse-incidence 或缺 provenance 資料的拒絕；
-- 已知二 pole 合成量測的係數與 complex reflection 回復；
-- 兩份真實 normalized impedance 的 provenance 與被動性；
-- alternating-frequency train/held-out RLC fitting；
-- dense frequency sweep 的 passivity；
-- FDTD relaxation、multi-pole、RLC biquad per-wall-cell state；
-- 1D 靜態解析模態與 phase-induced frequency shift。
-- two-microphone H12 forward/inverse round-trip；
-- microphone-switch complex mismatch correction；
-- transverse-mode、spacing conditioning 與 coherence rejection；
-- repeated-H12 CLI 到 strict complex-impedance contract。
-- 3D static-to-1D limit、cube degeneracy 與 dynamic phase-aware root；
-- 3D complex mode 對 independent FDTD frequency/Q；
-- explicit six-wall config 到 hybrid generator metadata。
-- fixed-pole complex residue recovery 與 position／room／grid split gate；
-- 50/100 mm controlled thickness protocol 與 shared-parameter diagnostic。
+- CSV/JSON round-trip, uncertainty, and provenance;
+- rejection of active, diffuse-incidence, or provenance-less data;
+- coefficient and complex-reflection recovery for a known two-pole
+  synthetic measurement;
+- provenance and passivity for two real normalized-impedance datasets;
+- alternating-frequency train/held-out RLC fitting;
+- passivity over a dense frequency sweep;
+- FDTD relaxation, multi-pole, and RLC-biquad per-wall-cell state;
+- 1D static analytic modes and phase-induced frequency shift;
+- two-microphone H12 forward/inverse round-trip;
+- microphone-switch complex mismatch correction;
+- transverse-mode, spacing-conditioning, and coherence rejection;
+- the repeated-H12 CLI down to the strict complex-impedance contract;
+- the 3D static-to-1D limit, cube degeneracy, and the dynamic phase-aware
+  root;
+- the 3D complex mode against independent FDTD frequency/Q;
+- explicit six-wall config down to hybrid-generator metadata;
+- fixed-pole complex residue recovery and the position/room/grid split
+  gate;
+- the 50/100 mm controlled-thickness protocol and shared-parameter
+  diagnostic.
 
-尚未完成：
+Not yet done:
 
-- train/development/held-out material split；
-- 一般室內材料的 normal-incidence、正常聲壓直接量測；
-- 不同安裝、air gap 與斜入射的模型；
-- 不同實測材料、air gap／mounting 的 residue FDTD 校正與真實房間
-  transfer measurement 校正；
-- accepted room-finish boundary 的 production mapping；
-- room-disjoint measured-bank 與固定下游任務驗證。
+- a train/development/held-out material split;
+- direct normal-incidence, normal-SPL measurements of common indoor
+  materials;
+- models for different mounting, air gap, and oblique incidence;
+- residue FDTD calibration and real-room transfer-measurement calibration
+  for different measured materials and air gap/mounting configurations;
+- production mapping for an accepted room-finish boundary;
+- room-disjoint measured-bank and fixed downstream-task validation.
 
-## 10. 程式入口
+## 10. Code entry points
 
-| 檔案 | 職責 |
+The old flat modules under `puresound/audio/` were removed during the
+package migration (see [`rir_package_migration.md`](rir_package_migration.md)).
+The table below is the current post-migration path for every entry; each
+row has been individually confirmed importable with
+`.venv/bin/python -c "import ..."` and its corresponding test.
+
+| File | Responsibility |
 |------|------|
-| `puresound/audio/impedance_measurements.py` | SI 與 normalized CSV/JSON 量測契約 |
-| `puresound/audio/impedance_tube.py` | H12、換麥校正、管徑／間距 gate、coherence 與 uncertainty reduction |
-| `puresound/audio/acoustic_impedance.py` | 被動 relaxation 與 series-RLC admittance |
-| `puresound/audio/impedance_fitting.py` | 固定實 pole 與共軛 RLC pole fitting |
-| `puresound/audio/fdtd_reference.py` | 每牆面 cell 的一階／biquad boundary state |
-| `puresound/audio/impedance_modes.py` | 1D cavity 與 separable 3D 六面 rational impedance eigenproblem |
-| `puresound/audio/impedance_residues.py` | fixed-pole complex residue fitting、position holdout 與版本化 calibration |
-| `puresound/audio/hybrid_rir.py` | experimental `ImpedanceModalLowFrequencyBackend` renderer |
-| `egs/rir_generation/phases/m2_impedance/scripts/validate_impedance_measurement.py` | held-out、passivity、cross-rig 與 modal report |
-| `egs/rir_generation/phases/m2_impedance/scripts/reduce_impedance_tube_measurement.py` | raw repeated H12 到 strict complex impedance |
-| `egs/rir_generation/phases/m2_impedance/scripts/calibrate_impedance_modal_residues.py` | 多房間 FDTD residue calibration 與 holdout report |
-| `egs/rir_generation/phases/m2_impedance/scripts/calibrate_impedance_residue_protocol.py` | M2.9 multi-boundary、unseen-room、grid-holdout protocol |
-| `test/test_impedance_measurements.py` | 匯入、passivity 與 fitting 測試 |
-| `test/test_impedance_tube.py` | H12 round-trip、calibration、gate 與 CLI 測試 |
-| `test/test_impedance_modes.py` | 解析模態與 phase shift 測試 |
+| `puresound/audio/rir/physics/impedance/measurements.py` | SI and normalized CSV/JSON measurement contracts (`ComplexImpedanceMeasurement`, `NormalizedComplexImpedanceMeasurement`) |
+| `puresound/audio/rir/physics/impedance/tube.py` | H12, microphone-swap calibration, tube-diameter/spacing gates, coherence, and uncertainty reduction (`TwoMicrophoneTubeGeometry`, `reduce_two_microphone_repeats`) |
+| `puresound/audio/rir/physics/impedance/admittance.py` | passive relaxation, multi-pole, and series-RLC admittance, plus the digital boundary reflection filter (`FirstOrderRelaxationAdmittance`, `PassiveMultiPoleAdmittance`, `PassiveResonantAdmittance`) |
+| `puresound/audio/rir/physics/impedance/fitting.py` | fixed-real-pole multi-pole fitting and conjugate-RLC-pole fitting (`fit_passive_multi_pole_admittance()`, `fit_passive_single_resonance_admittance()`) |
+| `puresound/audio/rir/physics/wave/fdtd.py` | the per-wall-cell first-order/biquad boundary-state 3D FDTD reference solver (`FDTDReferenceConfig`, `simulate_fdtd_reference()`) |
+| `puresound/audio/rir/physics/impedance/modes.py` | 1D cavity and separable 3D six-surface rational-impedance eigenproblem (`solve_1d_impedance_cavity_modes()`, `solve_rectangular_impedance_modes()`) |
+| `puresound/audio/rir/physics/impedance/residues.py` | fixed-pole complex residue fitting, position holdout, and versioned calibration (`fit_fixed_pole_modal_residues()`, `ImpedanceModalResidueCalibration`) |
+| `puresound/audio/rir/render/low_frequency/impedance_modal.py` | the experimental `ImpedanceModalLowFrequencyBackend`: the separable 3D rational-impedance modal renderer, split out of `hybrid_rir` into its own file in R2 (`RIR_EXP_LOG.md`) |
+| `puresound/audio/rir/render/hybrid.py` | `generate_hybrid_rir()`: the orchestration entry point that assembles the low-/high-frequency backends, the causality clip, and the crossover into one hybrid RIR; the direct successor to the old `hybrid_rir.py` |
+| `egs/rir_generation/phases/m2_impedance/scripts/validate_impedance_measurement.py` | held-out, passivity, cross-rig, and modal report |
+| `egs/rir_generation/phases/m2_impedance/scripts/reduce_impedance_tube_measurement.py` | raw repeated H12 to strict complex impedance |
+| `egs/rir_generation/phases/m2_impedance/scripts/calibrate_impedance_modal_residues.py` | multi-room FDTD residue calibration and holdout report |
+| `egs/rir_generation/phases/m2_impedance/scripts/calibrate_impedance_residue_protocol.py` | the M2.9 multi-boundary, unseen-room, grid-holdout protocol |
+| `test/test_acoustic_impedance.py` | admittance-model passivity and digital-boundary-filter tests |
+| `test/test_impedance_measurements.py` | ingestion, passivity, and fitting tests |
+| `test/test_impedance_tube.py` | H12 round-trip, calibration, gate, and CLI tests |
+| `test/test_impedance_modes.py` | analytic-mode and phase-shift tests |
+| `test/test_impedance_priors.py` | Miki prior fitting and FDTD modal-diagnostic tests |
+| `test/test_fdtd_reference.py` | FDTD boundary-state and 1D plane-wave-reflection tests |
+| `test/test_impedance_residues.py` | fixed-pole residue fitting and split-holdout gate tests |
+| `test/test_impedance_residue_protocol.py` | M2.9 residue-protocol CLI tests |
+| `test/test_impedance_validation_cli.py` | impedance-validation CLI smoke test |

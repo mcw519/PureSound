@@ -1,5 +1,7 @@
 # voice_isolate configs
 
+繁體中文版本：[`README.zh-TW.md`](README.zh-TW.md)
+
 Two files here are the **defaults**: the tuned settings to use as-is. Everything under
 `exp/` is the recipe history — earlier pipeline stages, ablations and eval-only fixtures.
 

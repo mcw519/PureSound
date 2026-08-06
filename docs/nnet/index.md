@@ -1,5 +1,7 @@
 # puresound.nnet
 
+繁體中文版本：[index.zh-TW.md](index.zh-TW.md)
+
 Neural network models and building blocks for speech enhancement, speaker verification, and target speaker extraction.
 
 ## Sub-modules
@@ -58,18 +60,25 @@ constructor signature is always the class docstring in the source file.
 
 ## Top-level Exports
 
-The following classes are directly importable from `puresound.nnet`:
+The following classes are directly importable from `puresound.nnet` (this is
+the complete `__all__` list in `puresound/nnet/__init__.py` — the config
+loader's `getattr(nnet, backbone["type"])` can only resolve names on this
+list, so a model missing here exists on disk but is not config-reachable):
 
 ```python
 from puresound.nnet import (
+    ConvEncDec,
+    ConvTasNet,
     DPARN,
     DPCRN,
+    DPRNN,
     EcapaTdnnExtractor,
     FeatureEncoder,
-    FrequencyEQLayer,
-    ConvEncDec,
     FreeEncDec,
+    FrequencyEQLayer,
     SkiM,
     TFGridNet,
+    Unet,
+    UnetTcn,
 )
 ```

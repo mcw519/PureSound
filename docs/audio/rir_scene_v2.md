@@ -1,5 +1,7 @@
 # Material-first RIR scene schema
 
+繁體中文版本：`rir_scene_v2.zh-TW.md`
+
 `puresound.audio.rir.scene.schema` defines the versioned `rir_scene.v2` metadata used
 by the M1 generator. The scene stores physical inputs rather than a requested
 broadband RT60:
@@ -117,12 +119,58 @@ inspectable in metadata. A blocked direct path may create:
 The interaction model is intentionally scoped: it is not a general triangle
 mesh or full UTD implementation. Diffraction is a bounded 1 kHz reference
 model, and controlled scattering currently applies only to first-order wall
-paths. The backend is selected with
-`--high-backend path-events-m3`; Pyroomacoustics remains the CLI default.
+paths.
 
 Source `speech_cardioid` directivity is evaluated per event from source
 orientation and departure direction. Receivers remain omnidirectional in this
 backend; unsupported patterns raise instead of silently falling back to omni.
+
+M4 (`PathEventFDNHighFrequencyBackend`) subclasses the M3 backend and replaces
+its sparse late field with a deterministic multiband feedback-delay network
+(FDN) tail. The coherent M3 early response is rendered first and then
+crossfaded into the FDN tail with an equal-power transition centered at a
+configurable mixing time (`--fdn-mixing-time-ms`, default 24 ms) over a
+configurable transition duration (`--fdn-transition-ms`, default 16 ms). The
+FDN's per-band RT60 targets come from the scene's own predicted octave decay
+rather than a fixed constant, its delay-line count is a power of two
+(`--fdn-delay-lines`, default 16), and it is seeded deterministically per
+room/source (`--fdn-seed`). A positive-quadratic-root gain solve keeps the
+post-transition energy equal to what the original PathEvent response would
+have carried, so M4 changes the late-field character without changing the
+direct/early samples that M3 already produced.
+
+### There is no single default backend
+
+There is no single "the default backend" for this system — the default
+depends on which entry point is called:
+
+| Entry point | Flag | Choices | Default |
+|---|---|---|---|
+| `generate_hybrid_rir.py` (low-level generator) | `--high-backend` | `pyroomacoustics`, `path-events-m3`, `path-events-m4` | `pyroomacoustics` |
+| `generate_m6_bank.py` (M6 one-command wrapper) | `--backend` | `pyroomacoustics`, `path-events-m4` | `path-events-m4` |
+
+`generate_hybrid_rir.py`'s own default is deliberately pinned to
+`pyroomacoustics` and is not expected to change: the M5 measured-calibration
+exit gate checks the parsed default backend's type, the M4 coupling
+validator's `production_default_unchanged` check reads the FDN metadata, and a
+dedicated test (`test_m6_emission_is_opt_in_and_default_backend_is_unchanged`)
+asserts the parsed default directly. Flipping this lower layer would
+retroactively rewrite already-closed milestones' exit contracts, so instead
+the change was made one layer up.
+
+`generate_m6_bank.py` — the recommended entry point for training data, see
+[`egs/rir_generation/README.md`](../../egs/rir_generation/README.md) — defaults
+its own `--backend` to `path-events-m4` (since commit `3525008`,
+2026-08-04) and always passes `--high-backend` explicitly to the low-level
+script on every invocation, so the M6 default lives entirely in the wrapper
+and never touches `generate_hybrid_rir.py`'s own default. The change was made
+on measured evidence: against 1465 measured RIRs from five corpora, M4's
+normalized octave decay shape deviates from measured decay by `0.081` where
+Pyroomacoustics deviates by `0.628` (`RIR_EXP_LOG.md` §6.6.6) — Pyroomacoustics's
+high-frequency reverberation runs roughly 2.2x too long at 2 kHz, the wrong
+direction entirely relative to every one of the five reference corpora.
+Pyroomacoustics remains available at both layers as a first-class explicit
+choice and as the A/B arm; the cause of its overshoot remains an open question.
 
 With `record_realized_metrics=True`, every output sidecar records broadband and
 valid octave-band DRR, C50/C80, EDT, T20, T30, fit quality, and spectral tilt
@@ -166,8 +214,14 @@ The old command remains v0 by default. This is intentional: selecting
 M1 made the high-frequency decay material-first. M2 added experimental
 per-mode and complex-impedance low-frequency paths. M3 now renders furniture
 visibility, scalar reference-frequency transmission/diffraction/scattering,
-and source cardioid through an opt-in PathEvent backend.
+and source cardioid through an opt-in PathEvent backend. M4 adds a
+deterministic multiband FDN late field to that same mono/per-channel hybrid
+generator (opt-in, see above), and — through the separate
+`puresound.audio.rir.render.spatial` API described in
+[`spatial_rir.md`](spatial_rir.md) — synchronized receiver arrays, first-order
+Ambisonics, and an optional binaural decoder.
 
 Surface patches are still area-weighted for shoebox backends instead of being
-explicit polygons. General meshes, frequency-dependent diffraction, measured
-source/receiver patterns, and spatial late fields remain later milestones.
+explicit polygons. General meshes, frequency-dependent diffraction, and
+measured (rather than idealized first-order) source/receiver directivity
+patterns remain later milestones.

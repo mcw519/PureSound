@@ -1,76 +1,96 @@
 # puresound.system.optim
 
-Optimizer and learning rate scheduler factory for PureSound training systems.
+繁體中文版本：[`optim.zh-TW.md`](optim.zh-TW.md)
 
-## Functions
+Reflection-based optimizer/LR-scheduler factory. There is no restricted enum of supported optimizer/scheduler names: `type` strings are looked up directly on `torch.optim` / `torch.optim.lr_scheduler` via `getattr`, so anything those modules export is usable. An unrecognized name fails with `AttributeError`, not a friendly config-validation error.
 
-### `create_optimizer_and_scheduler(model: nn.Module, hparam: Dict) -> Tuple`
+## Function: `create_optimizer_and_scheduler`
 
-Constructs a PyTorch optimizer (with optional per-component learning rate scaling) and an optional learning rate scheduler.
+```python
+create_optimizer_and_scheduler(
+    overall_params_and_lr_factor: Dict,
+    optimizer_args: Dict,
+    scheduler_args: Dict,
+) -> Tuple[Optimizer, LRScheduler]
+```
 
-**Parameters:**
-- `model` – The PyTorch model to optimize
-- `hparam` – Hyperparameter config dict with an `"optim"` section
+### Parameters
 
-**Returns:** `(optimizer, scheduler_dict or None)`
+- **`overall_params_and_lr_factor`** — `{group_name: {"params": Iterable[nn.Parameter], "lr_factor": float}}`. Not built by this function: it is produced by a Lightning module's own `get_total_param_groups()` (`siso.EncDecMaskBase`, `siso.EncPredClassBase`, `miso.EncDecCondMaskBase` — see [siso.md](siso.md)/[miso.md](miso.md)), one dict entry per named parameter group (e.g. `encoder`/`feats`/`backbone`, or a single `gate_head` group in `EncDecMaskBase`'s VAD-gate-only mode).
+- **`optimizer_args`** — `{"type": str, "learning_rate": float, "args": Dict}`.
+  - `type` — a class name in `torch.optim` (`Adam`, `AdamW`, `SGD`, `RAdam`, ...), resolved via `getattr(torch.optim, type)`.
+  - `learning_rate` — the base LR; each group's effective rate is `lr_factor * learning_rate`. It is *also* passed positionally as the optimizer constructor's own `lr=` argument — every group here already carries an explicit `"lr"`, so that positional value never actually ends up setting any group's rate, but some optimizer classes require `lr` regardless of whether every param group supplies its own.
+  - `args` — forwarded as `**kwargs` to the optimizer class (`weight_decay`, `betas`, `momentum`, ...).
+- **`scheduler_args`** — `{"type": str, "args": Dict}`.
+  - `type` — a class name in `torch.optim.lr_scheduler` (`StepLR`, `CosineAnnealingWarmRestarts`, `ReduceLROnPlateau`, ...), resolved via `getattr(torch.optim.lr_scheduler, type)`.
+  - `args` — forwarded as `**kwargs` to the scheduler class.
+  - Real recipes' YAML `scheduler:` blocks also carry a sibling `warmup_step` key — this function never reads it. It is pulled out separately by the training script and handed to [`BaseLightningModule.register_warmup_step()`](base.md), which drives a manual linear-warmup ramp inside `optimizer_step` — a mechanism entirely outside this module.
 
-### Config Structure
+### Returns
+
+`(optimizer, scheduler)` — always a 2-tuple. There is no "no scheduler" path: `scheduler_args["type"]` is required (`KeyError` otherwise), so a scheduler is always constructed and returned.
+
+### Real config example
+
+`egs/voice_isolate/config/train_dpcrn.yaml`:
 
 ```yaml
-optim:
-  optimizer: adam         # adam | sgd | adamw
-  lr: 0.001               # Base learning rate
-  weight_decay: 0.0
-  
-  # Per-component LR scaling (optional)
-  lr_factor:
-    encoder: 0.1          # encoder gets lr * 0.1
-    cond_backbone: 0.5    # cond_backbone gets lr * 0.5
+optimizer:
+  type: AdamW
+  learning_rate: 0.001
+  args:
+    weight_decay: 0.00001
+    betas: [0.9, 0.999]
 
-  scheduler:
-    type: reduce_lr       # reduce_lr | warmup_cosine | step
-    patience: 3           # for reduce_lr
-    factor: 0.5           # for reduce_lr / step
-    warmup_steps: 4000    # for warmup_cosine
+scheduler:
+  # warmup_step is read separately by main.py -> register_warmup_step;
+  # create_optimizer_and_scheduler itself only ever sees type/args.
+  type: CosineAnnealingWarmRestarts
+  warmup_step: 250
+  args:
+    T_0: 20
+    T_mult: 1
+    eta_min: 0.00001
 ```
 
-### Supported Optimizers
+`AdamW` is the only optimizer used across current recipes; scheduler choice varies — `egs/noise_suppression/config/dpcrn.yaml` uses `StepLR` instead:
 
-| Name | PyTorch Class |
-|------|--------------|
-| `"adam"` | `torch.optim.Adam` |
-| `"adamw"` | `torch.optim.AdamW` |
-| `"sgd"` | `torch.optim.SGD` |
-
-### Supported Schedulers
-
-| Type | Description |
-|------|-------------|
-| `"reduce_lr"` | `ReduceLROnPlateau` — reduces LR when metric plateaus |
-| `"warmup_cosine"` | Linear warmup + cosine annealing |
-| `"step"` | `StepLR` — reduces LR by `factor` every N epochs |
-
-### Per-Component LR Scaling
-
-If `lr_factor` is specified in the config, model parameters are grouped by component name, with each group receiving a scaled learning rate:
-
-```
-effective_lr[component] = base_lr * lr_factor[component]
+```yaml
+scheduler:
+  type: StepLR
+  args: {step_size: 10, gamma: 0.5}
 ```
 
-Parameters not matching any component key use the base `lr`.
+Both go through the same reflection path — switching from one to the other is a config edit, not a code change.
+
+### Real wiring (`egs/noise_suppression/main.py`)
+
+```python
+param_groups = lightning_model.get_total_param_groups()
+optimizer, scheduler = create_optimizer_and_scheduler(
+    overall_params_and_lr_factor=param_groups,
+    optimizer_args=optim_dict,       # config["optimizer"]
+    scheduler_args=scheduler_dict,   # config["scheduler"]
+)
+lightning_model.register_optimizer(optimizer)
+lightning_model.register_scheduler(scheduler)
+lightning_model.register_warmup_step(scheduler_dict["warmup_step"])
+```
 
 ## Example
 
 ```python
 from puresound.system.optim import create_optimizer_and_scheduler
 
-optimizer, scheduler = create_optimizer_and_scheduler(model, hparam)
+groups = model.get_total_param_groups()  # e.g. {"encoder": {...}, "feats": {...}, "backbone": {...}}
+optimizer, scheduler = create_optimizer_and_scheduler(
+    overall_params_and_lr_factor=groups,
+    optimizer_args={"type": "AdamW", "learning_rate": 1e-3, "args": {"weight_decay": 1e-5}},
+    scheduler_args={"type": "StepLR", "args": {"step_size": 10, "gamma": 0.5}},
+)
+model.register_optimizer(optimizer)
+model.register_scheduler(scheduler)
 
-# In PyTorch Lightning:
-def configure_optimizers(self):
-    opt, sch = create_optimizer_and_scheduler(self, self.hparam)
-    if sch:
-        return {"optimizer": opt, "lr_scheduler": sch}
-    return opt
+# In PyTorch Lightning, BaseLightningModule already implements configure_optimizers()
+# to return [self._optimizer], [self._scheduler] from these two registrations.
 ```

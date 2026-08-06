@@ -1,5 +1,7 @@
 # puresound.nnet
 
+繁體中文版本：[`README.zh-TW.md`](README.zh-TW.md)
+
 Model library for speech tasks. Every backbone stays available and reachable
 from a recipe config (`getattr(nnet, backbone["type"])`), whether or not a
 current recipe uses it; `nnet/__init__.py` is the authoritative export list.

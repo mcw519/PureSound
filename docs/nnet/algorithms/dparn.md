@@ -1,104 +1,158 @@
 # puresound.nnet.dparn
 
-Dual-Path Attention RNN (DPARN) — a U-Net architecture using attention-based intra-chunk processing and LSTM-based inter-chunk processing.
+繁體中文版本：[dparn.zh-TW.md](dparn.zh-TW.md)
 
-**Reference:** Inspired by DPARN architecture for speech enhancement in the time-frequency domain.
+Status: *active* (see [nnet index](../index.md)). Dual-Path Attention RNN
+(DPARN) — the same `Unet` chassis as [DPCRN](dpcrn.md), but the bottleneck
+replaces DPCRN's bidirectional intra-frequency LSTM with two stacked
+self-attention layers, keeping DPCRN's unidirectional inter-time LSTM.
 
 ## Class: `DPARNblock2D`
 
-A single Dual-Path Attention RNN processing block operating on 2D time-frequency feature maps.
-
-### Architecture
-
-- **Intra-chunk path**: Multi-head self-attention over the frequency axis (each time frame processed independently)
-- **Inter-chunk path**: LSTM over the time axis (captures temporal dependencies)
+The bottleneck block.
 
 ### Constructor
 
 ```python
 DPARNblock2D(
-    in_channel: int,
-    hid_channel: int,
-    num_heads: int = 4,
-    bidirectional: bool = True,
-    causal: bool = False,
+    input_size: int,
+    hidden_size: int,
+    nhead: int,
+    dropout: float = 0.0,
 )
 ```
 
 **Parameters:**
-- `in_channel` – Number of input feature channels (frequency bins after encoding)
-- `hid_channel` – Hidden dimension for LSTM
-- `num_heads` – Number of attention heads for intra-chunk self-attention
-- `bidirectional` – If `True`, the inter-chunk LSTM is bidirectional (non-causal)
-- `causal` – If `True`, applies causal masking to the attention to prevent look-ahead
+- `input_size` – bottleneck channel dimension (`channels[-1]` from the
+  enclosing `Unet`/`DPARN`)
+- `hidden_size` – hidden width for the inter-chunk LSTM
+- `nhead` – attention heads for the two intra-chunk `MhaSelfAttenLayer`s
+  (no default — always supplied by `DPARN`)
+- `dropout` – shared by both attention layers and the LSTM
 
-### `forward(x: Tensor) -> Tensor`
+There is no `bidirectional` or `causal` constructor argument. Both
+intra-chunk attention layers are hardcoded `bidirectional=False` (the
+`MhaSelfAttenLayer`'s LSTM-replacement flag, unrelated to sequence
+direction) and every call passes `causal=False` at the `forward` call site,
+not as stored construction state — this block does not currently expose a
+causal-streaming switch.
 
-**Parameters:**
-- `x` – Input tensor `[batch, channel, freq, time]`
+### Architecture
 
-**Returns:** Processed tensor `[batch, channel, freq, time]`.
+- **Intra-chunk (frequency axis, per time frame):** two stacked
+  `MhaSelfAttenLayer`s (see [lobe/attention](../lobe/attention.md)) —
+  the first with sinusoidal position encoding, the second without — followed
+  by a `Linear` + `LayerNorm`, replacing DPRNN/DPCRN's intra-frequency BiLSTM
+  with self-attention.
+- **Inter-chunk (time axis, per frequency bin):** one unidirectional
+  `SingleRNN("LSTM", ...)` + `LayerNorm`, identical in structure to
+  [`DPRNNblock2D`](dprnn.md)'s inter path.
 
----
+### `forward(x, intra_skip=True, inter_skip=True) -> Tensor`
+
+```python
+forward(
+    x: Tensor,             # [N, CH, C, T]
+    intra_skip: bool = True,
+    inter_skip: bool = True,
+) -> Tensor                # [N, CH, C, T]
+```
+
+Each path is a residual add around itself (`intra_skip`/`inter_skip` toggle
+whether that residual is actually added); `DPARN` always calls this with
+both left at their default `True`.
 
 ## Class: `DPARN`
 
-Full DPARN model extending the `Unet` architecture. Replaces the U-Net bottleneck with a stack of `DPARNblock2D` modules.
+Extends `Unet` (see [algorithms/unet](unet.md)) exactly like `DPCRN` does:
+same CNN down/up stack, bottleneck swapped in.
 
 ### Constructor
 
 ```python
 DPARN(
-    # U-Net parameters
-    in_channel: int,
-    out_channel: int,
-    encoder_kernel: List[int],
-    encoder_stride: List[int],
-    encoder_channel: List[int],
-    # DPARN bottleneck parameters
-    num_blocks: int,
-    hid_channel: int,
-    num_heads: int = 4,
-    bidirectional: bool = True,
-    causal: bool = False,
+    input_dim: int = 512,
+    activation_type: str = "PReLU",
+    norm_type: str = "bN2d",
+    dropout: float = 0.05,
+    channels: Tuple = (1, 32, 32, 32, 64, 128),
+    transpose_t_size: int = 2,
+    transpose_delay: bool = False,
+    skip_conv: bool = False,
+    kernel_t: Tuple = (2, 2, 2, 2, 2),
+    stride_t: Tuple = (1, 1, 1, 1, 1),
+    dilation_t: Tuple = (1, 1, 1, 1, 1),
+    kernel_f: Tuple = (5, 3, 3, 3, 3),
+    stride_f: Tuple = (2, 2, 1, 1, 1),
+    dilation_f: Tuple = (1, 1, 1, 1, 1),
+    delay: Tuple = (0, 0, 0, 0, 0),
+    n_dparn_block: int = 2,
+    rnn_hidden: int = 128,
+    nhead: int = 1,
+    spectral_compress: bool = False,
 )
 ```
 
-### `forward(x: Tensor, embed: Optional[Tensor] = None) -> Tensor`
+The first 15 parameters (`input_dim` … `delay`) are forwarded verbatim to
+`Unet.__init__` — see [algorithms/unet](unet.md) for what each one does to
+the CNN down/up stack. DPARN-specific:
+- `n_dparn_block` – number of stacked `DPARNblock2D`s at the bottleneck
+  (DPCRN hardcodes exactly 2; DPARN makes this configurable)
+- `rnn_hidden` – `hidden_size` passed to every `DPARNblock2D`
+- `nhead` – `nhead` passed to every `DPARNblock2D` (see note above — this
+  value is **not** stored on `self`, only used to build the blocks)
+- `spectral_compress` – if `True`, applies
+  `spectral_compression(x, alpha=0.3, dim=1)` (magnitude raised to the power
+  `alpha`, phase preserved — see [lobe/trivial](../lobe/trivial.md)) to the
+  input before anything else
 
-**Parameters:**
-- `x` – Input spectrum `[batch, channel, freq, time]`
-- `embed` – Optional conditioning embedding (unused in base DPARN)
-
-**Returns:** Enhanced spectrum tensor of the same shape.
-
-## Example
+### `forward(x) -> Tensor`
 
 ```python
-from puresound.nnet.dparn import DPARN
+forward(x: Tensor) -> Tensor
+# x: [N, CH, C, T] or [N, C, T] (unsqueezed to [N, 1, C, T])
+# returns: [N, CH, C, T]
+```
+
+`spectral_compress` (optional) → `Unet.input_norm` → CNN-down (collecting
+skip connections) → `n_dparn_block` stacked `DPARNblock2D`s → CNN-up
+(skip-concat or `skip_conv`, matching `Unet`'s up path exactly, including the
+`transpose_delay` cropping convention — see [algorithms/unet](unet.md)).
+
+### `get_args` property
+
+Returns a `Dict` of constructor arguments for checkpoint reconstruction —
+**but it omits `nhead` and `spectral_compress`** (both are real constructor
+parameters; `spectral_compress` is stored on `self` yet still left out of
+the dict, and `nhead` is never stored on `self` at all, so it could not be
+recovered even if included). Rebuilding a `DPARN` from
+`DPARN(**model.get_args)` silently resets `nhead` to its default (`1`) and
+drops whatever `spectral_compress` was.
+
+### Example (mirrors `test/test_backbone.py::test_dparn_backbone`)
+
+```python
+from puresound.nnet import DPARN
 
 model = DPARN(
-    in_channel=2,
-    out_channel=2,
-    encoder_kernel=[3, 3, 3],
-    encoder_stride=[2, 2, 1],
-    encoder_channel=[16, 32, 64],
-    num_blocks=4,
-    hid_channel=64,
-    num_heads=4,
-    bidirectional=True,
+    input_dim=256,
+    norm_type="cLN",
+    channels=(2, 32, 32, 32, 64, 128),
 )
+input_x = torch.rand(1, 2, 256, 200)
+y = model(input_x)
+assert input_x.shape == y.shape
 ```
 
 ## Streaming ONNX Runtime
 
-DPARN can be exported as a feature-frame ONNX model for low-latency inference.
-The streaming path keeps the offline model unchanged and wraps the DPARN
-backbone with explicit frame state:
+DPARN can be exported as a feature-frame ONNX model for low-latency
+inference. The streaming path keeps the offline model unchanged and wraps
+the DPARN backbone with explicit frame state:
 
 - CNN temporal caches for the downsampling path
 - transpose-convolution pending caches for the upsampling path
-- LSTM hidden and cell states for each DPARN block
+- LSTM hidden and cell states for each `DPARNblock2D`
 
 The ONNX model consumes one complex STFT frame at a time:
 

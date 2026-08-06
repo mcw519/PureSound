@@ -1,5 +1,7 @@
 # puresound.nnet.loss.residual
 
+繁體中文版本：[residual.zh-TW.md](residual.zh-TW.md)
+
 Training-only background accounting: supervise the residual left after
 subtracting the enhanced target from the mixture. The deployed model stays
 single-output while training gets an auxiliary "where did the suppressed energy

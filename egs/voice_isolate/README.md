@@ -1,10 +1,12 @@
 # voice_isolate — near-field foreground voice isolation
 
+繁體中文版本：[`README.zh-TW.md`](README.zh-TW.md)
+
 Single-channel, **enrollment-free, near-field (<1 m) foreground** voice isolation: keep the near
 speaker, suppress far/competing speakers + noise. The only cue is the **near/far DRR
 (direct-to-reverberant ratio) contrast**. Target effect = ai-coustics Voice Focus 2.0.
 
-**Backbone: DPCRN** (complex ratio mask, 16 kHz, ~1 M params, 30 ms look-ahead). Picked after an
+**Backbone: DPCRN** (complex ratio mask, 16 kHz, ~0.8 M params, 30 ms look-ahead). Picked after an
 overfit + full-train comparison showed the original TS-Conformer (mapping head) could not separate
 hard near/far cases while DPCRN/DPARN could — see "Pre-DPCRN history" below.
 
@@ -33,7 +35,7 @@ far-suppression harder inside that domain blows up real-acoustic deletion (rever
 `dpcrn_v6.ckpt` remains the fallback (no runtime knob, most conservative on far-field
 suppression). Per-version detail, results and the deployment notes: `pretrained_ckpt/README.md`.
 
-## The pipeline (7 stages, each warm-started from the previous)
+## The pipeline (8 stages, each warm-started from the previous)
 
 All stages share the **same DPCRN architecture** (`channels [2,32,64,128]`, `rnn_hidden 96`,
 look-ahead `delay=[1,1,1]`) — only the RIR bank, augmentation, and loss weights change. Judge only at
@@ -118,6 +120,11 @@ Tools + usage: `scripts/README.md`.
 - **Leakage probe (far-only/noise-only):** `config/exp/eval_targetabsent_probe.yaml` — forces every row
   target-absent; checks the model doesn't leak/hallucinate a near speaker. All pipeline checkpoints
   pass (power reduction ≤ −24.8 dB, false-near ≤3%) without ever training on this scenario.
+- **Synthetic-vs-real domain-gap decomposition:** `scripts/eval_domain_gap.py` — on matched VOiCES
+  (room, mic) triples that have both a real recording and a measured impulse response, splits the
+  synthetic-to-real gap into an LTI-convolution ceiling (real vs measured-IR fit) and RIR-bank
+  fidelity (measured vs synthetic-bank-IR fit). Produced `data_report/domain_gap_v7.jsonl`, the
+  evidence that drove stage 8's measured-capture realism fixes (`dpcrn_v8`).
 - **Dawn Chorus = reference / do-no-harm only.** It has **no near/far DRR contrast** and is 78%
   narrowband-GSM, so it is cue/bandwidth-mismatched to this task; a well-behaved model is ≈passthrough
   on it.

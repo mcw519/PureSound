@@ -1,142 +1,205 @@
 # puresound.nnet.lobe.encoder
 
-Audio encoding and decoding modules for transforming waveforms to latent feature representations.
+繁體中文版本：`encoder.zh-TW.md`
+
+Audio encoder/decoder modules that transform waveforms to latent feature
+representations and back. Every class here exposes exactly `forward()`
+(analysis) and `inverse()` (synthesis) — there are no `encode()`/`decode()`
+method names anywhere in this module.
 
 ## Class: `FreeEncDec`
 
-Learnable waveform encoder/decoder using Conv1d analysis and transposed Conv1d synthesis. Also known as a "free" encoder as it learns the analysis filters end-to-end.
+A fully learnable analysis/synthesis filterbank: `Conv1d` encoder,
+`ConvTranspose1d` decoder, no constraint tying the two together. Also known
+as a "free" encoder since the filters are learned end-to-end rather than
+fixed to a known basis (contrast with `ConvSTFT` below).
 
 > Exported from `puresound.nnet` as `FreeEncDec`.
 
-### Constructor
-
 ```python
 FreeEncDec(
-    win: int,
-    stride: int,
-    out_channel: int,
-    bias: bool = False,
+    win_length: int = 512,
+    laten_length: int = 512,
+    hop_length: int = 128,
+    output_active: Optional[str] = None,
 )
 ```
 
 **Parameters:**
-- `win` – Analysis window length (filter kernel size)
-- `stride` – Encoder hop size
-- `out_channel` – Number of encoder output channels (learned filters)
-- `bias` – If `True`, adds a learnable bias to the encoder filters
+- `win_length` – analysis/synthesis window length (the `Conv1d`/`ConvTranspose1d` kernel size)
+- `laten_length` – latent feature dimension (encoder output channels / decoder input channels)
+- `hop_length` – stride of both the encoder and decoder
+- `output_active` – if given, an `nn.{output_active}()` activation (looked up via `getattr(nn, output_active)`, e.g. `"ReLU"`) is appended after the encoder — there is **no `bias` parameter**; both convs are always built with `bias=False`
 
-### Methods
+### `forward(x: Tensor) -> Tensor`
 
-#### `encode(wav: Tensor) -> Tensor`
+**Parameters:** `x` – `[N, L]` or `[N, 1, L]`
 
-Encodes a waveform to a latent feature representation.
+**Returns:** `[N, laten_length, T]`, `T = (L - win_length) // hop_length + 1`.
 
-**Parameters:**
-- `wav` – Input waveform `[batch, 1, T]`
+### `inverse(x: Tensor) -> Tensor`
 
-**Returns:** Feature tensor `[batch, out_channel, T//stride]`.
+**Parameters:** `x` – `[N, laten_length, T]`
 
-#### `decode(feat: Tensor, original_length: Optional[int] = None) -> Tensor`
-
-Decodes a feature tensor back to a waveform.
-
-**Parameters:**
-- `feat` – Feature tensor `[batch, out_channel, T_feat]`
-- `original_length` – If provided, trims/pads output to this length
-
-**Returns:** Reconstructed waveform `[batch, 1, T]`.
+**Returns:** `[N, L]` (channel dim squeezed after the `ConvTranspose1d`).
 
 ---
 
 ## Class: `ConvEncDec`
 
-STFT-based encoder/decoder with configurable frequency scaling (linear or log-scale).
+STFT-based encoder/decoder: a trainable convolutional STFT (`ConvSTFT`,
+below) wrapped with window construction and optional pre-emphasis.
 
 > Exported from `puresound.nnet` as `ConvEncDec`.
 
-### Constructor
-
 ```python
 ConvEncDec(
-    n_fft: int,
-    hop_length: int,
-    win_length: int,
-    freq_scale: str = "linear",
-    out_channel: Optional[int] = None,
+    fft_length: int = 512,
+    win_type: str = "hann",
+    win_length: int = 512,
+    freq_bins: int = None,
+    hop_length: int = 128,
+    freq_scale: str = "no",
+    iSTFT: bool = True,
+    fmin: int = 0,
+    fmax: int = 8000,
+    sr: int = 16000,
+    preemphasis: Optional[float] = None,
+    trainable: bool = True,
 )
 ```
 
 **Parameters:**
-- `n_fft` – FFT size
+- `fft_length` – FFT size (`n_fft` passed down to `ConvSTFT`)
+- `win_type` – `"hann"`, `"hamming"`, or `"blackman"` — anything else raises `NotImplementedError`
+- `win_length` – analysis window length
+- `freq_bins` – number of frequency bins to keep; `None` means `n_fft // 2 + 1`
 - `hop_length` – STFT hop size
-- `win_length` – Analysis window length
-- `freq_scale` – Frequency axis scaling:
-  - `"linear"` – Standard linear STFT bins
-  - `"log"` – Log-compressed frequency bins
-- `out_channel` – Optional linear projection of frequency bins after STFT
+- `freq_scale` – frequency-bin spacing, one of **`"linear"`, `"log"`, `"no"`** (not just 2 values) — see [`stft.create_fourier_kernels`](stft.md); default here is `"no"` (uniform bins from 0 Hz to Nyquist, `fmin`/`fmax` ignored), which differs from `create_fourier_kernels`'s own bare default of `"linear"`
+- `iSTFT` – if `True`, also builds the inverse kernels needed by `inverse()`
+- `fmin` / `fmax` – only used when `freq_scale` is `"linear"` or `"log"`
+- `sr` – sample rate, used for `"linear"`/`"log"` bin-frequency mapping
+- `preemphasis` – if set, applies `x[t] - preemphasis * x[t-1]` before the STFT (first sample left unchanged, via zero-padding)
+- `trainable` – if `True`, the underlying STFT kernels (`wsin`/`wcos`) are learnable parameters instead of fixed buffers
 
-### Methods
+### `forward(x: Tensor) -> Tensor`
 
-#### `encode(wav: Tensor) -> Tuple[Tensor, Dict]`
+**Parameters:** `x` – `[N, L]`
 
-Computes STFT and returns features with metadata.
+**Returns:** `[N, C, T, 2]` (real/imag stacked on the last axis; `C = freq_bins`).
 
-**Parameters:**
-- `wav` – Input waveform `[batch, 1, T]`
+### `inverse(x: Tensor) -> Tensor`
 
-**Returns:** `(features, stft_meta)` where `features` is `[batch, C, T_frame]`.
+**Parameters:** `x` – `[N, C, T, 2]`
 
-#### `decode(feat: Tensor, meta: Dict, original_length: Optional[int] = None) -> Tensor`
-
-Reconstructs waveform from STFT features using inverse STFT.
-
-**Returns:** Waveform `[batch, 1, T]`.
+**Returns:** `[N, L]`.
 
 ---
 
 ## Class: `ConvSTFT`
 
-Trainable STFT/iSTFT implemented via convolutional kernels (no autograd through `torch.stft`). Enables end-to-end gradient flow through the analysis-synthesis filterbank.
-
-### Constructor
+Trainable STFT/iSTFT implemented as `Conv1d`/`Conv2d` with sinusoidal kernels
+(no autograd through `torch.stft`), adapted from
+[nnAudio](https://github.com/KinWaiCheuk/nnAudio). This is what `ConvEncDec`
+builds internally; it can also be used standalone.
 
 ```python
 ConvSTFT(
-    n_fft: int,
-    hop_length: int,
-    win_length: int,
-    window: str = "hann",
+    window_mask: torch.Tensor,
+    n_fft: int = 2048,
+    win_length: Optional[int] = None,
+    freq_bins: Optional[int] = None,
+    hop_length: Optional[int] = None,
+    freq_scale: str = "no",
+    iSTFT: bool = False,
+    fmin: int = 50,
+    fmax: int = 6000,
+    sr: int = 22050,
     trainable: bool = False,
 )
 ```
 
 **Parameters:**
+- `window_mask` – **required**, a precomputed 1D window tensor of length `n_fft` (e.g. `torch.hann_window(win_length)`) — this is a tensor, not a `window: str` name; raises `TypeError` if `len(window_mask) != n_fft`
 - `n_fft` – FFT size
-- `hop_length` – Frame hop size
-- `win_length` – Window length
-- `window` – Window function type: `"hann"`, `"hamming"`, etc.
-- `trainable` – If `True`, analysis kernels are learnable parameters
+- `win_length` – defaults to `n_fft` if `None`
+- `freq_bins` – defaults to `n_fft // 2 + 1` if `None`
+- `hop_length` – defaults to `win_length // 4` if `None`
+- `freq_scale`, `fmin`, `fmax`, `sr` – forwarded to [`stft.create_fourier_kernels`](stft.md)
+- `iSTFT` – if `True`, also registers the mirrored inverse kernels (`kernel_sin_inv`, `kernel_cos_inv`) needed by `inverse()`
+- `trainable` – if `True`, `wsin`/`wcos` (the window-multiplied kernels) are `nn.Parameter`; otherwise they're registered buffers
 
-### Methods
+### `forward(x: Tensor) -> Tensor`
 
-#### `forward(wav: Tensor) -> Tuple[Tensor, Tensor]`
+**Parameters:** `x` – `[N, channel, L]`
 
-Computes STFT and returns real and imaginary parts separately.
+Runs two `Conv1d`s (`wsin`, `wcos`) at stride `hop_length`, truncates to
+`freq_bins`. **Returns:** `[N, C, T, 2]` — note the imaginary part is
+negated on the way out (`torch.stack((spec_real, -spec_imag), -1)`).
 
-**Returns:** `(real, imag)` each of shape `[batch, n_fft//2+1, T_frame]`.
+### `inverse(X: Tensor, refresh_win: bool = True) -> Tensor`
+
+Requires `iSTFT=True` at construction (else raises `NameError`) and
+`X.dim() == 4`. Mirrors bins back out to full `n_fft` width
+([`stft.extend_fbins`](stft.md)), runs the inverse `Conv2d`s, reconstructs
+with [`stft.overlap_add`](stft.md), then **normalizes** by dividing the raw
+overlap-add output by [`stft.torch_window_sumsquare`](stft.md) at every
+position where that sum-square is non-negligible (`> 1e-10`) — this
+normalization step is not optional; skipping it leaves the reconstruction
+scaled by the window's overlap envelope. The sum-square is cached
+(`self.w_sum`) and only recomputed when `refresh_win=True` or on first call,
+since it depends only on the number of frames, not on `X`'s values.
+
+---
+
+## Class: `UnifiedConvEncDec`
+
+Handles **any** input sample rate by keeping one `ConvSTFT` per supported
+rate, all built to the same 25 ms window / 10 ms hop:
+
+```python
+UnifiedConvEncDec(win_type: str = "hann", trainable: bool = False)
+```
+
+Supported sample rates (fixed table in `get_stft_parms`): `8000, 16000,
+22050, 24000, 32000, 44100, 48000` Hz, each with its own `n_fft`/`hop_length`
+pair matching 25 ms/10 ms at that rate, `freq_scale="no"`, `iSTFT=True`.
+
+### `forward(x: Tensor, sr: Union[Tensor, int]) -> Tensor`
+
+**Parameters:**
+- `x` – `[N, L]`
+- `sr` – a plain `int` (whole batch shares one sample rate → dispatches to a single `ConvSTFT`), or a per-sample `Tensor[N]` (loops sample-by-sample, dispatching each to its own rate's encoder and concatenating — a mixed-sample-rate batch is supported, just not vectorized)
+
+**Returns:** `[N, C, T, 2]`.
+
+### `inverse(x: Tensor, sr: Union[Tensor, int]) -> Tensor`
+
+Symmetric to `forward`. **Returns:** `[N, L]`.
+
+No caller in the repository's recipes today — exercised directly by
+`test/test_lobe.py::test_unified_stft_encoder` across all 7 rates; a library
+piece for multi-sample-rate deployments.
+
+## Wiring
+
+`ConvEncDec` and `FreeEncDec` are re-exported as `puresound.nnet.ConvEncDec` /
+`puresound.nnet.FreeEncDec` and are the two `encoder.type` choices recipe
+configs pick between (e.g. `egs/default_config.yaml`'s
+`encoder: {type: ConvEncDec, encoder_args: {...}}`).
 
 ## Example
 
 ```python
 from puresound.nnet.lobe.encoder import FreeEncDec, ConvEncDec
 
-# Learnable encoder
-enc = FreeEncDec(win=16, stride=8, out_channel=512)
-feat = enc.encode(wav)
-wav_out = enc.decode(feat, original_length=wav.shape[-1])
+# Learnable filterbank encoder
+enc = FreeEncDec(win_length=16, hop_length=8, laten_length=512)
+feat = enc(wav)
+wav_out = enc.inverse(feat)
 
 # STFT encoder
-enc_stft = ConvEncDec(n_fft=512, hop_length=128, win_length=512)
-feat, meta = enc_stft.encode(wav)
-wav_out = enc_stft.decode(feat, meta)
+enc_stft = ConvEncDec(fft_length=512, hop_length=128, win_length=512, freq_scale="no")
+spec = enc_stft(wav)          # [N, C, T, 2]
+wav_out = enc_stft.inverse(spec)
 ```

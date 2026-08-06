@@ -1,33 +1,34 @@
 # PureSound
 
 PureSound is a speech processing toolkit based on PyTorch and PyTorch Lightning.
-PureSound 是一個以 PyTorch 與 PyTorch Lightning 為核心的語音處理工具包。
-
 It provides reusable audio utilities, model components, and training recipes for:
-它提供可重用的音訊工具、模型元件與訓練流程，涵蓋：
 
 - Noise Suppression (NS)
+- Near-field Voice Isolation
 - Speaker Embedding / Speaker Verification (SV)
-- Target Speaker Extraction (TSE)
+- Target Speaker Extraction (TSE, legacy)
+- Room Impulse Response (RIR) generation for training-data augmentation
+
+繁體中文版本：[`README.zh-TW.md`](README.zh-TW.md)
 
 ## Highlights
 
 - Modular design: `audio`, `dataset`, `nnet`, `system`, and `task`
 - Config-driven training and inference (YAML)
-- Multiple backbone models (for example: DPCRN, DPRNN, DPARn, ECAPA-TDNN, TF-GridNet)
-- Streaming DPARN ONNX Runtime deployment for realtime voice-isolate inference
-- Built-in objective and subjective metrics (for example: PESQ, STOI, SDR related tools)
+- A model library that keeps every backbone config-reachable (DPCRN, DPARN, DPRNN, SkiM, Conv-TasNet, TF-GridNet, ECAPA-TDNN), even when only some are used by an active recipe
+- Streaming **DPCRN** ONNX Runtime deployment for real-time voice-isolate inference (the released deployment path; DPARN streaming is kept as a legacy alternative)
+- A standalone `sdk/python` runtime for embedding streaming inference in another project without the full training package
+- A public RIR generation pipeline (`egs/rir_generation`) for near/far augmentation training data
+- Built-in objective and subjective metrics (for example: PESQ, STOI, SDR-related tools)
 
-## Requirements / 系統需求
+## Requirements
 
 - Python 3.10+
 - A working PyTorch environment compatible with your platform
 
-## Installation / 安裝
+## Installation
 
 ### Option 1: Use uv (recommended for development)
-
-### 方案 1：使用 uv（建議開發使用）
 
 ```bash
 git clone <project-url>
@@ -39,8 +40,6 @@ The repository pins `torch`, `torchaudio`, and `torchcodec` to the PyTorch CUDA 
 
 ### Option 2: Use pip
 
-### 方案 2：使用 pip
-
 ```bash
 git clone <project-url>
 cd PureSound
@@ -51,7 +50,7 @@ python -m pip install -e . --no-deps
 
 `requirements.txt` mirrors the runtime dependencies and includes the PyTorch CUDA 12.4 wheel index for `pip`.
 
-## Quick Validation / 快速驗證
+## Quick Validation
 
 Run the test suite:
 
@@ -65,7 +64,7 @@ Or with pip environment:
 pytest
 ```
 
-## Quick Start Recipes / 快速開始（Recipes）
+## Quick Start Recipes
 
 The `egs` folder contains runnable examples.
 
@@ -83,6 +82,8 @@ uv run python main.py --training True config/dpcrn.yaml
 # Inference
 uv run python main.py --inference True --ckpt_path /path/to/model.ckpt config/dpcrn.yaml
 ```
+
+More detail (the shared `dataset.task` switch between noise-suppression and voice-isolation training, DDP/precision flags, VAD labeling): `egs/noise_suppression/README.md`.
 
 ### 2) Speaker Embedding / Verification
 
@@ -103,7 +104,9 @@ More speaker embedding details and pretrained checkpoints are documented in:
 
 - `egs/speaker_embedding/README.md`
 
-### 3) Target Speaker Extraction
+### 3) Target Speaker Extraction (legacy)
+
+Frozen legacy recipe: no new features, no rewrites. Kept working for reference only.
 
 ```bash
 cd egs/target_speaker_extraction
@@ -120,14 +123,14 @@ uv run python main.py --inference True --ckpt_path /path/to/model.ckpt config/de
 
 ### 4) Voice Isolate Streaming ONNX
 
-Train or fine-tune the 16 kHz DPARN/DPCRN voice-isolate recipe, then export a
-feature-frame ONNX model. Example using the `egs/voice_isolate` (DPCRN) recipe
-and a pretrained checkpoint:
+Train or fine-tune the 16 kHz DPCRN voice-isolate recipe, then export a
+feature-frame ONNX model. Example using the `egs/voice_isolate` recipe and its
+current default checkpoint:
 
 ```bash
 uv run python egs/voice_isolate/scripts/streaming_onnx.py export \
   egs/voice_isolate/config/infer_dpcrn.yaml \
-  egs/voice_isolate/pretrained_ckpt/dpcrn_v7.ckpt \
+  egs/voice_isolate/pretrained_ckpt/dpcrn_v8.ckpt \
   /path/to/model.onnx
 ```
 
@@ -141,41 +144,72 @@ uv run python egs/voice_isolate/scripts/streaming_onnx.py infer \
   --provider auto
 ```
 
-The DPARN streaming path is documented separately in `docs/streaming/dparn_onnx.md`.
+`dpcrn_v8` ships with its runtime dry/wet blend baked into the exported graph
+(`out = 0.9 * enhanced + 0.1 * input`), so no extra post-processing is needed at
+inference time. Full pipeline history, per-version results, and deployment
+notes: `egs/voice_isolate/README.md`. The (legacy) DPARN streaming path is
+documented separately in `docs/streaming/dparn_onnx.md`.
 
 For deployment in another project without the full PureSound training package,
 install or copy the portable runtime in `sdk/python`. It only requires NumPy,
 ONNX Runtime, `model.onnx`, and `model.json`.
 
-## Repository Structure / 專案結構
+### 5) RIR Generation (training-data augmentation)
+
+Generate the recommended M6 training bank (deterministic generation + per-item
+QC + release packaging in one command):
+
+```bash
+PYTHONPATH=. .venv/bin/python \
+  egs/rir_generation/generate_m6_bank.py \
+  --output-dir egs/rir_generation/exp/rir_realism/m6/training_pilot \
+  --backend path-events-m4 \
+  --n-rooms 1000 \
+  --rir-per-room 4 \
+  --num-workers 8 \
+  --seed 1337 \
+  --sample-rate 16000
+```
+
+Always run with `.venv/bin/python` (or an environment with `pyroomacoustics`/
+`rir_generator` installed and a matching numpy ABI) — a mismatched interpreter
+produces collection errors that look like code bugs but are not. Full usage
+and the algorithm-to-code reference: `egs/rir_generation/README.md` and
+`docs/audio/index.md`.
+
+## Repository Structure
 
 ```text
 PureSound/
 ├── puresound/                 # Core library
-│   ├── audio/                 # Audio I/O, DSP, augmentation
-│   ├── dataset/               # Dataset base classes and parsers
-│   ├── nnet/                  # Model architectures and building blocks
-│   ├── streaming/             # Streaming inference and ONNX Runtime utilities
-│   ├── system/                # Lightning training systems
-│   ├── task/                  # Task-specific dataset logic
-│   ├── metrics.py             # Evaluation metrics
-│   ├── recipes.py             # Model/loss initialization helpers
-│   └── utils.py               # General utilities
-├── egs/                       # End-to-end recipes and configs
-├── docs/                      # API and module documentation
-├── sdk/                       # Portable inference SDKs for external projects
-└── test/                      # Unit tests
+│   ├── audio/                 # Audio I/O, DSP, augmentation, RIR generation (audio/rir/)
+│   ├── dataset/                # Dataset base classes and parsers
+│   ├── nnet/                   # Model architectures and building blocks
+│   ├── streaming/               # Streaming inference and ONNX Runtime utilities
+│   ├── system/                 # Lightning training systems
+│   ├── task/                   # Task-specific dataset logic
+│   ├── third_party/             # Vendored third-party research code (pytARD)
+│   ├── metrics.py               # Evaluation metrics
+│   ├── recipes.py               # Model/loss initialization helpers
+│   └── utils.py                 # General utilities
+├── egs/                        # End-to-end recipes and configs
+├── docs/                       # API and module documentation
+├── sdk/                        # Portable inference SDKs for external projects
+└── test/                       # Unit tests
 ```
 
-## Documentation / 文件
+## Documentation
 
 - Main docs entry: `docs/index.md`
-- Audio modules: `docs/audio/index.md`
+- Audio modules (incl. RIR generation): `docs/audio/index.md`
 - Neural network modules: `docs/nnet/index.md`
 - System modules: `docs/system/index.md`
 - Streaming runtimes: `docs/streaming/index.md`
 
-## Build Package / 打包
+Every document under `docs/`, `egs/`, and the package-level `README.md`s ships
+in both English (`name.md`) and Traditional Chinese (`name.zh-TW.md`).
+
+## Build Package
 
 ```bash
 ./build_puresound.sh
@@ -187,7 +221,7 @@ This script runs:
 - `uv sync --locked --group dev`
 - `uv build`
 
-## Notes / 備註
+## Notes
 
 - Some recipe scripts use boolean CLI flags in the form `--training True` or `--inference True`.
 - Please adjust dataset paths and output folders in each YAML config before training.
@@ -244,6 +278,16 @@ Cause:
 Fix:
 - Edit each recipe config in `egs/*/config` or `egs/speaker_embedding/conf`.
 - Run `prepare_metafile.py` first to generate manifests.
+
+### 5) RIR generation: collection errors or validator failures that look like code bugs
+
+Cause:
+- Running `egs/rir_generation` scripts with a Python interpreter that lacks
+  `pyroomacoustics`/`rir_generator`, or whose numpy ABI doesn't match.
+
+Fix:
+- Always invoke RIR generation scripts with `.venv/bin/python` (or an
+  equivalent environment with those packages installed).
 
 ## Minimal Demo
 

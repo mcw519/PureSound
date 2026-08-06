@@ -4,6 +4,8 @@ This folder keeps milestone-specific experiments separate from the seven stable
 public commands in `egs/rir_generation/`. Each phase follows the same
 convention:
 
+繁體中文版本：[`README.zh-TW.md`](README.zh-TW.md)
+
 The public commands are `generate_hybrid_rir.py`, `generate_m6_bank.py`,
 `render_spatial_rir.py`, `plot_rir.py`, `inspect_bank.py`,
 `compare_bank_acoustics.py`, and `compare_modal_acoustics.py`. Everything else

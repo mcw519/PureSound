@@ -1,5 +1,7 @@
 # PureSound Documentation
 
+繁體中文版本：[index.zh-TW.md](index.zh-TW.md)
+
 PureSound is a modular audio processing and deep learning framework for speech enhancement, speaker verification, and target speaker extraction tasks.
 
 ## Package Version
@@ -31,7 +33,8 @@ puresound/
 │   └── loss/       # Loss functions
 ├── system/         # Training system (PyTorch Lightning)
 ├── streaming/      # Streaming inference runtimes
-├── task/           # Task-specific datasets (NS, SV, TSE)
+├── task/           # Task-specific datasets (NS, near-field voice isolation, SV, TSE)
+├── third_party/    # Vendored research code (e.g. pytARD for low-frequency RIR simulation)
 ├── metrics.py      # Evaluation metrics
 ├── utils.py        # Utilities
 └── recipes.py      # Model construction recipes
@@ -42,6 +45,6 @@ puresound/
 - **Modular Architecture**: Clear separation between audio processing, neural network modeling, and training systems.
 - **PyTorch Lightning Integration**: All training systems extend `BaseLightningModule` for standardized training loops.
 - **Configuration-Driven**: YAML-based configs drive model construction for reproducible experiments.
-- **Multi-Task Support**: Shared base classes for noise suppression (NS), speaker verification (SV), and target speaker extraction (TSE).
+- **Multi-Task Support**: Shared base classes for noise suppression (NS), speaker verification (SV), and target speaker extraction (TSE) — plus `puresound.task.voice_isolation`, the most actively developed recipe today. Voice isolation is its own task built on the shared NS synthesis skeleton (real-recording rows, `mix_mode`, turn-taking, auxiliary distance/DRR labels), not just a variant of generic NS — see [task/index.md](task/index.md).
 - **Flexible Masking**: Support for complex, real, polar, deep-filter, Wiener, and MVDR masks.
 - **Composable Augmentation**: Pluggable audio augmentation via `AudioEffectAugmentor`.

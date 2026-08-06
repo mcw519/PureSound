@@ -1,5 +1,7 @@
 # Zenodo 15195587 normalized liner impedance
 
+繁體中文版本：[`README.zh-TW.md`](README.zh-TW.md)
+
 This directory contains a 500–2500 Hz subset of the normalized complex
 impedance data published with:
 

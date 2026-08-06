@@ -72,7 +72,7 @@ class GroupedGRULayer(nn.Module):
         groups: int,
         bidirectional: bool = False,
         bias: bool = True,
-        droupout: float = 0.0,
+        dropout: float = 0.0,
     ):
         super().__init__()
         assert input_size % groups == 0
@@ -90,7 +90,7 @@ class GroupedGRULayer(nn.Module):
                     self.hidden_size,
                     bias=bias,
                     batch_first=True,
-                    droupout=droupout,
+                    dropout=dropout,
                     bidirectional=bidirectional,
                 )
                 for _ in range(groups)
@@ -154,7 +154,7 @@ class GroupedGRU(nn.Module):
         groups: int = 4,
         bidirectional: bool = False,
         bias: bool = True,
-        droupout: float = 0.0,
+        dropout: float = 0.0,
         shuffle: bool = True,
     ):
         super().__init__()
@@ -178,7 +178,7 @@ class GroupedGRU(nn.Module):
                 hidden_size,
                 groups=groups,
                 bias=bias,
-                droupout=droupout,
+                dropout=dropout,
                 bidirectional=bidirectional,
             )
         )
@@ -189,7 +189,7 @@ class GroupedGRU(nn.Module):
                     hidden_size,
                     groups=groups,
                     bias=bias,
-                    droupout=droupout,
+                    dropout=dropout,
                     bidirectional=bidirectional,
                 )
             )

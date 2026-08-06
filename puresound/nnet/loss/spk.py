@@ -410,7 +410,7 @@ class TripletLoss(nn.Module):
             dist_pos = self.euclidean_distance(x_anchor, x_pos)
             dist_neg = self.euclidean_distance(x_anchor, x_neg)
 
-        elif self.distance.lower() == "consine":
+        elif self.distance.lower() == "cosine":
             dist_pos = self.cosine_similarity(x_anchor, x_pos)
             dist_neg = self.cosine_similarity(x_anchor, x_neg)
 

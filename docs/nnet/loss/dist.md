@@ -1,5 +1,7 @@
 # puresound.nnet.loss.dist
 
+繁體中文版本：[dist.zh-TW.md](dist.zh-TW.md)
+
 NaN-masked regression on the backbone `DistHead`'s utterance-level outputs
 (see [nnet.lobe.heads](../lobe/heads.md)). Auxiliary multi-task supervision:
 the bottleneck is regressed against physical proximity labels the dataset

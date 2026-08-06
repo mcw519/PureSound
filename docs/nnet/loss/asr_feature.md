@@ -1,5 +1,7 @@
 # puresound.nnet.loss.asr_feature
 
+繁體中文版本：[asr_feature.zh-TW.md](asr_feature.zh-TW.md)
+
 ASR-aware perceptual loss. Signal losses (SI-SDR / MR-STFT) reward suppressing
 interference but do not penalise destroying intelligibility, so a model tuned on
 them alone can over-suppress real speech and raise WER. This loss matches the
@@ -30,7 +32,7 @@ ASRFeatureLoss(
   terms with equal weights get equal influence; with `l1` the weights need
   rebalancing per bundle.
 
-### `forward(enh, ref) -> Tensor`
+### `forward(enhanced, target) -> Tensor`
 
 Waveforms in, scalar loss out. The encoder is frozen, kept **out of the module
 registry** (list-wrapped) so it is neither saved into checkpoints nor synced by

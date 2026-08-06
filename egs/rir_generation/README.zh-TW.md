@@ -7,7 +7,7 @@ release 封裝**。
 English version: [`README.md`](README.md)
 
 本 README 只寫**使用方式**。演算法與代碼的對應見
-[`docs/audio/rir_realism_algorithm_zh-TW.md`](../../docs/audio/rir_realism_algorithm_zh-TW.md)；
+[`docs/audio/rir_realism_algorithm.zh-TW.md`](../../docs/audio/rir_realism_algorithm.zh-TW.md)；
 實驗紀錄、審查結論與計畫見 [`RIR_EXP_LOG.md`](../../RIR_EXP_LOG.md)。
 
 > **一律用 `.venv/bin/python`**（或已安裝 `pyroomacoustics`/`rir_generator`
@@ -303,7 +303,7 @@ uv pip install cupy-cuda12x   # GPU 低頻帶，選配
 
 ## 延伸閱讀
 
-- [`docs/audio/rir_realism_algorithm_zh-TW.md`](../../docs/audio/rir_realism_algorithm_zh-TW.md) — 演算法 ↔ 代碼對應。
-- [`docs/audio/rir_bank_v2_zh-TW.md`](../../docs/audio/rir_bank_v2_zh-TW.md) — M6 契約與證據規則。
+- [`docs/audio/rir_realism_algorithm.zh-TW.md`](../../docs/audio/rir_realism_algorithm.zh-TW.md) — 演算法 ↔ 代碼對應。
+- [`docs/audio/rir_bank_v2.zh-TW.md`](../../docs/audio/rir_bank_v2.zh-TW.md) — M6 契約與證據規則。
 - [`docs/audio/rir_bank.md`](../../docs/audio/rir_bank.md) — 訓練端 loader。
 - [`RIR_EXP_LOG.md`](../../RIR_EXP_LOG.md) — 實驗紀錄、審查結論、計畫。

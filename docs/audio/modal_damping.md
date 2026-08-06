@@ -1,7 +1,7 @@
 # Material-derived low-frequency modal damping
 
-繁體中文的完整背景、算法與目前實驗判斷見
-[`rir_realism_algorithm_zh-TW.md`](rir_realism_algorithm_zh-TW.md)。
+繁體中文版本：[`modal_damping.zh-TW.md`](modal_damping.zh-TW.md)。完整背景、算法與
+目前實驗判斷見 [`rir_realism_algorithm.zh-TW.md`](rir_realism_algorithm.zh-TW.md)。
 
 M2 introduces an explicit experimental low-frequency path in
 `puresound.audio.rir.render.low_frequency`. Select it with one of:
@@ -99,7 +99,7 @@ q[k+1] = a1 q[k] + a2 q[k-1] + b f[k]
 ```
 
 At zero damping this reduces exactly to the previous pytARD recurrence. The
-material path disables `_apply_rt60_decay_envelope`; metadata records
+material path disables `apply_rt60_decay_envelope`; metadata records
 `global_rt60_envelope_applied: false`.
 
 ## Metadata and validation
@@ -149,4 +149,4 @@ This is the first M2 implementation, not its final acceptance:
 
 The complex measurement contract, passive multi-pole fitting, FDTD state, and
 1D eigenvalue reference are documented in
-[`impedance_measurements.md`](impedance_measurements.md).
+[`impedance_measurements.zh-TW.md`](impedance_measurements.zh-TW.md).

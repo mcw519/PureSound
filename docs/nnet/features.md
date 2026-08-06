@@ -1,75 +1,230 @@
 # puresound.nnet.features
 
-Feature processing layers for extracting audio representations from STFT spectra.
+繁體中文版本：[features.zh-TW.md](features.zh-TW.md)
+
+Feature transforms that sit between the waveform encoder and the mask-predicting
+backbone: `Wav -> Encoder -> Features -> Backbone -> Apply Mask -> Decoder -> Wav`
+(see `system.siso.EncDecMaskBase` / `system.miso.EncDecCondMaskBase`). Only
+`FeatureEncoder` is exported from `puresound.nnet` (`puresound/nnet/__init__.py`);
+`MelBank` and `WeightedSum` are internal helpers imported directly from
+`puresound.nnet.features` when needed.
+
+## Class: `FeatureEncoder`
+
+The real entry point of this module — every recipe builds one via
+`nnet.FeatureEncoder(**model_dict["features"])` (`puresound/recipes.py`). It
+converts the encoder's raw output into whatever representation the backbone
+was designed for, and hands back a *second*, untouched tensor that the mask
+gets multiplied against afterwards.
+
+### Constructor
+
+```python
+FeatureEncoder(
+    feats_type: str = "complex",
+    drop_stft_first_bin: bool = True,
+    include_specaug: bool = False,
+    specaug_args: Optional[Dict] = None,
+    peq_module: Optional[FrequencyEQLayer] = None,
+    normalized_mode: Optional[str] = None,
+    trainable: bool = False,
+)
+```
+
+**Parameters:**
+- `feats_type` – one of `"free"`, `"complex"`, `"magnitude"`, `"log1p"`,
+  `"fbank80_16k"`, `"logfbank80_16k"`, `"fbank128_16k"`, `"shrink_channel"`
+  (asserted at construction time). See table below.
+- `drop_stft_first_bin` – drop the DC bin (index 0). Only affects the
+  `complex` / `magnitude` / `log1p` branches; the `fbank*` branches build a
+  `MelBank` that always consumes the full `n_fft//2+1` spectrum regardless of
+  this flag (a learned Mel filter already down-weights the DC region through
+  its lowest triangular filter, so there is nothing to drop).
+- `include_specaug` – wrap the backbone-facing features with
+  [`SpecAugment`](lobe/trivial.md) (`specaug_args` is splatted straight into
+  its constructor, e.g. `freq_mask_length`, `time_mask_length`, `fill_value`,
+  `n_freq_mask`, `n_time_mask`, `prob` — see a real config below).
+- `peq_module` – an already-constructed `FrequencyEQLayer` instance (built by
+  `recipes.py` from a `freq_eq:` config block). `FeatureEncoder` does not use
+  it as-is: it reads `peq_module.get_args`, forces `trainable` to this
+  encoder's own `trainable` flag, and builds a *new* instance from those args.
+  This lets one config flag (`FeatureEncoder.trainable`) decide whether both
+  the PEQ and the Mel filterbank (see below) are learnable, independent of
+  how the `freq_eq:` block itself was written.
+- `normalized_mode` – `"per_feature"` (reduce over channel+freq),
+  `"per_channel"` (reduce over channel only) or `"all_feature"` (reduce over
+  channel+freq+time). **Currently a no-op**: `_apply_normalization` computes
+  `(x - mean) / (std + eps)` but never returns it, so the assigned `feats`
+  variable is immediately overwritten by the `include_specaug` /
+  `clone()` branch right below it. Setting this key changes nothing about the
+  tensor the backbone receives; it is kept here as an accurate description of
+  the code as it stands today, not of the intended behavior.
+- `trainable` – forwarded to the `MelBank` filterbank and to the re-built
+  `peq_module` (see above). Has no effect for `complex` / `magnitude` /
+  `log1p` / `free` / `shrink_channel`, which have no learnable parameters of
+  their own.
+
+### `feats_type` dispatch
+
+| `feats_type` | Transform | Output (pre channel-unsqueeze) |
+|---|---|---|
+| `complex` | drop DC bin (optional) then `permute(0, 3, 1, 2)` | `[N, 2, F(-1), T]` |
+| `magnitude` | [`Magnitude`](lobe/trivial.md)`(drop_first=...)` | `[N, F(-1), T]` |
+| `log1p` | `Magnitude(drop_first=..., log1p=True)` | `[N, F(-1), T]` |
+| `fbank80_16k` | `MelBank(sr=16000, n_fft=512, n_banks=80)` | `[N, 80, T]` |
+| `logfbank80_16k` | `MelBank(..., n_banks=80, apply_log=True)` | `[N, 80, T]` |
+| `fbank128_16k` | `MelBank(sr=16000, n_fft=512, n_banks=128)` | `[N, 128, T]` |
+| `free` | `nn.Identity()` | unchanged |
+| `shrink_channel` | `x.squeeze(-1)` (deferred, see below) | drops the trailing size-1 axis |
+
+`complex`/`magnitude`/`log1p` are the STFT-domain front ends used with
+`ConvEncDec` (see [lobe/encoder](lobe/encoder.md)); `fbank*` variants are used
+with speaker-embedding recipes (`EcapaTdnnExtractor` consumes the 80-bank
+output — see [algorithms/ecapa_tdnn](algorithms/ecapa_tdnn.md)); `free` /
+`shrink_channel` pair with a learned time-domain front end
+(`FreeEncDec`) for 1-D sequence backbones. Neither `free` nor
+`shrink_channel` is exercised by any current recipe.
+
+### `forward(x: Tensor) -> Tuple[Tensor, Tensor]`
+
+**Parameters:**
+- `x` – encoder output, `[N, C, T, 2]` (complex STFT: real/imag last axis) or
+  `[N, C, T]` (learned real-valued encoder; internally unsqueezed to
+  `[N, C, T, 1]`).
+
+**Returns:** `(feats, feats_for_enhanced)`, both `[N, CH, C, T]` for the
+STFT/Mel branches (a leading singleton channel axis is inserted if the
+transform produced a 3-D tensor):
+- `feats` – what gets passed to the backbone (`self.backbone(features)` in
+  `EncDecMaskBase`). SpecAugment, when enabled, is baked into *this* tensor
+  only.
+- `feats_for_enhanced` – the untouched transform output. This is the tensor
+  `Masker.apply_*_mask_on_reim` actually multiplies the predicted mask
+  against (see [nnet.masker](masker.md)), so augmentation never corrupts the
+  signal being reconstructed — only the copy the mask-predictor sees.
+
+If `peq_module` is set, the learnable EQ runs first, on the full `x` reshaped
+to `[N, 2, C, T]` (real/imag as the channel axis) — it operates in the
+STFT domain, not on the raw waveform.
+
+### `back_forward(x: Tensor) -> Tensor`
+
+Inverts `drop_stft_first_bin` after masking, before the decoder's inverse
+STFT: for `complex` / `magnitude` / `log1p`, re-pads a zero DC bin at
+`dim=2` so the tensor matches the encoder's original bin count; every other
+`feats_type` passes `x` through unchanged. Called from
+`EncDecMaskBase._spec_to_wav` / `EncDecCondMaskBase.forward` right after the
+mask has been applied.
+
+### Example (mirrors `egs/voice_isolate/config/train_dpcrn.yaml`)
+
+```python
+from puresound.nnet import FeatureEncoder
+
+feats = FeatureEncoder(
+    feats_type="complex",
+    drop_stft_first_bin=True,
+    trainable=False,
+    include_specaug=False,
+)
+
+complex_spec = encoder(wav)                 # [N, 257, T, 2] (ConvEncDec, 512-pt FFT)
+features, features_for_enhanced = feats(complex_spec)
+# features            -> [N, 2, 256, T], fed to the backbone
+# features_for_enhanced -> [N, 2, 256, T], multiplied by the predicted mask
+```
+
+```python
+# mirrors egs/speaker_embedding/conf/PS-spk-v1.yaml
+feats = FeatureEncoder(
+    feats_type="fbank80_16k",
+    drop_stft_first_bin=True,
+    trainable=False,
+    normalized_mode="all_feature",   # accepted, but see the no-op note above
+    include_specaug=True,
+    specaug_args=dict(
+        freq_mask_length=4, time_mask_length=3, fill_value=0.0,
+        n_freq_mask=3, n_time_mask=5, prob=0.5,
+    ),
+)
+mel_feat, _ = feats(complex_spec)   # [N, 1, 80, T] -> squeeze(1) before EcapaTdnnExtractor
+```
 
 ## Class: `MelBank`
 
-Converts a linear STFT magnitude or power spectrum into a Mel-scale filterbank representation.
+Converts a complex STFT tensor to a Mel filterbank representation. Used
+internally by `FeatureEncoder` for every `fbank*`/`logfbank*` `feats_type`;
+constructing one directly is only needed for standalone experimentation.
 
 ### Constructor
 
 ```python
 MelBank(
-    n_mels: int,
-    sr: int,
-    n_fft: int,
-    f_min: float = 0.0,
-    f_max: Optional[float] = None,
+    sr: int = 16000,
+    n_fft: int = 512,
+    n_banks: int = 80,
+    apply_log: bool = False,
+    utt_norm: bool = False,
     trainable: bool = False,
-    log_output: bool = True,
 )
 ```
 
 **Parameters:**
-- `n_mels` – Number of Mel filter channels
-- `sr` – Sample rate in Hz
-- `n_fft` – FFT size (determines number of linear frequency bins)
-- `f_min` – Minimum frequency for Mel filters (Hz)
-- `f_max` – Maximum frequency for Mel filters (Hz); defaults to `sr / 2`
-- `trainable` – If `True`, the filterbank weights are learnable parameters
-- `log_output` – If `True`, applies log compression to Mel outputs
+- `sr` – sample rate in Hz, passed to `lobe.stft.mel_filterbank`
+- `n_fft` – FFT size; the filterbank matrix is built for `n_fft // 2 + 1` linear bins
+- `n_banks` – number of Mel filters (output channels)
+- `apply_log` – apply `log(melspec + 1e-8)` after the filterbank matmul
+- `utt_norm` – subtract the per-utterance mean over time from each Mel
+  channel (mean-only; there is no variance division despite the name — see
+  source below)
+- `trainable` – if `True`, the filterbank matrix (`[n_fft//2+1, n_banks]`) is
+  a learnable `nn.Parameter` instead of a fixed buffer
 
-### `forward(spec: Tensor) -> Tensor`
-
-Applies the Mel filterbank to a linear spectrum.
+### `forward(x: Tensor) -> Tensor`
 
 **Parameters:**
-- `spec` – Linear magnitude spectrum `[batch, F, T]`
+- `x` – complex spectrum, `[N, F, T, 2]` where `F == n_fft // 2 + 1`
+  (real/imag stacked on the last axis — matches the raw `ConvEncDec` output,
+  *before* any DC-bin drop)
 
-**Returns:** Mel-scale feature tensor `[batch, n_mels, T]`.
+**Returns:** `[N, n_banks, T]`.
 
----
+```python
+spec_imag = x[..., 0]
+spec_real = x[..., 1]
+mag = torch.sqrt(spec_real.pow(2) + spec_imag.pow(2) + 1e-8)  # unconditional epsilon,
+# sqrt's gradient is Inf at 0, so any exact-zero STFT bin would poison backprop
+# through this layer otherwise.
+melspec = torch.matmul(mag.permute(0, 2, 1), self.filterbank)  # [N, T, n_banks]
+```
 
 ## Class: `WeightedSum`
 
-Computes a learnable weighted average over multiple input feature representations.
+Learnable weighted combination over the **last axis** of a single stacked
+tensor. Not currently constructed anywhere in the codebase (not by
+`FeatureEncoder`, not by any recipe) — it exists as a building block for a
+multi-representation combiner (e.g. SSL-layer-weighted-sum style features)
+that nothing in this repo assembles yet.
 
 ### Constructor
 
 ```python
-WeightedSum(num_inputs: int)
+WeightedSum(n_samples: int, trainable: bool = True)
 ```
 
 **Parameters:**
-- `num_inputs` – Number of input feature streams to combine
+- `n_samples` – number of entries stacked along the input's last axis
+- `trainable` – if `True`, the weight vector is a learnable parameter (`w`,
+  initialized to `1/n_samples` each); if `False`, it is a fixed buffer at
+  that same uniform-average initialization
 
-### `forward(features: List[Tensor]) -> Tensor`
+Note the weights are plain learnable scalars — there is **no softmax
+normalization**, unlike e.g. SUPERB-style layer-weighted-sum modules.
 
-Combines a list of feature tensors via learned scalar weights (softmax-normalized).
+### `forward(x: Tensor) -> Tensor`
 
 **Parameters:**
-- `features` – List of `num_inputs` tensors with identical shape `[batch, C, T]`
+- `x` – a single tensor with shape `[..., n_samples]` (already stacked by the
+  caller — this is not a `List[Tensor]` API)
 
-**Returns:** Weighted sum tensor `[batch, C, T]`.
-
-## Example
-
-```python
-from puresound.nnet.features import MelBank, WeightedSum
-
-mel = MelBank(n_mels=80, sr=16000, n_fft=512, trainable=False, log_output=True)
-mel_feat = mel(linear_spec)  # [batch, 80, T]
-
-ws = WeightedSum(num_inputs=3)
-combined = ws([feat1, feat2, feat3])
-```
+**Returns:** `(x * self.w).sum(dim=-1)`, i.e. `[...]` (last axis reduced away).

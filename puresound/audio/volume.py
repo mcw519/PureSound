@@ -36,7 +36,7 @@ def normalize_waveform(wav: torch.Tensor, amp_type: str = "avg") -> torch.Tensor
     elif amp_type == "peak":
         den = torch.max(torch.abs(wav), dim=-1, keepdim=True)[0]
     elif amp_type == "rms":
-        den = torch.sqrt(torch.mean(torch.square(wav), dim=-1, keepdim=False))
+        den = torch.sqrt(torch.mean(torch.square(wav), dim=-1, keepdim=True))
 
     den = den + eps
 

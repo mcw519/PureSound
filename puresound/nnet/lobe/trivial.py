@@ -171,6 +171,7 @@ class SplitMerge(nn.Module):
     """2S Process: Segmentation and Stitching(merge)."""
 
     def __init__(self, seg_size: int, seg_overlap: bool = True):
+        super().__init__()
         self.seg_size = seg_size
         self.seg_overlap = seg_overlap
 

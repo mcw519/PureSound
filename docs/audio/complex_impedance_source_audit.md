@@ -1,117 +1,138 @@
-# 複數聲學阻抗公開資料審核
+# Public complex acoustic impedance source audit
 
-本文件記錄 M2.5 對公開資料的逐項審核。目的不是收集越多
-absorption curve 越好，而是只納入能保留反射相位、安裝條件與授權的
-直接 complex impedance 證據。
+繁體中文版本：`complex_impedance_source_audit.zh-TW.md`
 
-## 1. 接受門檻
+This document records M2.5's item-by-item audit of public data sources. The
+goal is not to collect as many absorption curves as possible — it is to admit
+only direct complex-impedance evidence that preserves reflection phase,
+installation conditions, and licensing.
 
-一份資料至少必須符合：
+## 1. Acceptance criteria
 
-1. 直接提供複數表面阻抗 \(Z(f)\)、複數反射係數 \(\Gamma(f)\)，或提供
-   可重建它們的 calibrated complex two-microphone transfer function；
-2. 頻率、實部、虛部和 phasor convention 明確；
-3. 樣品厚度、背板／air gap、量測幾何與重要操作條件可追溯；
-4. 來源 URL、版本與 license 可追溯；
-5. 不把 diffuse-field absorption 或只有
-   \(\alpha(f)=1-|\Gamma(f)|^2\) 的資料補猜成唯一相位；
-6. 自動映射到 room material catalog 前，量測配置必須與實際安裝相容。
+A dataset must satisfy at least:
 
-## 2. 審核結果
+1. it directly provides complex surface impedance \(Z(f)\), complex
+   reflection coefficient \(\Gamma(f)\), or a calibrated complex
+   two-microphone transfer function from which they can be reconstructed;
+2. frequency, real part, imaginary part, and phasor convention are
+   explicit;
+3. sample thickness, backing/air gap, measurement geometry, and material
+   operating conditions are traceable;
+4. source URL, version, and license are traceable;
+5. it does not treat diffuse-field absorption, or data that only gives
+   \(\alpha(f)=1-|\Gamma(f)|^2\), as a substitute for a unique phase;
+6. before any automatic mapping to the room material catalog, the
+   measurement configuration must be compatible with the actual
+   installation.
 
-| 來源 | 結果 | 理由 |
+## 2. Review results
+
+| Source | Verdict | Rationale |
 |------|------|------|
-| [Zenodo 15195587](https://zenodo.org/records/15195587) | 接受，但只限 pipeline validation | CC BY 4.0 HDF5 直接提供逐頻率 normalized resistance/reactance；論文描述樣品幾何、130/145 dB、無流與 grazing-flow 條件、NASA/UFSC 試驗台和 eduction 方法。 |
-| [FOAM 02](https://zenodo.org/records/15407780) | 拒絕作為 complex source | Apache-2.0 與樣品標籤清楚，但公開檔只有 absorption coefficient、直徑與分類，沒有 reflection phase 或 complex impedance。 |
-| [FOAM 01](https://zenodo.org/records/10551344) | 拒絕作為 complex source | 公開檔只有 absorption coefficient 與樣品標籤；不能從 \(\alpha\) 唯一恢復相位。 |
-| [vyhyb/imptube](https://github.com/vyhyb/imptube) | 方法參考，不是量測資料源 | MIT 實作可由 calibrated transfer function 計算 reflection 與 surface impedance，但 repository 沒有可直接納入的已量測樣品資料。 |
-| [MDPI Mathematics 10(18), 3264](https://www.mdpi.com/2227-7390/10/18/3264) | 拒絕作為 production room-finish source | 文章包含六個燒結金屬纖維樣品的 normalised surface-impedance 圖與量測配置，但未提供可追溯的逐頻率原始數值；材料也不是本階段優先的常見室內 finish。 |
-| [Frontiers in Physics 14:1785611](https://www.frontiersin.org/journals/physics/articles/10.3389/fphy.2026.1785611/full) | 方法參考，不是實體量測 source | 研究測試 complex surface-impedance deduction，但本文驗證是 numerical experiment，結論也把 physical validation 列為後續工作。 |
+| [Zenodo 15195587](https://zenodo.org/records/15195587) | Accepted, but for pipeline validation only | CC BY 4.0 HDF5 directly provides per-frequency normalized resistance/reactance; the paper describes sample geometry, 130/145 dB, no-flow and grazing-flow conditions, the NASA/UFSC test rigs, and the eduction method. |
+| [FOAM 02](https://zenodo.org/records/15407780) | Rejected as a complex source | Apache-2.0 licensed with clear sample labels, but the public files contain only absorption coefficient, diameter, and classification — no reflection phase or complex impedance. |
+| [FOAM 01](https://zenodo.org/records/10551344) | Rejected as a complex source | The public files contain only absorption coefficient and sample labels; phase cannot be uniquely recovered from \(\alpha\). |
+| [vyhyb/imptube](https://github.com/vyhyb/imptube) | Method reference, not a measurement data source | The MIT-licensed implementation can compute reflection and surface impedance from a calibrated transfer function, but the repository has no already-measured sample data suitable for direct inclusion. |
+| [MDPI Mathematics 10(18), 3264](https://www.mdpi.com/2227-7390/10/18/3264) | Rejected as a production room-finish source | The article includes normalised surface-impedance plots and measurement configurations for six sintered metal-fiber samples, but does not provide traceable per-frequency raw values; the material is also not a common indoor finish prioritized at this stage. |
+| [Frontiers in Physics 14:1785611](https://www.frontiersin.org/journals/physics/articles/10.3389/fphy.2026.1785611/full) | Method reference, not a physical measurement source | The study tests complex surface-impedance deduction, but its validation is a numerical experiment, and the paper itself lists physical validation as future work. |
 
-「拒絕」只表示不符合這一條 complex-impedance 路徑，不表示資料品質差。
-FOAM 01/02 仍可用於 normal-incidence absorption 分布、分類或其他不需要
-phase 的工作。
+"Rejected" only means the source does not satisfy this specific
+complex-impedance path — it is not a statement about data quality. FOAM
+01/02 remain usable for normal-incidence absorption distributions,
+classification, or other work that does not require phase.
 
-## 3. 第一份接受資料
+## 3. The first accepted dataset
 
-M2.5 納入 Zenodo 15195587 Figure 6 的兩組無流、130 dB KT eduction：
+M2.5 admits the two no-flow, 130 dB KT eduction series from Zenodo
+15195587 Figure 6:
 
-- NASA GFIT：`Resistance-NASA-KT`、`Reactance-NASA-KT`；
-- UFSC：`Resistance-UFSC-KT`、`Reactance-UFSC-KT`；
-- 使用論文共同比較範圍 500–2500 Hz；
-- 數值原樣保留為 \(z=Z/(\rho c)\)，沒有插值；
-- 原始 `paper_data.hdf5`：
+- NASA GFIT: `Resistance-NASA-KT`, `Reactance-NASA-KT`;
+- UFSC: `Resistance-UFSC-KT`, `Reactance-UFSC-KT`;
+- using the paper's shared comparison range of 500–2500 Hz;
+- values are kept as-published, \(z=Z/(\rho c)\), with no interpolation;
+- source `paper_data.hdf5`:
   SHA-256
-  `ba4cf7cf293d2b20ed590eb78ed8c133484771acbd011c680466d289abdc1a72`。
+  `ba4cf7cf293d2b20ed590eb78ed8c133484771acbd011c680466d289abdc1a72`.
 
-兩份已轉換檔位於：
+The two converted files are at:
 
 - `egs/rir_generation/phases/m2_impedance/measurements/zenodo_15195587/nasa_gfit_noflow_130db_kt.csv`
 - `egs/rir_generation/phases/m2_impedance/measurements/zenodo_15195587/ufsc_noflow_130db_kt.csv`
 
-各自的 JSON sidecar 記錄 HDF5 dataset path、checksum、文章、授權、實際掃描
-幾何、量測條件與 transformation。
+Each has a JSON sidecar recording the HDF5 dataset path, checksum, paper
+citation, license, actual sweep geometry, measurement conditions, and
+transformation.
 
-## 4. 為什麼新增 normalized contract
+## 4. Why we added the normalized contract
 
-來源發表的是無因次：
+The source publishes a dimensionless quantity:
 
 \[
 z(f)=\frac{Z(f)}{\rho c}=r(f)+j x(f)
 \]
 
-但 HDF5 沒有逐筆保存當時用來 normalization 的精確 \(\rho\) 與 \(c\)。
-若任選標準大氣再乘回 Pa·s/m，會把「參考換算環境」誤寫成「量測環境」。
-因此 repository 保留原始 dimensionless 數值，並另設
-`puresound.normalized_complex_impedance_measurement.v1`。需要在指定空氣
-環境使用時，再由該場景自己的 \(\rho c\) 轉成 SI。
+but the HDF5 does not preserve, per record, the exact \(\rho\) and \(c\)
+used for that normalization at the time. Arbitrarily picking a standard
+atmosphere and multiplying back to Pa·s/m would mislabel a "reference
+conversion environment" as the "measurement environment." The repository
+therefore keeps the original dimensionless values and defines a separate
+schema,
+`puresound.normalized_complex_impedance_measurement.v1`. Converting to SI
+under a specific air environment is left to that scene's own \(\rho c\)
+when needed.
 
-## 5. 適用範圍
+## 5. Scope of applicability
 
-這是高聲壓、穿孔、背腔式 aircraft liner，資料由 grazing duct 的 acoustic
-field 反推表面阻抗。它很適合驗證：
+This is a high-SPL, perforated, back-cavity aircraft liner, with surface
+impedance inferred from a grazing duct's acoustic field. It is well suited
+to validating:
 
-- phase-aware ingestion；
-- Helmholtz resonance fitting；
-- passivity 與因果數位化；
-- 同一 rational boundary 的 FDTD／eigenproblem 接線。
+- phase-aware ingestion;
+- Helmholtz resonance fitting;
+- passivity and causal digitization;
+- wiring the same rational boundary into the FDTD solver/eigenproblem.
 
-它不適合直接代表：
+It is not suitable as a direct stand-in for:
 
-- 油漆牆、地毯、窗簾、天花板；
-- 低聲壓室內語音條件；
-- 未匹配的 incidence、流速、孔徑、背腔深度或 backing。
+- painted walls, carpet, curtains, ceilings;
+- low-SPL indoor speech conditions;
+- unmatched incidence, flow velocity, perforation size, cavity depth, or
+  backing.
 
-因此兩份 sidecar 都設為
-`automatic_scene_catalog_mapping: false`。第一份可直接映射到一般房間材料
-的資料，仍應是正常聲壓、normal-incidence、安裝配置完整的 porous 或 room
-finish 量測。
+Both sidecars therefore set
+`automatic_scene_catalog_mapping: false`. The first dataset that can be
+directly mapped to general room materials should still be a normal-SPL,
+normal-incidence measurement with a complete installation configuration,
+covering porous absorbers or room finishes.
 
-## 6. M2.6 第二輪結論與處置
+## 6. M2.6 second-round conclusions and disposition
 
-截至 2026-07-30，第二輪公開來源審核仍未找到同時具備下列條件、可直接
-納入的資料：
+As of 2026-07-30, a second round of public-source review still had not
+found data that was directly includable and simultaneously satisfied:
 
-- 常見 room-finish 或 porous absorber；
-- normal-incidence 的逐頻率 complex \(Z\)、complex \(\Gamma\) 或
-  calibrated complex \(H_{12}\)；
-- 厚度、backing、air gap、環境與正常室內聲壓級；
-- 可重用授權與 machine-readable raw values。
+- a common room-finish or porous absorber;
+- per-frequency complex \(Z\), complex \(\Gamma\), or a calibrated complex
+  \(H_{12}\) at normal incidence;
+- thickness, backing, air gap, environment, and normal indoor SPL;
+- a reusable license and machine-readable raw values.
 
-不能用論文圖的像素 digitization 冒充原始量測，也不能用 FOAM 01/02 的
-\(\alpha\) 補猜相位。因此本輪沒有新增「已接受的 room material」，而是
-補齊可重現的 two-microphone acquisition/reduction：
+Pixel-digitizing a paper's figure cannot stand in for an original
+measurement, and FOAM 01/02's \(\alpha\) cannot be used to guess a phase.
+This round therefore adds no newly "accepted room material"; instead it
+fills in a reproducible two-microphone acquisition/reduction pipeline:
 
-- raw repeated \(H_{12}=P(x_2)/P(x_1)\) contract；
-- microphone-switch complex calibration；
-- circular-tube plane-wave cutoff 與 microphone-spacing conditioning；
-- coherence gate、跨安裝 repeatability 與被動性 gate；
-- \(Z\) uncertainty 到 complex reflection fit 的權重傳播；
-- 可直接輸出 `puresound.complex_impedance_measurement.v1`。
+- the raw repeated \(H_{12}=P(x_2)/P(x_1)\) contract;
+- microphone-swap complex calibration;
+- circular-tube plane-wave cutoff and microphone-spacing conditioning;
+- a coherence gate, cross-installation repeatability, and a passivity gate;
+- weight propagation from \(Z\) uncertainty into the complex reflection
+  fit;
+- direct output of `puresound.complex_impedance_measurement.v1`.
 
-完整算法、原始檔格式與第一批實驗設計見
-[`impedance_tube_protocol_zh-TW.md`](impedance_tube_protocol_zh-TW.md)。
-ISO 10534-2:2023 的公開說明確認 two-microphone complex transfer
-technique 可取得 normal surface impedance，也明確指出阻抗管 normal
-incidence 和混響室 random/diffuse incidence 結果不能直接比較：
-[ISO 10534-2:2023](https://www.iso.org/standard/81294.html)。
+The full algorithm, raw file formats, and first-batch experiment design are
+in [`impedance_tube_protocol.md`](impedance_tube_protocol.md). ISO
+10534-2:2023's public description confirms that the two-microphone complex
+transfer technique obtains normal surface impedance, and explicitly states
+that impedance-tube normal-incidence results and reverberation-room
+random/diffuse-incidence results are not directly comparable:
+[ISO 10534-2:2023](https://www.iso.org/standard/81294.html).

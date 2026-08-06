@@ -1,10 +1,16 @@
 # puresound.recipes
 
+繁體中文版本：[recipes.zh-TW.md](recipes.zh-TW.md)
+
 Config-driven construction: a YAML recipe in, a ready model / loss list out.
 Model and loss types are resolved by name with `getattr` on `puresound.nnet` and
 `puresound.nnet.loss`, so **everything exported from those packages is reachable
 from a config** (the model library keeps all backbones exported for exactly this
 reason).
+
+See `egs/voice_isolate/config/train_dpcrn.yaml` for a complete, real recipe
+built on these functions — it's the config behind the released voice-isolate
+checkpoints.
 
 ## `load_siso_recipe_config(f_path) -> Tuple`
 
@@ -25,7 +31,16 @@ appending:
 | 17 | vad label | `vad_label` |
 | 18–19 | real-recording blocks | `augmentation_realfar`, `augmentation_realnear` (voice-isolation only) |
 
-Blocks gated by `used: False` (or absent) come back as `None`.
+Blocks gated by `used: False` (or absent) come back as `None` — **for most
+of the table**. Precisely: indices 6–11, 14–16, and 18–19 go through an
+internal `_enabled_config()` helper that checks `item.get("used")` and
+returns `None` if it's falsy. Indices **12, 13, and 17**
+(`augmentation_hpf`, `augmentation_volume`, `vad_label`) are read with a
+plain `config.get(key)` instead — they come back as `None` only if the
+*key itself* is absent from the YAML; if the block is present but
+internally marked `used: False`, these three fields still return that block
+as-is (unlike the other seventeen). Check `used` yourself if you consume one
+of these three directly.
 
 ```python
 (corpus, trainer, _opt, _sch, _loss, model_dict, *rest) = load_siso_recipe_config(path)

@@ -1,19 +1,27 @@
 # PathEvent–FDN late-field coupling — `puresound.audio.rir.render.coupling`
 
+繁體中文版本：[`rir_late_coupling.zh-TW.md`](rir_late_coupling.zh-TW.md)
+
 Couples a coherent PathEvent early field to a deterministic multiband FDN
 tail. Used by the M4 backend
 (`render/high_frequency/fdn.py`); design map in
-[`rir_realism_algorithm_zh-TW.md`](rir_realism_algorithm_zh-TW.md) §4.3.
+[`rir_realism_algorithm.md`](rir_realism_algorithm.md) §4.3.
 
 ## Coupling contract
 
-`couple_path_event_rir_with_fdn(rir, sample_rate=..., direct_sample=...,
-target_rt60_s_by_hz=..., mixing_time_s=..., transition_duration_s=..., ...)`
-→ `PathEventFDNCouplingResult` (`.rir`, `.metadata`).
+```python
+couple_path_event_rir_with_fdn(
+    path_event_rir, sample_rate, direct_sample, target_rt60_s_by_hz,
+    *, mixing_time_s=0.024, transition_duration_s=0.016,
+    delay_line_count=16, seed=0, filter_order=4,
+) -> PathEventFDNCouplingResult  # `.rir`, `.metadata`
+```
 
 - The early field is preserved **sample-exact** before the transition window.
-- The crossfade starts `mixing_time_s` after the direct sample and uses
-  `equal_power_transition_weights` over `transition_samples`.
+- The crossfade is *centered* `mixing_time_s` after the direct sample and
+  spans `transition_duration_s` (clamped to stay after the direct sample and
+  inside the RIR); it uses `equal_power_transition_weights` over the window
+  returned by `transition_samples`.
 - Policy string: `PATH_EVENT_FDN_COUPLING_POLICY`.
 
 ## Energy matching

@@ -1,5 +1,7 @@
 # puresound.nnet.dpcrn
 
+繁體中文版本：[dpcrn.zh-TW.md](dpcrn.zh-TW.md)
+
 DPCRN — dual-path convolutional recurrent network on a `Unet` chassis: CNN
 down/up stacks over frequency with two `DPRNNblock2D` blocks at the bottleneck
 (bidirectional intra-frequency LSTM, unidirectional inter-time LSTM, optional

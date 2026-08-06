@@ -1,5 +1,7 @@
 # Speaker Embedding
 
+繁體中文版本：[`README.zh-TW.md`](README.zh-TW.md)
+
 ## Train your own speaker embedding model
 
     # Generate manifest
@@ -16,7 +18,7 @@
     # Extract embedding for each utterances
     python main.py --inference=True --ckpt_path=ckpt_path work.yaml
     # Scoring
-    python local/compute_eer.py eer_trail_file embeddings_folder
+    python local/compute_eer.py eer_trail_file embeddings_folder score_file
 
 ## Pretrained models
 
@@ -34,7 +36,7 @@
 ## Export the model to ONNX format
 
     # Generate the ONNX model as ckpt_path.onnx
-    python main.py --export_onnx=True --pretrained_ckpt=ckpt_path work.yaml
+    python main.py --export_onnx=True --pretrained_ckpt_path=ckpt_path work.yaml
 
 ## Running your demo by using `Gradio`
 

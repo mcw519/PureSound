@@ -1,5 +1,7 @@
 # RIR package migration guide
 
+繁體中文版本：[`rir_package_migration.zh-TW.md`](rir_package_migration.zh-TW.md)
+
 The RIR code moved from flat modules under `puresound/audio/` into the
 `puresound.audio.rir` domain package, following
 [`RIR_EXP_LOG.md`](../../RIR_EXP_LOG.md) stages R0–R7.

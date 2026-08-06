@@ -1,12 +1,14 @@
 # puresound.system
 
+繁體中文版本：[`index.zh-TW.md`](index.zh-TW.md)
+
 PyTorch Lightning training systems.
 
 ## Sub-modules
 
 | Module | Status | Description |
 |--------|--------|-------------|
-| [system.base](base.md) | active | base Lightning module (loss registry, optimizer/scheduler plumbing, warmup) |
+| [system.base](base.md) | active | base Lightning module (loss registry, optimizer/scheduler plumbing, warmup, GPU-batched VAD labeling) |
 | [system.siso](siso.md) | active | single-input enhancement trainer (`EncDecMaskBase`) + embedding classifier (`EncPredClassBase`, legacy) |
 | [system.optim](optim.md) | active | optimizer and LR-scheduler factory |
 | [system.logger](logger.md) | active | training metric accumulation logger |

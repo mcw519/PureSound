@@ -258,19 +258,23 @@ class SegLSTM(nn.Module):
 
 class SkiM(nn.Module):
     """
-    Skipping memory LSTM.
-    
+    Skipping memory LSTM: a stack of per-segment LSTMs (`SegLSTM`) whose
+    hidden/cell states are bridged across segments by a `MemLSTM`, avoiding
+    the cost of running an inter-chunk LSTM over every segment at once.
+
     Args:
         input_size (int): input feature(channel) dimension
         hidden_size (int): hidden feature(channel) dimension
         output_size (int): output feature(channel) dimension
         n_blocks (int): number of blocks (intra+inter).
         seg_size (int): chunk size
-        seg_overlap (bool): if true, chunk stride is half chunk size.
-        embed_dim (int): if not zero, concate in right_conv's input.
+        seg_overlap (bool): if true, chunk stride is half chunk size (50% overlap); if false, chunks are split contiguously (no overlap).
+        causal (bool): if True, every SegLSTM and MemLSTM is unidirectional (causal); if False, bidirectional.
+        embed_dim (int): if not zero, blocks flagged in `block_with_embed` fuse `embed` into their segment input via `embed_fusion`.
         embed_norm (bool): applies 2-norm for input embedding.
-        causal (bool): padding by causal scenario, others padding to same length between input and output.
+        embed_fusion (str): fusion strategy used when `embed_dim` is set: "film" or "gate".
         block_with_embed (list): which layer insert embedding.
+        dropout (float): dropout rate inside each SegLSTM/MemLSTM.
 
     References:
         [1]: https://arxiv.org/abs/2201.10800

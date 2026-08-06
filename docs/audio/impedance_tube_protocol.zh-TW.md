@@ -1,5 +1,7 @@
 # 正入射複數阻抗量測與匯入流程
 
+English version: `impedance_tube_protocol.md`
+
 狀態：M2.6 的量測 reduction 已完成；尚待第一批實體 room-finish 樣品資料。
 
 ## 1. 我們為什麼要量 H12，而不是只抄吸收率

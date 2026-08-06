@@ -39,7 +39,7 @@ def convert_kaldi_format_to_puresound_metafile(
                 )
                 continue
             else:
-                gender = utt2gender[utt2gender][0]
+                gender = utt2gender[utt_key][0]
 
         speaker = utt2spk[utt_key][0]
         if insert_root_path is not None:

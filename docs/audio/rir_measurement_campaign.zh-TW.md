@@ -1,5 +1,7 @@
 # M5 受控房間 RIR 量測與反演校準契約
 
+English version: `rir_measurement_campaign.md`
+
 狀態：M5.1–M5.6 implementation 已完成；受控 measured／listening／downstream empirical exit 尚未就緒
 Schema：`puresound.rir_measurement_campaign.v1`
 Loss policy：`puresound.rir_calibration_loss.v1`

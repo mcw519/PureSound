@@ -1,5 +1,7 @@
 # PureSound Streaming SDK
 
+繁體中文版本：[`README.zh-TW.md`](README.zh-TW.md)
+
 Portable Python runtime for exported PureSound streaming ONNX models.
 
 This package is meant to be copied or installed into another project without
@@ -57,22 +59,28 @@ byte-identical to the training repo's own ORT inference path
 
 ## LiveKit Agent Shape
 
-Use this SDK inside a small LiveKit `FrameProcessor` adapter:
+`examples/livekit_frame_processor.py` is a minimal sketch showing the adapter
+shape a LiveKit Agent host project can wrap around the runtime:
 
 ```python
-class PureSoundFrameProcessor(rtc.FrameProcessor[rtc.AudioFrame]):
-    def __init__(self, model_path: str, manifest_path: str):
-        super().__init__()
-        self.runtime = PureSoundStreamingRuntime(model_path, manifest_path)
+class PureSoundLiveKitFrameProcessor:
+    def __init__(self, onnx_path: str, manifest_path: str | None = None, provider: str = "auto"):
+        self.runtime = PureSoundStreamingRuntime(onnx_path, manifest_path, provider=provider)
 
-    def _process(self, frame):
-        pcm = np.frombuffer(frame.data, dtype=np.int16)
-        enhanced = self.runtime.process_int16(pcm)
-        # Build and return a new rtc.AudioFrame with the enhanced PCM.
+    def process_pcm16(self, pcm: bytes | memoryview | np.ndarray) -> np.ndarray:
+        if isinstance(pcm, np.ndarray):
+            samples = pcm.astype(np.int16, copy=False)
+        else:
+            samples = np.frombuffer(pcm, dtype=np.int16)
+        return self.runtime.process_int16(samples)
+
+    def flush_pcm16(self) -> np.ndarray:
+        return self.runtime.flush_int16()
 ```
 
-The SDK intentionally does not import LiveKit. Each host project can adapt the
-returned int16 or float32 samples to its own audio frame type.
+The SDK intentionally does not import LiveKit. Each host project wires this
+adapter into its own `rtc.FrameProcessor` (or equivalent) and converts the
+returned int16 PCM back into its own audio frame type.
 
 ## Supported Profiles
 

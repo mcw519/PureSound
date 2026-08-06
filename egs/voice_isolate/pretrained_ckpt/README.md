@@ -1,5 +1,7 @@
 # voice_isolate — pretrained checkpoints
 
+繁體中文版本：[`README.zh-TW.md`](README.zh-TW.md)
+
 Near-field (<1 m) foreground voice isolation, single channel, no enrollment: keep the near
 speaker, suppress far/competing speakers and noise.
 
@@ -42,7 +44,7 @@ path needs a gate rather than a blend.
 | `dpcrn_v5.ckpt` | `config/exp/train_dpcrn_antisup_w3.yaml` | v4 | anti-suppression weight 3.0 | in-domain **+8.45**; best in deployment-level reverb, worst in extreme reverb — the domain split point (ep19) |
 | `dpcrn_v6.ckpt` | `config/exp/train_dpcrn_wide_antisup.yaml` | v5 | wide RIR domain (RT60 0.20–0.85) + capture realism (media-voice interferer, HPF) | held-out unseen-room **+8.06**; **first streaming-verified** version (see below) (ep19) |
 | `dpcrn_v7.ckpt` | `config/exp/train_dpcrn_realE2E_v2c.yaml` | v6 | real recordings on both sides of the decision (real far interferers + real <1 m keep rows), turn-taking far-solo supervision, distance/DRR aux head, channel-perturbation mask consistency | held-out real far-field **−9.45 dB, graded by distance** (1–2 m −3 → 5 m+ −38; v6: −1.76 flat), near-field keep flat (−0.11), **Dawn WER 0.174 < 0.184 raw**, deletion 0.088 ≈ raw floor, reverberant-office WER −0.024 vs mix, in-domain +8.18 (ep19, with `dry_blend 0.9`) |
-| **`dpcrn_v8.ckpt`** | **`config/train_dpcrn.yaml`** | v7 | measured-capture realism in synthesis: noise convolved with the speech's own room, an absolute dBFS microphone floor, and part of the synthetic mixture taking its SIR from the scene geometry | real far-field suppression **−15.91 dB** vs v7's −13.72 on identical files (leakage-free subset −17.74 vs −15.68), and the 2–3 m dip in v7's distance response filled in (−4.50 → −16.61) so grading is monotone; near-field keep flat (0.00) with the worst case improved (−5.45 → −1.06); Dawn WER 0.180 < 0.184 raw, deletion 0.094; reverberant-office WER −0.024 vs mix (both interferer counts); turn-taking KEEP 6 violations; in-domain +7.99. Costs: +0.019 WER on the extreme-reverb monitor where v7 was neutral (ep19, with `dry_blend 0.9`) |
+| **`dpcrn_v8.ckpt`** | **`config/train_dpcrn.yaml`** | v7 | measured-capture realism in synthesis: noise convolved with the speech's own room, an absolute dBFS microphone floor, and part of the synthetic mixture taking its SIR from the scene geometry | real far-field suppression **−15.91 dB** vs v7's −13.72 on identical files (leakage-free subset −17.74 vs −15.68), and the 2–3 m dip in v7's distance response filled in (−4.50 → −16.61) so grading is monotone; near-field keep flat (0.00) with the worst case improved (−5.45 → −1.06); Dawn WER 0.180 < 0.184 raw, deletion 0.094; reverberant-office WER −0.024 vs mix (both interferer counts); turn-taking KEEP 6 violations; in-domain +7.99. Costs: +0.020 WER on the extreme-reverb monitor where v7 was neutral (ep19, with `dry_blend 0.9`) |
 
 `dpcrn_v6_gate.ckpt` — off the main line: `config/exp/train_dpcrn_gate.yaml` freezes v6 and
 trains only a causal frame-level near/far VAD gate head (98,689 params). It reaches 0.90+
@@ -53,7 +55,7 @@ mask output is v6's up to those buffers.
 
 **Choosing a version.** Take `dpcrn_v8.ckpt` with `dry_blend 0.9`. `dpcrn_v7.ckpt` is the
 alternative when the deployment sees reverberation well past the training domain (RT60 > 1 s):
-it is neutral on the extreme-reverb WER monitor where v8 costs +0.019, and gives up about 2 dB
+it is neutral on the extreme-reverb WER monitor where v8 costs +0.020, and gives up about 2 dB
 of real far-field suppression for it. `dpcrn_v6.ckpt` is the conservative fallback: no runtime
 knob, and it largely passes far speech through. v1–v5 are the training-history stages, kept so
 any stage can be re-judged or re-warm-started; they are not deployment candidates.

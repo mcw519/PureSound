@@ -1,7 +1,8 @@
 # Low-frequency modal validation
 
-繁體中文的完整背景、算法與目前實驗判斷見
-[`rir_realism_algorithm_zh-TW.md`](rir_realism_algorithm_zh-TW.md)。
+繁體中文版本：[`modal_validation.zh-TW.md`](modal_validation.zh-TW.md)。完整背景、
+算法與目前實驗判斷見
+[`rir_realism_algorithm.zh-TW.md`](rir_realism_algorithm.zh-TW.md)。
 
 M2 has two validation components that do not reuse scene metadata as their
 answer: an independent 3D finite-difference reference and a pressure-response
@@ -9,8 +10,8 @@ modal estimator.
 
 ## Phase-aware impedance primitives
 
-`puresound.audio.acoustic_impedance` establishes the first complex-boundary
-validation layer in SI units of Pa·s/m:
+`puresound.audio.rir.physics.impedance.admittance` establishes the first
+complex-boundary validation layer in SI units of Pa·s/m:
 
 ```text
 Z0 = rho c
@@ -94,7 +95,7 @@ known poles are supplied, and a nonzero multi-pole boundary remains passive and
 finite in the 3D reference case.
 
 The complete schema, equations, caveats, and Traditional Chinese explanation
-are in [`impedance_measurements.md`](impedance_measurements.md).
+are in [`impedance_measurements.zh-TW.md`](impedance_measurements.zh-TW.md).
 
 M2.5 adds the first licensed direct complex dataset: CC BY 4.0 normalized
 resistance/reactance for nominally identical NASA and UFSC perforated liners
@@ -111,12 +112,12 @@ biquad is prewarped at resonance. The NASA fit has 0.0385 held-out RMS and
 A 4096-point sweep remains passive, the resonant FDTD state is finite, and the
 1D resonant/magnitude-only modal-Q ratio is 2.94. Source decisions and
 limitations are recorded in
-[`complex_impedance_source_audit.md`](complex_impedance_source_audit.md).
+[`complex_impedance_source_audit.zh-TW.md`](complex_impedance_source_audit.zh-TW.md).
 
 ## First provenance-bearing porous references
 
-`puresound.audio.impedance_priors` implements Miki's 1990 positive-real porous
-model for a rigid-backed layer. The first two references use Tarnow's measured
+`puresound.audio.rir.physics.impedance.priors` implements Miki's 1990
+positive-real porous model for a rigid-backed layer. The first two references use Tarnow's measured
 normal-direction flow resistivities for 100 mm, 14 kg/m³ and 30 kg/m³ glass
 wool. Their evidence tier is explicitly
 `measured_flow_resistivity_plus_miki_model`: impedance phase is modeled, not
@@ -140,8 +141,9 @@ sources, and caveats are in [`impedance_priors.md`](impedance_priors.md).
 
 ## Complex modal eigenvalue reference
 
-`puresound.audio.impedance_modes` is the minimal connection between the same
-rational boundary used by FDTD and a complex modal eigenproblem. For a 1D
+`puresound.audio.rir.physics.impedance.modes` is the minimal connection
+between the same rational boundary used by FDTD and a complex modal
+eigenproblem. For a 1D
 cavity of length `L` with the same locally reacting boundary at both ends it
 solves:
 
@@ -229,7 +231,8 @@ keeps `general_boundary_invariance_established: false`.
 
 ## Independent FDTD reference
 
-`puresound.audio.fdtd_reference` implements a small validation-only solver. It
+`puresound.audio.rir.physics.wave.fdtd` implements a small validation-only
+solver. It
 uses pressure at cell centers and particle velocity on staggered cell faces:
 
 ```text
@@ -269,7 +272,8 @@ spectral overlap.
 
 ## RIR modal peak and Q estimator
 
-`puresound.audio.low_frequency_modes` gates one measured or synthetic RIR,
+`puresound.audio.rir.physics.wave.low_frequency` gates one measured or
+synthetic RIR,
 finds prominent low-frequency response peaks, and reports:
 
 - peak frequency and prominence;

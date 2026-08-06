@@ -2,7 +2,7 @@
 
 > 本檔彙整 RIR 系統的**實驗紀錄、審查結論與工作計畫**，保留發現與撤回的完整歷史。
 > 它不是產品文件：演算法與代碼的對應見
-> [docs/audio/rir_realism_algorithm_zh-TW.md](docs/audio/rir_realism_algorithm_zh-TW.md)，
+> [docs/audio/rir_realism_algorithm.zh-TW.md](docs/audio/rir_realism_algorithm.zh-TW.md)，
 > 使用方式見 [egs/rir_generation/README.md](egs/rir_generation/README.md)。
 >
 > 三個部分原為獨立文件，2026-08-04 併入本檔（heading 各降一級；併入前的 git 歷史
@@ -1217,7 +1217,7 @@ Primary target: synthetic-to-real room acoustics for near/far speech training
 Secondary target: a reusable path toward microphone arrays, Ambisonics, and BRIR rendering
 
 繁體中文的整體算法、物理解釋、驗證方法與目前結論見
-[`docs/audio/rir_realism_algorithm_zh-TW.md`](docs/audio/rir_realism_algorithm_zh-TW.md)。
+[`docs/audio/rir_realism_algorithm.zh-TW.md`](docs/audio/rir_realism_algorithm.zh-TW.md)。
 
 Experiment organization follows the milestone layout documented in
 [`egs/rir_generation/phases/README.md`](egs/rir_generation/phases/README.md):
@@ -2411,7 +2411,7 @@ Evidence:
 - non-evidence template:
   `egs/rir_generation/phases/m5_calibration/config/m5_measurement_campaign_template.json`;
 - protocol and field semantics:
-  `docs/audio/rir_measurement_campaign_zh-TW.md`.
+  `docs/audio/rir_measurement_campaign.zh-TW.md`.
 
 M5.1 implementation exit is **PASS**. Controlled-measurement readiness is
 **OPEN**. M5.2 may proceed with synthetic recovery without claiming a
@@ -2630,7 +2630,7 @@ Evidence:
 
 - report: `egs/rir_generation/phases/m6_bank/reports/m6_bank_contract_report.json`;
 - fixture manifest: `egs/rir_generation/exp/rir_realism/m6/rir_m6_bank_contract/rir_bank_manifest.json`;
-- Chinese contract: `docs/audio/rir_bank_v2_zh-TW.md`.
+- Chinese contract: `docs/audio/rir_bank_v2.zh-TW.md`.
 
 M6.2 reproducible-generator result (hardened 2026-08-02):
 
@@ -3758,8 +3758,8 @@ R0 完成並通過後，才開始 R1 的實際檔案拆分。這樣可以先確�
 
 ## 附錄：自產品文件遷出的結果紀錄
 
-2026-08-04 文件重整時，自 `docs/audio/rir_bank_v2_zh-TW.md` 與
-`docs/audio/rir_measurement_campaign_zh-TW.md` 遷出的結果段落，原文照錄（heading 降兩級）。
+2026-08-04 文件重整時，自 `docs/audio/rir_bank_v2.zh-TW.md` 與
+`docs/audio/rir_measurement_campaign.zh-TW.md` 遷出的結果段落，原文照錄（heading 降兩級）。
 
 #### 7. M6.1 正式結果
 

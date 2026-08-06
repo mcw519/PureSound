@@ -1,5 +1,7 @@
 # puresound.nnet.lobe.heads
 
+繁體中文版本：`heads.zh-TW.md`
+
 Auxiliary prediction heads that read a backbone's bottleneck features. These are
 backbone-agnostic: any model whose bottleneck is a `[N, C, F, T]` feature map
 can attach them. Checkpoint keys bind to the attribute name the backbone stores

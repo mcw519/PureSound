@@ -1,5 +1,7 @@
 # RIR 演算法與代碼對應
 
+English version: `rir_realism_algorithm.md`
+
 本文件是 `puresound.audio.rir` 的**演算法 ↔ 代碼**參考：每一段物理與訊號處理，
 對應到實作它的模組、函式與 policy 字串。它描述系統「是什麼、在哪裡」；
 實驗結果、審查結論與工作計畫在 [`RIR_EXP_LOG.md`](../../RIR_EXP_LOG.md)，

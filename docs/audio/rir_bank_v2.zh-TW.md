@@ -1,8 +1,16 @@
 # M6 Production RIR Bank v2 契約
 
-狀態：M6.1–M6.6 implementation 已完成；M6.6 production promotion 因缺少
-measured／listening／downstream／renderer approval evidence 而維持 BLOCKED
-最後更新：2026-08-01
+English version: `rir_bank_v2.md`
+
+狀態：M6.1–M6.6 implementation 已完成。根據 2026-08-04 的 evidence pilot
+（`RIR_EXP_LOG.md` §6、§6.4），13 項 production-decision checks 中已有 10
+項 PASS——包括 `all_renderer_profiles_are_production_approved` 與
+`real_native`／`mixed_calibrated_real` recipe checks（現在 generation 已可
+使用 measured bank，見下方 §5、§8）。M6.6 production promotion 仍然
+**BLOCKED**，卡在唯有真實外部證據才能滿足的三項 check 上：≥20 人的
+controlled listening、room-disjoint downstream training，以及依賴這兩者的
+evidence-bundle audit——確切 check 清單見 §12 與 `RIR_EXP_LOG.md` §6。
+最後更新：2026-08-05
 
 這份文件說明 PureSound 如何把已驗證的 RIR renderer 包裝成可重現、可稽核、
 不會發生 room leakage 的訓練資料 bank。M6.1 解決的是「一個 bank 必須記住
@@ -385,10 +393,13 @@ audits 及 decision recomputation。Blocked、竄改或不存在的 certificate 
 
 Formal validator 的 15/15 implementation gates PASS，包括 unsafe evidence path、
 evaluation pass-flag/hash tamper、全 true 且重算外層 hash 的稱職偽造 certificate、
-直接修改 candidate status 與 production-reader 負控制。目前真實決定仍為 **BLOCKED**；缺件正是 real/mixed
-variants、renderer approval、M6.5 三類 empirical evidence、原始 evidence files
-與三方 sign-off。這代表 M6.6 decision engine 已完成，不代表 production evidence
-已憑空出現。
+直接修改 candidate status 與 production-reader 負控制。根據 2026-08-04 的 evidence pilot（`RIR_EXP_LOG.md` §6、§6.4），13 項
+check 中已有 10 項 PASS：real/mixed recipe 可用性、renderer-profile
+approval，以及 evaluation／hash 檢查均已解決。剩下的三項 blocker 全部
+屬於 empirical 性質——≥20 人的 controlled listening、multi-seed
+room-disjoint downstream training，以及依賴這兩者的 external
+evidence-bundle audit——三項都在這個 codebase 之外。這代表 M6.6 decision
+engine 已完成，不代表 production evidence 已憑空出現。
 
 Content addressing 能證明「被 review 的 bytes 沒變」，不能單獨證明 reviewer
 身份。正式部署仍應讓 sign-off records 由受控 CI／權限系統產生與保管；若威脅

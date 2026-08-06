@@ -1,5 +1,7 @@
 # scripts — voice_isolate tooling
 
+繁體中文版本：[`README.zh-TW.md`](README.zh-TW.md)
+
 Names follow what the script does:
 
 | prefix | meaning |
@@ -96,6 +98,7 @@ metrics cannot see the keep-side failure at all. These two measure both sides on
 | `eval_turntaking.py` | Same two-sided scorecard, spans derived automatically from the target energy of a frozen turn-taking set. |
 | `build_turntaking_set.py` | Builds that frozen (mix, target) turn-taking set; `--rir-folder` swaps in a measured-RIR bank for real-room turns. |
 | `eval_gate.py` | Frame-level gate-head scorecard (recall / specificity / balanced accuracy / BCE) on a held-out simulated set — the only view that shows gate progress, since gate training leaves the mask path untouched. |
+| `eval_domain_gap.py` | Domain-gap decomposition, not a checkpoint scorer: on matched VOiCES (room, mic) triples with both a real recording (R) and a measured impulse response (M), builds a same-source synthetic-bank version (S) and reports `fit_db` for R-vs-M (the LTI-convolution ceiling — non-linearity + time-variance + noise floor) and M-vs-S (RIR-bank fidelity), plus the noise floor; `--ckpt` adds each leg's behavioral suppression. Produced `data_report/domain_gap_v7.jsonl`, the evidence behind stage 8's realism fixes (`dpcrn_v8`). |
 
 `eval_realcase.py` and `eval_turntaking.py` take `--gate` to apply a trained gate head to the output as
 a per-frame gain, adding `gate_soft` / `gate_hard` rows next to the mask-only one.

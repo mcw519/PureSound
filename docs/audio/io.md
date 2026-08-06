@@ -1,81 +1,117 @@
 # puresound.audio.io
 
-Audio file I/O operations including loading, saving, slicing, and padding.
+繁體中文版本：[`io.zh-TW.md`](io.zh-TW.md)
+
+Audio file I/O: load + resample + level, save, and a length-normalizing
+crop. Every method is a `@staticmethod` on `AudioIO`; nothing in this repo
+ever instantiates the class — always call `AudioIO.open(...)`, not
+`AudioIO().open(...)`.
 
 ## Class: `AudioIO`
 
-Provides static methods for reading and writing audio files.
+### Constructor
+
+```python
+AudioIO(verbose: bool = False)
+```
+
+Exists but is vestigial: `self.verbose` is stored and never read by any
+method (they're all `@staticmethod`s and take their own `verbose` argument
+where relevant). No call site in this repo constructs an `AudioIO` instance.
 
 ### Static Methods
 
-#### `audio_info(f_path: str) -> Dict`
+#### `audio_info(f_path: str) -> Tuple[int, int, float, int]`
 
-Returns metadata about an audio file without loading the full waveform.
+Reads a file's metadata via `torchaudio.info` **without loading the
+waveform**. Returns a **plain tuple**, not a dict — order matters:
 
-**Returns dictionary with:**
-- `sr` – Sample rate
-- `num_samples` – Number of samples
-- `duration` – Duration in seconds
-- `num_channels` – Number of channels
+```python
+sample_rate, total_samples, total_seconds, num_channels = AudioIO.audio_info(f_path)
+```
 
----
-
-#### `open(f_path: str, target_sr: Optional[int] = None, normalize: bool = False, rescale_to: Optional[float] = None) -> Tuple[Tensor, int]`
-
-Loads an audio file from disk.
-
-**Parameters:**
-- `f_path` – Path to the audio file (WAV, FLAC, etc.)
-- `target_sr` – If provided, resample to this sample rate after loading
-- `normalize` – If `True`, normalize waveform to [-1, 1] peak amplitude
-- `rescale_to` – If provided, rescale RMS to this target level (dB)
-
-**Returns:** `(waveform: Tensor, sample_rate: int)`
+`total_seconds` is `round(num_frames / sample_rate, 2)`.
 
 ---
 
-#### `save(f_path: str, wav: Tensor, sr: int)`
+#### `open(f_path: str, resample_to: Optional[int] = None, normalized: bool = False, target_lvl: Optional[float] = None, verbose: bool = False) -> Tuple[Tensor, int]`
 
-Saves a waveform tensor to a WAV file on disk.
+Loads a file with `torchaudio.load`, optionally resamples via
+[`dsp.wav_resampling(..., backend="sox")`](dsp.md), then optionally levels
+it. `resample_to` happens *before* levelling, so `target_lvl` is measured on
+the already-resampled signal.
 
-**Parameters:**
-- `f_path` – Output file path
-- `wav` – Waveform tensor `[channels, samples]` or `[samples]`
-- `sr` – Sample rate
+> **Levelling has a sharp edge: `normalized=True` alone does nothing.** The
+> actual logic is
+> ```python
+> if normalized:
+>     if target_lvl is not None and verbose:
+>         wav = normalize_waveform(wav=wav, amp_type="avg")
+> elif target_lvl is not None:
+>     wav = rescale_waveform(wav=wav, target_lvl=target_lvl, amp_type="rms", scale="dB")
+> ```
+> so peak/avg normalization only fires when `normalized=True` **and**
+> `target_lvl` is also set **and** `verbose=True`. Every call site in this
+> repo avoids `normalized` entirely and uses `target_lvl` instead — that is
+> the path to use:
+
+```python
+wav, sr = AudioIO.open(f_path, target_lvl=-28.0)   # RMS-normalize to -28 dBFS
+```
+
+`target_lvl` alone (the common case, `normalized` left at its default
+`False`) rescales via `rescale_waveform(..., amp_type="rms", scale="dB")` —
+see [volume.md](volume.md). `target_lvl=None` (also the default) with
+`normalized=False` performs no levelling at all — `open` just loads (and
+optionally resamples).
 
 ---
 
-#### `audio_cut(wav: Tensor, target_len: int, pad_mode: str = "zero") -> Tensor`
+#### `save(wav: Tensor, f_path: str, sr: int, **kwargs)`
 
-Randomly cuts a waveform to a target length. If the waveform is shorter than `target_len`, it is padded.
+**`wav` is the first positional argument, `f_path` the second** — the
+reverse order from `open`/`audio_info`, which take the path first. A 1-D
+`wav` is unsqueezed to `[1, L]` before saving. `**kwargs` forwards to
+`torchaudio.save` (e.g. `encoding`, `bits_per_sample`).
 
-**Parameters:**
-- `wav` – Input waveform `[channels, samples]` or `[samples]`
-- `target_len` – Desired number of samples
-- `pad_mode` – Padding strategy: `"zero"` (default) or `"repeat"`
-
-**Returns:** Waveform of length `target_len`.
+```python
+AudioIO.save(wav=wav, f_path="output.wav", sr=16000)
+```
 
 ---
 
-#### `cut_audio(wav: Tensor, start: int, end: int, pad: bool = False) -> Tensor`
+#### `audio_cut(wav: Tensor, sr: int, length_s: float) -> Tuple[Tensor, Tuple[int, int]]`
 
-Slices a waveform between `start` and `end` sample indices, with optional zero-padding if the slice extends past the signal boundary.
+Convenience wrapper: `cut_audio(wav, sr, length_s, padding=True)`. Returns
+`(wav, (offset, end_offset))`.
 
-**Parameters:**
-- `wav` – Input waveform
-- `start` – Start sample index
-- `end` – End sample index (exclusive)
-- `pad` – If `True`, zero-pad to reach `end - start` samples
+---
 
-**Returns:** Sliced waveform tensor.
+#### `cut_audio(wav: Tensor, sr: int, length_s: int, padding: bool = False) -> Tuple[Tensor, int, int]`
+
+**A random-offset crop to a fixed target length** (`sr * length_s` samples)
+— not a deterministic `[start, end)` slice:
+
+| condition | result |
+|---|---|
+| `wav.shape[-1] > target_len` | random offset in `[0, len(wav) - target_len]`, sliced to exactly `target_len` |
+| `wav.shape[-1] <= target_len` and `padding=True` | zero-padded on the end to `target_len` |
+| `wav.shape[-1] <= target_len` and `padding=False` | returned unchanged — **shorter than `target_len`**, caller must handle |
+
+Returns **3 values**, `(wav, offset, end_offset)`, not 1.
+
+Neither `audio_cut` nor `cut_audio` has an external caller or a test in this
+repo currently (grepped: none). The dataset layer's own length-alignment
+utility, `align_audio_list` in `puresound/dataset/dynamic_base.py`, is a
+separate, independent implementation of the same "random crop or pad to a
+target length" idea — it does not call into either of these.
 
 ## Example
 
 ```python
 from puresound.audio.io import AudioIO
 
-wav, sr = AudioIO.open("speech.wav", target_sr=16000, normalize=True)
-info = AudioIO.audio_info("speech.wav")
-AudioIO.save("output.wav", wav, sr)
+wav, sr = AudioIO.open("speech.wav", resample_to=16000, target_lvl=-28.0)
+sample_rate, total_samples, duration_s, num_channels = AudioIO.audio_info("speech.wav")
+AudioIO.save(wav=wav, f_path="output.wav", sr=sr)
 ```
