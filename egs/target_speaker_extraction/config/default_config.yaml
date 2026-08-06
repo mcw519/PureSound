@@ -296,7 +296,11 @@ model:
     feats_type: fbank80_16k
     drop_stft_first_bin: True
     trainable: False
-    normalized_mode: all_feature
+    # Left off deliberately: FeatureEncoder.normalized_mode was silently a
+    # no-op until it was fixed, so any checkpoint trained from this frozen
+    # legacy recipe saw un-normalized features despite this config once
+    # reading `all_feature`. Turn it on only together with a retrain.
+    normalized_mode:
     include_specaug: False
     specaug_args:
       freq_mask_length: 4

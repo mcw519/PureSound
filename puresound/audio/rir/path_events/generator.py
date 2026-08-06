@@ -11,7 +11,6 @@ from __future__ import annotations
 import math
 from collections.abc import Iterable, Mapping
 from dataclasses import replace
-from typing import Any
 
 import numpy as np
 
@@ -30,7 +29,6 @@ from puresound.audio.rir.path_events.schema import (
     PathEvent,
     PathEventSet,
     _finite_float_list,
-    material_absorption_relaxation_models,
 )
 from puresound.audio.rir.scene.schema import RoomSceneV2, SHOEBOX_BOUNDARIES
 

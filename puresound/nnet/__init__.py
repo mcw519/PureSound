@@ -8,7 +8,7 @@ from .lobe.dsp import FrequencyEQLayer
 from .lobe.encoder import ConvEncDec, FreeEncDec
 from .skim import SkiM
 from .tfgridnet import TFGridNet
-from .unet import Unet, UnetTcn
+from .unet import Unet, UnetFsmn, UnetTcn
 
 # Every model the config loader can name via ``backbone.type`` (resolved with
 # ``getattr(nnet, type)`` in recipes.py and the egs mains). Keep this in sync
@@ -27,5 +27,6 @@ __all__ = [
     "SkiM",
     "TFGridNet",
     "Unet",
+    "UnetFsmn",
     "UnetTcn",
 ]

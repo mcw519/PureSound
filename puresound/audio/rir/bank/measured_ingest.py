@@ -48,7 +48,7 @@ from __future__ import annotations
 import json
 import math
 import re
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
@@ -57,7 +57,6 @@ import numpy as np
 from ..metrics import estimate_noise_floor_lundeby
 from ..scene.schema import EnvironmentConfig
 from .qc import (
-    DEFAULT_QC_SUMMARY_NAME,
     RIRBankQCPolicy,
     audit_rir_bank_qc_release,
     run_rir_bank_qc,

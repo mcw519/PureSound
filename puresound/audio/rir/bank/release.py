@@ -25,6 +25,7 @@ from puresound.audio.rir.bank.schema import (
     write_split_indexes,
 )
 from puresound.audio.rir.bank.qc import (
+    RIRBankQCPolicy,
     audit_rir_bank_qc_release,
     run_rir_bank_qc,
 )

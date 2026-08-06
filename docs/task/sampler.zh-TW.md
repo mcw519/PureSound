@@ -150,8 +150,27 @@ train_dataloader = torch.utils.data.DataLoader(
 
 ## Class: `SpeakerGenderSampler`
 
-另一個較簡單、獨立的 batch sampler，從固定的男／女（／其他）speaker-id
-list 中，各取相等的一半（若有給「其他」list 則是三等分）組成每個
-batch——`n_spks` 必須能被 2 或 3 整除。它沒有實作上述的 seeded/DDP 機制，目前
-在整個 repo 裡也沒有任何呼叫端在使用它。它究竟會保留、變更、還是被移除，是
-另外一項獨立在評估的事；這份文件僅描述它目前的行為。
+另一個較簡單、獨立的 batch sampler，產出的是性別平衡的 batch：每個 batch 會從
+`spk_list_male` 抽 `n_spks / 2` 位 speaker、從 `spk_list_female` 抽 `n_spks / 2`
+位（若有給選填的 `spk_list_other`——用來放缺少性別 metadata 的 speaker——則改成
+三個 list 各抽 `n_spks / 3` 位），再為每位抽中的 speaker 取 `n_per` 段
+utterance。`n_spks` 必須能被 2 或 3 整除，這點在 `__init__` 裡有 assert。
+`__len__` 就是 `total_batch`。
+
+```python
+SpeakerGenderSampler(
+    total_batch: int,
+    n_spks: int,
+    n_per: int,
+    spk_list_male: List,
+    spk_list_female: List,
+    spk_list_other: Optional[List] = None,
+)
+```
+
+它沒有實作 [`SpeakerSampler`](#class-speakersampler) 那套 seeded/DDP 的
+`item_seed` 機制，目前在這個 repo 裡也沒有任何呼叫端。它是被當成 library 資產
+保留的：它與 `prepare_metafile.py` 系列腳本（`egs/noise_suppression`、
+`egs/target_speaker_extraction`、`egs/speaker_embedding`）的
+`--utt2gender_path` 性別 metadata 路徑相互搭配——那條路徑產出的正是這個 sampler
+要吃的逐 speaker 性別 list。

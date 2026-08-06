@@ -105,7 +105,7 @@ from puresound.nnet import ConvEncDec, DPCRN, EcapaTdnnExtractor, FeatureEncoder
 encoder    = ConvEncDec(fft_length=512, win_length=512, hop_length=160, fmin=0, fmax=8000, sr=16000, trainable=False)
 c_encoder  = ConvEncDec(fft_length=512, win_length=512, hop_length=160, fmin=0, fmax=8000, sr=16000, preemphasis=0.97, trainable=False)
 feats      = FeatureEncoder(feats_type="complex", drop_stft_first_bin=True, trainable=False)
-c_feats    = FeatureEncoder(feats_type="fbank80_16k", normalized_mode="all_feature", trainable=False)
+c_feats    = FeatureEncoder(feats_type="fbank80_16k", normalized_mode=None, trainable=False)  # see nnet/features.md
 backbone   = DPCRN(input_dim=256, dvec_dim=192, channels=(2, 32, 32, 32, 64, 128))
 c_backbone = EcapaTdnnExtractor(input_size=80, embedding_size=192, model_scale=8, ndim=1024, att_size=1536)
 

@@ -227,7 +227,7 @@ class GroupedGRU(nn.Module):
         outstates = []
         h = self.groups * self.num_directions
         for i, gru in enumerate(self.grus):
-            x, s = gru(x, h0[i * h : (i + 1) * h])
+            x, s = gru(x, h0[i * h : (i + 1) * h], return_hidden=True)
             outstates.append(s)
             if self.shuffle and i < self.num_layers - 1:
                 x = x.permute(0, 2, 1).contiguous()  # [N, T, C]

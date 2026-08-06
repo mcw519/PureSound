@@ -156,42 +156,29 @@ instead (see *Config usage*). The preset table, traced from the current source:
 |---|---|---|---|---|
 | `sisnr` | `True` | `False` | `False` | `None` |
 | `sdsdr` | `True` | `True` | `False` | `None` |
-| `sdr` | `True` ¹ | `False` | `False` | `None` |
+| `sdr` | `False` | `False` | `False` | `None` |
 | `tsdr` | `False` | `False` | `False` | `30` |
 | `tsdr50` | `False` | `False` | `False` | `50` |
 | `sasdr` | `False` | `False` | `True` | `None` |
-| `sasisnr` | `False` ¹ | `False` | `True` | `None` |
+| `sasisnr` | `True` | `False` | `True` | `None` |
 | `satsdr` | `False` | `False` | `True` | `30` |
 
-¹ **Known quirk, tracked separately** — not fixed by this doc pass. `init_mode`
-decides `scaled` with:
+Any `loss_func` outside this eight-name set raises `NameError` before any of
+the flags are decided.
+
+The `scaled` column follows one rule — the scale-invariant modes get it:
 
 ```python
-if loss_func == "sisnr" or loss_func in "sdsdr" or loss_func == "sasisdr":
+if loss_func in ("sisnr", "sdsdr", "sasisnr"):
     scaled = True
 ```
 
-Two things here don't do what the names suggest, and both trace back to this
-one line:
-
-- `loss_func in "sdsdr"` is a **reversed containment check**: Python reads it
-  as "is the string `loss_func` a substring of the literal `'sdsdr'`", not
-  "does `loss_func` equal `'sdsdr'`". Since `"sdr"` happens to be a substring
-  of `"sdsdr"` (`"sdsdr"[2:5] == "sdr"`), the `sdr` preset silently gets
-  `scaled=True` too — so today `SDRLoss.init_mode("sdr")` and
-  `SDRLoss.init_mode("sisnr")` build identical objects instead of `"sdr"`
-  being a plain, non-scale-invariant SDR.
-- The third clause compares against the literal `"sasisdr"`, not the real mode
-  name `"sasisnr"` (the `d`/`n` are transposed). `"sasisdr"` was never a valid
-  `loss_func` value — it isn't in the allow-list `init_mode` checks first — so
-  this clause can never fire and is dead code for the mode it was presumably
-  meant to catch. Net effect: `SDRLoss.init_mode("sasisnr")` gets
-  `scaled=False` rather than the `True` its "SI" implies, making it currently
-  identical to `SDRLoss.init_mode("sasdr")`.
-
-This only affects the `init_mode(...)` convenience constructor described in
-this section; it is documented here so the preset table above isn't a
-mystery, not as a description of intended design.
+`sisnr` and `sasisnr` are scale-invariant by definition. `sdsdr` also needs the
+projection: it keeps the scale error inside the noise term (`scale_dependent=True`
+makes `e_noise = s1 - s2`) rather than discarding it, so it still has to compute
+`s_target` from the projection. Everything else — `sdr`, `tsdr`, `tsdr50`,
+`sasdr`, `satsdr` — is plain, scale-dependent SDR against the unmodified
+reference.
 
 ### Config usage
 
@@ -211,8 +198,8 @@ loss_func:
 
 Built with the raw constructor and explicit kwargs, a `(scaled=False,
 scale_dependent=True)` combination that no `init_mode` preset above produces —
-this recipe's behavior does not depend on the `init_mode` auto-defaults or
-their quirk.
+active recipes always pass `scaled` / `scale_dependent` themselves, so their
+behavior never depended on the `init_mode` auto-defaults.
 
 ## SI-SNR formula (the `scaled=True, scale_dependent=False` case)
 

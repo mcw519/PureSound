@@ -24,7 +24,7 @@ constructor signature is always the class docstring in the source file.
 | [algorithms/dprnn](algorithms/dprnn.md) | library | Dual-Path RNN (DPRNN) |
 | [algorithms/skim](algorithms/skim.md) | library | Skipping Memory LSTM (SkiM) |
 | [algorithms/tfgridnet](algorithms/tfgridnet.md) | library | TF-GridNet |
-| [algorithms/unet](algorithms/unet.md) | library | U-Net time-frequency models (`Unet` is also the DPCRN/DPARN chassis) |
+| [algorithms/unet](algorithms/unet.md) | library | U-Net time-frequency models — `Unet` (also the DPCRN/DPARN chassis), `UnetTcn`, `UnetFsmn` |
 | [nnet.features](features.md) | active | Feature processing layers |
 | [nnet.masker](masker.md) | active | Mask application utilities |
 
@@ -79,6 +79,7 @@ from puresound.nnet import (
     SkiM,
     TFGridNet,
     Unet,
+    UnetFsmn,
     UnetTcn,
 )
 ```

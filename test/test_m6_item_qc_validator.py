@@ -1,6 +1,12 @@
 import json
 
+import pytest
+
 from egs.rir_generation.phases.m6_bank.scripts import validate_m6_item_qc
+
+# End-to-end evidence-chain validator: builds, QCs and releases a real bank, so it
+# runs for tens of seconds. Excluded by `run_repo_checks.py --suite standard`.
+pytestmark = pytest.mark.slow
 
 
 def test_m6_3_item_qc_and_quarantine_validator(tmp_path):

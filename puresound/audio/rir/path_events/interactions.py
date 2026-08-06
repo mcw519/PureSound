@@ -12,7 +12,6 @@ from __future__ import annotations
 import math
 from collections.abc import Iterable, Mapping
 from dataclasses import replace
-from typing import Any
 
 import numpy as np
 
@@ -29,7 +28,7 @@ from puresound.audio.rir.path_events.schema import (
     PathEventSet,
     locally_reacting_reflection_coefficient,
 )
-from puresound.audio.rir.scene.schema import RoomSceneV2, SceneObject
+from puresound.audio.rir.scene.schema import RoomSceneV2
 
 
 def _gain_spectrum(

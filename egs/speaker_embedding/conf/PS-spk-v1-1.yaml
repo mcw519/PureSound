@@ -156,7 +156,13 @@ model:
     feats_type: fbank80_16k
     drop_stft_first_bin: True
     trainable: False
-    normalized_mode: all_feature
+    # Left off deliberately: FeatureEncoder.normalized_mode was silently a
+    # no-op until it was fixed, so pretrained/PS-spk-v1-1.{ckpt,onnx} were in
+    # fact trained on un-normalized features despite this config once reading
+    # `all_feature`. Enabling it now would feed the released checkpoints a
+    # feature distribution they never saw. Turn it on only together with a
+    # retrain.
+    normalized_mode:
     include_specaug: True
     specaug_args:
       freq_mask_length: 4

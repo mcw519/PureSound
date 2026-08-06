@@ -33,6 +33,10 @@ from puresound.audio.rir.bank.production import (
 )
 from puresound.audio.rir.bank.schema import RIRBankManifest, sha256_file
 
+# End-to-end evidence-chain validator: builds, QCs and releases a real bank, so it
+# runs for tens of seconds. Excluded by `run_repo_checks.py --suite standard`.
+pytestmark = pytest.mark.slow
+
 AUDIT = {
     "bank_id": "test-bank",
     "root": "/somewhere",
@@ -554,7 +558,6 @@ def test_renderer_approval_closes_its_production_check(release):
     from puresound.audio.rir.bank.qc import audit_rir_bank_qc_release
     from puresound.audio.rir.bank.release import (
         build_m6_variant_release,
-        prune_bank_to_qc_passed,
     )
 
     root = release["root"]

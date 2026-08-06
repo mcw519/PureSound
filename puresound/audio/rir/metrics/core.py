@@ -7,9 +7,8 @@ in R4 of ``RIR_EXP_LOG.md``.
 
 from __future__ import annotations
 
-import math
 from dataclasses import asdict, dataclass
-from typing import Any, Iterable, Optional, Sequence
+from typing import Any, Optional
 
 import numpy as np
 

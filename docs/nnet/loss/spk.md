@@ -194,8 +194,20 @@ TripletLoss(margin: float = 0.0, add_norm: bool = True, distance: str = "Euclide
 ```
 
 `forward(x, reduction=True)` splits `x` into anchor/positive/negative along
-dim 1, optionally L2-normalizes (`add_norm`), computes `dist_pos` / `dist_neg`
-using either `euclidean_distance` or `cosine_similarity` (selected by
-`distance`, case-insensitive; anything else raises `NameError`), and returns
-`mean(max(0, dist_pos - dist_neg + margin))` (or the unreduced per-row values
-if `reduction=False`).
+dim 1, optionally L2-normalizes (`add_norm`), computes `dist_pos` / `dist_neg`,
+and returns `mean(max(0, dist_pos - dist_neg + margin))` (or the unreduced
+per-row values if `reduction=False`).
+
+`distance` selects how the two terms are measured (case-insensitive; anything
+outside the two names below raises `NameError`). **Both branches produce a
+distance** — small means similar — because the hinge above is written for a
+distance:
+
+| `distance` | `dist_*` | Range |
+|---|---|---|
+| `"Euclidean"` (default) | `euclidean_distance(a, b)` | `[0, inf)` |
+| `"cosine"` | `1 - cosine_similarity(a, b)` | `[0, 2]`, `0` when identical |
+
+The `1 -` in the cosine branch is load-bearing: feeding the raw similarity into
+the hinge would invert the objective and push each anchor *away* from its
+positive.

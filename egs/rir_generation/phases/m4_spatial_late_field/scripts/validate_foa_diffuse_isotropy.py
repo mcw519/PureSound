@@ -322,7 +322,7 @@ def _print_scene(result: dict[str, Any]) -> None:
     print(f"\n   band      |{''.join(f'{label:>9}' for label in CHANNEL_LABELS[1:])}"
           f" | max dev")
     print(
-        f"   broadband |"
+        "   broadband |"
         + "".join(f"{value:>+9.2f}" for value in result["pure_diffuse_rel_w_db"][1:])
         + f" | {result['broadband_max_deviation_db']:.2f} dB"
     )

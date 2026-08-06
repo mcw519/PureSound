@@ -154,10 +154,29 @@ Used this way (as `batch_sampler=`) by all three egs mains that build a
 
 ## Class: `SpeakerGenderSampler`
 
-A separate, simpler batch sampler that builds each batch from fixed
-male/female(/other) speaker-id lists in equal halves (or thirds, if an
-"other" list is given) -- `n_spks` must divide evenly across the 2 or 3
-groups. It does not implement the seeded/DDP mechanism above and currently
-has no call sites anywhere in this repo. Whether it stays, changes, or is
-removed is being decided separately; this doc only describes its present
-behavior.
+A separate, simpler batch sampler that yields gender-balanced batches: each
+batch draws `n_spks / 2` speakers from `spk_list_male` and `n_spks / 2` from
+`spk_list_female` (or `n_spks / 3` from each of the three lists when the
+optional `spk_list_other` is supplied, for speakers with missing gender
+metadata), then `n_per` utterances per drawn speaker. `n_spks` must divide
+evenly across the 2 or 3 groups -- asserted in `__init__`. `__len__` is
+`total_batch`.
+
+```python
+SpeakerGenderSampler(
+    total_batch: int,
+    n_spks: int,
+    n_per: int,
+    spk_list_male: List,
+    spk_list_female: List,
+    spk_list_other: Optional[List] = None,
+)
+```
+
+It does not implement the seeded/DDP `item_seed` mechanism that
+[`SpeakerSampler`](#class-speakersampler) does, and it has no call site in
+this repo today. It is kept as a library asset: it pairs with the
+`--utt2gender_path` gender-metadata path in the `prepare_metafile.py` scripts
+(`egs/noise_suppression`, `egs/target_speaker_extraction`,
+`egs/speaker_embedding`), which is what produces the per-speaker gender lists
+this sampler consumes.

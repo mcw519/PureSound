@@ -202,36 +202,43 @@ MovingAverage1D(
 ## Function: `spectral_compression`
 
 ```python
-spectral_compression(x: Tensor, alpha: float = 0.3, dim: int = 1) -> Tensor
+spectral_compression(x: Tensor, alpha: float = 0.3, dim: int = 1, eps: float = 1e-8) -> Tensor
 ```
 
-原意是做保留相位的 power-law magnitude 壓縮:沿 `dim` 把 `x` 拆成
-實部/虛部,算出 `mag = sqrt(re**2+im**2+1e-8)`,取 `alpha` 次方,
-再與原本的相位組回一個 complex tensor。
+保留相位的 power-law magnitude 壓縮,也就是 `|X|**alpha * exp(j*angle(X))`,
+並且以實數 backbone 使用的「實部/虛部疊放」排列來計算與回傳:
 
-> **已驗證的 bug:** 相位重組那行寫的是
-> `mag.pow(alpha) * torch.exp(1j * torch.angle(torch.atan2(_im, _re)))`。
-> `torch.atan2(_im, _re)` 本身**已經是**相位角(一個實數 tensor);外面
-> 多套的 `torch.angle(...)` 接著又對*這個實數*取角度,而任何實數的
-> `torch.angle` 只會是 `0`(正數)或 `π`(負數)——把真正的相位壓縮成一個
-> 二元的正負號,其餘資訊全部遺失。已實測驗證:照原樣重建出來的結果
-> **不會**符合正確、保留相位的重建(`torch.allclose` 為 `False`;
-> 輸出的虛部幾乎全部是 0)。推測原本想寫的應該是
-> `torch.exp(1j * phase)`,不需要多餘的 `torch.angle(...)`。
->
-> **目前是無效狀態,本次未修正:** `DPARNblock2D` / `DPRNNblock2D` 都把
-> 這個呼叫包在建構子的 `spectral_compress: bool = False` 旗標之後,
-> 且 `egs/` 底下**每一個**設定到這個旗標的 recipe 都明確寫
-> `spectral_compress: False`——所以這個 bug 目前不會影響任何已訓練或
-> 部署的 model。也沒有任何測試涵蓋 `spectral_compress=True`。已另外
-> 標記出來待修,本次文件工作不處理。
+```python
+_re, _im = torch.chunk(x, 2, dim=dim)
+mag = (_re.pow(2) + _im.pow(2) + eps).sqrt()
+scale = mag.pow(alpha - 1.0)
+return torch.cat([_re * scale, _im * scale], dim=dim)
+```
+
+相位的保留方式是把實部與虛部同時乘上 `|X|**(alpha-1)`,而不是用
+`atan2`/`cos`/`sin` 重建。兩者是同一個恆等式(`cos(angle) == re/|X|`),但直接
+縮放的版本大約快 2 倍(不需要超越函數)、避開角度空間的來回轉換,而且在靜音
+bin 上才是正確的:`atan2(0, 0)` 等於 `0`,所以三角函數的寫法會對每個全零的
+bin 吐出一個多餘的 `|X|**alpha` 實部,而直接縮放的版本回傳的正是 0。
+
+回傳「實部/虛部疊放」而不是一個 `torch.complex64` tensor,正是它能被呼叫它的
+那些 Conv2d backbone 直接吃下去的原因——輸出的 shape *以及* 實數 dtype 都跟
+輸入一模一樣,所以可以當成前處理步驟直接插進去,下游完全不用改。
 
 **Parameters:**
 - `x` – 實部/虛部沿 `dim` 疊在一起(例如 `dim=1` 時為 `[N, 2*C, T, ...]`)
-- `alpha` – 壓縮指數
+- `alpha` – 壓縮指數。`alpha=1.0` 等同 identity(magnitude 取一次方,原本的
+  相位也被完整還原)
 - `dim` – 實部/虛部疊放的軸
+- `eps` – magnitude 的下限,讓 `mag.pow(alpha - 1.0)` 在原點附近維持有限值
 
-**Returns:** 一個 `torch.complex64` tensor,沿 `dim` 的大小是 `x` 的一半。
+**Returns:** 一個實數 tensor,shape 與 dtype 都跟 `x` 相同。其 magnitude 依循
+`|X|**alpha`,相位則維持不變。
+
+> **目前在所有地方都是關著的。** `DPARNblock2D` / `DPRNNblock2D` 都把這個呼叫
+> 包在建構子的 `spectral_compress: bool = False` 旗標之後,且 `egs/` 底下
+> **每一個**設定到這個旗標的 recipe 都明確寫 `spectral_compress: False`。
+> 這個 repo 裡沒有任何已訓練或部署的 model 會走到這條路徑。
 
 ---
 
@@ -277,7 +284,7 @@ for ASR," Interspeech 2019。
 `specaug_args` 設定字典建構)。`FiLM`/`SplitMerge` 驅動 `DPRNN` 的
 dual-path 分段(`puresound/nnet/dprnn.py`);`FiLM`/`Gate` 驅動 `SkiM`
 的條件化(`puresound/nnet/skim.py`);`spectral_compression` 有接到
-`DPARN`/`DPCRN`,但目前在所有地方都無法被觸發(見上方的 bug 說明)。
+`DPARN`/`DPCRN`,但在每一份 config 裡都是關著的(見上方的旗標說明)。
 
 ## Example
 

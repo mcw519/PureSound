@@ -57,6 +57,7 @@ hybrid-rir-gpu = [
 [dependency-groups]
 dev = [
   "pytest",
+  "pytest-xdist>=3.8.0",
   "ruff",
 ]
 
@@ -79,6 +80,7 @@ markers = [
   "nnet",
   "backbone",
   "audio_func",
+  "slow: heavy physics/bank tests; excluded by `run_repo_checks.py --suite standard`",
 ]
 filterwarnings = [
   "ignore:Call to deprecated create function FieldDescriptor",
@@ -86,6 +88,7 @@ filterwarnings = [
   "ignore:Call to deprecated create function EnumDescriptor",
   "ignore:Call to deprecated create function EnumValueDescriptor",
   "ignore:Call to deprecated create function FileDescriptor",
+  "ignore:Call to deprecated create function OneofDescriptor",
   "ignore:`np.object` is a deprecated alias for the builtin `object`",
   "ignore:`np.bool` is a deprecated alias for the builtin `bool`",
   "ignore::DeprecationWarning",

@@ -1,10 +1,14 @@
-import torch
 import pytest
+import torch
 
 from egs.rir_generation.phases.m6_bank.scripts import validate_m6_variant_release
 from puresound.audio.augmentation import AudioEffectAugmentor
 from puresound.audio.rir.bank.loader import PreGeneratedReleaseBank
 from puresound.task.ns import NoiseSuppressionCollateFunc, NoiseSuppressionDataset
+
+# End-to-end evidence-chain validator: builds, QCs and releases a real bank, so it
+# runs for tens of seconds. Excluded by `run_repo_checks.py --suite standard`.
+pytestmark = pytest.mark.slow
 
 
 def test_augmentor_consumes_m6_release_recipe_without_split_leakage(tmp_path):

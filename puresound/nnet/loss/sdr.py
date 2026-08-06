@@ -76,7 +76,10 @@ class SDRLoss(nn.Module):
         ):
             raise NameError
 
-        if loss_func == "sisnr" or loss_func in "sdsdr" or loss_func == "sasisdr":
+        # Scale-invariant modes project the estimate onto the target before
+        # measuring error. `sdsdr` also needs the projection (it keeps the
+        # scale error in the noise term instead of discarding it).
+        if loss_func in ("sisnr", "sdsdr", "sasisnr"):
             scaled = True
         else:
             scaled = False

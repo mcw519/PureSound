@@ -189,8 +189,18 @@ TripletLoss(margin: float = 0.0, add_norm: bool = True, distance: str = "Euclide
 ```
 
 `forward(x, reduction=True)` 把 `x` 沿 dim 1 拆成 anchor/positive/negative,
-視需要做 L2-normalize（`add_norm`),再用 `euclidean_distance` 或
-`cosine_similarity`（由 `distance` 選擇,不分大小寫;其他字串會丟出
-`NameError`)算出 `dist_pos` / `dist_neg`,回傳
+視需要做 L2-normalize（`add_norm`),算出 `dist_pos` / `dist_neg`,回傳
 `mean(max(0, dist_pos - dist_neg + margin))`（若 `reduction=False` 則回傳
 未經 reduce 的逐 row 結果)。
+
+`distance` 決定這兩項要怎麼量（不分大小寫;不在下面兩個名稱之內的字串會丟出
+`NameError`)。**兩條分支算出來的都是距離**——數值小代表相似——因為上面那個
+hinge 本來就是照距離寫的:
+
+| `distance` | `dist_*` | 值域 |
+|---|---|---|
+| `"Euclidean"`（預設) | `euclidean_distance(a, b)` | `[0, inf)` |
+| `"cosine"` | `1 - cosine_similarity(a, b)` | `[0, 2]`,完全相同時為 `0` |
+
+cosine 分支裡的 `1 -` 是關鍵:若把原始的 similarity 直接餵進 hinge,會把目標
+反過來,變成把 anchor 往「遠離」它的 positive 的方向推。

@@ -63,7 +63,12 @@ def validate_streaming_dparn_config(config: dict[str, Any]) -> dict[str, Any]:
 
     _require(backbone.get("type") == "DPARN", "streaming DPARN requires a DPARN backbone")
     _require(backbone_args.get("input_dim") == 256, "streaming DPARN requires input_dim=256")
-    _require(backbone_args.get("norm_type") in {"cLN", "iLN"}, "streaming DPARN requires causal/instant normalization")
+    # bN2d streams too: at eval BatchNorm2d uses fixed running statistics, so it
+    # degenerates to a per-frame affine. DPCRN's validator already accepts it and
+    # both share one runtime (StreamingDpcrnOrt is StreamingDparnOrt), so keeping
+    # DPARN stricter only rejected configs that would have exported correctly --
+    # including egs/noise_suppression/config/dparn.yaml, the repo's only DPARN recipe.
+    _require(backbone_args.get("norm_type") in {"cLN", "iLN", "bN2d"}, "streaming DPARN requires cLN/iLN/bN2d normalization")
     _require(not backbone_args.get("skip_conv", False), "streaming DPARN currently expects skip_conv=False")
     _require(all(v == 1 for v in _as_list(backbone_args.get("stride_t", []))), "streaming DPARN requires stride_t=1 for every down layer")
     _require(all(v == 1 for v in _as_list(backbone_args.get("dilation_t", []))), "streaming DPARN requires dilation_t=1 for every down layer")

@@ -8,7 +8,7 @@ Moved out of ``puresound.audio.rir.path_events`` in R3 of
 from __future__ import annotations
 
 import math
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable
 from dataclasses import replace
 from typing import Any
 
@@ -19,7 +19,7 @@ from puresound.audio.rir.path_events.schema import (
     PathEventSet,
     _vector3,
 )
-from puresound.audio.rir.scene.schema import SHOEBOX_BOUNDARIES, SceneObject
+from puresound.audio.rir.scene.schema import SceneObject
 
 
 OBJECT_VISIBILITY_POLICY = (

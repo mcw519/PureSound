@@ -16,7 +16,6 @@ from scipy.signal import csd, welch
 
 from puresound.audio.rir.metrics.core import _as_mono_numpy, direct_sample
 from puresound.audio.rir.metrics.spectral import (
-    DEFAULT_OCTAVE_CENTERS_HZ,
     octave_band_rir,
     valid_octave_centers,
 )

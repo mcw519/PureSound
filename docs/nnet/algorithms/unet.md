@@ -4,10 +4,13 @@
 
 Status: *library* (see [nnet index](../index.md)) for direct use, but this
 module is also the **chassis** [DPCRN](dpcrn.md) and [DPARN](dparn.md)
-subclass — both active — and `UnetTcn` is config-reachable
-(`getattr(nnet, "UnetTcn")`) with its own forward smoke test
-(`test/test_backbone.py::test_unet_tcn_backbone`). The file has three
-classes; only `Unet` and `UnetTcn` are exported.
+subclass — both active. All three classes here (`Unet`, `UnetTcn`,
+`UnetFsmn`) are exported from `puresound/nnet/__init__.py` and therefore
+config-reachable the way recipes resolve backbones
+(`getattr(nnet, "UnetTcn")`), which
+`test/test_backbone.py::test_backbone_reachable_from_config` asserts for each
+of them; `UnetTcn` additionally has its own forward smoke test
+(`test/test_backbone.py::test_unet_tcn_backbone`).
 
 ## Class: `Unet`
 
@@ -148,17 +151,17 @@ the base class (`multi_output` is not exposed — always `1`, see above);
 [`ConvTasNet`](conv_tasnet.md) (same assert that `len(tcn_with_embed) ==
 per_tcn_stack`, same dilation schedule), operating on
 `temporal_input_dim = (input_dim after all stride_f downsampling) *
-channels[-1]` channels. Two parameters worth flagging:
+channels[-1]` channels. One parameter worth flagging:
 - `input_type` is accepted but **never stored or read anywhere** in the
   class — passing anything here has zero effect.
-- **`UnetTcn.forward` never calls `self.input_norm`** — the `iLN` layer
-  `Unet.__init__` builds is constructed and holds parameters, but this
-  subclass's own `forward` override skips straight from the input
-  unsqueeze to the CNN-down loop. `DPCRN` and `DPARN` (RNN-bottleneck
-  subclasses) do call `input_norm`; `UnetTcn` and `UnetFsmn` (TCN/FSMN
-  bottleneck subclasses) both do not. Whether that's intentional is not
-  documented anywhere in source — treat `UnetTcn`'s (and `UnetFsmn`'s)
-  input as effectively un-normalized.
+
+> **Fixed in this pass:** `UnetTcn.forward` (and `UnetFsmn.forward`) used to
+> skip straight from the input unsqueeze to the CNN-down loop, never calling
+> the `self.input_norm` `iLN` that `Unet.__init__` builds — so the layer sat
+> in checkpoints holding parameters that were never applied, unlike `Unet` /
+> `DPCRN` / `DPARN`, which all call it. Both subclasses now apply it, matching
+> the rest of the family. No config in this repo uses any Unet variant, so no
+> checkpoint depended on the old behavior.
 
 `transpose_delay` (unlike base `Unet`) is a real, working option here:
 `forward` crops the *leading* `transpose_t_size - 1` frames when `True`,
@@ -174,10 +177,10 @@ forward(x: Tensor, dvec: Optional[Tensor] = None) -> Tensor
 # returns: [N, CH, C, T]
 ```
 
-CNN-down → flatten `(CH, C)` into one channel axis → `repeat_tcn` stacks of
-`per_tcn_stack` TCN/GatedTCN blocks (conditioned on `dvec` per
-`tcn_with_embed`) → unflatten back to `(CH, C)` → CNN-up (skip-concat or
-`skip_conv`, `transpose_delay`-aware cropping).
+`input_norm` → CNN-down → flatten `(CH, C)` into one channel axis →
+`repeat_tcn` stacks of `per_tcn_stack` TCN/GatedTCN blocks (conditioned on
+`dvec` per `tcn_with_embed`) → unflatten back to `(CH, C)` → CNN-up
+(skip-concat or `skip_conv`, `transpose_delay`-aware cropping).
 
 ### `get_args` property
 
@@ -208,11 +211,76 @@ y = model(torch.rand(1, 2, 256, 100), torch.rand(1, 192))  # [1, 2, 256, 100]
 
 ## Class: `UnetFsmn`
 
-A third subclass exists in this file — `Unet` with the bottleneck replaced
-by a stack of `FSMN`/`ConditionFSMN` layers (see [lobe/rnn](../lobe/rnn.md))
-instead of TCN blocks. It is **currently unexported** —
-`puresound/nnet/__init__.py` imports only `Unet` and `UnetTcn` from this
-module, so `UnetFsmn` is not config-reachable (`getattr(nnet, "UnetFsmn")`
-fails) and has no test coverage. A separate cleanup task is tracking
-whether to export it or delete it; no further documentation is provided
-here pending that decision.
+`Unet` with the bottleneck replaced by a stack of `FSMN`/`ConditionFSMN`
+layers (see [lobe/rnn](../lobe/rnn.md)) instead of TCN blocks — the same
+chassis as `UnetTcn`, swapping the temporal-modeling core for FSMN's
+feedforward memory blocks. Status *library*: exported and config-reachable,
+but no recipe in this repo currently builds one.
+
+```python
+UnetFsmn(
+    embed_dim: int = 0,
+    embed_norm: bool = False,
+    input_dim: int = 512,
+    activation_type: str = "PReLU",
+    norm_type: str = "bN2d",
+    dropout: float = 0.05,
+    channels: Tuple = (1, 1, 8, 8, 16, 16),
+    transpose_t_size: int = 2,
+    transpose_delay: bool = False,
+    skip_conv: bool = False,
+    kernel_t: Tuple = (5, 1, 9, 1, 1),
+    stride_t: Tuple = (1, 1, 1, 1, 1),
+    dilation_t: Tuple = (1, 1, 1, 1, 1),
+    kernel_f: Tuple = (1, 5, 1, 5, 1),
+    stride_f: Tuple = (1, 4, 1, 4, 1),
+    dilation_f: Tuple = (1, 1, 1, 1, 1),
+    delay: Tuple = (0, 0, 1, 0, 0),
+    fsmn_l_context: int = 3,
+    fsmn_r_context: int = 0,
+    fsmn_dim: int = 256,
+    num_fsmn: int = 8,
+    fsmn_with_embed: List = [1, 1, 1, 1, 1, 1, 1, 1],
+    fsmn_norm: str = "gLN",
+    use_film: bool = True,
+)
+```
+
+Everything from `input_dim` through `delay` behaves exactly as in `Unet`.
+The FSMN-specific parameters:
+- `num_fsmn` – how many FSMN blocks the bottleneck stacks; asserted equal to
+  `len(fsmn_with_embed)`
+- `fsmn_with_embed` – per-block flag; `1` builds a `ConditionFSMN` (takes
+  `dvec`), `0` builds a plain `FSMN`
+- `fsmn_l_context` / `fsmn_r_context` – left/right memory taps. `fsmn_r_context=0`
+  (the default) keeps the block causal
+- `fsmn_dim` – the FSMN projection width; input/output width is
+  `temporal_input_dim`, derived like `UnetTcn`'s from the post-`stride_f`
+  frequency resolution times `channels[-1]`
+- `fsmn_norm` – norm type inside the FSMN blocks
+- `use_film` – `ConditionFSMN` conditioning style: FiLM when `True`, otherwise
+  the concat-based path (see [lobe/rnn](../lobe/rnn.md))
+
+### `forward(x, dvec=None) -> Tensor`
+
+```python
+forward(x: Tensor, dvec: Optional[Tensor] = None) -> Tensor
+# x:    [N, CH, C, T] or [N, C, T]
+# dvec: [N, embed_dim], required only if any fsmn_with_embed[i] == 1
+# returns: [N, CH, C, T]
+```
+
+Note the default `fsmn_with_embed` is all ones, so **a `dvec` is required
+unless you override it** — this is a conditional (speaker-aware) backbone by
+default, like `UnetTcn` with `embed_dim > 0`. Calling `forward(x)` with no
+`dvec` fails inside `ConditionFSMN` rather than at the call site.
+
+`input_norm` → CNN-down → flatten `(CH, C)` into one channel axis → the FSMN
+stack, threading a `memory` tensor from block to block → unflatten back to
+`(CH, C)` → CNN-up (skip-concat or `skip_conv`, `transpose_delay`-aware
+cropping). As in `UnetTcn`, `transpose_delay=True` crops the *leading*
+`transpose_t_size - 1` frames instead of the trailing ones.
+
+### `get_args` property
+
+Complete — every constructor argument is stored and returned.

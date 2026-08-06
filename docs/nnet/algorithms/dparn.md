@@ -99,8 +99,7 @@ the CNN down/up stack. DPARN-specific:
 - `n_dparn_block` – number of stacked `DPARNblock2D`s at the bottleneck
   (DPCRN hardcodes exactly 2; DPARN makes this configurable)
 - `rnn_hidden` – `hidden_size` passed to every `DPARNblock2D`
-- `nhead` – `nhead` passed to every `DPARNblock2D` (see note above — this
-  value is **not** stored on `self`, only used to build the blocks)
+- `nhead` – `nhead` passed to every `DPARNblock2D`
 - `spectral_compress` – if `True`, applies
   `spectral_compression(x, alpha=0.3, dim=1)` (magnitude raised to the power
   `alpha`, phase preserved — see [lobe/trivial](../lobe/trivial.md)) to the
@@ -121,13 +120,15 @@ skip connections) → `n_dparn_block` stacked `DPARNblock2D`s → CNN-up
 
 ### `get_args` property
 
-Returns a `Dict` of constructor arguments for checkpoint reconstruction —
-**but it omits `nhead` and `spectral_compress`** (both are real constructor
-parameters; `spectral_compress` is stored on `self` yet still left out of
-the dict, and `nhead` is never stored on `self` at all, so it could not be
-recovered even if included). Rebuilding a `DPARN` from
-`DPARN(**model.get_args)` silently resets `nhead` to its default (`1`) and
-drops whatever `spectral_compress` was.
+Returns a `Dict` of constructor arguments for checkpoint reconstruction.
+Complete — every constructor parameter, including `nhead` and
+`spectral_compress`, is stored on `self` and returned, so
+`DPARN(**model.get_args)` rebuilds an architecturally identical model.
+
+> **Fixed in this pass:** `get_args` used to omit both `nhead` (which was
+> never stored on `self` at all, so it could not have been recovered even if
+> listed) and `spectral_compress`. Rebuilding from saved args silently reset
+> `nhead` to its default `1` and dropped whatever `spectral_compress` was.
 
 ### Example (mirrors `test/test_backbone.py::test_dparn_backbone`)
 

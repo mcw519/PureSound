@@ -150,6 +150,7 @@ class DPARN(Unet):
         self.transpose_delay = transpose_delay
         self.n_dparn_block = n_dparn_block
         self.rnn_hidden = rnn_hidden
+        self.nhead = nhead
         self.spectral_compress = spectral_compress
 
         # DPRNN block
@@ -234,4 +235,6 @@ class DPARN(Unet):
             "delay": self.delay,
             "n_dparn_block": self.n_dparn_block,
             "rnn_hidden": self.rnn_hidden,
+            "nhead": self.nhead,
+            "spectral_compress": self.spectral_compress,
         }

@@ -1,6 +1,7 @@
 from pathlib import Path
 
 import numpy as np
+import pytest
 import torch
 
 from puresound.nnet.masker import Masker
@@ -91,6 +92,7 @@ def _offline_vs_streaming_rel(config: str, seconds: float = 4.0):
     return best
 
 
+@pytest.mark.slow  # full offline-vs-ORT comparison; ~2.5 min each
 def test_dpcrn_streaming_matches_offline_for_causal_model():
     """Causal recipe (delay=[0,0,0]): per-frame streaming == offline with ZERO net
     delay. Guards the block-step port and the transpose-conv bias fix in _up_step."""
@@ -99,6 +101,7 @@ def test_dpcrn_streaming_matches_offline_for_causal_model():
     assert rel < 1e-3, f"causal streaming != offline (rel={rel:.3e})"
 
 
+@pytest.mark.slow  # full offline-vs-ORT comparison; ~2.5 min each
 def test_dpcrn_streaming_matches_offline_for_lookahead_model():
     """Look-ahead recipe (delay=[1,1,1], 3-frame): per-frame streaming reproduces
     offline exactly, delayed by the bottleneck latency (D=3). Guards the future

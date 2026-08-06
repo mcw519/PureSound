@@ -5,9 +5,12 @@ English version: [unet.md](unet.md)
 Status: *library*（見 [nnet index](../index.zh-TW.md)）——這是就直接使用而言的
 狀態，但這個 module 同時也是 [DPCRN](dpcrn.zh-TW.md) 跟
 [DPARN](dparn.zh-TW.md) 繼承的**底盤（chassis）**——這兩個都是 active 狀態——
-而 `UnetTcn` 本身也是 config-reachable 的（`getattr(nnet, "UnetTcn")`），
-有自己的 forward smoke test（`test/test_backbone.py::test_unet_tcn_backbone`）。
-這個檔案裡有三個 class；只有 `Unet` 跟 `UnetTcn` 有被 export。
+這個檔案裡的三個 class（`Unet`、`UnetTcn`、`UnetFsmn`）全都有從
+`puresound/nnet/__init__.py` export 出來，因此都能用 recipe 解析 backbone 的
+方式取得（`getattr(nnet, "UnetTcn")`），這點由
+`test/test_backbone.py::test_backbone_reachable_from_config` 對三者逐一驗證；
+`UnetTcn` 另外還有自己的 forward smoke test
+（`test/test_backbone.py::test_unet_tcn_backbone`）。
 
 ## Class: `Unet`
 
@@ -143,16 +146,16 @@ UnetTcn(
 TCN stack（一樣會 assert `len(tcn_with_embed) == per_tcn_stack`，dilation
 的排程也一樣），作用在
 `temporal_input_dim = (input_dim 經過所有 stride_f downsample 之後) *
-channels[-1]` 個 channel 上。有兩個參數值得特別提醒：
+channels[-1]` 個 channel 上。有一個參數值得特別提醒：
 - `input_type` 雖然接受這個參數，但這個 class **完全沒有任何地方存它或讀
   它**——傳什麼值進去都完全沒有效果。
-- **`UnetTcn.forward` 從來不會呼叫 `self.input_norm`**——`Unet.__init__`
-  建的那個 `iLN` layer 確實存在也持有參數，但這個 subclass 自己覆寫的
-  `forward` 是直接從 input unsqueeze 跳到 CNN-down 迴圈，中間完全跳過它。
-  `DPCRN` 跟 `DPARN`（RNN-bottleneck 的 subclass）都會呼叫
-  `input_norm`；`UnetTcn` 跟 `UnetFsmn`（TCN/FSMN-bottleneck 的 subclass）
-  則兩個都不會。這是不是故意的，原始碼裡完全沒有任何說明——先當作
-  `UnetTcn`（還有 `UnetFsmn`）的輸入實際上是沒有做過 normalize 的。
+
+> **本次已修正：** `UnetTcn.forward`（以及 `UnetFsmn.forward`）先前是直接從
+> input unsqueeze 跳到 CNN-down 迴圈，從來不會呼叫 `Unet.__init__` 建出來的
+> `self.input_norm`（一個 `iLN`）——所以那層一直帶著參數躺在 checkpoint 裡卻
+> 從未被套用，跟 `Unet` / `DPCRN` / `DPARN` 都會呼叫它的行為不一致。現在這兩個
+> subclass 都會套用它，與家族其餘成員一致。這個 repo 裡沒有任何 config 使用
+> 任何 Unet 變體，所以不會有 checkpoint 依賴舊行為。
 
 `transpose_delay`（跟 base `Unet` 不一樣）在這裡是真的有作用的選項：
 `transpose_delay=True` 時，`forward` 會裁掉*前段*的 `transpose_t_size - 1`
@@ -168,8 +171,8 @@ forward(x: Tensor, dvec: Optional[Tensor] = None) -> Tensor
 # returns: [N, CH, C, T]
 ```
 
-CNN-down → 把 `(CH, C)` 攤平成單一 channel 軸 → `repeat_tcn` 組、每組
-`per_tcn_stack` 個 TCN/GatedTCN block（依 `tcn_with_embed` 決定是否用
+`input_norm` → CNN-down → 把 `(CH, C)` 攤平成單一 channel 軸 → `repeat_tcn`
+組、每組 `per_tcn_stack` 個 TCN/GatedTCN block（依 `tcn_with_embed` 決定是否用
 `dvec` 條件化）→ 展開回 `(CH, C)` → CNN-up（skip-concat 或 `skip_conv`，
 裁切時會考慮 `transpose_delay`）。
 
@@ -201,10 +204,74 @@ y = model(torch.rand(1, 2, 256, 100), torch.rand(1, 192))  # [1, 2, 256, 100]
 
 ## Class: `UnetFsmn`
 
-這個檔案裡還有第三個 subclass——把 `Unet` 的 bottleneck 換成一疊
-`FSMN`/`ConditionFSMN` layer（見 [lobe/rnn](../lobe/rnn.md)），而不是 TCN
-block。它**目前沒有被 export**——`puresound/nnet/__init__.py` 從這個
-module 只 import 了 `Unet` 跟 `UnetTcn`，所以 `UnetFsmn` 不是
-config-reachable 的（`getattr(nnet, "UnetFsmn")` 會失敗），也完全沒有
-test 覆蓋。另外有一個獨立的清理任務在追蹤到底要把它 export 出來還是直接
-刪掉；在那個決定確定之前，這裡先不寫完整的文件。
+把 `Unet` 的 bottleneck 換成一疊 `FSMN`/`ConditionFSMN` layer（見
+[lobe/rnn](../lobe/rnn.zh-TW.md)）、而不是 TCN block——底盤跟 `UnetTcn` 相同，
+只是把負責時間建模的核心換成 FSMN 的 feedforward memory block。狀態為
+*library*：有 export、config-reachable，但這個 repo 裡目前沒有任何 recipe
+會建構它。
+
+```python
+UnetFsmn(
+    embed_dim: int = 0,
+    embed_norm: bool = False,
+    input_dim: int = 512,
+    activation_type: str = "PReLU",
+    norm_type: str = "bN2d",
+    dropout: float = 0.05,
+    channels: Tuple = (1, 1, 8, 8, 16, 16),
+    transpose_t_size: int = 2,
+    transpose_delay: bool = False,
+    skip_conv: bool = False,
+    kernel_t: Tuple = (5, 1, 9, 1, 1),
+    stride_t: Tuple = (1, 1, 1, 1, 1),
+    dilation_t: Tuple = (1, 1, 1, 1, 1),
+    kernel_f: Tuple = (1, 5, 1, 5, 1),
+    stride_f: Tuple = (1, 4, 1, 4, 1),
+    dilation_f: Tuple = (1, 1, 1, 1, 1),
+    delay: Tuple = (0, 0, 1, 0, 0),
+    fsmn_l_context: int = 3,
+    fsmn_r_context: int = 0,
+    fsmn_dim: int = 256,
+    num_fsmn: int = 8,
+    fsmn_with_embed: List = [1, 1, 1, 1, 1, 1, 1, 1],
+    fsmn_norm: str = "gLN",
+    use_film: bool = True,
+)
+```
+
+`input_dim` 到 `delay` 這幾個的行為與 `Unet` 完全相同。FSMN 專屬的參數：
+- `num_fsmn` – bottleneck 要疊幾個 FSMN block；會 assert 等於
+  `len(fsmn_with_embed)`
+- `fsmn_with_embed` – 逐 block 的旗標；`1` 建 `ConditionFSMN`（吃 `dvec`），
+  `0` 則建普通的 `FSMN`
+- `fsmn_l_context` / `fsmn_r_context` – 左/右側的 memory tap 數。
+  `fsmn_r_context=0`（預設）會讓 block 保持 causal
+- `fsmn_dim` – FSMN 的投影寬度；輸入/輸出寬度是 `temporal_input_dim`，推導方式
+  與 `UnetTcn` 相同，由經過 `stride_f` 之後的頻率解析度乘上 `channels[-1]` 得到
+- `fsmn_norm` – FSMN block 內部使用的 norm type
+- `use_film` – `ConditionFSMN` 的條件化方式：`True` 用 FiLM，否則走 concat
+  投影的那條路徑（見 [lobe/rnn](../lobe/rnn.zh-TW.md)）
+
+### `forward(x, dvec=None) -> Tensor`
+
+```python
+forward(x: Tensor, dvec: Optional[Tensor] = None) -> Tensor
+# x:    [N, CH, C, T] 或 [N, C, T]
+# dvec: [N, embed_dim]，只有 fsmn_with_embed[i] == 1 時才需要
+# returns: [N, CH, C, T]
+```
+
+注意 `fsmn_with_embed` 的預設值全為 1，因此**除非你自行覆寫，否則一定要傳
+`dvec`** —— 它預設就是一個條件式（speaker-aware）backbone，與
+`embed_dim > 0` 的 `UnetTcn` 同類。若呼叫 `forward(x)` 而不給 `dvec`，錯誤
+會發生在 `ConditionFSMN` 內部，而不是呼叫端。
+
+`input_norm` → CNN-down → 把 `(CH, C)` 攤平成單一 channel 軸 → FSMN stack
+（`memory` tensor 會一路從前一個 block 串到下一個）→ 展開回 `(CH, C)` →
+CNN-up（skip-concat 或 `skip_conv`，裁切時會考慮 `transpose_delay`）。
+跟 `UnetTcn` 一樣，`transpose_delay=True` 時裁掉的是*前段*的
+`transpose_t_size - 1` 個 frame，而不是尾端。
+
+### `get_args` property
+
+完整——每一個 constructor 參數都有存起來並回傳。

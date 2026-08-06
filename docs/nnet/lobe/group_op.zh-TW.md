@@ -126,17 +126,22 @@ GroupedGRU(
 **Parameters:** 與 `GroupedGRULayer` 相同,`h0` 形狀為
 `[num_layers * groups * num_directions, N, hidden_size / groups]`。
 
-> **既有的 bug,本次未修正:** `forward` 呼叫每個內部層時寫的是
-> `x, s = gru(x, h0[...])`,沒有傳入 `return_hidden=True`,所以
-> `gru(...)` 實際上回傳的是單一個 `Tensor`,不是 tuple——`x, s = <Tensor>`
-> 接著會試圖沿著 batch 維度把這個 tensor unpack。對任何不是 2 的
-> batch size,這行會直接拋出 `ValueError`;而 batch size 剛好是 2 時,
-> 這行「表面上」會成功,但其實悄悄丟掉了 batch 軸,幾行之後在
-> channel-shuffle 的 `.permute` 呼叫就會可靠地當掉。已驗證 batch
-> size 1–4 都會出錯。這個 bug 與上面修正的 `droupout` 拼字錯誤無關
-> ——純粹是因為先前光是建構 `GroupedGRULayer` 就會先當掉,所以這個
-> bug 一直沒有機會被碰到。目前 repository 裡沒有任何地方會建構
-> `GroupedGRU`(只有 `GroupedGRULayer` 單獨可用),也沒有任何測試涵蓋它。
+每個疊起來的層都是以 `x, s = gru(x, h0[...], return_hidden=True)` 的形式驅動;
+各層的 hidden state 會被收集起來串接,而 channel shuffle(當 `shuffle=True` 時)
+則在層與層之間執行,最後一層除外。
+
+**Returns:** `x`(`[N, hidden_size, T]`),若 `return_hidden=True` 則回傳
+`(x, outstates)`,其中 `outstates` 是所有層的 hidden state 疊成的
+`[num_layers * groups * num_directions, N, hidden_size / groups]`——與 `h0`
+的排列完全相同,所以可以直接餵回去處理下一個 chunk。
+
+> **本次已修正:** `forward` 先前呼叫內部層時沒有傳入 `return_hidden=True`,
+> 卻仍然以 `x, s = gru(...)` 的形式把結果 unpack。`GroupedGRULayer` 在沒有被
+> 要求回傳 hidden state 時只會回傳單一個 `Tensor`,所以那個 unpack 等於是試圖
+> 沿著 batch 軸把 tensor 拆開——除了 batch size 剛好是 2 以外,任何 batch size
+> 都會拋出 `ValueError`;而 batch size 為 2 時則會悄悄丟掉 batch 軸,幾行之後
+> 在 channel-shuffle 的 `.permute` 當掉。現在兩條呼叫路徑(`return_hidden`
+> 開與關)都已驗證可正常運作。
 
 ---
 

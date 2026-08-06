@@ -13,7 +13,7 @@ from functools import lru_cache
 from typing import Any, Iterable, Optional
 
 import numpy as np
-from scipy.signal import butter, sosfilt, sosfiltfilt
+from scipy.signal import butter, sosfilt
 
 from puresound.audio.rir.metrics.core import _as_mono_numpy
 

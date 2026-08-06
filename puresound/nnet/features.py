@@ -171,7 +171,7 @@ class FeatureEncoder(nn.Module):
 
         means = x.mean(dim=reduce_dim, keepdim=True)
         std = x.std(dim=reduce_dim, keepdim=True)
-        x = (x - means) / (std + eps)
+        return (x - means) / (std + eps)
 
     def forward(self, x: torch.Tensor):
         """
@@ -196,13 +196,17 @@ class FeatureEncoder(nn.Module):
         if feats_for_enhanced.dim() == 3:
             feats_for_enhanced = feats_for_enhanced.unsqueeze(1)  # [N, 1, C, T]
 
+        # Only the backbone input is normalized; feats_for_enhanced keeps its
+        # original scale because the predicted mask is applied back onto it.
         if self.normalized_mode is not None:
             feats = self._apply_normalization(x=feats_for_enhanced)
+        else:
+            feats = feats_for_enhanced
 
         if self.include_specaug:
-            feats = self.specaug(feats_for_enhanced)
+            feats = self.specaug(feats)
         else:
-            feats = feats_for_enhanced.clone()
+            feats = feats.clone()
 
         if self.feats_type == "shrink_channel":
             feats = self.transform(feats)

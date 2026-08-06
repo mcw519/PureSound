@@ -705,9 +705,11 @@ class TargetSpeakerExtractDataset(DynamicBaseDataset):
 
             added_noise = added_noise[..., : self.training_sample_length]
 
-        # Warp target speech to zeros
+        # Warp target speech to zeros. The speaker id stays untouched: it is
+        # still needed as a `spk2idx` key below (and this line used to assign
+        # over it, making every inactive-target row raise there).
         if inactive_target_speaker is not None:
-            target_speaker = torch.zeros_like(target_speech)
+            target_speech = torch.zeros_like(target_speech)
 
         audio_sr = if_none_else(self.target_sr, self.ori_audio_sr)
         if inactive_target_speaker is not None:

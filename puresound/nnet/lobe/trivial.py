@@ -295,14 +295,27 @@ class MovingAverage1D(nn.Module):
         return out
 
 
-def spectral_compression(x: torch.Tensor, alpha: float = 0.3, dim: int = 1):
-    _re, _im = torch.chunk(x, 2, dim=dim)
-    mag = _re.pow(2) + _im.pow(2)
-    mag = (mag + 1e-8).sqrt()
-    mag = mag.pow(alpha)
-    phase = torch.atan2(_im + 0.0, _re)
+def spectral_compression(
+    x: torch.Tensor, alpha: float = 0.3, dim: int = 1, eps: float = 1e-8
+) -> torch.Tensor:
+    """Power-law compress magnitude while preserving phase.
 
-    return mag * torch.exp(1j * torch.angle(phase))
+    ``x`` carries real and imaginary parts stacked along ``dim`` (each half is
+    one part). Returns ``|X|**alpha * exp(j*angle(X))`` split back into the
+    same real/imaginary layout, so the result keeps the input's shape and dtype
+    and stays usable by the real-valued backbones that call this.
+
+    Phase is preserved by scaling both parts by ``|X|**(alpha-1)`` rather than
+    rebuilding them through ``atan2``/``cos``/``sin``. That is the same
+    identity but avoids the round trip through angle space, which is ~2x
+    slower and — because ``atan2(0, 0)`` is ``0`` — would emit a spurious
+    ``|X|**alpha`` real part for every all-zero (silent) bin.
+    """
+    _re, _im = torch.chunk(x, 2, dim=dim)
+    mag = (_re.pow(2) + _im.pow(2) + eps).sqrt()
+    scale = mag.pow(alpha - 1.0)
+
+    return torch.cat([_re * scale, _im * scale], dim=dim)
 
 
 class SpecAugment(nn.Module):

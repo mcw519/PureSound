@@ -411,8 +411,12 @@ class TripletLoss(nn.Module):
             dist_neg = self.euclidean_distance(x_anchor, x_neg)
 
         elif self.distance.lower() == "cosine":
-            dist_pos = self.cosine_similarity(x_anchor, x_pos)
-            dist_neg = self.cosine_similarity(x_anchor, x_neg)
+            # The hinge below is written for a distance (small = similar), so
+            # the similarity has to be converted; feeding cosine similarity in
+            # directly would invert the objective and push the anchor away
+            # from its positive. 1 - cos lands in [0, 2], 0 when identical.
+            dist_pos = 1.0 - self.cosine_similarity(x_anchor, x_pos)
+            dist_neg = 1.0 - self.cosine_similarity(x_anchor, x_neg)
 
         else:
             raise NameError

@@ -153,41 +153,28 @@ arguments（見「Config usage」)。以下是從目前原始碼追出來的預�
 |---|---|---|---|---|
 | `sisnr` | `True` | `False` | `False` | `None` |
 | `sdsdr` | `True` | `True` | `False` | `None` |
-| `sdr` | `True` ¹ | `False` | `False` | `None` |
+| `sdr` | `False` | `False` | `False` | `None` |
 | `tsdr` | `False` | `False` | `False` | `30` |
 | `tsdr50` | `False` | `False` | `False` | `50` |
 | `sasdr` | `False` | `False` | `True` | `None` |
-| `sasisnr` | `False` ¹ | `False` | `True` | `None` |
+| `sasisnr` | `True` | `False` | `True` | `None` |
 | `satsdr` | `False` | `False` | `True` | `30` |
 
-¹ **已知的小瑕疵,另案追蹤中**——不在這次文件整理裡修。`init_mode` 是這樣
-決定 `scaled` 的:
+`loss_func` 只要不在這八個名稱之內,在任何 flag 被決定之前就會先 raise
+`NameError`。
+
+`scaled` 這一欄只有一條規則——scale-invariant 的那幾種模式會拿到 `True`:
 
 ```python
-if loss_func == "sisnr" or loss_func in "sdsdr" or loss_func == "sasisdr":
+if loss_func in ("sisnr", "sdsdr", "sasisnr"):
     scaled = True
 ```
 
-這一行裡有兩件事跟名字暗示的不一樣,而且兩者都出在同一行上:
-
-- `loss_func in "sdsdr"` 是一個**寫反的 containment 檢查**:Python 會把它
-  讀成「字串 `loss_func` 是不是字面字串 `'sdsdr'` 的子字串」,而不是
-  「`loss_func` 是否等於 `'sdsdr'`」。因為 `"sdr"` 剛好是 `"sdsdr"` 的子字串
-  （`"sdsdr"[2:5] == "sdr"`),所以 `sdr` 這個 preset 也會被悄悄設成
-  `scaled=True`——結果就是現在 `SDRLoss.init_mode("sdr")` 跟
-  `SDRLoss.init_mode("sisnr")` 建出來的是一模一樣的物件,而不是讓 `"sdr"`
-  成為一個單純、非 scale-invariant 的 SDR。
-- 第三個判斷式比對的字面字串是 `"sasisdr"`,而不是真正的 mode 名稱
-  `"sasisnr"`（`d`/`n` 兩個字母被寫反了)。`"sasisdr"` 從來就不是一個合法的
-  `loss_func` 值——它不在 `init_mode` 一開始檢查的允許清單裡——所以這個
-  判斷式永遠不會成立,對它原本大概想接住的那個 mode 來說,是一段死代碼。
-  實際效果:`SDRLoss.init_mode("sasisnr")` 拿到的是 `scaled=False`,而不是
-  它名字裡「SI」暗示的 `True`,導致它現在跟 `SDRLoss.init_mode("sasdr")`
-  一模一樣。
-
-這個問題只影響本節說明的 `init_mode(...)` 這個 convenience constructor;
-這裡記錄它,是為了讓上面那張預設組合表不會看起來莫名其妙,而不是把它當成
-刻意設計的行為來介紹。
+`sisnr` 與 `sasisnr` 依定義就是 scale-invariant 的。`sdsdr` 同樣需要那個投影:
+它是把 scale 誤差留在 noise 項裡（`scale_dependent=True` 會讓
+`e_noise = s1 - s2`),而不是把它丟掉,所以仍然得先用投影算出 `s_target`。
+其餘的 `sdr`、`tsdr`、`tsdr50`、`sasdr`、`satsdr` 則都是直接對未經修改的
+reference 做的、單純 scale-dependent 的 SDR。
 
 ### Config usage
 
@@ -207,8 +194,8 @@ loss_func:
 
 這裡用的是原始 constructor 加上明確的 kwargs,`(scaled=False,
 scale_dependent=True)` 這組組合,上面任何一個 `init_mode` preset 都做不出
-來——這個 recipe 的行為並不依賴 `init_mode` 的自動預設值,也就不受它那個
-瑕疵影響。
+來——現役 recipe 一律自己明確傳 `scaled` / `scale_dependent`,所以它們的行為
+從來就不依賴 `init_mode` 的自動預設值。
 
 ## SI-SNR 公式（`scaled=True, scale_dependent=False` 這個情況)
 

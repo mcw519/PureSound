@@ -204,38 +204,48 @@ MovingAverage1D(
 ## Function: `spectral_compression`
 
 ```python
-spectral_compression(x: Tensor, alpha: float = 0.3, dim: int = 1) -> Tensor
+spectral_compression(x: Tensor, alpha: float = 0.3, dim: int = 1, eps: float = 1e-8) -> Tensor
 ```
 
-Intended as power-law magnitude compression with phase preserved: split
-`x` into real/imag halves along `dim`, compute `mag = sqrt(re**2+im**2+1e-8)`,
-raise it to `alpha`, and recombine with the original phase into a complex
-tensor.
+Power-law magnitude compression with phase preserved, i.e.
+`|X|**alpha * exp(j*angle(X))`, computed and returned in the stacked real/imag
+layout the real-valued backbones use:
 
-> **Verified bug:** the phase recombination is
-> `mag.pow(alpha) * torch.exp(1j * torch.angle(torch.atan2(_im, _re)))`.
-> `torch.atan2(_im, _re)` already **is** the phase angle (a real tensor); the
-> extra `torch.angle(...)` around it then takes the angle *of that real
-> number*, which for any real input is only ever `0` (positive) or `π`
-> (negative) — collapsing the true phase to a binary sign and discarding the
-> rest. Verified live: reconstructing with the code as written does **not**
-> match a correct phase-preserving reconstruction (`torch.allclose` is
-> `False`; the output's imaginary part is uniformly ~0). The likely intended
-> line is `torch.exp(1j * phase)`, without the redundant `torch.angle(...)`.
->
-> **Currently inert, not fixed here:** `DPARNblock2D` / `DPRNNblock2D` both
-> gate this call behind a `spectral_compress: bool = False` constructor flag,
-> and **every** recipe config in `egs/` that sets it does so explicitly as
-> `spectral_compress: False` — so this bug does not currently affect any
-> trained or deployed model. No test covers `spectral_compress=True` either.
-> Flagged separately for a fix; out of scope for this documentation pass.
+```python
+_re, _im = torch.chunk(x, 2, dim=dim)
+mag = (_re.pow(2) + _im.pow(2) + eps).sqrt()
+scale = mag.pow(alpha - 1.0)
+return torch.cat([_re * scale, _im * scale], dim=dim)
+```
+
+Phase is preserved by scaling both parts by `|X|**(alpha-1)` rather than
+rebuilding them via `atan2`/`cos`/`sin`. The two are the same identity —
+`cos(angle) == re/|X|` — but the direct form is roughly 2x faster (no
+transcendentals), avoids a round trip through angle space, and is correct on
+silent bins: `atan2(0, 0)` is `0`, so the trigonometric form emits a spurious
+`|X|**alpha` real part for every all-zero bin, which the direct form returns
+as exactly zero.
+
+Returning stacked real/imag rather than a `torch.complex64` tensor is what
+keeps it usable by the Conv2d backbones that call it — the output has the same
+shape *and* the same real dtype as the input, so it can be dropped in as a
+pre-processing step without changing anything downstream.
 
 **Parameters:**
 - `x` – real/imag stacked along `dim` (e.g. `[N, 2*C, T, ...]` if `dim=1`)
-- `alpha` – compression exponent
+- `alpha` – compression exponent. `alpha=1.0` is the identity (magnitude is
+  raised to the first power and the original phase is restored exactly)
 - `dim` – axis the real/imag halves are stacked on
+- `eps` – magnitude floor, keeping `mag.pow(alpha - 1.0)` finite at the origin
 
-**Returns:** a `torch.complex64` tensor, half the size of `x` along `dim`.
+**Returns:** a real tensor with the same shape and dtype as `x`. Its magnitude
+follows `|X|**alpha` and its phase is unchanged.
+
+> **Still gated off everywhere.** `DPARNblock2D` / `DPRNNblock2D` both gate
+> this call behind a `spectral_compress: bool = False` constructor flag, and
+> **every** recipe config in `egs/` that sets it does so explicitly as
+> `spectral_compress: False`. No trained or deployed model in this repo goes
+> through this path.
 
 ---
 
@@ -281,8 +291,7 @@ hoc permutes), `Magnitude`, and `SpecAugment` (constructed from a
 `specaug_args` config dict). `FiLM`/`SplitMerge` drive `DPRNN`'s dual-path
 chunking (`puresound/nnet/dprnn.py`); `FiLM`/`Gate` drive `SkiM`'s
 conditioning (`puresound/nnet/skim.py`); `spectral_compression` is wired into
-`DPARN`/`DPCRN` but currently unreachable everywhere (see the bug note
-above).
+`DPARN`/`DPCRN` but switched off in every config (see the gating note above).
 
 ## Example
 

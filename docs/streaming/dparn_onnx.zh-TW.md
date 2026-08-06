@@ -22,8 +22,8 @@ DPARN 的 streaming 推論用的是一個逐 feature frame 的 ONNX 模型。Pyt
 - `features.feats_type: complex`、`drop_stft_first_bin: True`、
   `features.trainable: False`、不能開 `include_specaug`
 - `DPARN` backbone，`input_dim: 256`
-- `norm_type` 只能是 `cLN` 或 `iLN` 其中之一（跟 DPCRN 的 validator 不同，
-  這裡**不**接受 `bN2d`——見下方的已知落差）
+- `norm_type` 只能是 `cLN` / `iLN` / `bN2d` 其中之一（`BatchNorm2d` 在
+  `eval()` 模式下套用的是固定的 running stats，因此與 frame 無關）
 - `skip_conv: False`
 - 每個 down layer 的 `stride_t: 1` 且 `dilation_t: 1`
 
@@ -41,15 +41,15 @@ export 成功（附帶警告），也依然能通過 export 當下做的 offline
 utterance（offline）層級的比對，並沒有驗證在只看得到過去的實際 streaming
 緩衝下的行為。
 
-**已知落差**：repo 裡唯一一個真實的 DPARN recipe，
-`egs/noise_suppression/config/dparn.yaml`，目前設的是
-`backbone.backbone_args.norm_type: bN2d`。`bN2d` 不在 DPARN 支援的
-`{cLN, iLN}` 集合裡，所以現在照原樣 export 這份 recipe 會在 `norm_type`
-檢查上丟出 `ValueError`。（DPCRN 的 validator 之所以允許 `bN2d`，是因為
-`BatchNorm2d` 在 `eval()` 模式下是用固定的 running stats、依 `(freq,
-time)` 位置套用，因此不帶跨 frame 的狀態；這個放行從未延伸到 DPARN 的
-validator 上。）如果要把一個 DPARN checkpoint export 成 streaming，得改用
-`norm_type: cLN` 或 `norm_type: iLN` 去訓練或微調。
+**repo 裡的 DPARN recipe 不是 streaming recipe。** 唯一一份真實的 DPARN
+config，`egs/noise_suppression/config/dparn.yaml`，設的是
+`encoder_args.trainable: True` 並加了一個 `freq_eq` 區塊——它按設計就是一份
+offline 的 enhancement recipe，而一個學習出來的前端沒辦法被 export 成這個
+runtime 依賴的固定 STFT（Python 端負責 STFT/iSTFT；ORT 只跑逐 frame 的
+backbone）。export 它會卡在 `encoder.trainable` 這項檢查上，那是檢查照設計
+正常運作，不是缺陷。要把一個 DPARN checkpoint export 成 streaming，請用
+`encoder_args.trainable: False` 加固定的 Hann 前端去訓練；它的
+`norm_type: bN2d` 維持原樣就可以。
 
 ## Export
 

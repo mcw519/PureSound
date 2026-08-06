@@ -19,7 +19,6 @@ from puresound.audio.rir.contracts import HybridRIRConfig
 from puresound.audio.rir.scene.geometry import (
     ArrayLike,
     distance_point_to_polygon,
-    distance_point_to_segment,
     max_room_horizontal_distance_from_point,
     point_in_polygon,
     polygon_area,

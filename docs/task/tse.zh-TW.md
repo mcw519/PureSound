@@ -66,7 +66,7 @@ Constructor 會無條件呼叫 `self.init_enroll_augmentor()`，而它會立刻�
 | `add_noise` | `{used, prob, noise_folder, snr_range, prob_white_noise, white_noise_snr_range}` |
 | `add_reverb` | `{used, prob, rir_folder, target_rir_type}`，或者用一個 `simulator: {used: True, ...}` 子區塊取代 `rir_folder` |
 | `add_volume` | `{used, prob, clipping_prob, clipping_range: {min, max}, perturbed_range}` |
-| `add_inactive_target` | `{used, prob}`——見下方的怪異行為說明 |
+| `add_inactive_target` | `{used, prob}`——見[下方說明](#add_inactive_target) |
 
 （`egs/target_speaker_extraction/config/default_config.yaml` 裡的
 `enroll_speech:` 區塊,就是這個形狀一份完整、可運作的範例。）
@@ -101,50 +101,46 @@ volume -> 最終裁切。
 | Key | 說明 |
 |---|---|
 | `noisy_speech` | `Tensor [1, T]`，完整的 mixture |
-| `clean_speech` | `Tensor [1, T]`，target 的 direct-path 參考訊號（`add_inactive_target` 的 row 請見下方怪異行為說明） |
+| `clean_speech` | `Tensor [1, T]`，target 的 direct-path 參考訊號（`add_inactive_target` 的 row 會是全零，見下方說明） |
 | `enroll_speech` | `Tensor [1, T_enroll]`，獨立增強過的 enrollment 片段 |
 | `added_noise` | 實際加入的背景噪音，或 `None` |
 | `consistency_noise` | `noisy_speech - clean_speech` |
-| `speaker_id` | `self.spk2idx[target_speaker]`（見下方怪異行為說明） |
+| `speaker_id` | `self.spk2idx[target_speaker]`——永遠是真正 enrolled 的那位 speaker，`add_inactive_target` 的 row 也一樣 |
 | `audio_sr`、`audio_length` | 跟 `task.ns` 一樣 |
 | `vad_target` | 只有在設定了 `vad_label_args` 時才會出現 |
 
-### `add_inactive_target`：目前的實際行為（已知的怪異行為，另案追蹤中）
+### `add_inactive_target`
 
 當 `enroll_speech_args["add_inactive_target"]["used"]` 觸發時（機率為
 `prob`），dataset 會把 foreground utterance 換成一位不相干、隨機選出的
 speaker 的語音——用意是模擬「enrolled 的那個聲音在這段裡完全沒有出現」，
-一個原本應該教會模型輸出靜音的負樣本（negative example）。Enrollment 片段
+一個教會模型輸出靜音的負樣本（negative example）。Enrollment 片段
 本身不受影響：它是在這次替換之前,就已經從真正的 `target_speaker` 抓好的。
 
-在 `__getitem__` 的尾端（大約第 709-710 行），原本應該要把參考訊號歸零的
-那一行,實際上寫的是：
+在 `__getitem__` 的尾端，參考 waveform 會被歸零：
 
 ```python
 # Warp target speech to zeros
 if inactive_target_speaker is not None:
-    target_speaker = torch.zeros_like(target_speech)
+    target_speech = torch.zeros_like(target_speech)
 ```
 
-這一行覆寫的是區域變數 `target_speaker`——也就是幾行之後拿去查
-`self.spk2idx[target_speaker]` 的那個 speaker-id 字串——而不是
-`target_speech`（那個原本大概才是想要被歸零的 waveform）。就目前的寫法
-而言，只要這個分支被觸發：
+跟 [`task.ns`](ns.zh-TW.md)（`puresound/task/ns.py`，約第 441 行）是同一套寫法。
+只要這個分支被觸發：
 
-- `vad_target` 仍然會正確地變成全零，因為它是另外透過
-  `create_empty_vad_target(target_speech)` 算出來的，而這個函式只讀
-  `target_speech.shape`，完全不會讀它的數值。
-- 回傳 sample 裡的 `clean_speech` **並沒有**被歸零——它仍然是那位被替換
-  進來的 speaker（經過 reverb／混音處理後）的語音，所以這些 row 在
-  waveform 層級的訓練目標其實並不是靜音。
-- `self.spk2idx[target_speaker]` 現在是拿一個 zeros tensor,去查一個以
-  speaker-id 字串為 key 的 dict，會 raise `KeyError`——所以任何抽到這個
-  分支的 row，目前都會讓 worker 當掉。
+- `clean_speech` 會是全零，所以這些 row 在 waveform 層級的訓練目標確實就是靜音。
+- `consistency_noise`（`noisy_speech - target_speech`）因此會等於完整的 mixture。
+- `vad_target` 會是全零，由 `create_empty_vad_target(target_speech)` 算出來——
+  這個函式只讀 `target_speech.shape`，完全不會讀它的數值。
+- `speaker_id` 仍然是真正 enrolled 那位 speaker 的 index：`target_speaker` 這個
+  id 字串是刻意保持不動的，因為幾行之後還要拿它當
+  `self.spk2idx[target_speaker]` 的查表 key。
 
-這大概正是為什麼在這個 repo 裡能找到的每一份 recipe config,都設定
-`add_inactive_target: {used: False}`。考量到 `task.tse` 屬於凍結的 legacy
-模組，是否／如何處理這個問題,由另一項獨立的 task 追蹤中；這份文件只描述
-現在的程式碼實際上做了什麼，而不是它原本想做什麼。
+> **本次已修正：** 這行歸零的程式碼先前賦值的對象是 `target_speaker`（那個
+> speaker-id 字串）而不是 `target_speech`，跟它自己的註解相反。結果是
+> `clean_speech` 沒被歸零，*而且*任何抽到這個分支的 row 都會在 `spk2idx` 查表時
+> raise `KeyError`、讓 worker 當掉——這大概正是為什麼這個 repo 裡的每一份
+> recipe config 都設定 `add_inactive_target: {used: False}`。
 
 ## Class: `TargetSpeakerExtractCollateFunc`
 

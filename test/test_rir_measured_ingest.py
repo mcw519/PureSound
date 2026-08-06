@@ -29,6 +29,10 @@ from puresound.audio.rir.bank.release import (
 )
 from puresound.audio.rir.bank.schema import RIRBankManifest
 
+# End-to-end evidence-chain validator: builds, QCs and releases a real bank, so it
+# runs for tens of seconds. Excluded by `run_repo_checks.py --suite standard`.
+pytestmark = pytest.mark.slow
+
 SAMPLE_RATE = 16000
 SPEED = float(ASSUMED_MEASURED_ENVIRONMENT.sound_speed_m_s)
 

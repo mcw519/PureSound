@@ -6,7 +6,6 @@ Moved out of ``puresound.audio.rir.metrics`` in R4 of
 
 from __future__ import annotations
 
-import math
 from typing import Any, Iterable, Optional
 
 import numpy as np
@@ -19,7 +18,6 @@ from puresound.audio.rir.metrics.core import (
 )
 from puresound.audio.rir.metrics.density import analyze_echo_density
 from puresound.audio.rir.metrics.spectral import (
-    DEFAULT_OCTAVE_CENTERS_HZ,
     octave_band_rir,
     spectral_tilt_db_per_octave,
     valid_octave_centers,

@@ -67,7 +67,7 @@ keys present (each at least `{"used": False}` to turn it off):
 | `add_noise` | `{used, prob, noise_folder, snr_range, prob_white_noise, white_noise_snr_range}` |
 | `add_reverb` | `{used, prob, rir_folder, target_rir_type}`, or a `simulator: {used: True, ...}` sub-block instead of `rir_folder` |
 | `add_volume` | `{used, prob, clipping_prob, clipping_range: {min, max}, perturbed_range}` |
-| `add_inactive_target` | `{used, prob}` -- see the quirk below |
+| `add_inactive_target` | `{used, prob}` -- see [below](#add_inactive_target) |
 
 `egs/target_speaker_extraction/config/default_config.yaml`'s `enroll_speech:`
 block is a complete, working example of this shape.
@@ -104,52 +104,51 @@ Returns:
 | Key | Description |
 |---|---|
 | `noisy_speech` | `Tensor [1, T]`, the full mixture |
-| `clean_speech` | `Tensor [1, T]`, the target's direct-path reference (see the quirk below for `add_inactive_target` rows) |
+| `clean_speech` | `Tensor [1, T]`, the target's direct-path reference (all-zero on `add_inactive_target` rows, see below) |
 | `enroll_speech` | `Tensor [1, T_enroll]`, the separately-augmented enrollment clip |
 | `added_noise` | background noise actually added, or `None` |
 | `consistency_noise` | `noisy_speech - clean_speech` |
-| `speaker_id` | `self.spk2idx[target_speaker]` (see the quirk below) |
+| `speaker_id` | `self.spk2idx[target_speaker]` -- always the real enrolled speaker, including on `add_inactive_target` rows |
 | `audio_sr`, `audio_length` | as in `task.ns` |
 | `vad_target` | present only if `vad_label_args` is configured |
 
-### `add_inactive_target`: current behavior (known quirk, tracked separately)
+### `add_inactive_target`
 
 When `enroll_speech_args["add_inactive_target"]["used"]` fires (probability
 `prob`), the dataset swaps the foreground utterance for an unrelated,
 randomly-chosen speaker's speech -- modeling "the enrolled voice never speaks
-in this clip", a negative example meant to teach the model to output
-silence. The enrollment clip itself is unaffected: it was already fetched
-from the real `target_speaker` before this swap.
+in this clip", a negative example that teaches the model to output silence.
+The enrollment clip itself is unaffected: it was already fetched from the real
+`target_speaker` before this swap.
 
-At the end of `__getitem__` (around lines 709-710), the line that is meant to
-zero out the reference actually does:
+At the end of `__getitem__`, the reference waveform is zeroed out:
 
 ```python
 # Warp target speech to zeros
 if inactive_target_speaker is not None:
-    target_speaker = torch.zeros_like(target_speech)
+    target_speech = torch.zeros_like(target_speech)
 ```
 
-This overwrites the local `target_speaker` variable -- the speaker-id string
-used a few lines later as the `self.spk2idx[target_speaker]` lookup key --
-with a zeros tensor, instead of overwriting `target_speech` (the waveform
-that was presumably meant to become silent). As currently written, on rows
-where this branch fires:
+Same pattern as [`task.ns`](ns.md) (`puresound/task/ns.py`, ~line 441). On
+rows where this branch fires:
 
-- `vad_target` still comes out correctly all-zero, because it is built
-  separately via `create_empty_vad_target(target_speech)`, which only reads
-  `target_speech.shape` and never its values.
-- `clean_speech` in the returned sample is **not** zeroed -- it stays the
-  substituted speaker's (reverberated/mixed) speech, so the waveform-level
-  training target for these rows is not actually silence.
-- `self.spk2idx[target_speaker]` now looks up a zeros tensor in a dict keyed
-  by speaker-id strings, which raises `KeyError` -- so any row that draws
-  this branch currently crashes the worker.
+- `clean_speech` is all-zero, so the waveform-level training target for these
+  rows really is silence.
+- `consistency_noise` (`noisy_speech - target_speech`) therefore equals the
+  full mixture.
+- `vad_target` comes out all-zero, built via
+  `create_empty_vad_target(target_speech)` -- which only reads
+  `target_speech.shape`, never its values.
+- `speaker_id` is still the real enrolled speaker's index: the
+  `target_speaker` id string is deliberately left untouched, since it is used
+  as the `self.spk2idx[target_speaker]` lookup key a few lines later.
 
-This is presumably why every recipe config found in this repo ships
-`add_inactive_target: {used: False}`. A separate task is tracking
-whether/how to address this given `task.tse`'s frozen-legacy status; this
-doc describes what the code does today, not what it was meant to do.
+> **Fixed in this pass:** the zeroing line used to assign over `target_speaker`
+> (the speaker-id string) instead of `target_speech`, despite its own comment.
+> That left `clean_speech` un-zeroed *and* made every row drawing this branch
+> raise `KeyError` at the `spk2idx` lookup, crashing the worker -- which is
+> presumably why every recipe config in this repo ships
+> `add_inactive_target: {used: False}`.
 
 ## Class: `TargetSpeakerExtractCollateFunc`
 

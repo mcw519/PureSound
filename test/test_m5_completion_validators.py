@@ -1,13 +1,19 @@
 import json
 from pathlib import Path
 
+import pytest
+
 from egs.rir_generation.phases.m5_calibration.scripts import (
     validate_m5_constrained_residual,
+    validate_m5_exit,
     validate_m5_group_identifiability,
     validate_m5_measured_runner,
     validate_m5_spatial_calibration,
 )
-from egs.rir_generation.phases.m5_calibration.scripts import validate_m5_exit
+
+# End-to-end evidence-chain validator: builds, QCs and releases a real bank, so it
+# runs for tens of seconds. Excluded by `run_repo_checks.py --suite standard`.
+pytestmark = pytest.mark.slow
 
 
 def test_m5_2d_group_identifiability_passes_and_rejects_scattering_split():

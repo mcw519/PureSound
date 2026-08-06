@@ -21,7 +21,7 @@ Status 標籤:*active* = 目前有維護中的 recipe 在用;*library* = 保留�
 | [algorithms/dprnn](algorithms/dprnn.zh-TW.md) | library | Dual-Path RNN (DPRNN) |
 | [algorithms/skim](algorithms/skim.zh-TW.md) | library | Skipping Memory LSTM (SkiM) |
 | [algorithms/tfgridnet](algorithms/tfgridnet.zh-TW.md) | library | TF-GridNet |
-| [algorithms/unet](algorithms/unet.zh-TW.md) | library | U-Net time-frequency models（`Unet` 同時也是 DPCRN/DPARN 的 chassis） |
+| [algorithms/unet](algorithms/unet.zh-TW.md) | library | U-Net time-frequency models —— `Unet`（同時也是 DPCRN/DPARN 的 chassis）、`UnetTcn`、`UnetFsmn` |
 | [nnet.features](features.zh-TW.md) | active | Feature processing layers |
 | [nnet.masker](masker.zh-TW.md) | active | Mask application utilities |
 
@@ -75,6 +75,7 @@ from puresound.nnet import (
     SkiM,
     TFGridNet,
     Unet,
+    UnetFsmn,
     UnetTcn,
 )
 ```

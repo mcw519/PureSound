@@ -97,6 +97,7 @@ def test_unet_tcn_backbone():
 
 
 @pytest.mark.backbone
+@pytest.mark.slow  # library-status backbone; forward smoke test costs ~1 min
 def test_skim_backbone():
     model = SkiM(512, 256, 512, 4, 32, causal=True, seg_overlap=True)
     input_x = torch.rand(1, 512, 1000)
@@ -133,6 +134,7 @@ def test_skim_backbone():
 
 
 @pytest.mark.backbone
+@pytest.mark.slow  # library-status backbone; forward smoke test costs ~1 min
 def test_dprnn_backbone():
     model = DPRNN(512, 256, 512, 4, 32, causal=True, seg_overlap=True)
     input_x = torch.rand(1, 512, 1000)
@@ -188,6 +190,7 @@ def test_dpcrn_backbone():
 
 
 @pytest.mark.backbone
+@pytest.mark.slow  # library-status backbone; forward smoke test costs ~1 min
 def test_tfgrid_backbone():
     model = TFGridNet(
         inp_channel_dim=2,
@@ -223,8 +226,8 @@ def test_dparn_backbone():
 @pytest.mark.backbone
 @pytest.mark.parametrize(
     "type_name",
-    ["ConvTasNet", "DPARN", "DPCRN", "DPRNN", "SkiM", "TFGridNet", "Unet", "UnetTcn",
-     "EcapaTdnnExtractor"],
+    ["ConvTasNet", "DPARN", "DPCRN", "DPRNN", "SkiM", "TFGridNet", "Unet", "UnetFsmn",
+     "UnetTcn", "EcapaTdnnExtractor"],
 )
 def test_backbone_reachable_from_config(type_name):
     """Every model in the library must be resolvable the way recipe configs do it:

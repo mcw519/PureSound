@@ -97,8 +97,7 @@ DPARN 專屬的參數：
 - `n_dparn_block` – bottleneck 疊幾層 `DPARNblock2D`（DPCRN 寫死是 2 層；
   DPARN 把這個變成可設定的）
 - `rnn_hidden` – 傳給每個 `DPARNblock2D` 的 `hidden_size`
-- `nhead` – 傳給每個 `DPARNblock2D` 的 `nhead`（見上面的說明 —— 這個值
-  **不會**存在 `self` 上，只用來建 block）
+- `nhead` – 傳給每個 `DPARNblock2D` 的 `nhead`
 - `spectral_compress` – 若為 `True`，會在其他步驟之前先對輸入套用
   `spectral_compression(x, alpha=0.3, dim=1)`（magnitude 取 `alpha` 次方、
   phase 保持不變 —— 見 [lobe/trivial](../lobe/trivial.md)）
@@ -118,12 +117,13 @@ connection）→ 疊 `n_dparn_block` 層 `DPARNblock2D` → CNN-up（skip-concat
 
 ### `get_args` property
 
-回傳一個 constructor 參數組成的 `Dict`，供 checkpoint 重建用 ——
-**但它漏掉了 `nhead` 跟 `spectral_compress`**（兩者都是貨真價實的 constructor
-參數；`spectral_compress` 明明存在 `self` 上卻還是沒被放進這個 dict，`nhead`
-則是根本沒存在 `self` 上，就算想放進去也拿不回來）。用
-`DPARN(**model.get_args)` 重建模型時，`nhead` 會被悄悄重設回預設值（`1`），
-`spectral_compress` 原本設的值也會不見。
+回傳一個 constructor 參數組成的 `Dict`，供 checkpoint 重建用。內容是完整的 ——
+每一個 constructor 參數（包含 `nhead` 與 `spectral_compress`）都有存在 `self`
+上並回傳，所以 `DPARN(**model.get_args)` 能重建出架構完全相同的模型。
+
+> **本次已修正：** `get_args` 先前同時漏掉了 `nhead`（它根本沒存在 `self` 上，
+> 就算列進去也拿不回來）與 `spectral_compress`。從存下來的 args 重建時，
+> `nhead` 會被悄悄重設回預設值 `1`，`spectral_compress` 原本設的值也會不見。
 
 ### Example（對照 `test/test_backbone.py::test_dparn_backbone`）
 

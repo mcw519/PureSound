@@ -130,18 +130,23 @@ GroupedGRU(
 **Parameters:** as in `GroupedGRULayer`, with `h0` shaped
 `[num_layers * groups * num_directions, N, hidden_size / groups]`.
 
-> **Known pre-existing bug, not fixed in this pass:** `forward` calls each
-> inner layer as `x, s = gru(x, h0[...])` without passing
-> `return_hidden=True`, so `gru(...)` actually returns a single `Tensor`, not
-> a tuple — `x, s = <Tensor>` then tries to unpack that tensor along its
-> batch dimension. This raises `ValueError` for any batch size other than 2,
-> and for batch size 2 it "succeeds" by silently discarding the batch axis,
-> then reliably crashes a few lines later in the channel-shuffle `.permute`
-> call. Verified reproducible for batch sizes 1–4. This bug is independent of
-> the `droupout` typo fixed above — it was simply unreachable before, since
-> constructing `GroupedGRULayer` itself used to crash first. No caller in the
-> repository constructs `GroupedGRU` (only `GroupedGRULayer` is usable
-> standalone today), and there is no test covering it either.
+Each stacked layer is driven as `x, s = gru(x, h0[...], return_hidden=True)`;
+the per-layer hidden states are collected and concatenated, and the channel
+shuffle (when `shuffle=True`) runs between layers, on all but the last.
+
+**Returns:** `x` (`[N, hidden_size, T]`), or `(x, outstates)` if
+`return_hidden=True`, where `outstates` is every layer's hidden state stacked
+into `[num_layers * groups * num_directions, N, hidden_size / groups]` — the
+same layout `h0` takes, so it can be fed straight back in on the next chunk.
+
+> **Fixed in this pass:** `forward` used to call the inner layers without
+> `return_hidden=True` while still unpacking the result as `x, s = gru(...)`.
+> `GroupedGRULayer` returns a bare `Tensor` unless the hidden state is asked
+> for, so the unpack tried to split that tensor along its batch axis — raising
+> `ValueError` for every batch size except 2, and for batch size 2 silently
+> dropping the batch axis before crashing in the channel-shuffle `.permute` a
+> few lines later. Both call paths (`return_hidden` on and off) are verified
+> working now.
 
 ---
 

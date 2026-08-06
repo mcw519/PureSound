@@ -24,8 +24,8 @@ immediately:
 - `features.feats_type: complex`, `drop_stft_first_bin: True`,
   `features.trainable: False`, no `include_specaug`
 - `DPARN` backbone with `input_dim: 256`
-- `norm_type` one of `cLN` / `iLN` (unlike DPCRN's validator, `bN2d` is
-  **not** accepted here — see the known gap below)
+- `norm_type` one of `cLN` / `iLN` / `bN2d` (`BatchNorm2d` in `eval()` mode
+  applies fixed running stats and is therefore frame-independent)
 - `skip_conv: False`
 - `stride_t: 1` and `dilation_t: 1` on every down layer
 
@@ -44,16 +44,15 @@ comparison check performed at export time, but the resulting model is not
 real streaming — that check only verifies a whole-utterance (offline)
 comparison, not behavior under a live buffer that only has the past.
 
-**Known gap**: the one real DPARN recipe in the repo,
-`egs/noise_suppression/config/dparn.yaml`, currently sets
-`backbone.backbone_args.norm_type: bN2d`. `bN2d` is outside DPARN's supported
-`{cLN, iLN}` set, so exporting that recipe as-is today fails the `norm_type`
-check with `ValueError`. (DPCRN's validator allows `bN2d` because
-`BatchNorm2d` in `eval()` mode applies fixed running stats per `(freq,
-time)` location and is therefore frame-independent; that allowance was
-never extended to DPARN's validator.) To export a DPARN checkpoint for
-streaming, train or fine-tune it with `norm_type: cLN` or `norm_type: iLN`
-instead.
+**The repo's DPARN recipe is not a streaming recipe.** The one real DPARN
+config, `egs/noise_suppression/config/dparn.yaml`, sets
+`encoder_args.trainable: True` and adds a `freq_eq` block — it is an offline
+enhancement recipe by design, and a learned frontend cannot be exported as
+the fixed STFT this runtime relies on (Python owns STFT/iSTFT; ORT only runs
+the per-frame backbone). Exporting it fails on `encoder.trainable`, which is
+the check working as intended, not a defect. To export a DPARN checkpoint for
+streaming, train one with `encoder_args.trainable: False` and a fixed Hann
+frontend; its `norm_type: bN2d` is fine as-is.
 
 ## Export
 

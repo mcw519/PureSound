@@ -48,13 +48,9 @@ FeatureEncoder(
   `trainable` flag，然後用這組 args 重新建一個新的 instance。這樣一來，只要調
   `FeatureEncoder.trainable` 這一個 config 開關，就能同時決定 PEQ 跟下面的
   Mel filterbank 是否可學習，不受 `freq_eq:` block 本身怎麼寫影響。
-- `normalized_mode` – `"per_feature"`（對 channel+freq 兩軸取 reduce）、
-  `"per_channel"`（只對 channel 軸）或 `"all_feature"`（對 channel+freq+time
-  三軸）。**目前是 no-op**：`_apply_normalization` 確實算出了
-  `(x - mean) / (std + eps)`，但從未 `return`，所以緊接在它後面的
-  `include_specaug` / `clone()` 分支馬上就把 `feats` 這個變數整個覆蓋掉了。設這個
-  key 對 backbone 實際拿到的 tensor不會有任何改變；這裡如實記錄的是「目前程式碼
-  的行為」，不是「原本設計想做到的行為」。
+- `normalized_mode` – `None`（預設，不做 normalization），或三種只作用在「要餵給
+  backbone 的那份 tensor」上的標準化模式之一。見下方
+  [normalization](#normalization) 一節。
 - `trainable` – 會傳給 `MelBank` 的 filterbank，也會傳給重建後的
   `peq_module`（見上）。對 `complex` / `magnitude` / `log1p` / `free` /
   `shrink_channel` 沒有作用，因為這幾種本身就沒有可學習參數。
@@ -99,6 +95,38 @@ singleton channel 軸）：
 `[N, 2, C, T]`（real/imag 當作 channel 軸）—— 也就是說它是在 STFT domain
 裡運作，不是直接對原始 waveform 處理。
 
+### Normalization
+
+當 `normalized_mode` 不是 `None` 時，`_apply_normalization` 會對要餵給 backbone
+的那份 tensor 做標準化：`(x - mean) / (std + 1e-5)`，其中 mean 與 std 是在該模式
+指定的 reduce 軸上算出來的（全部都帶 `keepdim=True`，所以結果維持輸入的
+`[N, CH, C, T]` shape）：
+
+| `normalized_mode` | Reduce 軸 | 統計量共用於 | 各自獨立於 |
+|---|---|---|---|
+| `per_feature` | `(1, 2)` | channel + freq | 每個 batch item、每個 time frame |
+| `per_channel` | `1` | channel | 每個 batch item、每個 freq bin、每個 time frame |
+| `all_feature` | `(1, 2, 3)` | channel + freq + time | 每個 batch item |
+
+其他任何非 `None` 的字串都會 raise `NameError`。
+
+只有 `feats`（backbone 的輸入）會被 normalize。`feats_for_enhanced` 刻意保持原本的
+scale，因為預測出來的 mask 是乘回*這一份*上面 —— 如果連它也 normalize，重建出來的
+訊號就會被連帶縮放掉。有開 SpecAugment 的話，會在 normalization 之後才套用在
+`feats` 上。
+
+當 `normalized_mode` 是 `None` 時 tensor 原樣通過，行為與「整條 pipeline 根本沒有
+normalization 這一步」是 bit-identical 的 —— 目前所有現役 recipe 都屬於這種情況。
+
+> **Checkpoint 注意事項。** 這條路徑在被修好之前一直是靜默失效的
+>（`_apply_normalization` 有算出結果，卻沒有 `return`）。
+> `egs/speaker_embedding/conf/PS-spk-v1.yaml`、`PS-spk-v1-1.yaml` 與
+> `egs/target_speaker_extraction/config/default_config.yaml` 以前寫的是
+> `normalized_mode: all_feature`，但 normalization 從來沒有真的執行過，所以它們
+> 隨附/衍生出來的 checkpoint 事實上都是在「未經 normalize 的 features」上訓練的。
+> 這些 config 現在都改成空的 `normalized_mode:` 並加上說明註解，讓已釋出的
+> checkpoint 與其 config 保持一致。要打開任何一個都必須連同重新訓練一起做。
+
 ### `back_forward(x: Tensor) -> Tensor`
 
 在套用 mask 之後、decoder 做 inverse STFT 之前，把 `drop_stft_first_bin` 的效果反過來：
@@ -131,7 +159,7 @@ feats = FeatureEncoder(
     feats_type="fbank80_16k",
     drop_stft_first_bin=True,
     trainable=False,
-    normalized_mode="all_feature",   # 可以設，但實際效果請見上面的 no-op 說明
+    normalized_mode=None,            # 原因見上面的 checkpoint 注意事項
     include_specaug=True,
     specaug_args=dict(
         freq_mask_length=4, time_mask_length=3, fill_value=0.0,
