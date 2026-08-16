@@ -1,3 +1,4 @@
+import math
 import random
 from collections import OrderedDict
 from itertools import count
@@ -7,7 +8,11 @@ import torch
 import torchaudio
 
 from puresound.audio.dsp import wav_resampling
-from puresound.audio.impulse_response import rand_add_2nd_filter_response, wav_apply_rir
+from puresound.audio.impulse_response import (
+    compute_drr_db,
+    rand_add_2nd_filter_response,
+    wav_apply_rir,
+)
 from puresound.audio.io import AudioIO
 from puresound.audio.noise import add_bg_noise, add_bg_white_noise
 from puresound.audio.room_simulator import RoomImpulseResponseSimulator
@@ -49,6 +54,8 @@ class AudioEffectAugmentor:
         self.room_simulator = None
         self.room_bank = None
         self.room_bank_kind = None
+        self._last_bank_kind = None
+        self.drr_contrast = None
         self.simulated_rir = OrderedDict()
         self.simulated_rir_cache_size = 32
         self.simulated_rir_counter = count()
@@ -80,11 +87,54 @@ class AudioEffectAugmentor:
         self.room_simulator = RoomImpulseResponseSimulator(**simulator_config)
 
     def init_room_bank(self, config: dict):
-        """Initialize a legacy/M6 room bank or an M6 release recipe.
+        """Initialize a legacy/M6 room bank, an M6 release recipe, or a union.
 
         ``bank_type`` defaults to ``release`` when ``recipe_id`` is present,
-        otherwise to ``room`` for backward compatibility.
+        otherwise to ``room`` for backward compatibility. A ``banks`` list
+        instead builds each entry the same way and serves them as one pool at
+        the given ``weight``s (see UnionRoomBank).
         """
+        from puresound.audio.rir.bank.loader import UnionRoomBank
+
+        bank_config = dict(config)
+        bank_config.pop("used", None)
+        members = bank_config.pop("banks", None)
+        if members is None:
+            self.room_bank = self._build_room_bank(bank_config)
+            self.room_bank_kind = self._last_bank_kind
+            return
+
+        if not isinstance(members, list) or not members:
+            raise ValueError("pregenerated banks must be a non-empty list")
+        shared = {
+            key: value
+            for key, value in bank_config.items()
+            if key in {"usage_role"}
+        }
+        leftover = sorted(set(bank_config) - set(shared))
+        if leftover:
+            raise ValueError(
+                "pregenerated banks list cannot be combined with per-bank "
+                "options at the top level: " + ", ".join(leftover)
+            )
+        built = []
+        for index, member in enumerate(members):
+            member_config = dict(shared)
+            member_config.update(member)
+            name = str(member_config.pop("name", f"bank{index}"))
+            weight = member_config.pop("weight", 1.0)
+            built.append(
+                {
+                    "name": name,
+                    "weight": weight,
+                    "bank": self._build_room_bank(member_config),
+                }
+            )
+        self.room_bank = UnionRoomBank(built)
+        self.room_bank_kind = "union"
+
+    def _build_room_bank(self, config: dict):
+        """Build one bank from a single pregenerated config block."""
         from puresound.audio.rir.bank.loader import (
             PreGeneratedReleaseBank,
             PreGeneratedRoomBank,
@@ -113,7 +163,7 @@ class AudioEffectAugmentor:
                 raise ValueError(
                     "release pregenerated split must match its dataset usage_role"
                 )
-            self.room_bank = PreGeneratedReleaseBank(**bank_config)
+            bank = PreGeneratedReleaseBank(**bank_config)
         else:
             release_only = {
                 "recipe_id",
@@ -121,6 +171,8 @@ class AudioEffectAugmentor:
                 "require_production",
                 "production_decision_name",
                 "usage_role",
+                "audit",
+                "audit_cache",
             }
             invalid = sorted(release_only.intersection(bank_config))
             if invalid:
@@ -128,8 +180,9 @@ class AudioEffectAugmentor:
                     "room pregenerated bank received release-only options: "
                     + ", ".join(invalid)
                 )
-            self.room_bank = PreGeneratedRoomBank(**bank_config)
-        self.room_bank_kind = bank_type
+            bank = PreGeneratedRoomBank(**bank_config)
+        self._last_bank_kind = bank_type
+        return bank
 
     def sample_room_scene(self) -> Optional[dict]:
         if self.room_bank is not None:
@@ -137,6 +190,119 @@ class AudioEffectAugmentor:
         if self.room_simulator is None:
             return None
         return self.room_simulator.sample_scene()
+
+    def init_drr_contrast(self, config: dict) -> None:
+        """Enable DRR-contrast augmentation on freshly served RIR channels.
+
+        Scales the reverberant tail (everything past the direct window) so a
+        foreground channel gains DRR and a far-source channel loses it, which
+        widens the near/far separation the model trains on. Levels are
+        peak-normalized downstream, so the DRR ratio is the part of this that
+        survives to the model input.
+        """
+        options = dict(config)
+        options.pop("used", None)
+        mode = str(options.pop("mode", "random"))
+        window_ms = float(options.pop("direct_window_ms", 2.5))
+        if window_ms <= 0.0:
+            raise ValueError("drr_contrast direct_window_ms must be positive")
+        if mode == "random":
+            prob = float(options.pop("prob", 0.5))
+            near = options.pop("near_boost_db", [0.0, 4.0])
+            far = options.pop("far_cut_db", [0.0, 4.0])
+            if options:
+                raise ValueError(f"unknown drr_contrast options: {sorted(options)}")
+            if not 0.0 < prob <= 1.0:
+                raise ValueError("drr_contrast prob must lie in (0, 1]")
+            near = (float(near[0]), float(near[1]))
+            far = (float(far[0]), float(far[1]))
+            for low, high in (near, far):
+                if low < 0.0 or high < low:
+                    raise ValueError("drr_contrast ranges must satisfy 0 <= low <= high dB")
+            self.drr_contrast = {
+                "mode": "random",
+                "prob": prob,
+                "near_boost_db": near,
+                "far_cut_db": far,
+                "direct_window_ms": window_ms,
+            }
+        elif mode == "deterministic":
+            # DRR shift as a FIXED function of the channel's realized distance:
+            # shift = extra_db_per_decade * log10(distance / pivot_m). Negative
+            # extra steepens the pool's distance->DRR gradient (near of the
+            # pivot gains DRR, far of it loses), keeping one consistent mapping
+            # -- the random mode's per-draw jitter decoupled DRR from distance
+            # and made the model conservative (2026-08-14 finding).
+            extra = float(options.pop("extra_db_per_decade"))
+            pivot = float(options.pop("pivot_m", 1.0))
+            if options:
+                raise ValueError(f"unknown drr_contrast options: {sorted(options)}")
+            if pivot <= 0.0:
+                raise ValueError("drr_contrast pivot_m must be positive")
+            self.drr_contrast = {
+                "mode": "deterministic",
+                "extra_db_per_decade": extra,
+                "pivot_m": pivot,
+                "direct_window_ms": window_ms,
+            }
+        else:
+            raise ValueError("drr_contrast mode must be 'random' or 'deterministic'")
+
+    def _apply_drr_contrast(
+        self,
+        impulse: torch.Tensor,
+        sr: int,
+        source_role: str,
+        metadata: Optional[dict],
+    ) -> tuple[torch.Tensor, Optional[dict]]:
+        """Shift one fresh RIR channel's DRR by a sampled amount, exactly.
+
+        Runs before the RIR enters the cache, so the clean-target reuse via
+        rir_id sees the same impulse. Consumes NO randomness when the knob is
+        off, keeping older configs bit-identical. Only role-aware channels are
+        touched; the tail boundary matches compute_drr_db's convention, so the
+        shift lands exactly on the pipeline's own DRR measure.
+        """
+        if self.drr_contrast is None:
+            return impulse, metadata
+        if self.drr_contrast["mode"] == "deterministic":
+            # Distance-keyed, role-free, RNG-free: the same channel always gets
+            # the same shift, so the pool keeps ONE distance->DRR mapping.
+            distance = (metadata or {}).get("source_receiver_distance")
+            if distance is None or distance <= 0.0:
+                return impulse, metadata
+            shift_db = self.drr_contrast["extra_db_per_decade"] * math.log10(
+                float(distance) / self.drr_contrast["pivot_m"]
+            )
+            if shift_db == 0.0:
+                return impulse, metadata
+        else:
+            role = (source_role or "").lower()
+            if role == "foreground":
+                low, high = self.drr_contrast["near_boost_db"]
+                sign = 1.0
+            elif role in ("interferer", "media", "echo"):
+                low, high = self.drr_contrast["far_cut_db"]
+                sign = -1.0
+            else:
+                return impulse, metadata
+            if random.random() >= self.drr_contrast["prob"]:
+                return impulse, metadata
+            shift_db = sign * random.uniform(low, high)
+            if shift_db == 0.0:
+                return impulse, metadata
+        window_ms = self.drr_contrast["direct_window_ms"]
+        peak = int(impulse.abs().argmax())
+        tail_start = peak + max(1, int(round(window_ms * 1e-3 * float(sr))))
+        if tail_start >= impulse.shape[-1]:
+            return impulse, metadata
+        shifted = impulse.clone()
+        shifted[..., tail_start:] *= 10.0 ** (-shift_db / 20.0)
+        if isinstance(metadata, dict):
+            metadata = dict(metadata)
+            metadata["drr_contrast_shift_db"] = float(shift_db)
+            metadata["drr_db"] = compute_drr_db(shifted, sr, window_ms)
+        return shifted, metadata
 
     def _load_wav_folder(self, folder: str, suffix: str = ".wav"):
         """load all waveform in folder, and split the waveform id to be key"""
@@ -343,6 +509,9 @@ class AudioEffectAugmentor:
                 impaulse, _ = wav_resampling(
                     wav=impaulse, origin_sr=rir_file_sr, target_sr=sr, backend="sox"
                 )
+            impaulse, rir_metadata = self._apply_drr_contrast(
+                impaulse, sr, source_role, rir_metadata
+            )
             rir_id = f"bank-{next(self.simulated_rir_counter)}"
             self._cache_simulated_rir(rir_id, {
                 "impulse": impaulse,
@@ -355,6 +524,9 @@ class AudioEffectAugmentor:
                 scene=room_scene,
                 source_role=source_role,
                 distance_range_override=distance_range_override,
+            )
+            impaulse, rir_metadata = self._apply_drr_contrast(
+                impaulse, sr, source_role, rir_metadata
             )
             rir_id = f"simulated-{next(self.simulated_rir_counter)}"
             self._cache_simulated_rir(rir_id, {

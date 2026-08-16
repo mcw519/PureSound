@@ -1,3 +1,4 @@
+from pathlib import Path
 import pytest
 import torch
 
@@ -45,6 +46,68 @@ def test_augmentor_consumes_m6_release_recipe_without_split_leakage(tmp_path):
     assert metadata["release_recipe_id"] == "synthetic_calibrated"
     assert metadata["release_variant_id"] == "synthetic_calibrated"
     assert metadata["release_sha256"] == report["release"]["release_sha256"]
+
+
+def test_union_can_add_a_release_recipe_beside_a_folder_bank(tmp_path):
+    """Widening a folder-bank recipe with an M6 release keeps both provenances.
+
+    This is the bank-expansion shape: the existing pool stays exactly what it
+    was and the release rides alongside it at a fixed weight, with usage_role
+    injected once at the top level the way the dataset does it.
+    """
+    report = validate_m6_variant_release.build_report(tmp_path / "fixture")
+    release_root = Path(report["release"]["root"])
+    folder_member = release_root / "variants" / "calibrated"
+
+    augmentor = AudioEffectAugmentor()
+    augmentor.init_room_bank(
+        {
+            "used": True,
+            "usage_role": "train",
+            "banks": [
+                {
+                    "name": "folder",
+                    "weight": 0.6,
+                    "bank_type": "room",
+                    "folder": str(folder_member),
+                    "split": "train",
+                },
+                {
+                    "name": "m6",
+                    "weight": 0.4,
+                    "bank_type": "release",
+                    "folder": str(release_root),
+                    "recipe_id": "synthetic_calibrated",
+                    "split": "train",
+                },
+            ],
+        }
+    )
+
+    assert augmentor.room_bank_kind == "union"
+    assert augmentor.room_bank.weights == pytest.approx([0.6, 0.4])
+    assert "folder w=0.60" in augmentor.room_bank.describe()
+
+    by_member = {}
+    for _ in range(120):
+        scene = augmentor.sample_room_scene()
+        _reverberant, (_rir_id, info) = augmentor.apply_rir(
+            wav=torch.randn(1, 16000),
+            rir_mode="full",
+            sr=16000,
+            room_scene=scene,
+            source_role="foreground",
+        )
+        metadata = info["metadata"]
+        assert metadata["split"] == "train"
+        by_member.setdefault(metadata["union_member_name"], []).append(metadata)
+    assert set(by_member) == {"folder", "m6"}
+    # Release identity travels only with the release member's draws.
+    assert all("release_sha256" not in m for m in by_member["folder"])
+    assert all(
+        m["release_sha256"] == report["release"]["release_sha256"]
+        for m in by_member["m6"]
+    )
 
 
 def test_release_training_config_requires_recipe_and_split(tmp_path):
@@ -137,3 +200,61 @@ def test_release_provenance_survives_dataset_and_collate():
     batch = NoiseSuppressionCollateFunc()([collate_item])
     assert batch["rir_release_id"] == ["release-a"]
     assert batch["rir_split"] == ["train"]
+
+
+def test_release_audit_is_memoized_and_skippable(tmp_path):
+    """A full audit reads the whole release; a training start must not repeat it."""
+    from puresound.audio.rir.bank.release import (
+        AUDIT_CACHE_NAME,
+        audit_m6_variant_release,
+    )
+
+    report = validate_m6_variant_release.build_report(tmp_path / "fixture")
+    release_root = Path(report["release"]["root"])
+    # Building the fixture already audits it once, which now memoizes the verdict.
+    cache_path = release_root / AUDIT_CACHE_NAME
+    assert cache_path.is_file()
+    cache_path.unlink()
+
+    first = audit_m6_variant_release(release_root)
+    assert first["valid"]
+    assert cache_path.is_file()                      # verdict memoized beside the release
+
+    # A hit skips re-reading the bank's audio: hide one RIR, which only the cached
+    # verdict can survive. This is exactly the scope the cache trusts.
+    rir = next(release_root.glob("variants/*/**/*.wav"))
+    hidden = rir.with_suffix(".hidden")
+    rir.rename(hidden)
+    try:
+        assert audit_m6_variant_release(release_root) == first
+        assert not audit_m6_variant_release(release_root, use_cache=False)["valid"]
+    finally:
+        hidden.rename(rir)
+
+    # Anything the release declares by digest is inside the key, so tampering with
+    # a recipe index misses the cache and the audit still catches it -- the
+    # negative control the M6.4 validator relies on.
+    index_path = next(release_root.glob("recipes/**/*.jsonl"))
+    with index_path.open("ab") as handle:
+        handle.write(b"cache-key-tamper")
+    assert not audit_m6_variant_release(release_root)["valid"]
+
+
+def test_release_bank_can_skip_the_audit(tmp_path):
+    """`audit: False` loads an already-validated release without re-reading it."""
+    report = validate_m6_variant_release.build_report(tmp_path / "fixture")
+    release_root = Path(report["release"]["root"])
+
+    bank = PreGeneratedReleaseBank(
+        release_root,
+        recipe_id="synthetic_calibrated",
+        split="train",
+        audit=False,
+    )
+    assert len(bank) > 0
+
+    augmentor = AudioEffectAugmentor()
+    with pytest.raises(ValueError, match="release-only options"):
+        augmentor.init_room_bank(
+            {"used": True, "bank_type": "room", "folder": str(release_root), "audit": False}
+        )

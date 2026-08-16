@@ -288,10 +288,13 @@ class DynamicBaseDataset(torch.utils.data.Dataset):
                         )
                     pregenerated_config["usage_role"] = self.dataset_role
                     self.augmentor.init_room_bank(pregenerated_config)
+                    mix = getattr(self.augmentor.room_bank, "describe", None)
                     print(
                         "Augmentor initialized pre-generated RIR bank "
                         f"(kind={self.augmentor.room_bank_kind}, "
-                        f"items={len(self.augmentor.room_bank)})"
+                        f"items={len(self.augmentor.room_bank)}"
+                        + (f", mix: {mix()}" if mix is not None else "")
+                        + ")"
                     )
                 else:
                     self.augmentor.init_room_simulator(simulator_args)
@@ -301,6 +304,25 @@ class DynamicBaseDataset(torch.utils.data.Dataset):
                     self.augmentation_reverb_args["rir_folder"]
                 )
                 print(f"Augmentor finished load {len(self.augmentor.rir.keys())} rirs")
+
+            drr_contrast_args = self.augmentation_reverb_args.get("drr_contrast")
+            if drr_contrast_args and drr_contrast_args.get("used"):
+                self.augmentor.init_drr_contrast(drr_contrast_args)
+                knob = self.augmentor.drr_contrast
+                if knob["mode"] == "deterministic":
+                    detail = (
+                        f"deterministic {knob['extra_db_per_decade']} dB/decade "
+                        f"about {knob['pivot_m']} m"
+                    )
+                else:
+                    detail = (
+                        f"random prob={knob['prob']}, near +{knob['near_boost_db']} dB, "
+                        f"far -{knob['far_cut_db']} dB"
+                    )
+                print(
+                    "Augmentor initialized DRR-contrast augmentation "
+                    f"({detail}, window {knob['direct_window_ms']} ms)"
+                )
 
         print("----" * 30)
 

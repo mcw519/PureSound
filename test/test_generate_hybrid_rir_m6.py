@@ -35,6 +35,38 @@ def test_m6_wrapper_defaults_to_material_modal_damping(tmp_path):
     assert args.low_backend == "pytard-material"
 
 
+def test_m6_wrapper_forwards_source_distance_shells(tmp_path):
+    """The wrapper can build a boundary-coverage bank.
+
+    The generator's default shells leave 0.95-2.05 m unoccupied, and a bank
+    audit found that gap is the near/far decision boundary the model has to
+    learn: no synthetic room in either generator family puts a source there.
+    Filling it needs the shells reachable from the M6 entry point.
+    """
+    args = generate_m6_bank._build_parser().parse_args(
+        ["--output-dir", str(tmp_path), "--far-dist", "1.20", "2.10"]
+    )
+
+    assert args.near_dist is None
+    assert args.far_dist == [1.20, 2.10]
+    # Unset shells are omitted rather than echoed, so a manifest without the
+    # flags means the generator's own defaults were used.
+    assert generate_m6_bank._distance_flags(args.near_dist, args.far_dist) == [
+        "--far-dist",
+        "1.2",
+        "2.1",
+    ]
+    assert generate_m6_bank._distance_flags(None, None) == []
+
+
+def test_m6_wrapper_rejects_impossible_distance_shells():
+    import pytest
+
+    for bad in ([2.0, 1.0], [0.0, 1.0], [-1.0, 1.0], [1.5, 1.5]):
+        with pytest.raises(SystemExit, match="needs 0 < MIN < MAX"):
+            generate_m6_bank._distance_flags(None, bad)
+
+
 def test_m6_task_seed_is_stable_and_base_seed_sensitive():
     first = generate_hybrid_rir._m6_task_seed(1337, "room_000001_000002")
 

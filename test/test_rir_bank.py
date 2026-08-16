@@ -148,6 +148,63 @@ def test_augmentor_bank_path_reuses_channel_for_target_rir_type(tmp_path):
     assert clean.shape[-1] >= 1
 
 
+def test_union_bank_serves_both_members_and_routes_scenes_home(tmp_path):
+    """A union widens the pool without letting one member answer for another."""
+    hybrid = tmp_path / "hybrid"
+    _write_room(hybrid, "room_000000", [0.5, 0.8, 2.5, 3.5, 4.5])
+    added = tmp_path / "added"
+    _write_room(added, "room_000100", [0.4, 0.9, 2.2, 4.0, 5.2])
+
+    aug = AudioEffectAugmentor()
+    aug.init_room_bank(
+        {
+            "used": True,
+            "banks": [
+                {"name": "hybrid", "weight": 0.7, "folder": str(hybrid)},
+                {"name": "added", "weight": 0.3, "folder": str(added)},
+            ],
+        }
+    )
+    assert aug.room_bank_kind == "union"
+    assert len(aug.room_bank) == 2
+    assert aug.room_bank.weights == pytest.approx([0.7, 0.3])
+
+    seen = set()
+    for _ in range(200):
+        scene = aug.room_bank.sample_scene()
+        seen.add(scene["union_member_name"])
+        # Every draw must resolve against the bank that produced it.
+        _impulse, metadata, _sr = aug.room_bank.select_channel(
+            scene, source_role="foreground"
+        )
+        assert metadata["union_member_name"] == scene["union_member_name"]
+        assert metadata["source_receiver_distance"] < 1.0
+    assert seen == {"hybrid", "added"}
+
+    # A scene the union did not hand out cannot be redeemed against it.
+    stray = PreGeneratedRoomBank(str(hybrid)).sample_scene()
+    with pytest.raises(ValueError, match="does not belong"):
+        aug.room_bank.select_channel(stray)
+
+
+def test_union_bank_rejects_bad_weights_and_stray_top_level_options(tmp_path):
+    hybrid = tmp_path / "hybrid"
+    _write_room(hybrid, "room_000000", [0.5, 0.8, 2.5, 3.5, 4.5])
+    aug = AudioEffectAugmentor()
+
+    with pytest.raises(ValueError, match="weights must be positive"):
+        aug.init_room_bank(
+            {"used": True, "banks": [{"folder": str(hybrid), "weight": 0}]}
+        )
+    # A folder left at the top level would silently apply to no member.
+    with pytest.raises(ValueError, match="per-bank options at the top level"):
+        aug.init_room_bank(
+            {"used": True, "folder": str(hybrid), "banks": [{"folder": str(hybrid)}]}
+        )
+    with pytest.raises(ValueError, match="non-empty list"):
+        aug.init_room_bank({"used": True, "banks": []})
+
+
 def test_simulated_rir_cache_is_bounded(tmp_path):
     root = _make_bank_folder(tmp_path)
     aug = AudioEffectAugmentor()

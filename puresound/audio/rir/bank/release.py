@@ -8,7 +8,7 @@ import shutil
 from collections import Counter
 from dataclasses import dataclass, replace
 from pathlib import Path, PurePosixPath
-from typing import Any, Mapping, Sequence
+from typing import Any, Mapping, Optional, Sequence
 
 import numpy as np
 import soundfile as sf
@@ -964,17 +964,109 @@ def build_m6_variant_release(
     return release
 
 
+AUDIT_CACHE_NAME = ".m6_release_audit_cache.json"
+AUDIT_CACHE_SCHEMA_VERSION = "puresound.rir_bank_release_audit_cache.v1"
+
+
+def _audit_cache_key(
+    release_root: Path,
+    manifest_name: str,
+    release: "RIRBankReleaseManifest",
+) -> Optional[str]:
+    """Digest over every artifact the release declares, recomputed from disk.
+
+    Covers the release manifest, each variant's manifest/QC-summary/distribution,
+    and every recipe split index -- everything the audit verifies by digest, so
+    editing any of them misses the cache. Per-item metadata, QC reports and the
+    RIR audio are deliberately NOT covered: re-reading those is what makes a full
+    audit cost tens of minutes, and trusting them for an otherwise-identical
+    release is exactly the trade this cache makes.
+
+    Returns ``None`` when a declared artifact is missing, so an incomplete release
+    always takes the full audit path.
+    """
+
+    declared = [manifest_name]
+    for variant in release.variants:
+        declared.extend(
+            (variant.manifest_path, variant.qc_summary_path, variant.distribution_path)
+        )
+    for recipe in release.recipes:
+        for index in (recipe.split_indexes or {}).values():
+            declared.append(index.path)
+
+    digests: dict[str, str] = {}
+    for relative in sorted(set(declared)):
+        target = release_root / relative
+        if not target.is_file():
+            return None
+        digests[relative] = sha256_file(target)
+    return canonical_json_sha256(digests)
+
+
+def _read_audit_cache(release_root: Path, key: str) -> Optional[dict[str, Any]]:
+    try:
+        cached = json.loads(
+            (release_root / AUDIT_CACHE_NAME).read_text(encoding="utf-8")
+        )
+    except (OSError, json.JSONDecodeError):
+        return None
+    if (
+        cached.get("schema_version") != AUDIT_CACHE_SCHEMA_VERSION
+        or cached.get("release_manifest_sha256") != key
+        or not isinstance(cached.get("verdict"), dict)
+    ):
+        return None
+    return cached["verdict"]
+
+
+def _write_audit_cache(release_root: Path, key: str, verdict: dict[str, Any]) -> None:
+    try:
+        _atomic_json(
+            release_root / AUDIT_CACHE_NAME,
+            {
+                "schema_version": AUDIT_CACHE_SCHEMA_VERSION,
+                "release_manifest_sha256": key,
+                "verdict": verdict,
+            },
+        )
+    except OSError:
+        pass          # a read-only release still audits, it just cannot memoize
+
+
 def audit_m6_variant_release(
     root: str | Path,
     *,
     manifest_name: str = DEFAULT_RELEASE_MANIFEST_NAME,
+    use_cache: bool = True,
 ) -> dict[str, Any]:
-    """Audit variant lineage, distribution snapshots, and recipe membership."""
+    """Audit variant lineage, distribution snapshots, and recipe membership.
+
+    The lineage check re-derives every child RIR from its parent's samples, so a
+    full audit reads and digests the entire bank -- tens of minutes for a release
+    of tens of GB. The verdict is therefore memoized in ``AUDIT_CACHE_NAME``
+    beside the release, keyed by the release manifest's digest: that manifest
+    pins each variant's manifest/summary/distribution digests and item counts, so
+    any change to what the release declares invalidates the entry.
+
+    The key covers every artifact the release declares by digest, so tampering
+    with a manifest, a distribution snapshot or a recipe index misses the cache.
+    What a hit trusts is the rest: per-item metadata, QC reports and the RIR audio
+    of an otherwise byte-identical release. Delete the cache file to force a full
+    re-audit, or pass ``use_cache=False``.
+    """
 
     release_root = Path(root)
     release = RIRBankReleaseManifest.from_json(
         (release_root / manifest_name).read_text(encoding="utf-8")
     )
+    cache_key = (
+        _audit_cache_key(release_root, manifest_name, release) if use_cache else None
+    )
+    if cache_key is not None:
+        cached = _read_audit_cache(release_root, cache_key)
+        if cached is not None:
+            return cached
     variant_checks: dict[str, bool] = {}
     manifests: dict[str, RIRBankManifest] = {}
     for variant in release.variants:
@@ -988,23 +1080,13 @@ def audit_m6_variant_release(
             )
             distribution = json.loads(distribution_path.read_text(encoding="utf-8"))
             passed = _completed_items(manifest)
-            expected_distribution = compute_bank_distribution(
-                bank_root, variant_id=variant.variant_id
-            )
+            # Ordered by cost: file digests and manifest-only checks first, then
+            # the whole-bank walks. Every term short-circuits the ones after it,
+            # so a release that fails its digests never pays for the traversal.
             valid = bool(
                 sha256_file(manifest_path) == variant.manifest_file_sha256
                 and sha256_file(summary_path) == variant.qc_summary_file_sha256
                 and sha256_file(distribution_path) == variant.distribution_file_sha256
-                and audit_rir_bank_qc_release(bank_root)["valid"]
-                and distribution == expected_distribution
-                and distribution.get("distribution_sha256")
-                == canonical_json_sha256(
-                    {
-                        key: value
-                        for key, value in distribution.items()
-                        if key != "distribution_sha256"
-                    }
-                )
                 and len(passed) == variant.item_count
                 and all(item.origin == variant.origin for item in passed)
                 and all(item.signal_variant == variant.signal_variant for item in passed)
@@ -1014,6 +1096,17 @@ def audit_m6_variant_release(
                     == variant.split_item_counts[split]
                     for split in BANK_SPLITS
                 )
+                and distribution.get("distribution_sha256")
+                == canonical_json_sha256(
+                    {
+                        key: value
+                        for key, value in distribution.items()
+                        if key != "distribution_sha256"
+                    }
+                )
+                and audit_rir_bank_qc_release(bank_root)["valid"]
+                and distribution
+                == compute_bank_distribution(bank_root, variant_id=variant.variant_id)
             )
             manifests[variant.variant_id] = manifest
         except (OSError, RuntimeError, ValueError, KeyError, json.JSONDecodeError):
@@ -1171,7 +1264,7 @@ def audit_m6_variant_release(
         ),
         "release_does_not_claim_production": release.release_status != "production",
     }
-    return {
+    verdict = {
         "schema_version": "puresound.rir_bank_release_audit.v1",
         "release_id": release.release_id,
         "variant_checks": variant_checks,
@@ -1182,6 +1275,9 @@ def audit_m6_variant_release(
         "ready_recipe_count": ready_recipe_count,
         "production_ready": False,
     }
+    if cache_key is not None:
+        _write_audit_cache(release_root, cache_key, verdict)
+    return verdict
 
 
 __all__ = [

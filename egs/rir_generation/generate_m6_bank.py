@@ -75,6 +75,28 @@ def _build_parser() -> argparse.ArgumentParser:
             "damping; use pytard-cupy-material for GPU execution."
         ),
     )
+    parser.add_argument(
+        "--near-dist",
+        nargs=2,
+        type=float,
+        metavar=("MIN", "MAX"),
+        help=(
+            "Mic-to-source distance range (m) for the near_* channels. "
+            "Forwarded to the generator, which defaults to 0.35 0.95."
+        ),
+    )
+    parser.add_argument(
+        "--far-dist",
+        nargs=2,
+        type=float,
+        metavar=("MIN", "MAX"),
+        help=(
+            "Mic-to-source distance range (m) for the far_* channels. "
+            "Forwarded to the generator, which defaults to 2.05 5.5 and so "
+            "leaves 0.95-2.05 m unoccupied. Pass e.g. '--far-dist 1.20 2.10' "
+            "to build a boundary-coverage bank for that gap."
+        ),
+    )
     parser.add_argument("--scene-version", choices=("v0", "v1"), default="v1")
     parser.add_argument(
         "--room-type",
@@ -119,6 +141,27 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Resume an interrupted bank generation (default: enabled).",
     )
     return parser
+
+
+def _distance_flags(
+    near_dist: Sequence[float] | None,
+    far_dist: Sequence[float] | None,
+) -> list[str]:
+    """Forward the source-distance shells, omitting them when unset.
+
+    Omitting is not the same as passing the generator's defaults: the defaults
+    live in one place, and a bank whose manifest records no distance flags was
+    built with them.
+    """
+    flags: list[str] = []
+    for name, value in (("--near-dist", near_dist), ("--far-dist", far_dist)):
+        if value is None:
+            continue
+        low, high = float(value[0]), float(value[1])
+        if not 0 < low < high:
+            raise SystemExit(f"{name} needs 0 < MIN < MAX, got {low} {high}")
+        flags.extend([name, str(low), str(high)])
+    return flags
 
 
 def _run(command: list[str], env: dict[str, str]) -> None:
@@ -199,6 +242,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         "--m6-bank-id",
         bank_id,
     ]
+    generate_command.extend(_distance_flags(args.near_dist, args.far_dist))
     if args.gpu_devices:
         generate_command.extend(["--gpu-devices", args.gpu_devices])
     generate_command.append(

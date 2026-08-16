@@ -347,6 +347,8 @@ class PreGeneratedReleaseBank:
         release_manifest_name: str = DEFAULT_RELEASE_MANIFEST_NAME,
         require_production: bool = False,
         production_decision_name: str = DEFAULT_PRODUCTION_DECISION_NAME,
+        audit: bool = True,
+        audit_cache: bool = True,
         **bank_kwargs,
     ):
         self.folder = Path(folder)
@@ -354,12 +356,19 @@ class PreGeneratedReleaseBank:
         self.split = str(split)
         if self.split not in BANK_SPLITS:
             raise ValueError(f"split must be one of {BANK_SPLITS}")
-        audit = audit_m6_variant_release(
-            self.folder,
-            manifest_name=release_manifest_name,
-        )
-        if not audit["valid"]:
-            raise ValueError("M6.4 release audit failed")
+        # A full audit re-derives every child RIR from its parent's samples, so it
+        # reads the whole release. It is memoized beside the release (see
+        # audit_m6_variant_release); `audit=False` skips it outright for callers
+        # that already validated this release -- e.g. a training run whose two DDP
+        # ranks would otherwise each repeat it inside the rendezvous timeout.
+        if audit:
+            verdict = audit_m6_variant_release(
+                self.folder,
+                manifest_name=release_manifest_name,
+                use_cache=audit_cache,
+            )
+            if not verdict["valid"]:
+                raise ValueError("M6.4 release audit failed")
         release = RIRBankReleaseManifest.from_json(
             (self.folder / release_manifest_name).read_text(encoding="utf-8")
         )
@@ -467,4 +476,59 @@ class PreGeneratedReleaseBank:
                 ),
             }
         )
+        return impulse, metadata, sample_rate
+
+
+class UnionRoomBank:
+    """Serve scenes from several banks at fixed per-bank probabilities.
+
+    Use this to widen a recipe's room pool without replacing what already
+    works: each member keeps its own layout, labels, DRR window and wav cache,
+    and every scene is routed back to the bank that produced it. Weights are
+    sampling probabilities, not item counts -- a member holding a tenth of the
+    rooms still gets its share of the draws.
+    """
+
+    def __init__(self, members: list[dict]):
+        if not members:
+            raise ValueError("union room bank requires at least one member bank")
+        self._names = [str(member["name"]) for member in members]
+        self._banks = [member["bank"] for member in members]
+        weights = [float(member.get("weight", 1.0)) for member in members]
+        if any(weight <= 0 for weight in weights):
+            raise ValueError("union room bank weights must be positive")
+        total = sum(weights)
+        self.weights = [weight / total for weight in weights]
+
+    def __len__(self) -> int:
+        return sum(len(bank) for bank in self._banks)
+
+    def describe(self) -> str:
+        return ", ".join(
+            f"{name} w={weight:.2f} items={len(bank)}"
+            for name, weight, bank in zip(self._names, self.weights, self._banks)
+        )
+
+    def sample_scene(self) -> dict:
+        index = random.choices(range(len(self._banks)), weights=self.weights, k=1)[0]
+        scene = self._banks[index].sample_scene()
+        scene["_union_member"] = index
+        scene["union_member_name"] = self._names[index]
+        return scene
+
+    def select_channel(
+        self,
+        scene: dict,
+        source_role: str = "source",
+        distance_range_override: Optional[list[float]] = None,
+    ) -> tuple[torch.Tensor, dict, int]:
+        index = scene.get("_union_member")
+        if not isinstance(index, int) or not 0 <= index < len(self._banks):
+            raise ValueError("scene does not belong to this union room bank")
+        impulse, metadata, sample_rate = self._banks[index].select_channel(
+            scene,
+            source_role=source_role,
+            distance_range_override=distance_range_override,
+        )
+        metadata["union_member_name"] = self._names[index]
         return impulse, metadata, sample_rate
