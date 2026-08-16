@@ -45,7 +45,7 @@ foreground 與最強干擾者的距離／DRR、`drr_gap`、`rt60`、`n_interfere
 
 ```yaml
 dataset:
-  task: voice_isolation      # selects this dataset in egs/noise_suppression/main.py
+  task: voice_isolation      # this recipe: egs/voice_isolate/main.py
 augmentation_realfar:  {used: True, prob: 0.20, lone_far_prob: 0.15,
                         pool_manifest: data/realfar_pool/voices.train.jsonl,
                         turn_taking_prob: 0.3}

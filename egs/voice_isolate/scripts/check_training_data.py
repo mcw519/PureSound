@@ -39,7 +39,7 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-import egs.noise_suppression.main as recipe_main  # noqa: E402
+import egs.voice_isolate.main as recipe_main  # noqa: E402
 from puresound.audio.io import AudioIO  # noqa: E402
 from puresound.audio.vad import BatchedSileroVADLabeler  # noqa: E402
 from puresound.recipes import load_siso_recipe_config  # noqa: E402

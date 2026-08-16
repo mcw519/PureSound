@@ -53,7 +53,7 @@ register_warmup_step(warmup_step: int)
 configure_optimizers()
 ```
 
-`configure_optimizers()`（在 trainer 設定時觸發一次的 Lightning hook）在已註冊 scheduler 時回傳 `[self._optimizer], [self._scheduler]`，否則回傳裸的 optimizer。實際的建構發生在 module 之外，由 [`system.optim.create_optimizer_and_scheduler`](optim.zh-TW.md) 完成，輸入來自子類別自己的 `get_total_param_groups()`。標準接法（`egs/noise_suppression/main.py`）：
+`configure_optimizers()`（在 trainer 設定時觸發一次的 Lightning hook）在已註冊 scheduler 時回傳 `[self._optimizer], [self._scheduler]`，否則回傳裸的 optimizer。實際的建構發生在 module 之外，由 [`system.optim.create_optimizer_and_scheduler`](optim.zh-TW.md) 完成，輸入來自子類別自己的 `get_total_param_groups()`。標準接法（`puresound/system/runner.py`）：
 
 ```python
 param_groups = lightning_model.get_total_param_groups()
@@ -91,7 +91,7 @@ on_after_batch_transfer(batch: Any, dataloader_idx: int)
 
 由於這個 hook 的確切觸發時機在不同 Lightning strategy 下略有差異，`EncDecMaskBase` 自己的 `training_step`/`validation_step`/`test_step`/`predict_step`（見 siso.zh-TW.md）也會在開頭主動呼叫 `self.ensure_vad_targets(batch)`——雙重保險，這也讓直接在單元測試裡呼叫這些 step 方法（完全繞過 Lightning hook）變得安全。
 
-只有在 recipe 要求較昂貴的 backend 時才會接上（`egs/noise_suppression/main.py`）：
+只有在 recipe 要求較昂貴的 backend 時才會接上（`puresound/system/runner.py`）：
 
 ```python
 if vad_label_dict.get("backend", "energy").lower() == "silero":

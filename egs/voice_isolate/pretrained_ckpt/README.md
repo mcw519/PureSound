@@ -117,8 +117,9 @@ uv run python egs/voice_isolate/scripts/streaming_onnx.py export \
     egs/voice_isolate/pretrained_ckpt/dpcrn_v8.ckpt /tmp/model.onnx
 
 # run the default recipe, warm-starting from v7 as v8 did
-uv run python egs/voice_isolate/main.py egs/voice_isolate/config/train_dpcrn.yaml --training \
-    --pretrained_ckpt_path egs/voice_isolate/pretrained_ckpt/dpcrn_v7.ckpt
+# (from the recipe dir -- the config's metafile paths are relative to it)
+cd egs/voice_isolate && uv run python main.py config/train_dpcrn.yaml --training \
+    --pretrained_ckpt_path pretrained_ckpt/dpcrn_v7.ckpt
 ```
 
 Checkpoints here are the judged troughs pulled out of the full training history under `../exp/`

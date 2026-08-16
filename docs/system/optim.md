@@ -63,7 +63,7 @@ scheduler:
 
 Both go through the same reflection path — switching from one to the other is a config edit, not a code change.
 
-### Real wiring (`egs/noise_suppression/main.py`)
+### Real wiring (`puresound/system/runner.py`)
 
 ```python
 param_groups = lightning_model.get_total_param_groups()

@@ -53,7 +53,7 @@ register_warmup_step(warmup_step: int)
 configure_optimizers()
 ```
 
-`configure_optimizers()` (the Lightning hook fired once at trainer setup) returns `[self._optimizer], [self._scheduler]` if a scheduler was registered, otherwise the bare optimizer. The actual construction happens outside the module, in [`system.optim.create_optimizer_and_scheduler`](optim.md), fed by the subclass's own `get_total_param_groups()`. Canonical wiring (`egs/noise_suppression/main.py`):
+`configure_optimizers()` (the Lightning hook fired once at trainer setup) returns `[self._optimizer], [self._scheduler]` if a scheduler was registered, otherwise the bare optimizer. The actual construction happens outside the module, in [`system.optim.create_optimizer_and_scheduler`](optim.md), fed by the subclass's own `get_total_param_groups()`. Canonical wiring (`puresound/system/runner.py`):
 
 ```python
 param_groups = lightning_model.get_total_param_groups()
@@ -91,7 +91,7 @@ on_after_batch_transfer(batch: Any, dataloader_idx: int)
 
 Because that hook's exact timing varies a little across Lightning strategies, `EncDecMaskBase`'s own `training_step`/`validation_step`/`test_step`/`predict_step` (siso.md) also call `self.ensure_vad_targets(batch)` defensively at the top — belt-and-suspenders, and it is what makes calling those step methods directly in a unit test (bypassing the Lightning hook entirely) safe too.
 
-Wired up only when a recipe asks for the expensive backend (`egs/noise_suppression/main.py`):
+Wired up only when a recipe asks for the expensive backend (`puresound/system/runner.py`):
 
 ```python
 if vad_label_dict.get("backend", "energy").lower() == "silero":

@@ -52,16 +52,18 @@ look-ahead `delay=[1,1,1]`) — only the RIR bank, augmentation, and loss weight
 | 7 | real recordings on both sides + turn-taking + distance aux head + channel consistency | `config/exp/train_dpcrn_realE2E_v2c.yaml` | stage 6 ep19 | `dpcrn_v7.ckpt` | held-out real far-field **−9.45 dB, distance-graded**; keep flat (−0.11); **Dawn WER 0.174 < 0.184 raw**, deletion 0.088; reverberant-office WER −0.024 vs mix; in-domain +8.18 — needs `dry_blend 0.9` |
 | 8 | measured-capture realism in synthesis (room-colored noise, absolute dBFS floor, geometry-driven SIR) | `config/train_dpcrn.yaml` | stage 7 ep19 | `dpcrn_v8.ckpt` **(current default)** | real far-field **−15.91 dB** vs stage 7's −13.72 on identical files (leakage-free subset −17.74 vs −15.68); 2–3 m dip filled (−4.50 → −16.61) so grading is monotone; keep flat (0.00), worst case −5.45 → −1.06; **Dawn WER 0.180 < 0.184 raw**, deletion 0.094; reverberant-office WER −0.024 vs mix; in-domain +7.99 — costs +0.020 WER in extreme reverb; needs `dry_blend 0.9` |
 
-Run (from repo root):
+Run **from this directory** — the configs' metafile and work-folder paths are relative to it:
 ```bash
+cd egs/voice_isolate
+
 # default recipe, warm-started from the previous release
-uv run python egs/voice_isolate/main.py egs/voice_isolate/config/train_dpcrn.yaml --training \
-    --pretrained_ckpt_path egs/voice_isolate/pretrained_ckpt/dpcrn_v6.ckpt
+uv run python main.py config/train_dpcrn.yaml --training \
+    --pretrained_ckpt_path pretrained_ckpt/dpcrn_v6.ckpt
 
 # reproducing an earlier stage
-uv run python egs/voice_isolate/main.py egs/voice_isolate/config/exp/train_dpcrn_curriculum_core.yaml --training
-uv run python egs/voice_isolate/main.py egs/voice_isolate/config/exp/train_dpcrn_curriculum_expand.yaml --training \
-    --pretrained_ckpt_path egs/voice_isolate/pretrained_ckpt/dpcrn_v1.ckpt
+uv run python main.py config/exp/train_dpcrn_curriculum_core.yaml --training
+uv run python main.py config/exp/train_dpcrn_curriculum_expand.yaml --training \
+    --pretrained_ckpt_path pretrained_ckpt/dpcrn_v1.ckpt
 ```
 `--ckpt_path <ckpt>` instead of `--pretrained_ckpt_path` = true resume (restores optimizer/scheduler/epoch).
 Config details (shared design, eval-only variants, inference config): `config/README.md`.

@@ -133,22 +133,22 @@ uv run python egs/noise_suppression/main.py egs/noise_suppression/config/dpcrn.y
 **只**套用在 `--training`；`--scoring`/`--inference` 完全不會讀 `trainer.num_gpus`，一律以單一
 process 執行。
 
-## `dataset.task` 切換：`noise_suppression` 與 `voice_isolation`
+## `dataset.task`：屬於本 recipe 還是 `voice_isolate`
 
-`egs/voice_isolate/main.py` 並不是另一份獨立實作——它只是一個三行的轉接殼（shim）：
+兩個 recipe 是各自獨立的入口。本 recipe 訓練 `NoiseSuppressionDataset`；
+`egs/voice_isolate/main.py` 訓練 `VoiceIsolationDataset`，並額外接受兩種本 recipe 用不到的資料列
+類型。兩者互不 import——它們共用的東西（sampler、dataloader、CLI、Lightning 接線、DDP strategy、
+scoring 與 inference 階段）放在
+[`puresound/system/runner.py`](../../puresound/system/runner.py)，所以兩邊可以各自演進，不必各自
+帶一份會走鐘的驅動程式。
 
-```python
-runpy.run_module("egs.noise_suppression.main", run_name="__main__")
-```
+`dataset.task` 標示一份 config 屬於哪個 recipe，而每個入口會**拒絕**不屬於自己的 config，而不是
+默默拿錯誤的分佈開訓：
 
-每一次 `voice_isolate` 的訓練／inference，實際執行的都是**這一支** `main.py`。兩條產品線的差別
-只在於指向哪一份 config。`init_dataloader` 會從 config 讀 `dataset.task`（沒寫這個 key 時預設是
-`"noise_suppression"`——這個 recipe 裡的兩份範例 config 都沒寫），並依此切換 dataset/collate：
-
-| `dataset.task` | dataset 類別 | collate 類別 | 額外傳入的參數 |
-|---|---|---|---|
-| `noise_suppression`（預設） | `NoiseSuppressionDataset` | `NoiseSuppressionCollateFunc` | — |
-| `voice_isolation` | `VoiceIsolationDataset` | `VoiceIsolationCollateFunc` | `augmentation_realfar_args`、`augmentation_realnear_args` |
+| `dataset.task` | 入口 | dataset 類別 | collate 類別 | 額外參數 |
+|---|---|---|---|---|
+| `noise_suppression`（沒寫這個 key 時的預設——本 recipe 兩份範例 config 都沒寫） | `egs/noise_suppression/main.py` | `NoiseSuppressionDataset` | `NoiseSuppressionCollateFunc` | — |
+| `voice_isolation` | `egs/voice_isolate/main.py` | `VoiceIsolationDataset` | `VoiceIsolationCollateFunc` | `augmentation_realfar_args`、`augmentation_realnear_args` |
 
 這兩個類別都定義在 `puresound.task.ns` / `puresound.task.voice_isolation`；`VoiceIsolationDataset`
 繼承自通用版本，只覆寫了它的資料列類型 hook（`_plan_row`、`_prepare_foreground`、
@@ -156,12 +156,11 @@ runpy.run_module("egs.noise_suppression.main", run_name="__main__")
 [`docs/task/ns.md`](../../docs/task/ns.md)（共用骨架）與
 [`docs/task/voice_isolation.md`](../../docs/task/voice_isolation.md)（特化的部分）。
 
-有兩道防呆機制在 `init_dataloader` 裡守著這個配對關係，資料還沒開始載入就會擋下來：
+有兩道防呆機制守著這個配對關係，資料還沒開始載入就會擋下來：
 
-- `dataset.task: noise_suppression`（或沒寫）**同時** `augmentation_realfar.used: True` 或
-  `augmentation_realnear.used: True` → 丟出 `ValueError("augmentation_realfar/realnear need
-  dataset.task: voice_isolation")`。這兩個區塊只有在 voice-isolation 的資料列類型下才有意義。
-- 其他任何 `dataset.task` 的值 → 丟出 `ValueError("Unsupported dataset.task: <value>")`。
+- `dataset.task` 不是 `noise_suppression` 的 config → 直接結束，並指出它屬於哪個 recipe。
+- `augmentation_realfar.used: True` 或 `augmentation_realnear.used: True` → 直接結束，因為這兩個
+  區塊只有在 voice-isolation 的資料列類型下才有意義。
 
 要把一份 `noise_suppression` 的 config 改成 `voice_isolation`，加上：
 

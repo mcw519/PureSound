@@ -149,7 +149,7 @@ train_dataloader = torch.utils.data.DataLoader(
 ```
 
 Used this way (as `batch_sampler=`) by all three egs mains that build a
-`DynamicBaseDataset` subclass: `egs/noise_suppression/main.py`,
+`DynamicBaseDataset` subclass: `puresound/system/runner.py`,
 `egs/target_speaker_extraction/main.py`, `egs/speaker_embedding/main.py`.
 
 ## Class: `SpeakerGenderSampler`

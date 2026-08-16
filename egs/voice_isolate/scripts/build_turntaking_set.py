@@ -80,7 +80,7 @@ def main() -> None:
     import torch
     from puresound.audio.io import AudioIO
     from puresound.recipes import load_siso_recipe_config
-    import egs.noise_suppression.main as M
+    import egs.voice_isolate.main as M
 
     cfg = load_siso_recipe_config(str(Path(args.config_path).resolve()))
     (corpus, trainer, _opt, _sch, _loss, _md, a_sp, a_no, a_rv, a_spd,

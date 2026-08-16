@@ -134,23 +134,22 @@ every other `trainer.lightning_trainer_args` key from the "DDP, precision and pe
 section below apply to `--training` **only**; `--scoring`/`--inference` never read
 `trainer.num_gpus` and always run single-process.
 
-## The `dataset.task` switch: `noise_suppression` vs `voice_isolation`
+## `dataset.task`: this recipe or `voice_isolate`
 
-`egs/voice_isolate/main.py` is not a second implementation — it is a three-line shim:
+The two recipes are separate entry points. This one trains `NoiseSuppressionDataset`;
+`egs/voice_isolate/main.py` trains `VoiceIsolationDataset` and accepts two row types this recipe
+has no use for. Neither imports the other — everything they share (sampler, dataloaders, CLI,
+Lightning wiring, DDP strategy, scoring and inference stages) lives in
+[`puresound/system/runner.py`](../../puresound/system/runner.py), so the two can diverge without
+either carrying a copy of the driver.
 
-```python
-runpy.run_module("egs.noise_suppression.main", run_name="__main__")
-```
+`dataset.task` names which recipe a config belongs to, and each entry point refuses configs that
+are not its own rather than silently training the wrong distribution:
 
-Every `voice_isolate` training/inference run actually executes **this** `main.py`. The two
-products differ only in which config they point at. `init_dataloader` reads `dataset.task` from
-the config (default `"noise_suppression"` when the key is absent — both example configs in this
-recipe omit it) and switches the dataset/collate pair:
-
-| `dataset.task` | dataset class | collate class | extra kwargs passed through |
-|---|---|---|---|
-| `noise_suppression` (default) | `NoiseSuppressionDataset` | `NoiseSuppressionCollateFunc` | — |
-| `voice_isolation` | `VoiceIsolationDataset` | `VoiceIsolationCollateFunc` | `augmentation_realfar_args`, `augmentation_realnear_args` |
+| `dataset.task` | entry point | dataset class | collate class | extra kwargs |
+|---|---|---|---|---|
+| `noise_suppression` (default when the key is absent — both example configs here omit it) | `egs/noise_suppression/main.py` | `NoiseSuppressionDataset` | `NoiseSuppressionCollateFunc` | — |
+| `voice_isolation` | `egs/voice_isolate/main.py` | `VoiceIsolationDataset` | `VoiceIsolationCollateFunc` | `augmentation_realfar_args`, `augmentation_realnear_args` |
 
 Both classes live in `puresound.task.ns` / `puresound.task.voice_isolation`; `VoiceIsolationDataset`
 subclasses the generic one and only overrides its row-type hooks (`_plan_row`,
@@ -159,13 +158,12 @@ underneath, not two. Full detail: [`docs/task/ns.md`](../../docs/task/ns.md) (th
 skeleton) and [`docs/task/voice_isolation.md`](../../docs/task/voice_isolation.md) (the
 specialization).
 
-Two guard rails enforce the pairing, both raised from `init_dataloader` before any data loads:
+Two guard rails enforce the pairing, both raised before any data loads:
 
-- `dataset.task: noise_suppression` (or unset) **and** `augmentation_realfar.used: True` or
-  `augmentation_realnear.used: True` → `ValueError("augmentation_realfar/realnear need
-  dataset.task: voice_isolation")`. These two blocks only mean something for the
-  voice-isolation row types.
-- Any other `dataset.task` value → `ValueError("Unsupported dataset.task: <value>")`.
+- a config whose `dataset.task` is not `noise_suppression` → exits pointing at the recipe that
+  owns it.
+- `augmentation_realfar.used: True` or `augmentation_realnear.used: True` → exits, because those
+  two blocks only mean something for the voice-isolation row types.
 
 To turn a `noise_suppression` config into a `voice_isolation` one:
 

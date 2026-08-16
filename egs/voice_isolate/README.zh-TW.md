@@ -53,16 +53,18 @@ epoch 會被 LR 擾動。
 | 7 | 決策兩端都用真實錄音 + turn-taking + distance 輔助 head + channel consistency | `config/exp/train_dpcrn_realE2E_v2c.yaml` | stage 6 ep19 | `dpcrn_v7.ckpt` | held-out 真實遠場 **−9.45 dB，依距離分級**；keep 側持平（−0.11）；**Dawn WER 0.174 < 0.184 raw**，deletion 0.088；reverberant-office WER −0.024 vs mix；in-domain +8.18——需要 `dry_blend 0.9` |
 | 8 | 合成中的量測式擷取真實化（room-colored 噪音、絕對 dBFS 底噪、幾何驅動的 SIR） | `config/train_dpcrn.yaml` | stage 7 ep19 | `dpcrn_v8.ckpt` **(現行預設)** | 真實遠場 **−15.91 dB**，優於第 7 階段在同一批檔案上的 −13.72（排除洩漏子集為 −17.74 對 −15.68）；補平 2–3 m 凹陷（−4.50 → −16.61）使分級單調；keep 側持平（0.00），最差個案 −5.45 → −1.06；**Dawn WER 0.180 < 0.184 raw**，deletion 0.094；reverberant-office WER −0.024 vs mix；in-domain +7.99——代價是極端殘響下 WER +0.020；需要 `dry_blend 0.9` |
 
-執行方式（從 repo root）：
+執行方式：**從本目錄執行**——config 裡的 metafile 與 work folder 路徑都是相對於它的：
 ```bash
+cd egs/voice_isolate
+
 # 預設 recipe，從前一個版本 warm-start
-uv run python egs/voice_isolate/main.py egs/voice_isolate/config/train_dpcrn.yaml --training \
-    --pretrained_ckpt_path egs/voice_isolate/pretrained_ckpt/dpcrn_v6.ckpt
+uv run python main.py config/train_dpcrn.yaml --training \
+    --pretrained_ckpt_path pretrained_ckpt/dpcrn_v6.ckpt
 
 # 重現較早的階段
-uv run python egs/voice_isolate/main.py egs/voice_isolate/config/exp/train_dpcrn_curriculum_core.yaml --training
-uv run python egs/voice_isolate/main.py egs/voice_isolate/config/exp/train_dpcrn_curriculum_expand.yaml --training \
-    --pretrained_ckpt_path egs/voice_isolate/pretrained_ckpt/dpcrn_v1.ckpt
+uv run python main.py config/exp/train_dpcrn_curriculum_core.yaml --training
+uv run python main.py config/exp/train_dpcrn_curriculum_expand.yaml --training \
+    --pretrained_ckpt_path pretrained_ckpt/dpcrn_v1.ckpt
 ```
 用 `--ckpt_path <ckpt>` 取代 `--pretrained_ckpt_path` = 真正的 resume（還原
 optimizer/scheduler/epoch）。

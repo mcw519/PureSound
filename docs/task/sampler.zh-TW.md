@@ -145,7 +145,7 @@ train_dataloader = torch.utils.data.DataLoader(
 ```
 
 三個會建立 `DynamicBaseDataset` subclass 的 egs main 都是這樣使用它（當成
-`batch_sampler=`）：`egs/noise_suppression/main.py`、
+`batch_sampler=`）：`puresound/system/runner.py`、
 `egs/target_speaker_extraction/main.py`、`egs/speaker_embedding/main.py`。
 
 ## Class: `SpeakerGenderSampler`

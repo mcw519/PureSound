@@ -39,7 +39,7 @@ if str(REPO) not in sys.path:
 import numpy as np  # noqa: E402
 from puresound.audio.io import AudioIO  # noqa: E402
 from puresound.recipes import init_siso_model, load_siso_recipe_config  # noqa: E402
-import egs.noise_suppression.main as M  # noqa: E402
+import egs.voice_isolate.main as M  # noqa: E402
 
 
 def si_sdr(est: torch.Tensor, ref: torch.Tensor, eps: float = 1e-8) -> float:

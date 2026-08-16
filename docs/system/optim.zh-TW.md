@@ -63,7 +63,7 @@ scheduler:
 
 兩者都走同一條 reflection 路徑——從一個換到另一個只是改設定檔，不需要改程式碼。
 
-### 真實接法（`egs/noise_suppression/main.py`）
+### 真實接法（`puresound/system/runner.py`）
 
 ```python
 param_groups = lightning_model.get_total_param_groups()

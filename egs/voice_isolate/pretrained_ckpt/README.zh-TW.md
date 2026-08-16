@@ -112,8 +112,9 @@ uv run python egs/voice_isolate/scripts/streaming_onnx.py export \
     egs/voice_isolate/pretrained_ckpt/dpcrn_v8.ckpt /tmp/model.onnx
 
 # 執行預設 recipe，像 v8 當初那樣從 v7 warm-start
-uv run python egs/voice_isolate/main.py egs/voice_isolate/config/train_dpcrn.yaml --training \
-    --pretrained_ckpt_path egs/voice_isolate/pretrained_ckpt/dpcrn_v7.ckpt
+# （從 recipe 目錄執行——config 裡的 metafile 路徑是相對於它的）
+cd egs/voice_isolate && uv run python main.py config/train_dpcrn.yaml --training \
+    --pretrained_ckpt_path pretrained_ckpt/dpcrn_v7.ckpt
 ```
 
 這裡的 checkpoint 都是從 `../exp/` 底下完整訓練歷史中取出的判準谷底（該目錄

@@ -41,7 +41,7 @@ REPO = Path(__file__).resolve().parents[3]  # -> PureSound repo root
 if str(REPO) not in sys.path:
     sys.path.insert(0, str(REPO))
 
-import egs.noise_suppression.main as recipe_main  # noqa: E402
+import egs.voice_isolate.main as recipe_main  # noqa: E402
 from puresound.nnet.loss import VADHeadBCELoss  # noqa: E402
 from puresound.recipes import (  # noqa: E402
     init_loss_func, init_siso_model, load_siso_recipe_config)
