@@ -56,6 +56,16 @@ anna_test.wav
 !egs/*/config/exp/
 !egs/*/config/exp/*.yaml
 
+# PRIVATE BENCHMARK AUDIO -- never version-controlled, never redistributed.
+# These are internal field recordings (and one set carrying a commercial system's
+# output). Their labels and scorecards live under egs/*/benchmarks/ and carry no
+# audio; the recordings themselves are distributed out of band. Do not add negative
+# rules under these paths.
+egs/voice_isolate/test_vector/
+egs/voice_isolate/data_report/field_cases/
+egs/voice_isolate/data_report/qvf22_real_cases/
+*.wav.private
+
 # Keep the RIR realism artifact index visible while ignoring generated payloads.
 !egs/rir_generation/exp/
 !egs/rir_generation/exp/rir_realism/
