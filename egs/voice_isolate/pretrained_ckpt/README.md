@@ -45,6 +45,8 @@ path needs a gate rather than a blend.
 | `dpcrn_v6.ckpt` | `config/exp/train_dpcrn_wide_antisup.yaml` | v5 | wide RIR domain (RT60 0.20–0.85) + capture realism (media-voice interferer, HPF) | held-out unseen-room **+8.06**; **first streaming-verified** version (see below) (ep19) |
 | `dpcrn_v7.ckpt` | `config/exp/train_dpcrn_realE2E_v2c.yaml` | v6 | real recordings on both sides of the decision (real far interferers + real <1 m keep rows), turn-taking far-solo supervision, distance/DRR aux head, channel-perturbation mask consistency | held-out real far-field **−9.45 dB, graded by distance** (1–2 m −3 → 5 m+ −38; v6: −1.76 flat), near-field keep flat (−0.11), **Dawn WER 0.174 < 0.184 raw**, deletion 0.088 ≈ raw floor, reverberant-office WER −0.024 vs mix, in-domain +8.18 (ep19, with `dry_blend 0.9`) |
 | **`dpcrn_v8.ckpt`** | **`config/train_dpcrn.yaml`** | v7 | measured-capture realism in synthesis: noise convolved with the speech's own room, an absolute dBFS microphone floor, and part of the synthetic mixture taking its SIR from the scene geometry | real far-field suppression **−15.91 dB** vs v7's −13.72 on identical files (leakage-free subset −17.74 vs −15.68), and the 2–3 m dip in v7's distance response filled in (−4.50 → −16.61) so grading is monotone; near-field keep flat (0.00) with the worst case improved (−5.45 → −1.06); Dawn WER 0.180 < 0.184 raw, deletion 0.094; reverberant-office WER −0.024 vs mix (both interferer counts); turn-taking KEEP 6 violations; in-domain +7.99. Costs: +0.020 WER on the extreme-reverb monitor where v7 was neutral (ep19, with `dry_blend 0.9`) |
+| `dpcrn_v10.ckpt` | `config/exp/train_dpcrn_coldstart.yaml` | v8 | self-calibration curriculum: rows that OPEN with real far-field solo before any near anchor (row-initial-far exposure ~10% → ~23%, anchor-free real lone-far 3% → 7.5%), teaching the model to calibrate against whatever reference exists including the noise floor | the **cold-start** operating point, judged on the field benchmark only (ep39). Bot-idle far suppression: 5 of 10 isolated far clips clear −6 dB where v8 clears 1 and v9 clears 2, and it produces the deepest single result in the set (−11.95 dB, residual 12.6 dB over room tone). Near keep is the best of any version (worst case −0.34 dB). Confined to 200 cm — at 300 cm it is no better than v9. Costs ~1 dB of stream-mode suppression vs v8. **Not a deployment candidate**: only the field axis has been run |
+| `dpcrn_v9.ckpt` | `config/exp/train_dpcrn_drrcontrast.yaml` | v8 | DRR-contrast augmentation: per fresh RIR channel (prob 0.4) the reverberant tail is rescaled so foreground channels gain up to 4 dB DRR and far channels lose up to 4 dB | the ASR-gate-optimal operating point: reverberant-office WER **0.513, −0.050 vs mix** (v8: 0.539, −0.024; both interferer counts improve — 1 itf 0.480, 2 itf 0.576), **Dawn WER 0.172 / deletion 0.086** (both best of any version), extreme-reverb monitor **−0.003** (v8's +0.020 cost erased), turn-taking KEEP 94/6, in-domain +8.10. Costs: real far-field suppression −12.44 vs v8's −15.91 (paired, 24/71 files >3 dB shallower), turn-taking SUPPRESS 80/20 @ −13.43 vs v8's 87/13 @ −16.14 (ep19, with `dry_blend 0.9`) |
 
 `dpcrn_v6_gate.ckpt` — off the main line: `config/exp/train_dpcrn_gate.yaml` freezes v6 and
 trains only a causal frame-level near/far VAD gate head (98,689 params). It reaches 0.90+
@@ -53,12 +55,20 @@ an engineering reference for the gate path, not a deployable model. Its separato
 identical to v6; only 10 BatchNorm running-statistic buffers drifted during that run, so its
 mask output is v6's up to those buffers.
 
-**Choosing a version.** Take `dpcrn_v8.ckpt` with `dry_blend 0.9`. `dpcrn_v7.ckpt` is the
+**Choosing a version.** Take `dpcrn_v8.ckpt` with `dry_blend 0.9` — it remains the default.
+`dpcrn_v9.ckpt` sits at a different operating point: pick it when downstream ASR quality on
+the near speaker is the objective (its reverberant-office WER gain is double v8's and its
+deletion is the lowest of any version), and accept ~3.5 dB shallower far-field suppression —
+a far voice is more audible in the residual than under v8. `dpcrn_v7.ckpt` is the
 alternative when the deployment sees reverberation well past the training domain (RT60 > 1 s):
-it is neutral on the extreme-reverb WER monitor where v8 costs +0.020, and gives up about 2 dB
+it is neutral on the extreme-reverb WER monitor where v8 costs +0.020 (v9 is also neutral
+there), and gives up about 2 dB
 of real far-field suppression for it. `dpcrn_v6.ckpt` is the conservative fallback: no runtime
-knob, and it largely passes far speech through. v1–v5 are the training-history stages, kept so
-any stage can be re-judged or re-warm-started; they are not deployment candidates.
+knob, and it largely passes far speech through. `dpcrn_v10.ckpt` is the cold-start stage: take it
+only if bot-idle behaviour (a bystander talking before the user has said anything) is the axis
+you are optimising, and only after running the rest of the gate on it — so far it has been judged
+on the field benchmark alone. v1–v5 are the training-history stages, kept so any stage can be
+re-judged or re-warm-started; they are not deployment candidates.
 
 **What none of them do.** Far speech recorded through a capture chain very unlike the training
 corpora is still barely suppressed (about −1 dB on the cross-chain reference clips, where a
@@ -71,11 +81,16 @@ number above comes from a trough epoch.
 
 ## `streaming/` — per-frame ONNX exports
 
-`dpcrn_v6.{onnx,json}`, `dpcrn_v7.{onnx,json}` and `dpcrn_v8.{onnx,json}`, built with
+`dpcrn_v6.{onnx,json}` through `dpcrn_v10.{onnx,json}`, built with
 `../scripts/streaming_onnx.py export`. All carry a **30 ms (3-frame) algorithmic latency** from
 the look-ahead, handled by future-buffering baked into the graph as extra state
 (`puresound/streaming/dpcrn.py`), and all are verified against the offline model once aligned by
-that latency: v6 88–105 dB, v7 63 dB, v8 49.7 dB SI-SDR. CPU RTF 0.43. Load with `puresound.streaming.StreamingDpcrnOrt` or the SDK's
+that latency. `verify` defaults to a **white-noise** probe, which is a stress signal rather than
+a deployment one — v6 88–105 dB, v7 63 dB, v8 49.7 dB, v9 48.2 dB, v10 24.6 dB SI-SDR, a trend
+that tracks how aggressively each version modulates its mask, not its streaming correctness.
+Pass real speech with `--input_audio` and the same graphs are near bit-exact: on 30 s of the
+field benchmark's 90D session, v8 124.4 dB, v9 120.2 dB, v10 116.1 dB. Judge a new export on the
+speech number; use the noise number only to compare versions with each other. CPU RTF 0.43. Load with `puresound.streaming.StreamingDpcrnOrt` or the SDK's
 manifest-driven `PureSoundStreamingRuntime` (`processor: stft_frame_ort`).
 
 Any offline↔streaming comparison **must** align by the reported latency and trim the edges,
@@ -125,6 +140,8 @@ Earlier logs and reports use the pre-versioning names:
 | `dpcrn_gate_synth_ep7.ckpt` | `dpcrn_v6_gate.ckpt` |
 | `dpcrn_realE2E_v2c_ep19.ckpt` | `dpcrn_v7.ckpt` |
 | `dpcrn_realism_0729_ep19.ckpt` | `dpcrn_v8.ckpt` |
+| `dpcrn_drrcontrast_ep19.ckpt` | `dpcrn_v9.ckpt` |
+| `dpcrn_coldstart_ep39.ckpt` | `dpcrn_v10.ckpt` |
 
 Training-run directories keep their original names (`exp/dpcrn_wide_antisup_0702`,
 `exp/dpcrn_realE2E_v2c_0722`, `exp/dpcrn_realism_0729`, …).

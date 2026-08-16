@@ -96,7 +96,7 @@ keep 側的失敗。以下兩個腳本在真實錄音上同時量測兩側。
 |---|---|
 | `eval_far_suppression.py` | 壓制側：真實遠場語音依距離被壓制了多少。`--corpus voices` 依 (room, mic) 分桶，span 取自錄音自身的能量；`--corpus realman` 依標註距離分桶，span 取自逐樣本對齊的直達路徑參考。希望超過 1 m 時非常負，1 m 以內約 0 dB。 |
 | `eval_keep_robustness.py` | 保留側：近場語音在其擷取鏈逐漸偏離訓練用的擷取鏈時（dry → 模擬 RIR → 實測 RIR → 真實錄音），有噪音／無噪音下各存活多少。若階梯很陡，代表 keep 決策是錨定在擷取鏈上、而非距離上。 |
-| `eval_realcase.py` | 在真實片段（`windows.json`）上手動標註 keep/suppress 區段，把兩種失敗方向分開評分。若 case 目錄附有第二套系統的輸出，會一併評分。 |
+| `eval_realcase.py` | 在真實片段（`windows.json`）上手動標註 keep/suppress 區段，把兩種失敗方向分開評分，而且是**用絕對位準**：除了相對衰減量，還報告殘留高於該錄音噪音底多少、以及低於使用者本人聲音多少；當某段輸入本來就貼近底噪、沒有可移除的能量時標成 NOT-SCORABLE。預設跑田野 benchmark（`data_report/field_cases/test_vector_cases`，見其 `RESULTS.md`）；若 case 目錄附有第二套系統的輸出，會一併評分。 |
 | `eval_turntaking.py` | 相同的雙側計分卡，區段由一組凍結 turn-taking 集合的 target 能量自動推得。 |
 | `build_turntaking_set.py` | 建立上述凍結的 (mix, target) turn-taking 集合；`--rir-folder` 可換成實測 RIR bank 來產生真實房間的輪替。 |
 | `eval_gate.py` | 在留存的模擬集合上，逐幀 gate-head 計分卡（recall / specificity / balanced accuracy / BCE）——因為 gate 訓練不動 mask 路徑，這是唯一能看出 gate 進展的視角。 |
@@ -118,11 +118,15 @@ uv run python egs/voice_isolate/scripts/eval_keep_robustness.py \
     --ckpt v7=egs/voice_isolate/pretrained_ckpt/dpcrn_v7.ckpt \
     --ckpt v8=egs/voice_isolate/pretrained_ckpt/dpcrn_v8.ckpt --device cuda
 
+PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True \
 uv run python egs/voice_isolate/scripts/eval_realcase.py \
     egs/voice_isolate/config/infer_dpcrn.yaml \
     --ckpt egs/voice_isolate/pretrained_ckpt/dpcrn_v8.ckpt --dry-blend 0.9 \
-    --cases-dir egs/voice_isolate/data_report/qvf22_real_cases --device cpu
+    --cases-dir egs/voice_isolate/data_report/field_cases/test_vector_cases --device cuda:0
 ```
+
+田野評測集的 134.8 秒 session 是單次 forward，DPCRN 的 LSTM 會一次要一塊 9.8 GiB，
+所以 24 GB 卡需要 `expandable_segments`，否則會因碎片化 OOM。
 
 以上所有項目（加上 in-domain 與 WER 階段）都能透過一個指令為一個 checkpoint
 一次跑完：

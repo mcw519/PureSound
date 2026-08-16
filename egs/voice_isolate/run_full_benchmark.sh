@@ -17,10 +17,16 @@ OUT="$SD/bench_$TAG"; mkdir -p "$OUT"
 ASR=faster-whisper; ASR_MODEL=large-v3   # strong ASR reveals over-suppression whisper-small hides
 say(){ echo "[bench $(date +%H:%M:%S)] $*"; }
 
-say "1/9 real-clip scorecard (voicebot gate)"
+say "1/9 real-clip scorecard (voicebot gate): cross-chain reference + field benchmark"
 uv run python scripts/eval_realcase.py config/infer_dpcrn.yaml \
   --ckpt "$CKPT" --cases-dir data_report/qvf22_real_cases --device cpu \
   --dry-blend "$BLEND" > "$OUT/1_scorecard.log" 2>&1
+# the field set is the one with STREAM vs COLD-START modes and absolute residual levels;
+# its 134.8 s session needs expandable_segments on a 24 GB card
+PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True \
+uv run python scripts/eval_realcase.py config/infer_dpcrn.yaml \
+  --ckpt "$CKPT" --cases-dir data_report/field_cases/test_vector_cases --device "$DEV" \
+  --dry-blend "$BLEND" > "$OUT/1_scorecard_field.log" 2>&1
 
 say "2/9 in-domain SI-SDRi + buckets + solo-leakage (phase1 bank)"
 uv run python scripts/eval_indomain.py config/exp/eval_indomain_phase1.yaml \
@@ -64,6 +70,8 @@ uv run python scripts/eval_turntaking.py config/infer_dpcrn.yaml \
 
 echo; echo "================ BENCHMARK SUMMARY [$TAG]  (dry_blend=$BLEND) ================"
 echo "--- real scorecard ---";        grep -E "scenario|# (ours|gate_|reference):" "$OUT/1_scorecard.log" 2>/dev/null
+echo "--- field scorecard ---";       grep -E "_session|# ours:" "$OUT/1_scorecard_field.log" 2>/dev/null
+echo "    cold-start far verdicts:";  awk -F'\t' '/_far/ && $3=="ours" {v=$11; c[v]++} END {for (k in c) printf "      %-40s %d\n", k, c[k]}' "$OUT/1_scorecard_field.log" 2>/dev/null
 echo "--- in-domain ---";             grep -E "SI-SDRi :|1N\+0F|F-only|median power|interferer-solo leakage|by turn_taking" -A1 "$OUT/2_indomain.log" 2>/dev/null | grep -vE "^--$"
 echo "--- probe expand/high/boundary (F-only median) ---"
 for f in 3_probe_expand 4_probe_high 5_probe_boundary; do echo -n "$f: "; grep "median power reduction" "$OUT/$f.log" 2>/dev/null | tail -1; done

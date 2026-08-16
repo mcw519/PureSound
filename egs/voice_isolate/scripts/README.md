@@ -94,7 +94,7 @@ metrics cannot see the keep-side failure at all. These two measure both sides on
 |---|---|
 | `eval_far_suppression.py` | Suppress side: how much real far-field speech is suppressed, by distance. `--corpus voices` buckets by (room, mic) with spans from the recording's own energy; `--corpus realman` buckets by annotated distance with spans from the sample-aligned direct-path reference. Want very negative beyond 1 m, ~0 dB within 1 m. |
 | `eval_keep_robustness.py` | Keep side: how much near speech survives as its capture chain moves away from the training one (dry → simulated RIR → measured RIR → real recording), with and without noise. A steep ladder means the keep decision is anchored on the capture chain instead of on distance. |
-| `eval_realcase.py` | Hand-annotated keep/suppress spans on real clips (`windows.json`), scoring both failure directions separately. Scores a second system's output alongside when the case dir ships one. |
+| `eval_realcase.py` | Hand-annotated keep/suppress spans on real clips (`windows.json`), scoring both failure directions separately, **in absolute levels**: alongside relative attenuation it reports the residual over the recording's noise floor and below the user's own voice, and marks a span NOT-SCORABLE when its input was too close to the floor to have removable energy. Defaults to the field benchmark (`data_report/field_cases/test_vector_cases`, see its `RESULTS.md`); scores a second system's output alongside when the case dir ships one. |
 | `eval_turntaking.py` | Same two-sided scorecard, spans derived automatically from the target energy of a frozen turn-taking set. |
 | `build_turntaking_set.py` | Builds that frozen (mix, target) turn-taking set; `--rir-folder` swaps in a measured-RIR bank for real-room turns. |
 | `eval_gate.py` | Frame-level gate-head scorecard (recall / specificity / balanced accuracy / BCE) on a held-out simulated set — the only view that shows gate progress, since gate training leaves the mask path untouched. |
@@ -115,11 +115,15 @@ uv run python egs/voice_isolate/scripts/eval_keep_robustness.py \
     --ckpt v7=egs/voice_isolate/pretrained_ckpt/dpcrn_v7.ckpt \
     --ckpt v8=egs/voice_isolate/pretrained_ckpt/dpcrn_v8.ckpt --device cuda
 
+PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True \
 uv run python egs/voice_isolate/scripts/eval_realcase.py \
     egs/voice_isolate/config/infer_dpcrn.yaml \
     --ckpt egs/voice_isolate/pretrained_ckpt/dpcrn_v8.ckpt --dry-blend 0.9 \
-    --cases-dir egs/voice_isolate/data_report/qvf22_real_cases --device cpu
+    --cases-dir egs/voice_isolate/data_report/field_cases/test_vector_cases --device cuda:0
 ```
+
+The field set's 134.8 s session is one forward pass and the DPCRN LSTM asks for a single
+9.8 GiB block, so a 24 GB card needs `expandable_segments` or it fragments into an OOM.
 
 All of the above (plus the in-domain and WER stages) run in one shot per checkpoint:
 
