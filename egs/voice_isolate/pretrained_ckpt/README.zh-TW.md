@@ -44,8 +44,14 @@ manifest 把這個值放在 `recommended_inference` 底下。
 | `dpcrn_v6.ckpt` | `config/exp/train_dpcrn_wide_antisup.yaml` | v5 | 拓寬 RIR 域（RT60 0.20–0.85）+ 擷取真實化（media-voice 干擾者、HPF） | held-out unseen-room **+8.06**；**第一個經 streaming 驗證**的版本（詳見下文）（ep19） |
 | `dpcrn_v7.ckpt` | `config/exp/train_dpcrn_realE2E_v2c.yaml` | v6 | 決策兩端都用真實錄音（真實遠場干擾者 + 真實 <1 m keep 列）、turn-taking far-solo 監督、distance/DRR 輔助 head、channel-perturbation mask consistency | held-out 真實遠場 **−9.45 dB，依距離分級**（1–2 m −3 → 5 m+ −38；v6：−1.76 持平），近場 keep 持平（−0.11），**Dawn WER 0.174 < 0.184 raw**，deletion 0.088 ≈ raw 底線，reverberant-office WER −0.024 vs mix，in-domain +8.18（ep19，搭配 `dry_blend 0.9`） |
 | **`dpcrn_v8.ckpt`** | **`config/train_dpcrn.yaml`** | v7 | 合成中的量測式擷取真實化：噪音與語音卷積同一個房間、絕對 dBFS 麥克風底噪、部分合成混音的 SIR 取自場景幾何 | 真實遠場壓制 **−15.91 dB**，優於 v7 在同一批檔案上的 −13.72（排除洩漏子集為 −17.74 對 −15.68），且補平了 v7 距離響應中的 2–3 m 凹陷（−4.50 → −16.61）使分級單調；近場 keep 持平（0.00），最差個案有改善（−5.45 → −1.06）；Dawn WER 0.180 < 0.184 raw，deletion 0.094；reverberant-office WER −0.024 vs mix（兩種干擾者數量皆然）；turn-taking KEEP 6 違規；in-domain +7.99。代價：極端殘響監看上 +0.020 WER，而 v7 在此為中性（ep19，搭配 `dry_blend 0.9`） |
-| `dpcrn_v10.ckpt` | `config/exp/train_dpcrn_coldstart.yaml` | v8 | 自我校準課程：讓部分訓練列在任何近場錨出現**之前**就以真實遠場獨白開場（列首遠場曝光 ~10% → ~23%、完全無錨的真實 lone-far 3% → 7.5%），教模型拿現場既有的任何參考——包含從第零幀就存在的噪音底——來校準 | **冷啟動軸動了，但部署閘門沒撐住**（ep39，完整關卡）。贏的部分：機器閒置時的遠場壓制 10 個孤立 clip 中 5 個跨過 −6 dB（v8 為 1、v9 為 2），並產生全集最深的單一結果；近場保留歷來最佳（最差 −0.34 dB）；turn-taking SUPPRESS 89/11 @ −15.98（ok 率最佳）；Dawn WER 0.173 / deletion 0.088 ≈ v9。輸的部分：**BUT-OFFICE 這道主要部署閘門塌到 −0.004 vs mix**（v8 −0.024、v9 −0.050），而且它的單一干擾者子集反向惡化（mix 0.518 → enh 0.526）；turn-taking KEEP 違規 6 → 10；in-domain +7.56（v8 +7.99、v9 +8.10）；極端殘響回到 +0.017（v9 −0.003）。冷啟動的增益侷限在 200 cm。**非部署候選**——留作冷啟動參考與 warm-start 起點 |
 | `dpcrn_v9.ckpt` | `config/exp/train_dpcrn_drrcontrast.yaml` | v8 | DRR 對比增強：每個新取出的 RIR 通道（機率 0.4）重縮殘響尾——前景通道 DRR 最多 +4 dB、遠場通道最多 −4 dB | ASR 閘最優工作點：reverberant-office WER **0.513，−0.050 vs mix**（v8 為 0.539、−0.024；兩種干擾者數量皆改善——1 itf 0.480、2 itf 0.576），**Dawn WER 0.172 / deletion 0.086**（皆為歷來版本最佳），極端殘響監看 **−0.003**（v8 的 +0.020 代價歸零），turn-taking KEEP 94/6，in-domain +8.10。代價：真實遠場壓制 −12.44 對 v8 的 −15.91（逐檔配對，24/71 檔淺 >3 dB）、turn-taking SUPPRESS 80/20 @ −13.43 對 v8 的 87/13 @ −16.14（ep19，搭配 `dry_blend 0.9`） |
+| `dpcrn_v10.ckpt` | `config/exp/train_dpcrn_coldstart.yaml` | v8 | 自我校準課程：讓部分訓練列在任何近場錨出現**之前**就以真實遠場獨白開場（列首遠場曝光 ~10% → ~23%、完全無錨的真實 lone-far 3% → 7.5%），教模型拿現場既有的任何參考——包含從第零幀就存在的噪音底——來校準 | **冷啟動軸動了，但部署閘門沒撐住**（ep39，完整關卡）。贏的部分：機器閒置時的遠場壓制 10 個孤立 clip 中 5 個跨過 −6 dB（v8 為 1、v9 為 2），並產生全集最深的單一結果；近場保留歷來最佳（最差 −0.34 dB）；turn-taking SUPPRESS 89/11 @ −15.98（ok 率最佳）；Dawn WER 0.173 / deletion 0.088 ≈ v9。輸的部分：**在部署殘響範圍上比 v8 差 0.024 WER**（同一批語句配對，95% CI [+0.008, +0.041]）；turn-taking KEEP 違規 6 → 10；in-domain +7.56（v8 +7.99、v9 +8.10）；極端殘響回到 +0.017（v9 −0.003）。在 BUT-OFFICE 上讀到 −0.004 對 v8 的 −0.024，但該集合分辨不出這兩個數字（n=200，兩個區間都跨過 0）——它是監看，不是閘門。冷啟動的增益侷限在 200 cm。**非部署候選**——留作冷啟動參考與 warm-start 起點 |
+
+> **關於上表的 reverberant-office 數字。** 表中每一個 `reverberant-office WER`（v7 −0.024、
+> v8 −0.024、v9 −0.050、v10 −0.004）都來自一個 200 句的集合，其 bootstrap 區間約 ±0.03。
+> 2026-08 重新量測後，v8 與 v10 在該集合上**都無法證明比不處理更好**，所以它隱含的版本排序
+> 並未成立。主要 WER 閘門已改為 `wer_set_moderate_test`，它能乾淨地分辨同一組比較。細節與
+> 配對數字見 [`../benchmarks/wer_sets/README.md`](../benchmarks/wer_sets/README.md)。
 
 `dpcrn_v6_gate.ckpt`——不在主線上：`config/exp/train_dpcrn_gate.yaml` 凍結 v6，
 只訓練一個 causal 逐幀近／遠 VAD gate head（98,689 參數）。它在模擬資料上達到
@@ -62,8 +68,8 @@ manifest 把這個值放在 `recommended_inference` 底下。
 中性的（v8 在此要付出 +0.020 的代價，v9 在此亦為中性），代價是放棄約 2 dB 的真實遠場壓制。
 `dpcrn_v6.ckpt` 是保守 fallback：沒有 runtime 旋鈕，而且對遠場語音大致上是
 放行的。**`dpcrn_v10.ckpt` 不是部署選項**：它是唯一能推動「機器閒置冷啟動壓制」的版本，但完整
-關卡顯示它為此付掉了主要部署閘門——reverberant-office 的 WER 增益從 v8 的 −0.024 掉到 −0.004，
-而且該集合單一干擾者那半邊比未處理的混音**更差**。把它當冷啟動的參考，或當作「要把 office 閘門
+關卡顯示它為此在部署殘響範圍的 WER 上付出代價：同一批語句配對比 v8 差 0.024，bootstrap 區間
+不跨過 0。把它當冷啟動的參考，或當作「要把 office 閘門
 補回來」那個 recipe 的 warm-start 起點。v1–v5 是訓練歷史階段，保留下來是為了讓任何階段都能被重新
 判準或重新 warm-start；它們不是部署候選。
 

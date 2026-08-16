@@ -111,6 +111,39 @@ def main():
         for it,rf,hm,he in zip(items,refs,hyp_mix,hyp_enh):
             fh.write(json.dumps({"id":it["id"],"ref":rf,"mix":hm,"enh":he,"n_interferers":it["n_interferers"]},ensure_ascii=False)+"\n")
 
+    # Per-utterance edit counts, so the enh-vs-mix difference can be given an interval
+    # instead of a bare point estimate. A 200-utterance set at WER ~0.55 resolves about
+    # +-0.03; quoting a 0.02 "win" from it without the interval is reading noise (this
+    # bit the v8/v9/v10 comparison -- see benchmarks/wer_sets/README.md).
+    def _counts(refs_, hyps_):
+        rt = jiwer.Compose([jiwer.ReduceToListOfListOfWords()])
+        out=[]
+        for r,h in zip(refs_,hyps_):
+            o=jiwer.process_words([_NORM(r) or " "],[_NORM(h) or " "],
+                                  reference_transform=rt,hypothesis_transform=rt)
+            out.append((o.substitutions+o.insertions+o.deletions, sum(len(x) for x in o.references)))
+        return out
+
+    def _ci(rows, n_boot=4000, seed=0):
+        """95% bootstrap interval on WER(enh) - WER(mix), resampling utterances."""
+        import random
+        rng=random.Random(seed); vals=[]
+        for _ in range(n_boot):
+            s=[rows[rng.randrange(len(rows))] for _ in range(len(rows))]
+            n=sum(x[2] for x in s)
+            vals.append((sum(x[1] for x in s)-sum(x[0] for x in s))/n if n else float("nan"))
+        vals.sort()
+        return vals[int(0.025*n_boot)], vals[int(0.975*n_boot)]
+
+    def _delta_line(refs_, hm_, he_, label=""):
+        cm=_counts(refs_,hm_); ce=_counts(refs_,he_)
+        rows=[(m[0],e[0],m[1]) for m,e in zip(cm,ce)]
+        n=sum(r[2] for r in rows)
+        d=(sum(r[1] for r in rows)-sum(r[0] for r in rows))/n
+        lo,hi=_ci(rows)
+        flag="" if (hi<0 or lo>0) else "   <- INSIDE NOISE: this set cannot resolve this difference"
+        return f"{label}delta {d:+.4f}  95% CI [{lo:+.4f}, {hi:+.4f}]{flag}"
+
     wm=norm_wer(refs,hyp_mix); we=norm_wer(refs,hyp_enh); wr=norm_wer(refs,hyp_ref)
     print("="*64); print(f"BUT real-RIR WER benchmark (real LibriTTS transcripts, Whisper-normalized, n={len(refs)})"); print("="*64)
     print(f"SI-SDRi vs near-reverb ref : mean {st.mean(sisdri):+.2f} / median {st.median(sisdri):+.2f} dB  (secondary; ref=full near-reverb, not early)")
@@ -118,10 +151,14 @@ def main():
     print(f"WER mix      : {wm['wer']:.3f}  (sub {wm['substitution_rate']:.3f} / ins {wm['insertion_rate']:.3f} / del {wm['deletion_rate']:.3f})")
     print(f"WER enhanced : {we['wer']:.3f}  (sub {we['substitution_rate']:.3f} / ins {we['insertion_rate']:.3f} / del {we['deletion_rate']:.3f})")
     print(f"-> enhancement {'REDUCES' if we['wer']<wm['wer'] else 'RAISES'} WER by {abs(we['wer']-wm['wer']):.3f} vs mix")
+    print(f"   {_delta_line(refs,hyp_mix,hyp_enh)}")
+    print(f"   headroom on this set: mix {wm['wer']:.3f} - reverb floor {wr['wer']:.3f} = {wm['wer']-wr['wer']:.3f};"
+          f" this checkpoint captured {100*(wm['wer']-we['wer'])/max(wm['wer']-wr['wer'],1e-9):.0f}% of it")
     print("-- by n_interferers --")
     for k in sorted(by_itf):
         trip=by_itf[k]; r=[t[0] for t in trip]; hm=[t[1] for t in trip]; he=[t[2] for t in trip]
         print(f"   {int(k)} itf (n={len(trip)}): WER mix {norm_wer(r,hm)['wer']:.3f} -> enh {norm_wer(r,he)['wer']:.3f}")
+        print(f"        {_delta_line(r,hm,he)}")
 
 if __name__ == "__main__":
     main()

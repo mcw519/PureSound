@@ -49,7 +49,17 @@ uv run python scripts/eval_dawn_chorus.py config/infer_dpcrn.yaml \
   --ckpt "$CKPT" --device "$DEV" --asr "$ASR" --asr-model "$ASR_MODEL" \
   --dry-blend "$BLEND" > "$OUT/6_dawn_wer.log" 2>&1
 
-say "7/9 BUT-OFFICE real-RIR WER (PRIMARY deployment gate, RT30 0.56-0.69; $ASR/$ASR_MODEL)"
+# PRIMARY WER gate: the deployment reverberation range, and the only WER set here whose
+# resolution matches the differences between our checkpoints -- models capture ~40% of its
+# headroom, so a version difference lands outside the bootstrap interval. BUT-OFFICE below
+# is kept as a monitor, not a gate: at n=200 nothing we have is distinguishable from
+# doing nothing on it (see benchmarks/wer_sets/README.md).
+say "7a/9 moderate-reverb WER (PRIMARY deployment gate, RT60 0.20-0.65; $ASR/$ASR_MODEL)"
+uv run python scripts/eval_wer.py config/exp/eval_but_real.yaml \
+  --ckpt "$CKPT" --set-dir data_report/wer_set_moderate_test --device "$DEV" \
+  --asr "$ASR" --asr-model "$ASR_MODEL" --dry-blend "$BLEND" > "$OUT/7a_moderate_wer.log" 2>&1
+
+say "7b/9 BUT-OFFICE real-RIR WER (measured-RIR MONITOR, RT30 0.56-0.69; $ASR/$ASR_MODEL)"
 uv run python scripts/eval_wer.py config/exp/eval_but_real.yaml \
   --ckpt "$CKPT" --set-dir data_report/but_wer_set_office --device "$DEV" \
   --asr "$ASR" --asr-model "$ASR_MODEL" --dry-blend "$BLEND" > "$OUT/7_but_office_wer.log" 2>&1
@@ -76,7 +86,8 @@ echo "--- in-domain ---";             grep -E "SI-SDRi :|1N\+0F|F-only|median po
 echo "--- probe expand/high/boundary (F-only median) ---"
 for f in 3_probe_expand 4_probe_high 5_probe_boundary; do echo -n "$f: "; grep "median power reduction" "$OUT/$f.log" 2>/dev/null | tail -1; done
 echo "--- Dawn WER (deletion guardrail) ---"; grep -iE "WER|deletion|insert|substit|SI-SDR" "$OUT/6_dawn_wer.log" 2>/dev/null | tail -6
-echo "--- BUT-OFFICE WER (PRIMARY deployment gate) ---"; grep -iE "WER|deletion|insert|substit|SI-SDR" "$OUT/7_but_office_wer.log" 2>/dev/null | tail -6
+echo "--- moderate-reverb WER (PRIMARY deployment gate) ---"; grep -iE "WER|delta|headroom|deletion|insert|substit|SI-SDR" "$OUT/7a_moderate_wer.log" 2>/dev/null | tail -10
+echo "--- BUT-OFFICE WER (measured-RIR monitor; check the CI before reading a win) ---"; grep -iE "WER|delta|headroom|deletion|insert|substit|SI-SDR" "$OUT/7_but_office_wer.log" 2>/dev/null | tail -10
 echo "--- BUT reverb WER (secondary extreme-OOD monitor) ---"; grep -iE "WER|deletion|insert|substit" "$OUT/8_but_reverb_wer.log" 2>/dev/null | tail -4
 echo "--- real-RIR turn-taking (KEEP near / SUPPRESS far-solo) ---"; grep -E "^(system|ours|gate_)" "$OUT/9_turntaking.log" 2>/dev/null
 echo "logs: $OUT"

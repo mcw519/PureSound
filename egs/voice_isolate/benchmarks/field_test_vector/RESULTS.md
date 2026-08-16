@@ -131,7 +131,8 @@ nine-stage gate ([`../full_gate/v10.txt`](../full_gate/v10.txt)) says otherwise:
 
 | gate | v8 | v9 | v10 |
 |---|---|---|---|
-| BUT-OFFICE WER vs mix — **primary deployment gate** | −0.024 | **−0.050** | **−0.004** (1-interferer subset: mix 0.518 → enh 0.526, *worse*) |
+| **moderate-reverb WER, paired vs v8** — primary WER gate | — | not yet run | **+0.024 worse** [+0.008, +0.041] |
+| BUT-OFFICE WER vs mix (monitor; n=200 resolves ~±0.03) | −0.022 [−0.049, +0.002] | −0.050 | −0.006 [−0.033, +0.018] |
 | Dawn Chorus WER / deletion (raw 0.184) | 0.180 / 0.094 | **0.172 / 0.086** | 0.173 / 0.088 |
 | extreme-reverb monitor vs mix | +0.020 | **−0.003** | +0.017 |
 | turn-taking KEEP violations | 6 | 6 | **10** |
@@ -139,10 +140,19 @@ nine-stage gate ([`../full_gate/v10.txt`](../full_gate/v10.txt)) says otherwise:
 | in-domain SI-SDRi | +7.99 | **+8.10** | +7.56 |
 | cold-start far clearing −6 dB (this set) | 1/10 | 2/10 | **5/10** |
 
-So the cold-start curriculum bought exactly what it was built to buy — and paid for it on
-the gate that decides deployment. The office set's single-interferer half comes out worse
-than the unprocessed mixture, which is the failure this whole line of work exists to avoid.
-`dpcrn_v8.ckpt` remains the default; v10 is kept as the cold-start reference.
+So the cold-start curriculum bought exactly what it was built to buy, and paid for it on the
+WER gate: on the deployment reverberation range v10 is 0.024 WER worse than v8, paired on
+identical utterances, with the interval clear of zero. `dpcrn_v8.ckpt` remains the default;
+v10 is kept as the cold-start reference.
 
-The lesson is about the benchmark, not only the checkpoint: a recipe optimised against one
-axis will move that axis. This scorecard cannot be read alone.
+Two lessons, and the second is the bigger one:
+
+1. A recipe optimised against one axis will move that axis. This scorecard cannot be read
+   alone — read it beside [`../full_gate/`](../full_gate/).
+2. **The gate it was first judged against could not measure what it was asked to.** The
+   original verdict said v10's BUT-OFFICE result was a collapse and that its
+   single-interferer half came out worse than the unprocessed mixture. Bootstrapping that
+   set showed neither claim survives: at n=200 nothing we have is distinguishable from
+   doing nothing on BUT-OFFICE, including v8's own headline −0.024. The verdict held only
+   because a set with real resolution agreed with it. See
+   [`../wer_sets/README.md`](../wer_sets/README.md).
