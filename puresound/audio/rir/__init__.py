@@ -5,6 +5,20 @@ This package is the destination of the modularization described in
 migration the existing flat ``puresound.audio.*`` modules remain the canonical
 implementations and keep working unchanged.
 
+Where this sits relative to training
+------------------------------------
+
+Almost all of this package is **generation-side**: it builds and audits RIR banks
+offline, and ``egs/rir_generation`` is its only caller.  A training run touches exactly
+one module -- ``bank.loader``, which reads a released bank and hands channels to the
+augmentor.  Nothing under ``calibration``, ``physics``, ``path_events``, ``render`` or
+``scene`` is imported on the training path.
+
+It stays in the library because it is general acoustics code, not one recipe's private
+machinery: any recipe that needs a room can build one with it.  But when you are reading
+a training run, ``bank.loader`` is the whole surface, and when you change anything else
+here, no training run is affected until a bank is rebuilt and re-released.
+
 Layering
 --------
 
