@@ -1,0 +1,1835 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Span — audio span annotator</title>
+<style>
+:root{
+  --bg:#101419; --panel:#161B22; --panel2:#1C222B; --sunk:#0B0E12;
+  --line:#262E39; --line-soft:#1E2530;
+  --text:#E6EAF0; --dim:#8B96A5; --faint:#5C6675;
+  --keep:#E8A33D; --sup:#6C8CFF;
+  --accent:#3FA5A0; --accent-ink:#08110F; --danger:#E2686A;
+  --wave:#7F8DA3;
+  --r:6px;
+  --railw:216px; --dockh:250px;
+  --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;
+  --sans:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+}
+@media (prefers-color-scheme:light){
+  :root{
+    --bg:#EDF0F4; --panel:#FFFFFF; --panel2:#F5F7FA; --sunk:#E8ECF1;
+    --line:#D3DAE3; --line-soft:#E3E8EF;
+    --text:#131820; --dim:#5D6875; --faint:#8C97A5;
+    --keep:#B9741B; --sup:#3D5FD9;
+    --accent:#1F7A76; --accent-ink:#FFFFFF; --danger:#C0393C;
+    --wave:#65758C;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#101419; --panel:#161B22; --panel2:#1C222B; --sunk:#0B0E12;
+  --line:#262E39; --line-soft:#1E2530;
+  --text:#E6EAF0; --dim:#8B96A5; --faint:#5C6675;
+  --keep:#E8A33D; --sup:#6C8CFF;
+  --accent:#3FA5A0; --accent-ink:#08110F; --danger:#E2686A; --wave:#7F8DA3;
+}
+:root[data-theme="light"]{
+  --bg:#EDF0F4; --panel:#FFFFFF; --panel2:#F5F7FA; --sunk:#E8ECF1;
+  --line:#D3DAE3; --line-soft:#E3E8EF;
+  --text:#131820; --dim:#5D6875; --faint:#8C97A5;
+  --keep:#B9741B; --sup:#3D5FD9;
+  --accent:#1F7A76; --accent-ink:#FFFFFF; --danger:#C0393C; --wave:#65758C;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14px;
+  line-height:1.45;-webkit-font-smoothing:antialiased;overflow:hidden}
+button,input,select{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
+.lbl{font-size:10px;letter-spacing:.13em;text-transform:uppercase;color:var(--faint);font-weight:600}
+.spacer{flex:1}
+
+.app{height:100vh;display:grid;grid-template-rows:auto auto auto minmax(0,1fr)}
+
+/* ---- heading bar: brand + menus ---- */
+.menubar{display:flex;align-items:center;gap:14px;padding:6px 12px;background:var(--panel);
+  border-bottom:1px solid var(--line)}
+.brand{display:flex;align-items:baseline;gap:9px}
+.brand h1{margin:0;font-size:15px;font-weight:640;letter-spacing:-.015em}
+.brand .sub{font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--faint)}
+.menus{display:flex;gap:2px}
+.menu{position:relative}
+.mbtn{background:transparent;border:1px solid transparent;border-radius:var(--r);padding:4px 10px;font-size:12.5px}
+.mbtn:hover{background:var(--panel2)}
+.menu.open .mbtn{background:var(--panel2);border-color:var(--line)}
+.pop{position:absolute;top:calc(100% + 5px);left:0;min-width:246px;background:var(--panel);
+  border:1px solid var(--line);border-radius:8px;box-shadow:0 14px 34px rgba(0,0,0,.34);
+  padding:5px;z-index:80;display:none}
+.menu.open .pop{display:block}
+.mi{display:flex;align-items:center;gap:9px;width:100%;background:transparent;border:0;
+  padding:6px 9px;border-radius:5px;font-size:12.5px;text-align:left;white-space:nowrap}
+.mi:hover:not(:disabled){background:var(--panel2)}
+.mi:disabled{opacity:.38;cursor:not-allowed}
+.mi .ck{width:11px;color:var(--accent);font-size:11px}
+.mi .sc{margin-left:auto;padding-left:18px;font-family:var(--mono);font-size:10.5px;color:var(--faint)}
+.msep{height:1px;background:var(--line-soft);margin:5px 7px}
+.mlbl{font-size:9.5px;letter-spacing:.13em;text-transform:uppercase;color:var(--faint);padding:7px 9px 3px}
+.mrow{display:flex;align-items:center;gap:9px;padding:4px 9px 6px}
+.mrow .lbl{width:38px}
+.nowfile{font-size:11.5px;color:var(--dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:38vw}
+
+/* ---- transport ---- */
+.bar{display:flex;align-items:center;gap:12px;padding:7px 12px;background:var(--panel);
+  border-bottom:1px solid var(--line);flex-wrap:wrap}
+.btn{background:var(--panel2);border:1px solid var(--line);border-radius:var(--r);padding:6px 11px;
+  font-size:12.5px;font-weight:520;display:inline-flex;align-items:center;gap:7px;
+  transition:border-color .12s,background .12s,color .12s;white-space:nowrap}
+.btn:hover:not(:disabled){border-color:var(--faint)}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);font-weight:600}
+.btn.icon{padding:6px 9px}
+.btn.on{border-color:var(--accent);color:var(--accent)}
+.btn.play{min-width:74px;justify-content:center}
+.btn.sm{padding:4px 8px;font-size:11.5px}
+.group{display:flex;align-items:center;gap:6px;padding-left:12px;border-left:1px solid var(--line-soft)}
+.group:first-child{padding-left:0;border-left:0}
+.seg{display:flex;border:1px solid var(--line);border-radius:var(--r);overflow:hidden}
+.seg button{background:var(--panel2);border:0;padding:6px 10px;font-size:12px;border-right:1px solid var(--line)}
+.seg button:last-child{border-right:0}
+.seg button[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink);font-weight:600}
+.clock{font-family:var(--mono);font-size:17px;font-variant-numeric:tabular-nums}
+.clock .of{color:var(--faint);font-size:12px}
+input[type=range]{width:76px;accent-color:var(--accent);background:transparent}
+input[type=range]:disabled{opacity:.4}
+#zoom{width:92px} #amp,#boost{width:66px}
+.rd{font-size:11px;color:var(--dim);min-width:42px;text-align:right}
+.lim{font-family:var(--mono);font-size:9.5px;font-weight:700;letter-spacing:.08em;padding:2px 5px;
+  border-radius:3px;border:1px solid var(--line);color:var(--faint);background:var(--panel2)}
+.lim.warn{color:var(--keep);border-color:var(--keep)}
+.lim.hot{color:var(--accent-ink);background:var(--danger);border-color:var(--danger)}
+
+.meta{display:flex;gap:20px;align-items:center;padding:6px 12px;background:var(--panel2);
+  border-bottom:1px solid var(--line);font-family:var(--mono);font-size:11.5px;color:var(--dim);
+  overflow-x:auto;white-space:nowrap}
+.meta b{color:var(--text);font-weight:560}
+.meta .sel{color:var(--accent)}
+
+/* ---- main: file rail | workspace ---- */
+.main{display:grid;grid-template-columns:var(--railw) 5px minmax(0,1fr);min-height:0;min-width:0}
+/* display:none drops the rail out of the grid entirely, so the template must shrink to match —
+   leaving three tracks would park the workspace in the empty first one */
+.main.norail{grid-template-columns:minmax(0,1fr)}
+.main.norail .rail,.main.norail #gRail{display:none}
+.workspace{display:grid;grid-template-rows:minmax(0,1fr) 5px var(--dockh);min-height:0;min-width:0}
+.gut{background:var(--line-soft);position:relative;z-index:7;touch-action:none}
+.gut.v{cursor:col-resize}
+.gut.h{cursor:row-resize}
+.gut:hover,.gut.drag{background:var(--accent)}
+.gut::after{content:"";position:absolute;inset:-2px}
+
+.rail{background:var(--panel);display:flex;flex-direction:column;min-width:0;min-height:0}
+.railhead{display:flex;align-items:center;gap:8px;padding:8px 10px;border-bottom:1px solid var(--line);flex:0 0 auto}
+.railhead .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11.5px}
+.filelist{flex:1 1 auto;overflow-y:auto;overscroll-behavior:contain;min-height:0}
+.fitem{display:flex;align-items:center;gap:8px;padding:5px 10px;font-size:12px;cursor:pointer;
+  border-bottom:1px solid var(--line-soft)}
+.fitem:hover{background:var(--panel2)}
+.fitem.on{background:color-mix(in srgb,var(--accent) 15%,transparent)}
+.fitem .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fitem .n{font-family:var(--mono);font-size:9.5px;color:var(--faint);flex:0 0 auto}
+.fitem .n.has{color:var(--accent);font-weight:700}
+.fitem .dot{width:6px;height:6px;border-radius:50%;background:var(--keep);flex:0 0 auto;visibility:hidden}
+.fitem.dirty .dot{visibility:visible}
+.railfoot{padding:8px 10px;border-top:1px solid var(--line);display:flex;gap:6px;flex:0 0 auto}
+.railempty{padding:22px 14px;color:var(--faint);font-size:11.5px;text-align:center;line-height:1.7}
+
+/* ---- stage: ruler / waveform / spectrogram / span lane ---- */
+.stage{display:flex;flex-direction:column;min-height:0;min-width:0;background:var(--sunk);position:relative}
+.pane{position:relative;min-height:0}
+.pane canvas{display:block;width:100%;height:100%;touch-action:none}
+.pane.hidden{display:none}
+#rulerPane{flex:0 0 26px}
+#wavePane{flex:1 1 auto;min-height:56px}
+#specPane{flex:0 0 auto;min-height:56px}
+#lanePane{flex:0 0 auto;min-height:40px;background:var(--panel2);cursor:default}
+.stage.specmain #wavePane{display:none}
+.stage.specmain #specPane{flex:1 1 auto}
+.sgut{flex:0 0 5px;background:var(--line-soft);cursor:row-resize;position:relative;z-index:6;touch-action:none}
+.sgut:hover,.sgut.drag{background:var(--accent)}
+.sgut.hidden{display:none}
+.sgut::after{content:"";position:absolute;left:0;right:0;top:-2px;bottom:-2px}
+
+/* horizontal timeline scrollbar */
+.hscroll{flex:0 0 16px;position:relative;background:var(--sunk);border-top:1px solid var(--line);
+  cursor:pointer;touch-action:none;user-select:none}
+.hscroll.off{opacity:.35;cursor:default}
+.hthumb{position:absolute;top:3px;bottom:3px;left:0;width:100%;border-radius:6px;
+  background:var(--line);border:1px solid var(--faint);transition:background .12s,border-color .12s}
+.hscroll:not(.off):hover .hthumb{background:var(--faint)}
+.hthumb.drag{background:var(--accent);border-color:var(--accent)}
+.pane-tag{position:absolute;left:8px;top:5px;z-index:5;pointer-events:none;font-size:9.5px;
+  letter-spacing:.14em;text-transform:uppercase;color:var(--faint);
+  background:color-mix(in srgb,var(--sunk) 74%,transparent);padding:2px 6px;border-radius:3px}
+#lanePane .pane-tag{background:color-mix(in srgb,var(--panel2) 74%,transparent)}
+.drop{position:absolute;inset:0;display:grid;place-items:center;z-index:30;
+  background:color-mix(in srgb,var(--bg) 93%,transparent);text-align:center;padding:30px}
+.drop.gone{display:none}
+.drop .inner{max-width:470px;display:flex;flex-direction:column;gap:13px;align-items:center}
+.drop h2{margin:0;font-size:20px;font-weight:620;letter-spacing:-.02em}
+.drop p{margin:0;color:var(--dim);font-size:13px}
+.drop .row{display:flex;gap:8px}
+.drop .hint{color:var(--faint);font-size:11.5px;font-family:var(--mono);line-height:1.7}
+.drop.over{background:color-mix(in srgb,var(--accent) 12%,var(--bg));outline:2px dashed var(--accent);outline-offset:-14px}
+.busy{position:absolute;inset:0;z-index:40;display:grid;place-items:center;
+  background:color-mix(in srgb,var(--bg) 76%,transparent);font-size:12.5px;color:var(--dim)}
+.busy.hidden{display:none}
+
+/* ---- dock: tags + span table + export ---- */
+.dock{background:var(--panel);border-top:1px solid var(--line);display:grid;
+  grid-template-columns:250px minmax(0,1fr);min-height:0}
+.tagcol{border-right:1px solid var(--line);padding:10px 12px;display:flex;flex-direction:column;gap:8px;overflow-y:auto}
+/* one tag per row — a wrapping pill cloud made the list hard to scan and shifted rows around
+   whenever a tag was added or renamed */
+.tagrow{display:flex;flex-direction:column;gap:4px}
+.tag{border:1px solid var(--line);background:var(--panel2);border-radius:var(--r);padding:5px 9px;
+  font-size:12px;display:flex;align-items:center;gap:8px;width:100%;text-align:left}
+.tag:hover{border-color:var(--faint)}
+.tag .dot{width:8px;height:8px;border-radius:50%;background:var(--c);flex:0 0 auto}
+.tag .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tag[aria-pressed="true"]{border-color:var(--c);background:color-mix(in srgb,var(--c) 16%,transparent)}
+.tag[aria-pressed="true"] .nm{font-weight:600}
+.tag .k{font-family:var(--mono);font-size:9.5px;color:var(--faint);flex:0 0 auto}
+.newtag{display:flex;gap:6px}
+.newtag input{flex:1;min-width:0;background:var(--sunk);border:1px solid var(--line);
+  border-radius:var(--r);padding:5px 8px;font-size:12px}
+kbd{font-family:var(--mono);font-size:10px;background:var(--panel2);border:1px solid var(--line);
+  border-bottom-width:2px;border-radius:4px;padding:1px 5px;color:var(--dim)}
+
+.tblcol{display:flex;flex-direction:column;min-width:0;min-height:0}
+.tblhead{display:flex;align-items:center;gap:9px;padding:8px 12px;border-bottom:1px solid var(--line);flex:0 0 auto}
+.count{font-family:var(--mono);font-size:11px;color:var(--dim);background:var(--panel2);
+  border:1px solid var(--line);border-radius:20px;padding:1px 8px}
+.tblwrap{flex:1 1 auto;overflow-y:auto;overflow-x:hidden;min-height:0;overscroll-behavior:contain}
+
+/* always-visible scrollbars — macOS hides overlay ones until you already scroll */
+.tblwrap::-webkit-scrollbar,.tagcol::-webkit-scrollbar,.meta::-webkit-scrollbar,
+.filelist::-webkit-scrollbar,.sheet::-webkit-scrollbar{width:12px;height:10px}
+.tblwrap::-webkit-scrollbar-track,.tagcol::-webkit-scrollbar-track,.meta::-webkit-scrollbar-track,
+.filelist::-webkit-scrollbar-track,.sheet::-webkit-scrollbar-track{background:var(--sunk)}
+.tblwrap::-webkit-scrollbar-thumb,.tagcol::-webkit-scrollbar-thumb,.meta::-webkit-scrollbar-thumb,
+.filelist::-webkit-scrollbar-thumb,.sheet::-webkit-scrollbar-thumb{
+  background:var(--line);border:3px solid var(--sunk);border-radius:8px}
+.tblwrap::-webkit-scrollbar-thumb:hover,.tagcol::-webkit-scrollbar-thumb:hover,
+.meta::-webkit-scrollbar-thumb:hover,.filelist::-webkit-scrollbar-thumb:hover{background:var(--faint)}
+table{width:100%;border-collapse:collapse;font-size:12.5px}
+thead th{position:sticky;top:0;background:var(--panel);z-index:2;text-align:left;
+  font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--faint);font-weight:600;
+  padding:7px 10px;border-bottom:1px solid var(--line);white-space:nowrap}
+tbody td{padding:5px 10px;border-bottom:1px solid var(--line-soft);vertical-align:middle}
+tbody tr{cursor:pointer}
+tbody tr:hover{background:var(--panel2)}
+tbody tr.sel{background:color-mix(in srgb,var(--accent) 11%,transparent)}
+td.num{font-family:var(--mono);font-variant-numeric:tabular-nums;color:var(--dim);white-space:nowrap}
+td.tagcell{white-space:nowrap}
+.chip{display:inline-flex;align-items:center;gap:6px;font-size:11.5px}
+.chip .dot{width:8px;height:8px;border-radius:50%;background:var(--c)}
+td select,td input{background:transparent;border:1px solid transparent;border-radius:4px;
+  padding:2px 5px;font-size:12px;width:100%;min-width:70px}
+td select:hover,td input:hover{border-color:var(--line)}
+td select:focus,td input:focus{border-color:var(--accent);background:var(--sunk)}
+.rowdel{background:transparent;border:0;color:var(--faint);padding:2px 6px;border-radius:4px;font-size:13px}
+.rowdel:hover{color:var(--danger);background:color-mix(in srgb,var(--danger) 14%,transparent)}
+.empty{padding:34px 16px;text-align:center;color:var(--faint);font-size:12.5px;line-height:1.8}
+.expbar{display:flex;align-items:center;gap:9px;padding:8px 12px;border-top:1px solid var(--line);flex:0 0 auto}
+#out{display:none;flex:0 0 auto;width:100%;height:126px;resize:none;background:var(--sunk);color:var(--text);
+  border:0;border-top:1px solid var(--line);padding:10px;font-family:var(--mono);font-size:11.5px;
+  line-height:1.55;white-space:pre;overflow:auto}
+#out.show{display:block}
+
+/* ---- modals ---- */
+.modal{position:fixed;inset:0;z-index:100;display:grid;place-items:center;
+  background:color-mix(in srgb,#000 46%,transparent);padding:24px}
+.modal.hidden{display:none}
+.sheet{background:var(--panel);border:1px solid var(--line);border-radius:11px;
+  box-shadow:0 24px 60px rgba(0,0,0,.42);max-width:660px;width:100%;max-height:82vh;overflow:auto;padding:20px 22px}
+.sheet h3{margin:0 0 4px;font-size:16px;font-weight:640;letter-spacing:-.015em}
+.sheet p{margin:0;color:var(--dim);font-size:12.5px}
+.keys{display:grid;grid-template-columns:auto 1fr auto 1fr;gap:7px 12px;font-size:11.5px;color:var(--dim);
+  align-items:center;margin-top:14px}
+.keys kbd{justify-self:start}
+.keys .hd{grid-column:1/-1;font-size:9.5px;letter-spacing:.13em;text-transform:uppercase;
+  color:var(--faint);font-weight:600;margin-top:8px;padding-top:8px;border-top:1px solid var(--line-soft)}
+.keys .hd:first-child{margin-top:0;padding-top:0;border-top:0}
+.sheetfoot{display:flex;gap:8px;justify-content:flex-end;margin-top:18px}
+
+.toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%) translateY(14px);
+  background:var(--accent);color:var(--accent-ink);padding:8px 16px;border-radius:20px;
+  font-size:12.5px;font-weight:600;opacity:0;pointer-events:none;transition:opacity .18s,transform .18s;z-index:120}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+@media (max-width:820px){.dock{grid-template-columns:1fr}.tagcol{border-right:0;border-bottom:1px solid var(--line)}}
+</style>
+
+<div class="app">
+  <div class="menubar">
+    <div class="brand"><h1>Span</h1><span class="sub">audio span annotator</span></div>
+    <nav class="menus" id="menus">
+      <div class="menu" data-m="file"><button class="mbtn">File</button><div class="pop">
+        <button class="mi" data-act="openFiles"><span class="ck"></span>Open audio…<span class="sc">⌘O</span></button>
+        <button class="mi" data-act="openFolderFS"><span class="ck"></span>Open folder…<span class="sc">⇧⌘O</span></button>
+        <button class="mi" data-act="openFolderInput"><span class="ck"></span>Open folder (read-only)…</button>
+        <div class="msep"></div>
+        <button class="mi" data-act="importSpans"><span class="ck"></span>Import spans…<span class="sc">⌘I</span></button>
+        <button class="mi" data-act="saveSidecars"><span class="ck"></span>Save spans into folder<span class="sc">⌘S</span></button>
+        <div class="msep"></div>
+        <button class="mi" data-act="closeFile"><span class="ck"></span>Remove current file</button>
+        <button class="mi" data-act="closeAll"><span class="ck"></span>Close all</button>
+      </div></div>
+
+      <div class="menu" data-m="view"><button class="mbtn">View</button><div class="pop">
+        <div class="mlbl">Panes</div>
+        <button class="mi" data-act="v-wave"><span class="ck"></span>Waveform</button>
+        <button class="mi" data-act="v-both"><span class="ck"></span>Waveform + spectrogram</button>
+        <button class="mi" data-act="v-spec"><span class="ck"></span>Spectrogram</button>
+        <div class="msep"></div>
+        <button class="mi" data-act="toggleRail"><span class="ck"></span>File list<span class="sc">\</span></button>
+        <div class="msep"></div>
+        <div class="mlbl">Zoom</div>
+        <button class="mi" data-act="zin"><span class="ck"></span>Zoom in<span class="sc">+</span></button>
+        <button class="mi" data-act="zout"><span class="ck"></span>Zoom out<span class="sc">−</span></button>
+        <button class="mi" data-act="zfit"><span class="ck"></span>Fit whole file<span class="sc">0</span></button>
+        <button class="mi" data-act="zsel"><span class="ck"></span>Zoom to selection</button>
+        <div class="msep"></div>
+        <button class="mi" data-act="resetLayout"><span class="ck"></span>Reset pane sizes</button>
+        <button class="mi" data-act="theme"><span class="ck"></span>Toggle light / dark</button>
+      </div></div>
+
+      <div class="menu" data-m="play"><button class="mbtn">Playback</button><div class="pop">
+        <button class="mi" data-act="play"><span class="ck"></span>Play / pause<span class="sc">Space</span></button>
+        <button class="mi" data-act="playSel"><span class="ck"></span>Play selection<span class="sc">⇧Space</span></button>
+        <button class="mi" data-act="stop"><span class="ck"></span>Stop</button>
+        <button class="mi" data-act="loop"><span class="ck"></span>Loop selection<span class="sc">L</span></button>
+        <div class="msep"></div>
+        <div class="mrow"><span class="lbl">Rate</span>
+          <input type="range" id="rate" min="0.25" max="2" step="0.05" value="1">
+          <span class="mono rd" id="rateV">1.00×</span></div>
+        <div class="mrow"><span class="lbl">Vol</span>
+          <input type="range" id="vol" min="0" max="1" step="0.01" value="1">
+          <span class="mono rd" id="volV">100%</span></div>
+        <div class="msep"></div>
+        <button class="mi" data-act="normGain"><span class="ck"></span>Auto boost (clip-free)<span class="sc">G</span></button>
+        <button class="mi" data-act="resetGain"><span class="ck"></span>Reset boost to 0 dB</button>
+      </div></div>
+
+      <div class="menu" data-m="exp"><button class="mbtn">Export</button><div class="pop">
+        <div class="mlbl">Format</div>
+        <button class="mi" data-act="f-json"><span class="ck"></span>JSON</button>
+        <button class="mi" data-act="f-csv"><span class="ck"></span>CSV</button>
+        <button class="mi" data-act="f-windows"><span class="ck"></span>windows.json</button>
+        <button class="mi" data-act="f-audacity"><span class="ck"></span>Audacity labels</button>
+        <div class="msep"></div>
+        <button class="mi" data-act="preview"><span class="ck"></span>Preview in a new tab</button>
+        <button class="mi" data-act="copy"><span class="ck"></span>Copy to clipboard</button>
+        <button class="mi" data-act="download"><span class="ck"></span>Download<span class="sc">⌘E</span></button>
+        <button class="mi" data-act="saveSidecars"><span class="ck"></span>Save spans into folder<span class="sc">⌘S</span></button>
+      </div></div>
+
+      <div class="menu" data-m="help"><button class="mbtn">Help</button><div class="pop">
+        <button class="mi" data-act="shortcuts"><span class="ck"></span>Keyboard shortcuts<span class="sc">?</span></button>
+        <button class="mi" data-act="about"><span class="ck"></span>About Span</button>
+      </div></div>
+    </nav>
+    <div class="spacer"></div>
+    <div class="nowfile mono" id="nowFile">No file loaded</div>
+  </div>
+
+  <div class="bar">
+    <div class="group">
+      <button class="btn icon" id="railBtn" title="Toggle file list (\)" aria-pressed="false">☰</button>
+      <button class="btn play primary" id="play" disabled>▶ Play</button>
+      <button class="btn icon" id="stop" disabled title="Stop">■</button>
+      <button class="btn icon" id="loop" disabled aria-pressed="false" title="Loop selection (L)">↻</button>
+      <button class="btn" id="playSel" disabled title="Play selection (⇧Space)">Selection</button>
+    </div>
+    <div class="group">
+      <span class="clock mono"><span id="cur">0:00.000</span><span class="of"> / <span id="dur">0:00.000</span></span></span>
+    </div>
+    <div class="spacer"></div>
+    <div class="group">
+      <span class="lbl">Zoom</span>
+      <input type="range" id="zoom" min="0" max="1000" step="1" value="0" disabled
+             title="Magnify the waveform along time — keys + and −, or wheel over the waveform" aria-label="Time zoom">
+      <span class="mono rd" id="zoomV">1.0×</span>
+      <button class="btn sm" id="zfit" disabled title="Fit whole file (0)">Fit</button>
+      <button class="btn sm" id="zsel" disabled title="Zoom to selection">→Sel</button>
+    </div>
+    <div class="group">
+      <span class="lbl" title="Waveform display gain — drawing only, never touches the audio or the export">Amp</span>
+      <input type="range" id="amp" min="0" max="1000" step="1" value="0" aria-label="Waveform display gain">
+      <span class="mono rd" id="ampV">1.0×</span>
+    </div>
+    <div class="group">
+      <span class="lbl" title="Playback gain, with a limiter so it cannot clip">Boost</span>
+      <input type="range" id="boost" min="0" max="48" step="0.5" value="0" aria-label="Playback gain boost">
+      <span class="mono rd" id="boostV">0.0 dB</span>
+      <button class="btn sm" id="norm" disabled title="Set the largest boost this file takes without clipping (G)">Auto</button>
+      <span class="lim" id="lim" title="Limiter status">LIM</span>
+    </div>
+  </div>
+
+  <div class="meta">
+    <span id="mFile">No file loaded</span><span id="mFmt"></span><span id="mLevel"></span>
+    <span id="mSel" class="sel"></span><span id="mView"></span>
+  </div>
+
+  <div class="main norail" id="main">
+    <aside class="rail" id="rail">
+      <div class="railhead">
+        <span class="lbl">Files</span><span class="nm mono" id="railTitle"></span>
+        <div class="spacer"></div><span class="count" id="fcount">0</span>
+      </div>
+      <div class="filelist" id="filelist"></div>
+      <div class="railfoot">
+        <button class="btn sm" id="railOpen">Open folder…</button>
+        <div class="spacer"></div>
+        <button class="btn sm" id="railSave" title="Write <name>.spans.json next to each audio file">Save all</button>
+      </div>
+    </aside>
+    <div class="gut v" id="gRail" title="Drag to resize · double-click to reset"></div>
+
+    <div class="workspace">
+      <div class="stage" id="stage">
+        <div class="pane" id="rulerPane"><canvas id="ruler"></canvas></div>
+        <div class="pane" id="wavePane"><span class="pane-tag" id="waveTag">Waveform</span><canvas id="wave"></canvas></div>
+        <div class="sgut hidden" id="gSpec" title="Drag to resize · double-click to reset"></div>
+        <div class="pane hidden" id="specPane"><span class="pane-tag">Spectrogram · 0–8 kHz</span><canvas id="spec"></canvas></div>
+        <div class="sgut" id="gLane" title="Drag to resize · double-click to reset"></div>
+        <div class="pane" id="lanePane"><span class="pane-tag">Spans · drag edges to adjust, drag body to move</span><canvas id="lane"></canvas></div>
+        <div class="hscroll off" id="hscroll" title="Drag to scroll the timeline · wheel / trackpad scrolls sideways"><div class="hthumb" id="hthumb"></div></div>
+
+        <div class="drop" id="drop">
+          <div class="inner">
+            <h2>Drop audio, a folder, or a span file</h2>
+            <p>Drag a range on the waveform, tag it, and export every file's spans as JSON, CSV, or an eval <code>windows.json</code>.</p>
+            <div class="row">
+              <button class="btn primary" id="load2">Choose files</button>
+              <button class="btn" id="load3">Choose folder</button>
+            </div>
+            <div class="hint">wav · flac · mp3 · ogg · m4a — decoded in the browser, nothing is uploaded<br>
+              existing <code>.spans.json</code> / csv / Audacity labels are picked up automatically</div>
+          </div>
+        </div>
+        <div class="busy hidden" id="busy">Decoding…</div>
+      </div>
+
+      <div class="gut h" id="gDock" title="Drag to resize · double-click to reset"></div>
+
+      <div class="dock">
+        <div class="tagcol">
+          <div class="lbl">Tag for new spans</div>
+          <div class="tagrow" id="tagrow"></div>
+          <form class="newtag" id="newtagForm">
+            <input id="newtag" placeholder="Add a tag…" maxlength="24" aria-label="New tag name">
+            <button class="btn" type="submit">Add</button>
+          </form>
+          <button class="btn sm" data-act="shortcuts" id="scBtn" style="justify-content:center;margin-top:2px">Keyboard shortcuts <kbd>?</kbd></button>
+        </div>
+
+        <div class="tblcol">
+          <div class="tblhead">
+            <span class="lbl">Spans</span><span class="count" id="count">0</span>
+            <span class="mono" id="totalCount" style="font-size:11px;color:var(--faint)"></span>
+            <div class="spacer"></div>
+            <button class="btn" id="clearAll">Clear all</button>
+          </div>
+          <div class="tblwrap" id="tblwrap">
+            <div class="empty" id="empty">No spans yet.<br>Drag a range across the waveform, then press <kbd>Enter</kbd>.</div>
+            <table id="tbl" hidden>
+              <thead><tr>
+                <th style="width:34px">#</th><th style="width:150px">Tag</th>
+                <th style="width:96px">Start</th><th style="width:96px">End</th><th style="width:78px">Length</th>
+                <th>Label</th><th style="width:34px"></th>
+              </tr></thead>
+              <tbody id="tbody"></tbody>
+            </table>
+          </div>
+          <div class="expbar">
+            <span class="lbl">Export</span>
+            <div class="seg" id="fmt">
+              <button data-f="json" aria-pressed="true">JSON</button>
+              <button data-f="csv" aria-pressed="false">CSV</button>
+              <button data-f="windows" aria-pressed="false">windows.json</button>
+              <button data-f="audacity" aria-pressed="false">Audacity</button>
+            </div>
+            <button class="btn" id="preview">Preview</button>
+            <span class="mono" id="scope" style="font-size:11px;color:var(--faint)"></span>
+            <div class="spacer"></div>
+            <button class="btn" id="copy">Copy</button>
+            <button class="btn primary" id="download">Download</button>
+          </div>
+          <textarea id="out" readonly spellcheck="false" aria-label="Exported spans"></textarea>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<input type="file" id="file" accept="audio/*,.wav,.flac,.mp3,.ogg,.m4a" multiple hidden>
+<input type="file" id="folder" webkitdirectory directory multiple hidden>
+<input type="file" id="spanfile" accept=".json,.csv,.txt,.tsv" multiple hidden>
+
+<div class="modal hidden" id="scModal">
+  <div class="sheet">
+    <h3>Keyboard shortcuts</h3>
+    <p>Keys are ignored while you are typing in a field.</p>
+    <div class="keys">
+      <div class="hd">Transport</div>
+      <kbd>Space</kbd><span>play / pause</span><kbd>⇧Space</kbd><span>play selection</span>
+      <kbd>L</kbd><span>loop selection</span><kbd>← →</kbd><span>nudge 1 s (⇧ 0.1 s)</span>
+      <div class="hd">Spans</div>
+      <kbd>Enter</kbd><span>add span from selection</span><kbd>1…9</kbd><span>pick tag</span>
+      <kbd>S</kbd><span>start at playhead</span><kbd>E</kbd><span>end at playhead</span>
+      <kbd>⌫</kbd><span>delete selected span</span><kbd>Esc</kbd><span>clear selection</span>
+      <div class="hd">View</div>
+      <kbd>+ − 0</kbd><span>zoom in / out / fit</span><kbd>⇧wheel</kbd><span>scroll timeline sideways</span>
+      <kbd>wheel</kbd><span>zoom at pointer</span><kbd>\</kbd><span>toggle file list</span>
+      <div class="hd">Files</div>
+      <kbd>[ ]</kbd><span>previous / next file</span><kbd>⌘O</kbd><span>open audio</span>
+      <kbd>⇧⌘O</kbd><span>open folder</span><kbd>⌘I</kbd><span>import spans</span>
+      <kbd>⌘S</kbd><span>save spans into folder</span><kbd>⌘E</kbd><span>download export</span>
+      <div class="hd">Level</div>
+      <kbd>G</kbd><span>auto boost (clip-free)</span><kbd>?</kbd><span>this list</span>
+    </div>
+    <div class="sheetfoot"><button class="btn primary" data-close>Close</button></div>
+  </div>
+</div>
+
+<div class="modal hidden" id="ask">
+  <div class="sheet" style="max-width:460px">
+    <h3 id="askTitle"></h3><p id="askMsg"></p>
+    <div class="sheetfoot" id="askBtns"></div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+(() => {
+"use strict";
+const $ = s => document.querySelector(s);
+const $$ = s => [...document.querySelectorAll(s)];
+const clamp = (v,a,b) => v<a?a:v>b?b:v;
+const AUDIO_BTNS=["play","stop","loop","playSel","zfit","zsel","norm","zoom"];
+const AUDIO_RE=/\.(wav|wave|flac|mp3|ogg|oga|opus|m4a|mp4|aac|aif|aiff|aifc|caf|webm)$/i;
+const SPANF_RE=/\.(json|csv|txt|tsv)$/i;
+const base=n=>n.replace(/\.[^.]+$/,"").replace(/\.spans$/i,"");
+
+const S = {
+  files:[], cur:-1, folderName:"", dirHandle:null,
+  buf:null,name:"",mono:null,sr:0,mip:null,peak:0,
+  view:{a:0,b:1}, sel:null, spans:[], selId:null, nextId:1,
+  tag:"near / keep",
+  tags:[{name:"near / keep",color:"#E8A33D"},{name:"far / suppress",color:"#6C8CFF"},
+        {name:"double-talk",color:"#3FA5A0"},{name:"exclude",color:"#8B96A5"}],
+  playing:false,t:0,loop:false,rate:1,vol:1,boostDb:0,amp:1,mode:"wave",specCache:null,
+  resizing:false,
+  layout:{rail:216,dock:250,spec:180,lane:72,railOpen:false},
+};
+const DEF_LAYOUT={rail:216,dock:250,spec:180,lane:72};
+let ctx=null,srcNode=null,boostNode=null,limNode=null,shaper=null,gainNode=null;
+let startedAt=0,startedFrom=0,raf=0;
+
+const dur=()=>S.buf?S.buf.duration:0;
+const vA=()=>S.view.a*dur(), vB=()=>S.view.b*dur();
+const vSpan=()=>Math.max(1e-6,vB()-vA());
+const fmt=t=>{ if(!isFinite(t))t=0; const m=Math.floor(t/60),s=Math.floor(t%60),ms=Math.round((t%1)*1000);
+  return `${m}:${String(s).padStart(2,"0")}.${String(ms).padStart(3,"0")}`; };
+const toast=m=>{const el=$("#toast");el.textContent=m;el.classList.add("show");
+  clearTimeout(el._t);el._t=setTimeout(()=>el.classList.remove("show"),1700);};
+const tagColor=n=>(S.tags.find(t=>t.name===n)||{color:"#8B96A5"}).color;
+const css=v=>getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+const db=v=>20*Math.log10(Math.max(1e-7,v));
+const lin=d=>Math.pow(10,d/20);
+const F=()=>S.cur>=0?S.files[S.cur]:null;
+
+/* ---------- tiny modal helpers ---------- */
+function ask(title,msg,btns){
+  return new Promise(res=>{
+    $("#askTitle").textContent=title; $("#askMsg").textContent=msg;
+    const row=$("#askBtns"); row.innerHTML="";
+    btns.forEach(b=>{ const el=document.createElement("button");
+      el.className="btn"+(b.primary?" primary":""); el.textContent=b.label;
+      el.onclick=()=>{$("#ask").classList.add("hidden");res(b.value);}; row.appendChild(el); });
+    $("#ask").classList.remove("hidden");
+    (row.querySelector(".primary")||row.firstChild)?.focus();
+  });
+}
+$$(".modal").forEach(m=>{
+  m.addEventListener("click",e=>{ if(e.target===m&&m.id!=="ask")m.classList.add("hidden"); });
+  m.querySelectorAll("[data-close]").forEach(b=>b.onclick=()=>m.classList.add("hidden"));
+});
+
+/* ---------- layout ---------- */
+const LKEY="span.layout.v2";
+function loadLayout(){
+  try{ const v=JSON.parse(localStorage.getItem(LKEY)); if(v&&typeof v==="object")Object.assign(S.layout,v); }catch(e){}
+}
+function saveLayout(){ try{ localStorage.setItem(LKEY,JSON.stringify(S.layout)); }catch(e){} }
+function applyLayout(){
+  const L=S.layout, root=document.documentElement.style;
+  root.setProperty("--railw",L.rail+"px");
+  root.setProperty("--dockh",L.dock+"px");
+  $("#main").classList.toggle("norail",!L.railOpen);
+  $("#railBtn").setAttribute("aria-pressed",!!L.railOpen);
+  $("#railBtn").classList.toggle("on",!!L.railOpen);
+  $("#specPane").style.height=L.spec+"px";
+  $("#lanePane").style.height=L.lane+"px";
+}
+function makeGutter(el,{axis,key,inv,min,max}){
+  let start=0,b0=0,active=false;
+  el.addEventListener("pointerdown",e=>{
+    el.setPointerCapture(e.pointerId); el.classList.add("drag"); active=true; S.resizing=true;
+    start=axis==="x"?e.clientX:e.clientY; b0=S.layout[key]; e.preventDefault();
+  });
+  el.addEventListener("pointermove",e=>{
+    if(!active)return;
+    /* a collapsed viewport (tab hidden mid-drag) would clamp every pane to its minimum
+       and then persist that — ignore those frames rather than destroy the layout */
+    if(!$("#stage").clientHeight||!$("#main").clientWidth)return;
+    const d=((axis==="x"?e.clientX:e.clientY)-start)*(inv?-1:1);
+    S.layout[key]=clamp(Math.round(b0+d),min(),max());
+    applyLayout(); resize(); renderStage();
+  });
+  const end=()=>{ if(!active)return; active=false; el.classList.remove("drag");
+    S.resizing=false; S.specCache=null; saveLayout(); resize(); render(); };
+  el.addEventListener("pointerup",end); el.addEventListener("pointercancel",end);
+  el.addEventListener("dblclick",()=>{ S.layout[key]=DEF_LAYOUT[key]; applyLayout();
+    S.specCache=null; saveLayout(); resize(); render(); });
+}
+makeGutter($("#gRail"),{axis:"x",key:"rail",inv:false,min:()=>140,max:()=>Math.min(480,innerWidth-360)});
+makeGutter($("#gDock"),{axis:"y",key:"dock",inv:true,min:()=>120,max:()=>Math.max(140,innerHeight-300)});
+makeGutter($("#gSpec"),{axis:"y",key:"spec",inv:true,min:()=>56,max:()=>Math.max(60,$("#stage").clientHeight-190)});
+makeGutter($("#gLane"),{axis:"y",key:"lane",inv:true,min:()=>40,max:()=>Math.max(44,$("#stage").clientHeight-190)});
+
+/* ---------- file registry ---------- */
+let fileSeq=1;
+const CACHE_MAX=2;
+const decoded=new Map();   /* id -> {buf,mono,mip,peak,sr} */
+
+function addEntries(list){
+  /* list: [{name,path,file?,handle?,dir?}] — audio only, deduped by path */
+  let added=0;
+  for(const it of list){
+    if(S.files.some(f=>f.path===it.path))continue;
+    S.files.push({id:fileSeq++,name:it.name,path:it.path,file:it.file||null,handle:it.handle||null,
+      dir:it.dir||null,spans:[],nextId:1,sr:0,duration:0,peak:0,probed:false,dirty:false});
+    added++;
+  }
+  S.files.sort((a,b)=>a.path.localeCompare(b.path,undefined,{numeric:true,sensitivity:"base"}));
+  return added;
+}
+const fileOf=async e=>e.file||(e.handle?await e.handle.getFile():null);
+
+function syncSpans(){ const f=F(); if(f){ f.spans=S.spans; f.nextId=S.nextId; } }
+
+async function selectFile(i,{keepView=false}={}){
+  if(i<0||i>=S.files.length)return;
+  syncSpans(); stopPlayback();
+  S.cur=i;
+  const e=S.files[i];
+  S.spans=e.spans; S.nextId=e.nextId; S.selId=null; S.sel=null; S.t=0;
+  if(!keepView)S.view={a:0,b:1};
+  await ensureDecoded(e);
+  renderFileList(); render(); updateExport();
+}
+async function ensureDecoded(e){
+  ctx=ctx||new (window.AudioContext||window.webkitAudioContext)();
+  let d=decoded.get(e.id);
+  if(!d){
+    $("#busy").classList.remove("hidden"); $("#busy").textContent="Decoding "+e.name+"…";
+    try{
+      const f=await fileOf(e); if(!f)throw new Error("no file");
+      const ab=await f.arrayBuffer();
+      const srFile=wavRate(ab);          /* must be read before decodeAudioData detaches the buffer */
+      const buf=await ctx.decodeAudioData(ab);
+      const n=buf.length,ch=buf.numberOfChannels,mono=new Float32Array(n);
+      for(let c=0;c<ch;c++){const dd=buf.getChannelData(c);for(let k=0;k<n;k++)mono[k]+=dd[k];}
+      if(ch>1)for(let k=0;k<n;k++)mono[k]/=ch;
+      let peak=0; for(let k=0;k<n;k++){const v=mono[k]<0?-mono[k]:mono[k]; if(v>peak)peak=v;}
+      d={buf,mono,mip:buildMip(mono),peak,sr:buf.sampleRate,srFile:srFile||buf.sampleRate,ch};
+      decoded.set(e.id,d);
+      e.sr=d.srFile; e.duration=buf.duration; e.peak=peak; e.ch=ch; e.probed=true;
+      /* keep only the most recent few buffers — an AudioBuffer is 4 bytes per sample per channel */
+      while(decoded.size>CACHE_MAX){ const k=decoded.keys().next().value;
+        if(k===e.id)break; decoded.delete(k); }
+    }catch(err){
+      console.error(err); toast("Could not decode "+e.name);
+      $("#busy").classList.add("hidden");
+      /* leave nothing stale behind — the pane must not keep showing the previous file */
+      S.buf=null; S.mono=null; S.mip=null; S.peak=0; S.sr=0; S.name=e.name; S.specCache=null;
+      e.broken=true;
+      AUDIO_BTNS.forEach(id=>$("#"+id).disabled=true);
+      $("#nowFile").textContent=e.path+" — could not decode";
+      $("#mFile").innerHTML=`<b>${esc(e.name)}</b>`; $("#mFmt").textContent="undecodable";
+      $("#mLevel").textContent=""; $("#dur").textContent=fmt(0);
+      resize(); return false;
+    }
+    $("#busy").classList.add("hidden");
+  }
+  S.buf=d.buf; S.mono=d.mono; S.mip=d.mip; S.peak=d.peak; S.sr=d.sr; S.name=e.name;
+  S.specCache=null;
+  $("#drop").classList.add("gone");
+  AUDIO_BTNS.forEach(id=>$("#"+id).disabled=false);
+  $("#dur").textContent=fmt(d.buf.duration);
+  $("#cur").textContent=fmt(0);
+  $("#nowFile").textContent=e.path;
+  $("#mFile").innerHTML=`<b>${esc(e.name)}</b>`;
+  /* Web Audio resamples to the context rate, so say which number is which */
+  $("#mFmt").textContent=`${d.srFile.toLocaleString()} Hz`
+    +(d.srFile!==d.sr?` (decoded ${Math.round(d.sr/1000)} kHz)`:"")
+    +` · ${d.ch===1?"mono":d.ch===2?"stereo":d.ch+" ch"} · ${fmt(d.buf.duration)}`;
+  resize(); updateLevelMeta(); syncZoomUI();
+  return true;
+}
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+
+/* the true rate off the WAV header — decodeAudioData reports the context rate, which would
+   put a wrong sample_rate in every export for anything that is not already 48 kHz */
+function wavRate(ab){
+  try{
+    const d=new DataView(ab);
+    if(d.byteLength<44||d.getUint32(0,false)!==0x52494646||d.getUint32(8,false)!==0x57415645)return 0;
+    let p=12;
+    while(p+8<=d.byteLength){
+      const id=d.getUint32(p,false), sz=d.getUint32(p+4,true);
+      if(id===0x666d7420)return d.getUint32(p+12,true);      /* "fmt " → sampleRate at +12 */
+      p+=8+sz+(sz&1);
+    }
+  }catch(e){}
+  return 0;
+}
+
+/* min/max mip pyramid — keeps waveform redraw independent of file length, which is what
+   makes dragging the pane gutters and hopping between files feel instant */
+function buildMip(m){
+  const B0=256,FAC=4,L=[];
+  let n=Math.ceil(m.length/B0), mn=new Float32Array(n), mx=new Float32Array(n);
+  for(let i=0;i<n;i++){
+    let lo=1,hi=-1; const s=i*B0,e=Math.min(m.length,s+B0);
+    for(let j=s;j<e;j++){const v=m[j]; if(v<lo)lo=v; if(v>hi)hi=v;}
+    if(lo>hi){lo=hi=0;} mn[i]=lo; mx[i]=hi;
+  }
+  L.push({bucket:B0,mn,mx});
+  while(L[L.length-1].mn.length>4){
+    const p=L[L.length-1], pn=p.mn.length, nn=Math.ceil(pn/FAC);
+    const a=new Float32Array(nn), b=new Float32Array(nn);
+    for(let i=0;i<nn;i++){
+      let lo=1,hi=-1; const s=i*FAC,e=Math.min(pn,s+FAC);
+      for(let j=s;j<e;j++){ if(p.mn[j]<lo)lo=p.mn[j]; if(p.mx[j]>hi)hi=p.mx[j]; }
+      if(lo>hi){lo=hi=0;} a[i]=lo; b[i]=hi;
+    }
+    L.push({bucket:p.bucket*FAC,mn:a,mx:b});
+  }
+  return L;
+}
+
+function renderFileList(){
+  const el=$("#filelist");
+  $("#fcount").textContent=S.files.length;
+  $("#railTitle").textContent=S.folderName||"";
+  if(!S.files.length){ el.innerHTML=`<div class="railempty">No files yet.<br>Open a folder or drop one here.</div>`; return; }
+  el.innerHTML="";
+  S.files.forEach((f,i)=>{
+    const d=document.createElement("div");
+    d.className="fitem"+(i===S.cur?" on":"")+(f.dirty?" dirty":"");
+    d.innerHTML=`<span class="dot"></span><span class="nm" title="${esc(f.path)}">${esc(f.name)}</span>
+      <span class="n${f.spans.length?" has":""}">${f.spans.length||"·"}</span>`;
+    d.onclick=()=>selectFile(i);
+    el.appendChild(d);
+  });
+  const on=el.querySelector(".fitem.on"); if(on)on.scrollIntoView({block:"nearest"});
+}
+
+/* ---------- opening ---------- */
+$("#load2").onclick=()=>$("#file").click();
+$("#load3").onclick=$("#railOpen").onclick=()=>openFolder();
+$("#file").onchange=e=>{ intake([...e.target.files].map(f=>({name:f.name,path:f.name,file:f}))); e.target.value=""; };
+$("#folder").onchange=e=>{
+  const list=[...e.target.files].map(f=>({name:f.name,path:f.webkitRelativePath||f.name,file:f}));
+  S.folderName=(list[0]?.path.split("/")[0])||"folder"; S.dirHandle=null;
+  intake(list,true); e.target.value="";
+};
+$("#spanfile").onchange=e=>{ intakeSpanFiles([...e.target.files]); e.target.value=""; };
+
+async function openFolder(){
+  if(window.showDirectoryPicker){
+    try{
+      const dir=await window.showDirectoryPicker({mode:"readwrite"});
+      const out=[]; await scanDir(dir,"",out,{n:0});
+      S.dirHandle=dir; S.folderName=dir.name;
+      await intake(out,true);
+    }catch(err){ if(err&&err.name!=="AbortError"){console.error(err);toast("Could not open that folder");} }
+  } else $("#folder").click();
+}
+async function scanDir(dir,prefix,out,guard){
+  for await (const [name,h] of dir.entries()){
+    if(guard.n++>4000)return;
+    if(h.kind==="file") out.push({name,path:prefix+name,handle:h,dir});
+    else if(h.kind==="directory") await scanDir(h,prefix+name+"/",out,guard);
+  }
+}
+
+/* one entry point for every source: file picker, folder picker, drag & drop */
+async function intake(items,isFolder=false){
+  const audio=items.filter(i=>AUDIO_RE.test(i.name));
+  /* only files that look like sidecars — a folder full of unrelated .txt should not be read */
+  const names=new Set([...audio,...S.files].map(f=>base(f.name).toLowerCase()));
+  const spanF=items.filter(i=>!AUDIO_RE.test(i.name)&&SPANF_RE.test(i.name)&&
+    (/\.spans\.(json|csv)$/i.test(i.name)||/windows\.json$/i.test(i.name)||names.has(base(i.name).toLowerCase())));
+  if(!audio.length&&!spanF.length){ toast("Nothing loadable in there"); return; }
+  const firstLoad=!S.files.length;
+  const added=addEntries(audio);
+  if(added>1||S.files.length>1) S.layout.railOpen=true;
+  if(added) applyLayout();
+
+  /* sidecars found alongside the audio get attached without asking */
+  let auto=0;
+  for(const sf of spanF){
+    const txt=await readText(sf); if(txt==null)continue;
+    auto+=applyParsed(parseSpans(txt,sf.name),"merge",true);
+  }
+  renderFileList();
+  if(S.cur<0&&S.files.length) await selectFile(0);
+  else { renderFileList(); render(); updateExport(); }
+  const bits=[];
+  if(added)bits.push(added+" audio file"+(added>1?"s":""));
+  if(auto)bits.push(auto+" span"+(auto>1?"s":"")+" from sidecars");
+  if(bits.length)toast((firstLoad?"Loaded ":"Added ")+bits.join(" · "));
+}
+const readText=async it=>{ try{ const f=await fileOf(it); return f?await f.text():null; }catch(e){ return null; } };
+
+/* drag & drop, including whole folders */
+const drop=$("#drop"), stage=$("#stage");
+["dragenter","dragover"].forEach(ev=>$("#main").addEventListener(ev,e=>{
+  e.preventDefault(); drop.classList.remove("gone"); drop.classList.add("over"); }));
+$("#main").addEventListener("dragleave",e=>{ e.preventDefault(); drop.classList.remove("over");
+  if(S.buf)drop.classList.add("gone"); });
+$("#main").addEventListener("drop",async e=>{
+  e.preventDefault(); drop.classList.remove("over"); if(S.buf)drop.classList.add("gone");
+  const dt=e.dataTransfer;
+  const roots=[...dt.items].filter(i=>i.kind==="file")
+    .map(i=>i.webkitGetAsEntry&&i.webkitGetAsEntry()).filter(Boolean);   /* must run before any await */
+  let items=[],folder=false;
+  if(roots.length){
+    for(const r of roots){ if(r.isDirectory){folder=true; S.folderName=r.name; S.dirHandle=null;} await walkEntry(r,"",items); }
+  } else items=[...dt.files].map(f=>({name:f.name,path:f.name,file:f}));
+  if(items.length)intake(items,folder);
+});
+function walkEntry(entry,prefix,out){
+  return new Promise(res=>{
+    if(entry.isFile){ entry.file(f=>{out.push({name:entry.name,path:prefix+entry.name,file:f});res();},()=>res()); return; }
+    if(!entry.isDirectory){ res(); return; }
+    const rd=entry.createReader(), all=[];
+    const step=()=>rd.readEntries(async es=>{
+      if(!es.length){ for(const e of all)await walkEntry(e,prefix+entry.name+"/",out); res(); return; }
+      all.push(...es); step();
+    },()=>res());
+    step();
+  });
+}
+
+/* ---------- span import ---------- */
+function parseSpans(text,fname){
+  const t=text.trim(); if(!t)return null;
+  if(t[0]==="{"||t[0]==="["){
+    let j; try{ j=JSON.parse(t); }catch(e){ return null; }
+    /* native, single file */
+    if(j&&Array.isArray(j.spans)) return {[base(j.file||fname)]:j.spans.map(normSpan)};
+    /* native, whole folder */
+    if(j&&Array.isArray(j.files)){
+      const o={}; j.files.forEach(f=>{ o[base(f.file||f.path||"")]=(f.spans||[]).map(normSpan); }); return o;
+    }
+    if(Array.isArray(j)) return {[base(fname)]:j.map(normSpan)};
+    /* windows.json — {base:{keep:[[a,b]],suppress:[[a,b]]}} */
+    const o={}; let hit=false;
+    for(const k in j){
+      const v=j[k]; if(k[0]==="_"||!v||typeof v!=="object"||Array.isArray(v))continue;
+      const arr=[];
+      (v.keep||[]).forEach(p=>arr.push({a:+p[0],b:+p[1],tag:"near / keep",label:""}));
+      (v.suppress||[]).forEach(p=>arr.push({a:+p[0],b:+p[1],tag:"far / suppress",label:""}));
+      if(arr.length){ o[base(k)]=arr; hit=true; }
+    }
+    return hit?o:null;
+  }
+  const lines=t.split(/\r?\n/).filter(l=>l.trim());
+  /* Audacity labels: start<TAB>end<TAB>label */
+  if(lines[0].includes("\t")&&!/start_s/i.test(lines[0])){
+    const arr=lines.map(l=>{const c=l.split("\t");
+      return {a:+c[0],b:+c[1],tag:S.tag,label:(c[2]||"").trim()};}).filter(s=>isFinite(s.a)&&isFinite(s.b));
+    return arr.length?{[base(fname)]:arr}:null;
+  }
+  /* CSV — with or without a leading file column */
+  const head=splitCsv(lines[0]).map(h=>h.trim().toLowerCase());
+  if(!head.includes("start_s"))return null;
+  const ix=n=>head.indexOf(n), o={};
+  for(let i=1;i<lines.length;i++){
+    const c=splitCsv(lines[i]); if(!c.length)continue;
+    const key=ix("file")>=0?base(c[ix("file")]||fname):base(fname);
+    (o[key]=o[key]||[]).push({a:+c[ix("start_s")],b:+c[ix("end_s")],
+      tag:(ix("tag")>=0?c[ix("tag")]:"")||S.tag, label:(ix("label")>=0?c[ix("label")]:"")||""});
+  }
+  for(const k in o)o[k]=o[k].filter(s=>isFinite(s.a)&&isFinite(s.b));
+  return o;
+}
+const normSpan=s=>({a:+(s.start_s??s.a??s.start??0), b:+(s.end_s??s.b??s.end??0),
+  tag:s.tag||S.tag, label:s.label||""});
+function splitCsv(line){
+  const out=[]; let cur="",q=false;
+  for(let i=0;i<line.length;i++){
+    const c=line[i];
+    if(q){ if(c==='"'){ if(line[i+1]==='"'){cur+='"';i++;} else q=false; } else cur+=c; }
+    else if(c==='"')q=true; else if(c===","){out.push(cur);cur="";} else cur+=c;
+  }
+  out.push(cur); return out;
+}
+/* mode: "merge" | "replace" — quiet=true skips the toast and only matches files already loaded */
+function applyParsed(parsed,mode,quiet){
+  if(!parsed)return 0;
+  let n=0;
+  for(const key in parsed){
+    const rows=parsed[key]; if(!rows||!rows.length)continue;
+    let e=S.files.find(f=>base(f.name).toLowerCase()===key.toLowerCase())
+       || S.files.find(f=>base(f.path).toLowerCase()===key.toLowerCase());
+    if(!e){
+      if(quiet)continue;
+      if(S.files.length===1)e=S.files[0];
+      else if(F())e=F();
+      else continue;
+    }
+    if(mode==="replace"){ e.spans=[]; e.nextId=1; }
+    for(const r of rows){
+      if(!(r.b>r.a))continue;
+      ensureTag(r.tag);
+      e.spans.push({id:e.nextId++,a:r.a,b:r.b,tag:r.tag,label:r.label||""});
+      n++;
+    }
+    e.spans.sort((x,y)=>x.a-y.a);
+    e.dirty=true;
+    if(e===F()){ S.spans=e.spans; S.nextId=e.nextId; }
+  }
+  if(n){ renderTags(); renderFileList(); render(); updateExport(); if(!quiet)toast("Imported "+n+" spans"); }
+  return n;
+}
+function ensureTag(name){
+  if(!name||S.tags.some(t=>t.name===name))return;
+  const pal=["#C77DFF","#5EC58A","#E2686A","#D9A441","#4FB4D8","#B0879C","#8FBF6A","#E0836B"];
+  S.tags.push({name,color:pal[S.tags.length%pal.length]});
+}
+async function intakeSpanFiles(files){
+  if(!S.files.length){ toast("Open the audio first, then import its spans"); return; }
+  const anyExisting=S.files.some(f=>f.spans.length);
+  let mode="merge";
+  if(anyExisting){
+    mode=await ask("Import spans","Some files already have spans. Replace them, or add the imported ones on top?",
+      [{label:"Cancel",value:null},{label:"Add",value:"merge"},{label:"Replace",value:"replace",primary:true}]);
+    if(!mode)return;
+  }
+  let n=0;
+  for(const f of files){ try{ n+=applyParsed(parseSpans(await f.text(),f.name),mode); }catch(e){ console.error(e); } }
+  if(!n)toast("No spans found in that file");
+}
+
+/* ---------- writing spans back into the folder ---------- */
+async function saveSidecars(){
+  const withSpans=S.files.filter(f=>f.spans.length);
+  if(!withSpans.length){ toast("No spans to save"); return; }
+  if(!S.dirHandle){
+    await ask("Folder not writable",
+      "This folder was opened read-only, so Span cannot write next to the audio. Re-open it with File ▸ Open folder… (Chromium browsers), or use Download instead.",
+      [{label:"OK",value:1,primary:true}]);
+    return;
+  }
+  const writable=withSpans.filter(f=>f.dir);
+  if(!writable.length){ toast("Those files did not come from the picked folder"); return; }
+  const ok=await ask("Save spans into the folder",
+    `Write ${writable.length} file${writable.length>1?"s":""} named <name>.spans.json next to the audio in “${S.folderName}”. Existing files with those names are overwritten.`,
+    [{label:"Cancel",value:false},{label:"Write "+writable.length+" files",value:true,primary:true}]);
+  if(!ok)return;
+  try{
+    if(S.dirHandle.queryPermission){
+      let p=await S.dirHandle.queryPermission({mode:"readwrite"});
+      if(p!=="granted")p=await S.dirHandle.requestPermission({mode:"readwrite"});
+      if(p!=="granted"){ toast("Write permission denied"); return; }
+    }
+    let n=0;
+    for(const f of writable){
+      const h=await f.dir.getFileHandle(base(f.name)+".spans.json",{create:true});
+      const w=await h.createWritable();
+      await w.write(singleFileJson(f)); await w.close();
+      f.dirty=false; n++;
+    }
+    renderFileList(); toast("Wrote "+n+" span file"+(n>1?"s":""));
+  }catch(err){ console.error(err); toast("Could not write: "+(err.message||err.name)); }
+}
+
+/* ---------- playback ---------- */
+const SOFT=(()=>{ /* final safety curve: unity below 0.7, soft knee above — never hard-clips */
+  const n=2048,c=new Float32Array(n),k=.7;
+  for(let i=0;i<n;i++){ const x=i/(n-1)*2-1, ax=Math.abs(x);
+    c[i]=Math.sign(x)*(ax<=k?ax:k+(1-k)*Math.tanh((ax-k)/(1-k))); }
+  return c;
+})();
+function stopPlayback(){
+  if(srcNode){try{srcNode.onended=null;srcNode.stop();}catch(e){}srcNode=null;}
+  S.playing=false; $("#play").innerHTML="▶ Play"; cancelAnimationFrame(raf); setLim(0);
+}
+function play(from,until){
+  if(!S.buf)return;
+  if(ctx.state==="suspended")ctx.resume();
+  stopPlayback();
+  srcNode=ctx.createBufferSource(); srcNode.buffer=S.buf; srcNode.playbackRate.value=S.rate;
+  boostNode=ctx.createGain(); boostNode.gain.value=lin(S.boostDb);
+  limNode=ctx.createDynamicsCompressor();
+  limNode.threshold.value=-1; limNode.knee.value=0; limNode.ratio.value=20;
+  limNode.attack.value=.003; limNode.release.value=.10;
+  shaper=ctx.createWaveShaper(); shaper.curve=SOFT; shaper.oversample="4x";
+  gainNode=ctx.createGain(); gainNode.gain.value=S.vol;
+  srcNode.connect(boostNode).connect(limNode).connect(shaper).connect(gainNode).connect(ctx.destination);
+  const lp=S.loop&&S.sel;
+  if(lp){srcNode.loop=true;srcNode.loopStart=S.sel.a;srcNode.loopEnd=S.sel.b;}
+  startedFrom=clamp(from,0,dur()); startedAt=ctx.currentTime;
+  if(until!=null&&!lp) srcNode.start(0,startedFrom,Math.max(.01,until-startedFrom));
+  else srcNode.start(0,startedFrom);
+  srcNode.onended=()=>{ if(S.playing){stopPlayback(); S.t=until!=null?until:dur(); render();} };
+  S.playing=true; $("#play").innerHTML="❚❚ Pause"; tick();
+}
+function tick(){
+  if(!S.playing)return;
+  let t=startedFrom+(ctx.currentTime-startedAt)*S.rate;
+  if(S.loop&&S.sel&&t>S.sel.b){const sp=Math.max(1e-3,S.sel.b-S.sel.a); t=S.sel.a+((t-S.sel.a)%sp);}
+  S.t=clamp(t,0,dur()); $("#cur").textContent=fmt(S.t);
+  if(limNode&&typeof limNode.reduction==="number")setLim(-limNode.reduction);
+  drawOverlays(); raf=requestAnimationFrame(tick);
+}
+function setLim(gr){
+  const el=$("#lim");
+  el.classList.toggle("hot",gr>0.4);
+  el.classList.toggle("warn",gr<=0.4&&willLimit());
+  el.textContent=gr>0.4?"LIM "+gr.toFixed(1):"LIM";
+}
+/* the limiter sits at −1 dBFS, so a clip-free target has to land below it */
+const BOOST_MAX=48, SAFE_DBFS=-1.5;
+const willLimit=()=>!!S.buf&&db(S.peak)+S.boostDb>-1;
+const safeBoost=()=>SAFE_DBFS-db(S.peak);
+function updateLevelMeta(){
+  if(!S.buf){ $("#mLevel").textContent=""; return; }
+  const head=safeBoost();
+  $("#mLevel").textContent=`peak ${db(S.peak).toFixed(1)} dBFS · ${head>0.05?"+"+head.toFixed(1)+" dB free":"no headroom"}`;
+  setLim(0);
+}
+$("#play").onclick=()=>S.playing?(stopPlayback(),render()):play(S.t>=dur()-.01?0:S.t);
+$("#stop").onclick=()=>{stopPlayback();S.t=0;$("#cur").textContent=fmt(0);render();};
+$("#playSel").onclick=()=>{ if(S.sel) play(S.sel.a,S.sel.b); };
+$("#loop").onclick=()=>{S.loop=!S.loop;$("#loop").setAttribute("aria-pressed",S.loop);$("#loop").classList.toggle("on",S.loop);};
+$("#rate").oninput=e=>{S.rate=+e.target.value;$("#rateV").textContent=S.rate.toFixed(2)+"×";if(srcNode)srcNode.playbackRate.value=S.rate;};
+$("#vol").oninput=e=>{S.vol=+e.target.value;$("#volV").textContent=Math.round(S.vol*100)+"%";if(gainNode)gainNode.gain.value=S.vol;};
+$("#boost").oninput=e=>setBoost(+e.target.value);
+function setBoost(dbv){
+  S.boostDb=clamp(dbv,0,BOOST_MAX);
+  $("#boost").value=S.boostDb; $("#boostV").textContent=S.boostDb.toFixed(1)+" dB";
+  if(boostNode&&ctx)boostNode.gain.setTargetAtTime(lin(S.boostDb),ctx.currentTime,.02);
+  setLim(0);
+}
+$("#norm").onclick=()=>autoBoost();
+function autoBoost(){
+  if(!S.buf)return;
+  const want=safeBoost(), head=clamp(want,0,BOOST_MAX);
+  setBoost(head);
+  if(head<.05) toast("Already at full scale — no clip-free boost available");
+  else if(want>BOOST_MAX+.05)
+    toast(`Boost ${head.toFixed(1)} dB (slider max) · peak lands at ${(db(S.peak)+head).toFixed(1)} dBFS, still no limiting`);
+  else toast(`Boost ${head.toFixed(1)} dB · peak lands at ${SAFE_DBFS} dBFS, no limiting`);
+}
+
+/* ---------- canvas plumbing ---------- */
+const cv={ruler:$("#ruler"),wave:$("#wave"),spec:$("#spec"),lane:$("#lane")};
+function resize(){
+  const dpr=Math.min(2,window.devicePixelRatio||1);
+  for(const k in cv){
+    const c=cv[k], r=c.parentElement.getBoundingClientRect();
+    c.width=Math.max(1,Math.floor(r.width*dpr)); c.height=Math.max(1,Math.floor(r.height*dpr));
+    c._dpr=dpr; c._w=r.width; c._h=r.height;
+  }
+  if(!S.resizing)S.specCache=null;
+}
+new ResizeObserver(()=>{ if(!S.resizing)fitPanes(); resize(); renderStage(); }).observe($("#stage"));
+const xOf=t=>(t-vA())/vSpan();
+const tOf=x=>vA()+x*vSpan();
+
+function drawRuler(){
+  const c=cv.ruler,g=c.getContext("2d"),w=c._w,h=c._h;
+  g.setTransform(c._dpr,0,0,c._dpr,0,0); g.clearRect(0,0,w,h);
+  g.fillStyle=css("--panel2"); g.fillRect(0,0,w,h);
+  g.strokeStyle=css("--line"); g.beginPath(); g.moveTo(0,h-.5); g.lineTo(w,h-.5); g.stroke();
+  if(!S.buf)return;
+  const steps=[.001,.002,.005,.01,.02,.05,.1,.25,.5,1,2,5,10,15,30,60,120,300,600];
+  const step=steps.find(s=>vSpan()/s<12)||900;
+  g.font="10px "+css("--mono"); g.textBaseline="middle";
+  for(let t=Math.ceil(vA()/step)*step;t<=vB();t+=step){
+    const x=xOf(t)*w;
+    g.strokeStyle=css("--line"); g.beginPath(); g.moveTo(x+.5,h-7); g.lineTo(x+.5,h); g.stroke();
+    g.fillStyle=css("--dim"); g.fillText(step<1?t.toFixed(3):fmt(t).replace(/\.000$/,""),x+4,h/2-1);
+  }
+}
+function drawWave(){
+  const c=cv.wave,g=c.getContext("2d"),w=c._w,h=c._h;
+  g.setTransform(c._dpr,0,0,c._dpr,0,0); g.clearRect(0,0,w,h);
+  g.fillStyle=css("--sunk"); g.fillRect(0,0,w,h);
+  if(!S.buf)return;
+  const mid=h/2, amp=S.amp;
+  g.strokeStyle=css("--line-soft"); g.beginPath();
+  [.25,.5,.75].forEach(f=>{g.moveTo(0,h*f+.5);g.lineTo(w,h*f+.5);}); g.stroke();
+  const i0=vA()*S.sr, i1=vB()*S.sr, per=(i1-i0)/w, m=S.mono;
+  let lvl=null; if(S.mip) for(const L of S.mip){ if(L.bucket<=per)lvl=L; else break; }
+  g.fillStyle=css("--wave");
+  for(let px=0;px<w;px++){
+    let lo=1,hi=-1;
+    if(lvl){
+      const s=Math.max(0,Math.floor((i0+px*per)/lvl.bucket));
+      const e=Math.min(lvl.mn.length,Math.max(s+1,Math.ceil((i0+(px+1)*per)/lvl.bucket)));
+      for(let i=s;i<e;i++){ if(lvl.mn[i]<lo)lo=lvl.mn[i]; if(lvl.mx[i]>hi)hi=lvl.mx[i]; }
+    }else if(per<1){
+      const v=m[clamp(Math.round(i0+px*per),0,m.length-1)]||0; lo=Math.min(0,v); hi=Math.max(0,v);
+    }else{
+      const s=Math.max(0,Math.floor(i0+px*per)), e=Math.min(m.length,Math.ceil(i0+(px+1)*per));
+      for(let i=s;i<e;i++){const v=m[i]; if(v<lo)lo=v; if(v>hi)hi=v;}
+    }
+    if(lo>hi){lo=hi=0;}
+    const y1=mid-clamp(hi*amp,-1,1)*mid*.94, y2=mid-clamp(lo*amp,-1,1)*mid*.94;
+    g.fillRect(px,y1,1,Math.max(1,y2-y1));
+  }
+  g.strokeStyle=css("--line"); g.beginPath(); g.moveTo(0,mid+.5); g.lineTo(w,mid+.5); g.stroke();
+  /* when the view is amplified, say what full height now means so nobody misreads the level */
+  if(amp>1.01){
+    g.strokeStyle=css("--keep"); g.setLineDash([3,4]); g.globalAlpha=.55;
+    g.beginPath(); g.moveTo(0,mid-mid*.94+.5); g.lineTo(w,mid-mid*.94+.5);
+    g.moveTo(0,mid+mid*.94-.5); g.lineTo(w,mid+mid*.94-.5); g.stroke();
+    g.setLineDash([]); g.globalAlpha=1;
+  }
+  $("#waveTag").textContent=amp>1.01?`Waveform · ×${amp.toFixed(1)} — full height = ${db(1/amp).toFixed(1)} dBFS`:"Waveform";
+}
+/* FFT */
+function fft(re,im){
+  const n=re.length;
+  for(let i=1,j=0;i<n;i++){
+    let bit=n>>1; for(;j&bit;bit>>=1)j^=bit; j^=bit;
+    if(i<j){const tr=re[i];re[i]=re[j];re[j]=tr;const ti=im[i];im[i]=im[j];im[j]=ti;}
+  }
+  for(let len=2;len<=n;len<<=1){
+    const ang=-2*Math.PI/len, wr=Math.cos(ang), wi=Math.sin(ang);
+    for(let i=0;i<n;i+=len){
+      let cr=1,ci=0;
+      for(let k=0;k<len/2;k++){
+        const ur=re[i+k],ui=im[i+k];
+        const vr=re[i+k+len/2]*cr-im[i+k+len/2]*ci, vi=re[i+k+len/2]*ci+im[i+k+len/2]*cr;
+        re[i+k]=ur+vr; im[i+k]=ui+vi; re[i+k+len/2]=ur-vr; im[i+k+len/2]=ui-vi;
+        const nr=cr*wr-ci*wi; ci=cr*wi+ci*wr; cr=nr;
+      }
+    }
+  }
+}
+const N=1024, HANN=(()=>{const a=new Float32Array(N);for(let i=0;i<N;i++)a[i]=.5-.5*Math.cos(2*Math.PI*i/(N-1));return a;})();
+function ramp(v){
+  const st=[[11,14,18],[40,52,110],[38,120,124],[214,150,60],[248,244,235]];
+  const p=clamp(v,0,1)*(st.length-1),i=Math.min(st.length-2,Math.floor(p)),f=p-i,a=st[i],b=st[i+1];
+  return [a[0]+(b[0]-a[0])*f,a[1]+(b[1]-a[1])*f,a[2]+(b[2]-a[2])*f];
+}
+function drawSpec(){
+  const c=cv.spec,g=c.getContext("2d"),w=c._w,h=c._h;
+  g.setTransform(c._dpr,0,0,c._dpr,0,0); g.clearRect(0,0,w,h);
+  g.fillStyle=css("--sunk"); g.fillRect(0,0,w,h);
+  if(!S.buf)return;
+  /* while a gutter is being dragged, stretch the stale image instead of refeeding the FFT */
+  if(S.resizing&&S.specCache){ g.drawImage(S.specCache.off,0,0,w,h); return; }
+  const key=`${S.view.a.toFixed(6)}|${S.view.b.toFixed(6)}|${Math.round(w)}|${Math.round(h)}|${S.amp.toFixed(2)}|${S.name}`;
+  if(!S.specCache||S.specCache.key!==key){
+    const cols=Math.min(1400,Math.max(180,Math.floor(w))), rows=Math.min(360,Math.max(120,Math.floor(h)));
+    const img=new ImageData(cols,rows);
+    const i0=vA()*S.sr, step=(vB()-vA())*S.sr/cols;
+    const re=new Float32Array(N), im=new Float32Array(N), m=S.mono;
+    const maxBin=Math.max(8,Math.min(N/2,Math.floor(8000/(S.sr/N))));
+    const lift=db(S.amp);   /* the Amp control lifts the spectrogram floor the same way */
+    for(let x=0;x<cols;x++){
+      const s=Math.floor(i0+x*step-N/2);
+      for(let i=0;i<N;i++){const k=s+i; re[i]=(k>=0&&k<m.length?m[k]:0)*HANN[i]; im[i]=0;}
+      fft(re,im);
+      for(let y=0;y<rows;y++){
+        const bin=Math.floor((1-y/rows)*maxBin);
+        const mag=Math.hypot(re[bin],im[bin])/(N/4);
+        const v=(20*Math.log10(mag+1e-9)+92+lift)/82;
+        const [r,gg,b]=ramp(v); const o=(y*cols+x)*4;
+        img.data[o]=r; img.data[o+1]=gg; img.data[o+2]=b; img.data[o+3]=255;
+      }
+    }
+    const off=document.createElement("canvas"); off.width=cols; off.height=rows;
+    off.getContext("2d").putImageData(img,0,0);
+    S.specCache={key,off};
+  }
+  g.drawImage(S.specCache.off,0,0,w,h);
+}
+/* span lane: the marked regions, on the same time axis */
+function drawLane(){
+  const c=cv.lane,g=c.getContext("2d"),w=c._w,h=c._h;
+  g.setTransform(c._dpr,0,0,c._dpr,0,0); g.clearRect(0,0,w,h);
+  g.fillStyle=css("--panel2"); g.fillRect(0,0,w,h);
+  if(!S.buf)return;
+  const top=Math.min(20,h*.28), bh=Math.max(8,h-top-9);
+  g.strokeStyle=css("--line-soft"); g.beginPath(); g.moveTo(0,top-.5); g.lineTo(w,top-.5); g.stroke();
+  for(const sp of S.spans){
+    if(sp.b<vA()||sp.a>vB())continue;
+    const x1=xOf(sp.a)*w, x2=xOf(sp.b)*w, bw=Math.max(2,x2-x1), col=tagColor(sp.tag), on=sp.id===S.selId;
+    g.fillStyle=col; g.globalAlpha=on?.42:.24; g.fillRect(x1,top,bw,bh); g.globalAlpha=1;
+    g.strokeStyle=col; g.lineWidth=on?2:1; g.strokeRect(x1+.5,top+.5,bw-1,bh-1);
+    g.fillStyle=col; g.fillRect(x1,top,Math.min(4,bw),bh); g.fillRect(x2-Math.min(4,bw),top,Math.min(4,bw),bh);
+    if(bw>46&&bh>14){
+      g.font="600 11px "+css("--sans"); g.fillStyle=css("--text");
+      g.save(); g.beginPath(); g.rect(x1+7,top,bw-14,bh); g.clip();
+      g.fillText(sp.label||sp.tag, x1+8, top+bh/2+4); g.restore();
+    }
+  }
+  if(!S.spans.length){
+    g.fillStyle=css("--faint"); g.font="11.5px "+css("--sans");
+    g.fillText("Spans you add appear here on the same time axis.", 10, Math.min(h-6,h/2+8));
+  }
+}
+function drawOverlays(){
+  [["wave",$("#wavePane")],["spec",$("#specPane")],["lane",$("#lanePane")]].forEach(([k,pane])=>{
+    if(pane.classList.contains("hidden")||!pane.offsetHeight)return;
+    const c=cv[k];
+    let ov=pane.querySelector("canvas.ov");
+    if(!ov){ov=document.createElement("canvas");ov.className="ov";
+      ov.style.cssText="position:absolute;inset:0;pointer-events:none;z-index:4;width:100%;height:100%";
+      pane.appendChild(ov);}
+    if(ov.width!==c.width||ov.height!==c.height){ov.width=c.width;ov.height=c.height;}
+    const g=ov.getContext("2d"),w=c._w,h=c._h;
+    g.setTransform(c._dpr,0,0,c._dpr,0,0); g.clearRect(0,0,w,h);
+    if(k!=="lane"){
+      for(const sp of S.spans){
+        if(sp.b<vA()||sp.a>vB())continue;
+        const x1=xOf(sp.a)*w,x2=xOf(sp.b)*w,col=tagColor(sp.tag);
+        g.fillStyle=col; g.globalAlpha=sp.id===S.selId?.20:.11; g.fillRect(x1,0,Math.max(1,x2-x1),h); g.globalAlpha=1;
+        g.strokeStyle=col; g.lineWidth=1;
+        g.beginPath(); g.moveTo(x1+.5,0); g.lineTo(x1+.5,h); g.moveTo(x2-.5,0); g.lineTo(x2-.5,h); g.stroke();
+      }
+    }
+    if(S.sel){
+      const x1=xOf(S.sel.a)*w,x2=xOf(S.sel.b)*w;
+      g.fillStyle=css("--accent"); g.globalAlpha=.14; g.fillRect(x1,0,x2-x1,h); g.globalAlpha=1;
+      g.strokeStyle=css("--accent"); g.lineWidth=1.5;
+      g.beginPath(); g.moveTo(x1+.5,0); g.lineTo(x1+.5,h); g.moveTo(x2-.5,0); g.lineTo(x2-.5,h); g.stroke();
+      g.fillStyle=css("--accent"); [x1,x2].forEach(x=>{g.fillRect(x-3,0,6,7); g.fillRect(x-3,h-7,6,7);});
+    }
+    const px=xOf(S.t)*w;
+    if(px>=-2&&px<=w+2){
+      g.strokeStyle=css("--text"); g.lineWidth=1;
+      g.beginPath(); g.moveTo(px+.5,0); g.lineTo(px+.5,h); g.stroke();
+      g.fillStyle=css("--text"); g.beginPath(); g.moveTo(px-4,0); g.lineTo(px+4,0); g.lineTo(px,6); g.closePath(); g.fill();
+    }
+  });
+  drawRuler();
+  const r=cv.ruler,g=r.getContext("2d"),px=xOf(S.t)*r._w;
+  g.strokeStyle=css("--text"); g.beginPath(); g.moveTo(px+.5,0); g.lineTo(px+.5,r._h); g.stroke();
+}
+/* renderStage redraws the time axis only — panning must not rebuild the span table,
+   or the table's scroll position and any label you are typing in get thrown away. */
+function renderStage(){
+  drawRuler(); drawWave();
+  if(!$("#specPane").classList.contains("hidden")) drawSpec();
+  drawLane(); drawOverlays(); updateMeta(); drawHScroll(); syncZoomUI();
+}
+function render(){ syncSpans(); renderStage(); renderTable(); }
+function updateMeta(){
+  $("#mSel").textContent=S.sel?`sel ${fmt(S.sel.a)} → ${fmt(S.sel.b)}  (${(S.sel.b-S.sel.a).toFixed(3)} s)`:"";
+  $("#mView").textContent=S.buf?`view ${fmt(vA())} → ${fmt(vB())} · ${(dur()/vSpan()).toFixed(1)}× zoom`:"";
+}
+
+/* ---------- zoom ---------- */
+const zMax=()=>Math.max(2,dur()/0.02);            /* down to a 20 ms window */
+const zoomNow=()=>clamp(1/Math.max(1e-9,S.view.b-S.view.a),1,zMax());
+function sliderToZoom(v){ return Math.exp(v/1000*Math.log(zMax())); }
+function zoomToSlider(z){ return clamp(Math.log(Math.max(1,z))/Math.log(zMax())*1000,0,1000); }
+function syncZoomUI(){
+  if(!S.buf){ $("#zoomV").textContent="1.0×"; return; }
+  const z=zoomNow();
+  if(document.activeElement!==$("#zoom"))$("#zoom").value=Math.round(zoomToSlider(z));
+  $("#zoomV").textContent=(z<10?z.toFixed(1):Math.round(z))+"×";
+}
+function setZoom(z,anchorFrac){
+  if(!S.buf)return;
+  const ns=clamp(1/clamp(z,1,zMax()),1/zMax(),1);
+  const f=anchorFrac!=null?anchorFrac:(xOf(S.t)>=0&&xOf(S.t)<=1?xOf(S.t):.5);
+  const at=S.view.a+(S.view.b-S.view.a)*f;
+  const na=clamp(at-ns*f,0,1-ns);
+  S.view={a:na,b:na+ns}; S.specCache=null; renderStage();
+}
+$("#zoom").oninput=e=>setZoom(sliderToZoom(+e.target.value));
+function zoomAt(frac,k){
+  const a=S.view.a,b=S.view.b,span=b-a,at=a+span*frac;
+  const ns=clamp(span*k,1/zMax(),1), na=clamp(at-(at-a)*(ns/span),0,1-ns);
+  S.view={a:na,b:na+ns}; S.specCache=null; renderStage();
+}
+function pan(df){
+  const s=S.view.b-S.view.a, a=clamp(S.view.a+df*s,0,1-s);
+  if(Math.abs(a-S.view.a)<1e-9)return;
+  S.view={a,b:a+s}; S.specCache=null; renderStage();
+}
+const zoomIn=()=>zoomAt(.5,.6), zoomOut=()=>zoomAt(.5,1.7);
+const zoomFit=()=>{S.view={a:0,b:1};S.specCache=null;render();};
+const zoomSel=()=>{ if(!S.sel)return; const p=(S.sel.b-S.sel.a)*.15;
+  S.view={a:clamp((S.sel.a-p)/dur(),0,1),b:clamp((S.sel.b+p)/dur(),0,1)}; S.specCache=null; render(); };
+$("#zfit").onclick=zoomFit; $("#zsel").onclick=zoomSel;
+
+/* amp = display gain for the waveform (and the spectrogram floor). Never touches the audio. */
+$("#amp").oninput=e=>{
+  S.amp=Math.exp(+e.target.value/1000*Math.log(32));
+  $("#ampV").textContent=S.amp.toFixed(1)+"×";
+  S.specCache=null; renderStage();
+};
+
+/* ---------- horizontal timeline scrollbar ---------- */
+const hscroll=$("#hscroll"), hthumb=$("#hthumb");
+const THUMB_MIN=26;
+function hGeom(){
+  const W=Math.max(1,hscroll.clientWidth), s=clamp(S.view.b-S.view.a,1e-6,1);
+  const w=Math.min(W,Math.max(THUMB_MIN,s*W));
+  return {W,s,w,track:Math.max(1e-6,W-w)};
+}
+function drawHScroll(){
+  const {W,s,w,track}=hGeom(), full=!S.buf||s>=.9999;
+  hscroll.classList.toggle("off",full);
+  const left=full?0:clamp(S.view.a/(1-s),0,1)*track;
+  hthumb.style.left=left+"px"; hthumb.style.width=(full?W:w)+"px";
+}
+function viewFromThumb(leftPx){
+  const {s,track}=hGeom();
+  const a=clamp(clamp(leftPx,0,track)/track*(1-s),0,1-s);
+  if(Math.abs(a-S.view.a)<1e-9)return;
+  S.view={a,b:a+s}; S.specCache=null; renderStage();
+}
+(()=>{
+  let grab=null;
+  hscroll.addEventListener("pointerdown",e=>{
+    const {s,w,track}=hGeom(); if(!S.buf||s>=.9999)return;
+    const x=e.clientX-hscroll.getBoundingClientRect().left;
+    const cur=clamp(S.view.a/(1-s),0,1)*track;
+    hscroll.setPointerCapture(e.pointerId); hthumb.classList.add("drag");
+    if(x<cur||x>cur+w){ grab=w/2; viewFromThumb(x-w/2); }   // click the track: jump there
+    else grab=x-cur;                                        // grab the thumb: keep the offset
+  });
+  hscroll.addEventListener("pointermove",e=>{
+    if(grab==null)return;
+    viewFromThumb(e.clientX-hscroll.getBoundingClientRect().left-grab);
+  });
+  const end=()=>{ if(grab!=null){grab=null; hthumb.classList.remove("drag"); renderTable();} };
+  hscroll.addEventListener("pointerup",end);
+  hscroll.addEventListener("pointercancel",end);
+})();
+
+/* wheel: sideways scroll pans, vertical zooms, ⌘/ctrl+wheel zooms (trackpad pinch) */
+const panPx=(dx,w)=>pan(dx/Math.max(1,w));
+function bindWheel(el,canZoom){
+  el.addEventListener("wheel",e=>{
+    if(!S.buf)return; e.preventDefault();
+    const r=el.getBoundingClientRect();
+    if(canZoom&&(e.ctrlKey||e.metaKey)){
+      zoomAt(clamp((e.clientX-r.left)/r.width,0,1),e.deltaY>0?1.18:.85); return;
+    }
+    if(Math.abs(e.deltaX)>Math.abs(e.deltaY)){ panPx(e.deltaX,r.width); return; }
+    if(!canZoom||e.shiftKey){ panPx(e.deltaY,r.width); return; }
+    zoomAt(clamp((e.clientX-r.left)/r.width,0,1),e.deltaY>0?1.25:.8);
+  },{passive:false});
+}
+[cv.wave,cv.spec,cv.lane].forEach(c=>bindWheel(c,true));
+[cv.ruler,hscroll].forEach(el=>bindWheel(el,false));
+
+/* ---------- selection on wave/spec ---------- */
+const paneT=(e,c)=>{const r=c.getBoundingClientRect();return tOf(clamp((e.clientX-r.left)/r.width,0,1));};
+[cv.wave,cv.spec].forEach(c=>{
+  let drag=null;
+  c.addEventListener("pointerdown",e=>{
+    if(!S.buf)return; c.setPointerCapture(e.pointerId);
+    const t=paneT(e,c);
+    if(S.sel){const w=c._w,x=xOf(t)*w;
+      if(Math.abs(xOf(S.sel.a)*w-x)<6){drag={fix:S.sel.b,mode:"edge"};return;}
+      if(Math.abs(xOf(S.sel.b)*w-x)<6){drag={fix:S.sel.a,mode:"edge"};return;}}
+    drag={mode:"new",anchor:t,moved:false}; S.sel={a:t,b:t};
+  });
+  c.addEventListener("pointermove",e=>{
+    if(!S.buf)return;
+    if(!drag){ if(S.sel){const w=c._w,x=xOf(paneT(e,c))*w;
+        c.style.cursor=(Math.abs(xOf(S.sel.a)*w-x)<6||Math.abs(xOf(S.sel.b)*w-x)<6)?"ew-resize":"text";}
+      else c.style.cursor="text"; return; }
+    const t=paneT(e,c), fix=drag.mode==="edge"?drag.fix:drag.anchor;
+    S.sel={a:Math.min(fix,t),b:Math.max(fix,t)};
+    if(drag.mode==="new"&&Math.abs(t-drag.anchor)>vSpan()*.002)drag.moved=true;
+    drawOverlays(); updateMeta();
+  });
+  c.addEventListener("pointerup",e=>{
+    if(!drag)return; const click=drag.mode==="new"&&!drag.moved; drag=null;
+    if(click){const t=paneT(e,c); S.sel=null; S.t=t; $("#cur").textContent=fmt(t);
+      if(S.playing)play(t); S.selId=null; render(); return;}
+    drawOverlays(); updateMeta();
+  });
+});
+
+/* ---------- lane editing ---------- */
+(()=>{
+  const c=cv.lane; let drag=null;
+  const hit=(t,x,w)=>{
+    for(let i=S.spans.length-1;i>=0;i--){
+      const sp=S.spans[i], x1=xOf(sp.a)*w, x2=xOf(sp.b)*w;
+      if(x>=x1-4&&x<=x2+4){
+        if(Math.abs(x-x1)<=5)return{sp,edge:"a"};
+        if(Math.abs(x-x2)<=5)return{sp,edge:"b"};
+        return{sp,edge:null};
+      }
+    }
+    return null;
+  };
+  c.addEventListener("pointerdown",e=>{
+    if(!S.buf)return;
+    const r=c.getBoundingClientRect(), x=e.clientX-r.left, t=tOf(clamp(x/r.width,0,1));
+    const h=hit(t,x,c._w);
+    if(!h){ S.t=t; $("#cur").textContent=fmt(t); if(S.playing)play(t); S.selId=null; render(); return; }
+    c.setPointerCapture(e.pointerId);
+    S.selId=h.sp.id;
+    drag={sp:h.sp, edge:h.edge, grab:t, a0:h.sp.a, b0:h.sp.b};
+    render();
+  });
+  c.addEventListener("pointermove",e=>{
+    const r=c.getBoundingClientRect(), x=e.clientX-r.left, t=tOf(clamp(x/r.width,0,1));
+    if(!drag){ const h=S.buf?hit(t,x,c._w):null;
+      c.style.cursor=!h?"crosshair":h.edge?"ew-resize":"grab"; return; }
+    const d=t-drag.grab;
+    if(drag.edge==="a") drag.sp.a=clamp(Math.min(t,drag.sp.b-.01),0,dur());
+    else if(drag.edge==="b") drag.sp.b=clamp(Math.max(t,drag.sp.a+.01),0,dur());
+    else { const len=drag.b0-drag.a0;
+      drag.sp.a=clamp(drag.a0+d,0,dur()-len); drag.sp.b=drag.sp.a+len; }
+    c.style.cursor=drag.edge?"ew-resize":"grabbing";
+    markDirty(); drawLane(); drawOverlays(); renderTable();
+  });
+  c.addEventListener("pointerup",()=>{ if(drag){ S.spans.sort((x,y)=>x.a-y.a); drag=null; render(); updateExport(); } });
+  c.addEventListener("dblclick",e=>{
+    const r=c.getBoundingClientRect(), x=e.clientX-r.left, t=tOf(clamp(x/r.width,0,1));
+    const h=S.buf?hit(t,x,c._w):null;
+    if(h){ S.sel={a:h.sp.a,b:h.sp.b}; S.t=h.sp.a; play(h.sp.a,h.sp.b); render(); }
+  });
+})();
+
+cv.ruler.addEventListener("pointerdown",e=>{
+  if(!S.buf)return;
+  const r=cv.ruler.getBoundingClientRect(), t=tOf(clamp((e.clientX-r.left)/r.width,0,1));
+  S.t=t; $("#cur").textContent=fmt(t); if(S.playing)play(t); drawOverlays();
+});
+
+/* the fixed-height panes must not starve the flexible one when a pane is switched on */
+const WAVE_MIN=110;
+function fitPanes(){
+  const stageH=$("#stage").clientHeight;
+  if(!stageH||S.mode==="spec")return;
+  const chrome=26+16+5+(S.mode==="both"?5:0);       /* ruler + scrollbar + gutters */
+  const spec=S.mode==="both"?S.layout.spec:0;
+  let need=WAVE_MIN-(stageH-chrome-spec-S.layout.lane);
+  if(need<=0)return;
+  if(S.mode==="both"){ const cut=Math.min(need,S.layout.spec-56); S.layout.spec-=cut; need-=cut; }
+  if(need>0){ S.layout.lane-=Math.min(need,S.layout.lane-40); }
+  applyLayout();
+}
+function setMode(m){
+  S.mode=m;
+  $("#wavePane").classList.toggle("hidden",m==="spec");
+  $("#specPane").classList.toggle("hidden",m==="wave");
+  $("#gSpec").classList.toggle("hidden",m!=="both");
+  $("#stage").classList.toggle("specmain",m==="spec");
+  /* getBoundingClientRect forces layout, so this is safe to do now — waiting on rAF is not,
+     it never fires in a background tab and the canvases would stay 1×1 */
+  fitPanes(); resize(); render();
+}
+
+/* ---------- tags ---------- */
+function renderTags(){
+  const row=$("#tagrow"); row.innerHTML="";
+  S.tags.forEach((t,i)=>{
+    const b=document.createElement("button");
+    b.className="tag"; b.style.setProperty("--c",t.color);
+    b.setAttribute("aria-pressed",t.name===S.tag);
+    b.innerHTML=`<span class="dot"></span><span class="nm">${esc(t.name)}</span><span class="k">${i<9?i+1:""}</span>`;
+    b.onclick=()=>{S.tag=t.name;renderTags();};
+    row.appendChild(b);
+  });
+}
+$("#newtagForm").onsubmit=e=>{
+  e.preventDefault();
+  const v=$("#newtag").value.trim(); if(!v)return;
+  ensureTag(v); S.tag=v; $("#newtag").value=""; renderTags(); renderTable();
+};
+
+/* ---------- spans + table ---------- */
+function markDirty(){ const f=F(); if(f)f.dirty=true; }
+function addSpan(){
+  if(!S.buf){toast("Load a file first");return;}
+  if(!S.sel||S.sel.b-S.sel.a<.001){toast("Select a range on the waveform first");return;}
+  const sp={id:S.nextId++,a:S.sel.a,b:S.sel.b,tag:S.tag,label:""};
+  S.spans.push(sp); S.spans.sort((x,y)=>x.a-y.a);
+  S.selId=sp.id; S.sel=null; markDirty(); render(); renderFileList(); updateExport(); toast("Span added · "+S.tag);
+}
+function delSpan(id){
+  S.spans=S.spans.filter(s=>s.id!==id); if(S.selId===id)S.selId=null;
+  markDirty(); render(); renderFileList(); updateExport();
+}
+function selectSpan(id){
+  const sp=S.spans.find(s=>s.id===id); if(!sp)return;
+  S.selId=id; S.sel={a:sp.a,b:sp.b}; S.t=sp.a; $("#cur").textContent=fmt(sp.a); render();
+}
+let shownSelId=null;
+function renderTable(){
+  const tb=$("#tbody"), wrap=$("#tblwrap");
+  /* the table is rebuilt from scratch, so remember where the user was before wiping it */
+  const scroll=wrap.scrollTop, ae=document.activeElement;
+  const row=ae&&ae.closest?ae.closest("#tbody tr"):null;
+  const focus=row?{id:row.dataset.id,a:ae.dataset.a,s:ae.selectionStart,e:ae.selectionEnd}:null;
+
+  $("#count").textContent=S.spans.length;
+  const tot=S.files.reduce((n,f)=>n+f.spans.length,0);
+  $("#totalCount").textContent=S.files.length>1?`· ${tot} across ${S.files.length} files`:"";
+  $("#tbl").hidden=!S.spans.length; $("#empty").style.display=S.spans.length?"none":"block";
+  tb.innerHTML="";
+  S.spans.forEach((sp,i)=>{
+    const tr=document.createElement("tr");
+    tr.dataset.id=sp.id;
+    tr.className=sp.id===S.selId?"sel":"";
+    const opts=S.tags.map(t=>`<option value="${esc(t.name)}"${t.name===sp.tag?" selected":""}>${esc(t.name)}</option>`).join("");
+    tr.innerHTML=`<td class="num">${i+1}</td>
+      <td class="tagcell"><span class="chip" style="--c:${tagColor(sp.tag)}"><span class="dot"></span></span>
+        <select data-a="tag" style="width:auto">${opts}</select></td>
+      <td class="num">${fmt(sp.a)}</td><td class="num">${fmt(sp.b)}</td>
+      <td class="num">${(sp.b-sp.a).toFixed(3)}s</td>
+      <td><input data-a="label" value="${esc(sp.label||"")}" placeholder="—"></td>
+      <td><button class="rowdel" title="Delete">✕</button></td>`;
+    tr.onclick=e=>{ if(e.target.closest("select,input"))return;
+      if(e.target.closest(".rowdel")){delSpan(sp.id);return;} selectSpan(sp.id); };
+    tr.querySelector('[data-a="tag"]').onchange=e=>{sp.tag=e.target.value;markDirty();render();updateExport();};
+    tr.querySelector('[data-a="label"]').oninput=e=>{sp.label=e.target.value;markDirty();drawLane();updateExport();};
+    tb.appendChild(tr);
+  });
+
+  wrap.scrollTop=scroll;
+  if(focus){
+    const el=tb.querySelector(`tr[data-id="${focus.id}"] [data-a="${focus.a}"]`);
+    if(el){ el.focus({preventScroll:true});
+      if(focus.s!=null&&el.setSelectionRange){try{el.setSelectionRange(focus.s,focus.e);}catch(_){}} }
+  }
+  /* only chase the selection when it actually moved, so manual scrolling stays put */
+  if(S.selId!==shownSelId){
+    shownSelId=S.selId;
+    const r=S.selId!=null&&tb.querySelector(`tr[data-id="${S.selId}"]`);
+    if(r)r.scrollIntoView({block:"nearest"});
+  }
+}
+$("#clearAll").onclick=async()=>{
+  if(!S.spans.length)return;
+  const ok=await ask("Clear spans",`Delete all ${S.spans.length} spans on ${S.name}? Other files keep theirs.`,
+    [{label:"Cancel",value:false},{label:"Delete",value:true,primary:true}]);
+  if(ok){S.spans=[];S.selId=null;markDirty();render();renderFileList();updateExport();}
+};
+
+/* ---------- export ---------- */
+let fmtSel="json";
+const r3=n=>+(+n).toFixed(3);
+const spanRows=f=>f.spans.map(s=>({start_s:r3(s.a),end_s:r3(s.b),duration_s:r3(s.b-s.a),tag:s.tag,label:s.label||null}));
+const singleFileJson=f=>JSON.stringify({file:f.name,sample_rate:f.sr||null,duration_s:f.duration?r3(f.duration):null,
+  spans:spanRows(f)},null,2);
+function withSpans(){ syncSpans(); return S.files.filter(f=>f.spans.length); }
+function buildExport(){
+  const list=withSpans();
+  if(!list.length)return "(no spans yet)";
+  const many=S.files.length>1;
+  if(fmtSel==="json"){
+    if(!many)return singleFileJson(list[0]);
+    return JSON.stringify({
+      folder:S.folderName||null,
+      annotated_files:list.length,
+      spans_total:list.reduce((n,f)=>n+f.spans.length,0),
+      generated_by:"Span",
+      files:list.map(f=>({file:f.name,path:f.path,sample_rate:f.sr||null,
+        duration_s:f.duration?r3(f.duration):null,spans:spanRows(f)}))},null,2);
+  }
+  if(fmtSel==="csv"){
+    const head=(many?"file,":"")+"start_s,end_s,duration_s,tag,label";
+    const q=v=>`"${String(v??"").replace(/"/g,'""')}"`;
+    return head+"\n"+list.flatMap(f=>f.spans.map(s=>
+      (many?q(f.name)+",":"")+`${r3(s.a)},${r3(s.b)},${r3(s.b-s.a)},${q(s.tag)},${q(s.label||"")}`)).join("\n");
+  }
+  if(fmtSel==="audacity"){
+    const f=F();
+    if(!f||!f.spans.length)return "(the current file has no spans — Audacity labels are per file)";
+    return f.spans.map(s=>`${r3(s.a)}\t${r3(s.b)}\t${s.label||s.tag}`).join("\n");
+  }
+  /* windows.json — one entry per file, keep/suppress derived from the tag name */
+  const out={_comment:`Spans annotated in Span. keep = near speech that must survive (preservation ~0 dB); suppress = >1 m voice that must be attenuated. Tags matching neither are omitted.`};
+  list.forEach(f=>{
+    const keep=[],sup=[];
+    f.spans.forEach(s=>{const t=s.tag.toLowerCase();
+      if(t.includes("keep")||t.includes("near")||t.includes("double"))keep.push([r3(s.a),r3(s.b)]);
+      else if(t.includes("sup")||t.includes("far"))sup.push([r3(s.a),r3(s.b)]);});
+    if(!keep.length&&!sup.length)return;
+    const clip={role:"annotated in Span"};
+    if(keep.length)clip.keep=keep;
+    if(sup.length)clip.suppress=sup;
+    out[base(f.name)]=clip;
+  });
+  return JSON.stringify(out,null,2);
+}
+function exportName(){
+  const ext=fmtSel==="csv"?"csv":fmtSel==="audacity"?"txt":"json";
+  if(fmtSel==="windows")return "windows.json";
+  if(fmtSel==="audacity")return `${base(S.name||"audio")}.txt`;
+  if(S.files.length>1)return S.folderName?`${S.folderName}.spans.${ext}`:`spans.${ext}`;
+  return `${base(S.name||"audio")}.spans.${ext}`;
+}
+function updateExport(){
+  $("#out").value=buildExport();
+  const many=S.files.length>1, n=withSpans().length;
+  $("#scope").textContent=fmtSel==="audacity"
+    ? "current file only" : many?`all ${n} annotated file${n===1?"":"s"}` : "";
+  $$("#fmt button").forEach(b=>b.setAttribute("aria-pressed",b.dataset.f===fmtSel));
+  if(previewWin&&!previewWin.closed)writePreview();   /* keep an open preview tab in step */
+}
+$("#fmt").addEventListener("click",e=>{
+  const b=e.target.closest("button"); if(!b)return; fmtSel=b.dataset.f; updateExport();
+});
+
+/* the preview opens in its own tab — the strip under the span table was too cramped to read
+   a folder's worth of JSON in. about:blank + document.write keeps it working from file:// too,
+   where a blob: URL would not open. */
+let previewWin=null;
+function writePreview(){
+  const w=previewWin; if(!w||w.closed)return;
+  const text=buildExport(), name=exportName(), n=withSpans().reduce((a,f)=>a+f.spans.length,0);
+  const scope=fmtSel==="audacity"?`${S.name||"current file"} only`
+    :S.files.length>1?`${withSpans().length} of ${S.files.length} files`:(S.name||"");
+  w.document.open();
+  w.document.write(`<!doctype html><meta charset="utf-8"><title>${esc(name)}</title>
+<style>
+:root{color-scheme:dark light;--bg:#101419;--panel:#161B22;--line:#262E39;--text:#E6EAF0;--dim:#8B96A5;--accent:#3FA5A0;--ink:#08110F}
+@media(prefers-color-scheme:light){:root{--bg:#EDF0F4;--panel:#FFF;--line:#D3DAE3;--text:#131820;--dim:#5D6875;--accent:#1F7A76;--ink:#FFF}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:14px system-ui,-apple-system,"Segoe UI",sans-serif;
+ height:100vh;display:flex;flex-direction:column}
+header{display:flex;align-items:center;gap:12px;padding:11px 16px;background:var(--panel);
+ border-bottom:1px solid var(--line);flex:0 0 auto}
+h1{margin:0;font-size:13.5px;font-weight:640;font-family:ui-monospace,Menlo,monospace}
+.sub{font-size:11.5px;color:var(--dim)}
+.sp{flex:1}
+button{font:inherit;font-size:12px;background:transparent;color:inherit;border:1px solid var(--line);
+ border-radius:6px;padding:5px 12px;cursor:pointer}
+button:hover{border-color:var(--dim)}
+button.p{background:var(--accent);border-color:var(--accent);color:var(--ink);font-weight:600}
+pre{flex:1 1 auto;margin:0;padding:16px 18px;overflow:auto;
+ font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12.5px;line-height:1.6;
+ white-space:pre;tab-size:4}
+</style>
+<header>
+  <h1>${esc(name)}</h1>
+  <span class="sub">${esc(fmtSel)} · ${n} span${n===1?"":"s"} · ${esc(scope)}</span>
+  <span class="sp"></span>
+  <button id="c">Copy</button><button class="p" id="d">Download</button>
+</header>
+<pre id="t">${esc(text)}</pre>
+<script>
+const txt=document.getElementById("t").textContent;
+document.getElementById("c").onclick=async e=>{
+  try{await navigator.clipboard.writeText(txt);}
+  catch(_){const a=document.createElement("textarea");a.value=txt;document.body.appendChild(a);
+    a.select();document.execCommand("copy");a.remove();}
+  e.target.textContent="Copied";setTimeout(()=>e.target.textContent="Copy",1200);
+};
+document.getElementById("d").onclick=()=>{
+  const a=document.createElement("a");
+  a.href=URL.createObjectURL(new Blob([txt],{type:"text/plain"}));
+  a.download=${JSON.stringify(name)};a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href),2000);
+};
+<\/script>`);
+  w.document.close();
+}
+$("#preview").onclick=()=>{
+  if(!withSpans().length){ toast("Nothing to preview"); return; }
+  if(previewWin&&!previewWin.closed){ writePreview(); previewWin.focus(); return; }
+  let w=null;
+  try{ w=window.open("","spanPreview","width=920,height=780"); }catch(e){}
+  if(!w){   /* popup blocked — fall back to the inline strip rather than doing nothing */
+    $("#out").classList.add("show"); updateExport();
+    toast("Popup blocked — preview shown below instead"); return;
+  }
+  previewWin=w; writePreview(); w.focus();
+};
+$("#copy").onclick=async()=>{
+  if(!withSpans().length){toast("Nothing to copy");return;}
+  try{await navigator.clipboard.writeText(buildExport());toast("Copied to clipboard");}
+  catch(e){$("#out").classList.add("show");$("#out").select();document.execCommand("copy");toast("Copied");}
+};
+$("#download").onclick=()=>{
+  if(!withSpans().length){toast("Nothing to export");return;}
+  const nm=exportName();
+  const a=document.createElement("a");
+  a.href=URL.createObjectURL(new Blob([buildExport()],{type:"text/plain"})); a.download=nm; a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href),2000); toast("Downloaded "+nm);
+};
+$("#railSave").onclick=()=>saveSidecars();
+
+/* ---------- menus ---------- */
+const closeMenus=()=>$$(".menu.open").forEach(m=>m.classList.remove("open"));
+$("#menus").addEventListener("click",e=>{
+  const btn=e.target.closest(".mbtn");
+  if(btn){ const m=btn.parentElement, was=m.classList.contains("open");
+    closeMenus(); if(!was){ m.classList.add("open"); syncMenuState(); } return; }
+});
+$("#menus").addEventListener("pointerover",e=>{
+  const btn=e.target.closest(".mbtn"); if(!btn)return;
+  if(!$(".menu.open"))return;
+  const m=btn.parentElement; if(m.classList.contains("open"))return;
+  closeMenus(); m.classList.add("open"); syncMenuState();
+});
+document.addEventListener("pointerdown",e=>{ if(!e.target.closest(".menu"))closeMenus(); },true);
+function syncMenuState(){
+  const set=(act,on)=>{ const b=$(`.mi[data-act="${act}"] .ck`); if(b)b.textContent=on?"✓":""; };
+  set("v-wave",S.mode==="wave"); set("v-both",S.mode==="both"); set("v-spec",S.mode==="spec");
+  set("toggleRail",S.layout.railOpen); set("loop",S.loop);
+  ["json","csv","windows","audacity"].forEach(f=>set("f-"+f,fmtSel===f));
+  const noAudio=!S.buf;
+  $$(".mi[data-act]").forEach(b=>{
+    const a=b.dataset.act;
+    if(["play","playSel","stop","loop","zin","zout","zfit","zsel","normGain","closeFile"].includes(a))b.disabled=noAudio;
+    if(a==="saveSidecars")b.disabled=!S.dirHandle||!withSpans().length;
+    if(["copy","download","preview"].includes(a))b.disabled=!withSpans().length;
+  });
+}
+const ACT={
+  openFiles:()=>$("#file").click(),
+  openFolderFS:()=>openFolder(),
+  openFolderInput:()=>$("#folder").click(),
+  importSpans:()=>$("#spanfile").click(),
+  saveSidecars,
+  closeFile:async()=>{
+    const f=F(); if(!f)return;
+    if(f.spans.length){ const ok=await ask("Remove file",`${f.name} has ${f.spans.length} spans. Remove it from the list? The file on disk is untouched.`,
+      [{label:"Cancel",value:false},{label:"Remove",value:true,primary:true}]); if(!ok)return; }
+    decoded.delete(f.id);
+    const at=S.cur;
+    S.files.splice(at,1);
+    /* the index now points at a different entry — drop the working spans before selectFile's
+       syncSpans() writes the closed file's list onto its neighbour */
+    S.cur=-1; S.spans=[]; S.nextId=1;
+    if(!S.files.length)resetToEmpty(); else selectFile(clamp(at,0,S.files.length-1));
+  },
+  closeAll:async()=>{
+    if(!S.files.length)return;
+    const list=withSpans(), n=list.reduce((a,f)=>a+f.spans.length,0);
+    if(n){ const ok=await ask("Close all",
+      `${n} span${n>1?"s":""} across ${list.length} file${list.length>1?"s":""} will be discarded. Export or save them first if you need them.`,
+      [{label:"Cancel",value:false},{label:"Discard",value:true,primary:true}]); if(!ok)return; }
+    resetToEmpty();
+  },
+  "v-wave":()=>setMode("wave"), "v-both":()=>setMode("both"), "v-spec":()=>setMode("spec"),
+  toggleRail:()=>{ S.layout.railOpen=!S.layout.railOpen; applyLayout(); saveLayout(); resize(); render(); },
+  zin:zoomIn, zout:zoomOut, zfit:zoomFit, zsel:zoomSel,
+  resetLayout:()=>{ Object.assign(S.layout,DEF_LAYOUT); applyLayout(); saveLayout(); S.specCache=null; resize(); render(); },
+  theme:()=>{
+    const cur=document.documentElement.getAttribute("data-theme")
+      ||(matchMedia("(prefers-color-scheme:dark)").matches?"dark":"light");
+    document.documentElement.setAttribute("data-theme",cur==="dark"?"light":"dark");
+  },
+  play:()=>$("#play").click(), playSel:()=>$("#playSel").click(), stop:()=>$("#stop").click(), loop:()=>$("#loop").click(),
+  normGain:()=>autoBoost(), resetGain:()=>setBoost(0),
+  "f-json":()=>{fmtSel="json";updateExport();}, "f-csv":()=>{fmtSel="csv";updateExport();},
+  "f-windows":()=>{fmtSel="windows";updateExport();}, "f-audacity":()=>{fmtSel="audacity";updateExport();},
+  preview:()=>$("#preview").click(), copy:()=>$("#copy").click(), download:()=>$("#download").click(),
+  shortcuts:()=>$("#scModal").classList.remove("hidden"),
+  about:()=>ask("Span","A single-file audio span annotator. Everything — decoding, waveform, spectrogram, export — happens in this browser tab; no audio ever leaves the machine.",[{label:"Close",value:1,primary:true}]),
+};
+document.addEventListener("click",e=>{
+  const b=e.target.closest("[data-act]"); if(!b||b.disabled)return;
+  const fn=ACT[b.dataset.act]; if(!fn)return;
+  closeMenus(); fn();
+});
+function resetToEmpty(){
+  stopPlayback();
+  S.files=[]; S.cur=-1; S.buf=null; S.mono=null; S.mip=null; S.spans=[]; S.selId=null; S.sel=null;
+  S.folderName=""; S.dirHandle=null; S.name=""; S.t=0; S.view={a:0,b:1}; S.specCache=null;
+  decoded.clear();
+  AUDIO_BTNS.forEach(id=>$("#"+id).disabled=true);
+  $("#drop").classList.remove("gone");
+  $("#nowFile").textContent="No file loaded"; $("#mFile").textContent="No file loaded";
+  $("#mFmt").textContent=""; $("#mLevel").textContent=""; $("#dur").textContent=fmt(0); $("#cur").textContent=fmt(0);
+  renderFileList(); render(); updateExport();
+}
+$("#railBtn").onclick=()=>ACT.toggleRail();
+
+/* ---------- keyboard ---------- */
+addEventListener("keydown",e=>{
+  const mod=e.metaKey||e.ctrlKey;
+  if(mod){
+    const k=e.key.toLowerCase();
+    if(k==="o"){e.preventDefault(); e.shiftKey?openFolder():$("#file").click(); return;}
+    if(k==="i"){e.preventDefault(); $("#spanfile").click(); return;}
+    if(k==="s"){e.preventDefault(); saveSidecars(); return;}
+    if(k==="e"){e.preventDefault(); $("#download").click(); return;}
+    return;
+  }
+  if(e.key==="Escape"){
+    const m=$(".modal:not(.hidden)");
+    if(m&&m.id!=="ask"){m.classList.add("hidden");return;}
+    if($(".menu.open")){closeMenus();return;}
+  }
+  if(e.target.matches("input,textarea,select"))return;
+  if($(".modal:not(.hidden)"))return;          /* a sheet is up — let it own the keyboard */
+  const k=e.key;
+  if(k==="?"){e.preventDefault();$("#scModal").classList.remove("hidden");return;}
+  if(k==="\\"){e.preventDefault();ACT.toggleRail();return;}
+  if(k==="["||k==="]"){
+    if(S.files.length<2)return;
+    e.preventDefault(); selectFile(clamp(S.cur+(k==="["?-1:1),0,S.files.length-1)); return;
+  }
+  if(k===" "){e.preventDefault();
+    if(e.shiftKey&&S.sel)play(S.sel.a,S.sel.b);
+    else S.playing?(stopPlayback(),render()):play(S.t>=dur()-.01?0:S.t); return;}
+  if(!S.buf)return;
+  if(k==="Enter"){e.preventDefault();addSpan();return;}
+  if(k==="Backspace"||k==="Delete"){if(S.selId){e.preventDefault();delSpan(S.selId);}return;}
+  if(k>="1"&&k<="9"){const i=+k-1; if(S.tags[i]){S.tag=S.tags[i].name;renderTags();toast("Tag · "+S.tag);} return;}
+  if(k==="s"||k==="S"){S.sel={a:S.t,b:Math.max(S.t,S.sel?S.sel.b:S.t)};drawOverlays();updateMeta();return;}
+  if(k==="e"||k==="E"){S.sel={a:Math.min(S.t,S.sel?S.sel.a:S.t),b:S.t};drawOverlays();updateMeta();return;}
+  if(k==="l"||k==="L"){$("#loop").click();return;}
+  if(k==="g"||k==="G"){autoBoost();return;}
+  if(k==="+"||k==="="){zoomAt(.5,.6);return;}
+  if(k==="-"||k==="_"){zoomAt(.5,1.7);return;}
+  if(k==="0"){S.view={a:0,b:1};S.specCache=null;render();return;}
+  if(k==="ArrowLeft"||k==="ArrowRight"){e.preventDefault();
+    S.t=clamp(S.t+(k==="ArrowLeft"?-1:1)*(e.shiftKey?.1:1),0,dur());
+    $("#cur").textContent=fmt(S.t); if(S.playing)play(S.t); else drawOverlays(); return;}
+  if(k==="Escape"){S.sel=null;S.selId=null;render();}
+});
+addEventListener("beforeunload",e=>{
+  if(S.files.some(f=>f.spans.length&&f.dirty)){ e.preventDefault(); e.returnValue=""; }
+});
+
+/* ---------- boot ---------- */
+loadLayout(); applyLayout(); setMode("wave");
+renderTags(); renderFileList(); resize(); render(); updateExport(); syncZoomUI();
+$("#ampV").textContent="1.0×"; $("#boostV").textContent="0.0 dB"; $("#volV").textContent="100%";
+matchMedia("(prefers-color-scheme:dark)").addEventListener("change",()=>{S.specCache=null;render();});
+new MutationObserver(()=>{S.specCache=null;render();})
+  .observe(document.documentElement,{attributes:true,attributeFilter:["data-theme"]});
+})();
+</script>
