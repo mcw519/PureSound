@@ -1,0 +1,577 @@
+{
+ "_comment": "voice_isolate field benchmark v2 (2026-08-16), built by build_cases.py from the hand labelling in egs/voice_isolate/test_vector/*.spans.json (tools/audio_annotator.html). 90D = real_record_test_90D.wav (bit-identical to the older field_cases/raw/real_distance_test_vector_90D.wav -- only the labels changed), 270D = real_record_test_270D.wav. Near talker 30 cm on 90D, 50 cm on 270D; far talkers at 200/300 cm per span label. TWO MODES, never averaged: '*_session' is STREAM (full recording, near anchor present = mid-conversation); the cut-out near*/far*/dt* clips are COLD-START (span fed from t=0, no context). double-talk is scored keep-only: the near voice must survive; the far side is not separable without a reference. Each clip carries floor_dbfs / near_ref_dbfs so the scorer can report absolute residual level, not only relative attenuation -- a span that starts close to the noise floor has little removable energy and its reduction_db is not comparable with a loud one.",
+ "90d_session": {
+  "role": "STREAM: full 90D recording (near anchor present)",
+  "group": "90d",
+  "keep": [
+   [
+    0.333,
+    15.215
+   ],
+   [
+    24.252,
+    26.049
+   ],
+   [
+    35.44,
+    37.856
+   ],
+   [
+    48.697,
+    50.736
+   ],
+   [
+    58.874,
+    66.979
+   ],
+   [
+    70.498,
+    86.134
+   ],
+   [
+    86.269,
+    98.428
+   ],
+   [
+    109.879,
+    133.561
+   ]
+  ],
+  "suppress": [
+   [
+    15.337,
+    24.195
+   ],
+   [
+    26.171,
+    35.393
+   ],
+   [
+    38.044,
+    48.652
+   ],
+   [
+    51.053,
+    58.798
+   ],
+   [
+    67.248,
+    70.219
+   ],
+   [
+    107.023,
+    109.797
+   ]
+  ],
+  "floor_dbfs": -78.71,
+  "near_ref_dbfs": -40.95,
+  "source": "real_record_test_90D.wav",
+  "duration_s": 134.8
+ },
+ "90d_near1": {
+  "role": "COLD-START lone near voice (keep)",
+  "group": "90d",
+  "label": "30 cm",
+  "floor_dbfs": -78.71,
+  "near_ref_dbfs": -40.95,
+  "in_dbfs": -43.93,
+  "source_span_s": [
+   0.333,
+   15.215
+  ],
+  "keep": [
+   [
+    0.0,
+    14.882
+   ]
+  ]
+ },
+ "90d_far1": {
+  "role": "COLD-START lone far voice, no near anchor (suppress)",
+  "group": "90d",
+  "label": "200 cm",
+  "floor_dbfs": -78.71,
+  "near_ref_dbfs": -40.95,
+  "in_dbfs": -51.56,
+  "source_span_s": [
+   15.337,
+   24.195
+  ],
+  "suppress": [
+   [
+    0.0,
+    8.858
+   ]
+  ]
+ },
+ "90d_near2": {
+  "role": "COLD-START lone near voice (keep)",
+  "group": "90d",
+  "label": "30 cm",
+  "floor_dbfs": -78.71,
+  "near_ref_dbfs": -40.95,
+  "in_dbfs": -43.49,
+  "source_span_s": [
+   24.252,
+   26.049
+  ],
+  "keep": [
+   [
+    0.0,
+    1.797
+   ]
+  ]
+ },
+ "90d_far2": {
+  "role": "COLD-START lone far voice, no near anchor (suppress)",
+  "group": "90d",
+  "label": "200 cm",
+  "floor_dbfs": -78.71,
+  "near_ref_dbfs": -40.95,
+  "in_dbfs": -47.46,
+  "source_span_s": [
+   26.171,
+   35.393
+  ],
+  "suppress": [
+   [
+    0.0,
+    9.222
+   ]
+  ]
+ },
+ "90d_near3": {
+  "role": "COLD-START lone near voice (keep)",
+  "group": "90d",
+  "label": "30 cm",
+  "floor_dbfs": -78.71,
+  "near_ref_dbfs": -40.95,
+  "in_dbfs": -42.95,
+  "source_span_s": [
+   35.44,
+   37.856
+  ],
+  "keep": [
+   [
+    0.0,
+    2.416
+   ]
+  ]
+ },
+ "90d_far3": {
+  "role": "COLD-START lone far voice, no near anchor (suppress)",
+  "group": "90d",
+  "label": "300 cm",
+  "floor_dbfs": -78.71,
+  "near_ref_dbfs": -40.95,
+  "in_dbfs": -53.21,
+  "source_span_s": [
+   38.044,
+   48.652
+  ],
+  "suppress": [
+   [
+    0.0,
+    10.608
+   ]
+  ]
+ },
+ "90d_near4": {
+  "role": "COLD-START lone near voice (keep)",
+  "group": "90d",
+  "label": "30 cm",
+  "floor_dbfs": -78.71,
+  "near_ref_dbfs": -40.95,
+  "in_dbfs": -39.59,
+  "source_span_s": [
+   48.697,
+   50.736
+  ],
+  "keep": [
+   [
+    0.0,
+    2.039
+   ]
+  ]
+ },
+ "90d_far4": {
+  "role": "COLD-START lone far voice, no near anchor (suppress)",
+  "group": "90d",
+  "label": "300 cm",
+  "floor_dbfs": -78.71,
+  "near_ref_dbfs": -40.95,
+  "in_dbfs": -50.09,
+  "source_span_s": [
+   51.053,
+   58.798
+  ],
+  "suppress": [
+   [
+    0.0,
+    7.745
+   ]
+  ]
+ },
+ "90d_near5": {
+  "role": "COLD-START lone near voice (keep)",
+  "group": "90d",
+  "label": "30 cm",
+  "floor_dbfs": -78.71,
+  "near_ref_dbfs": -40.95,
+  "in_dbfs": -38.76,
+  "source_span_s": [
+   58.874,
+   66.979
+  ],
+  "keep": [
+   [
+    0.0,
+    8.105
+   ]
+  ]
+ },
+ "90d_far5": {
+  "role": "COLD-START lone far voice, no near anchor (suppress)",
+  "group": "90d",
+  "label": "300 cm",
+  "floor_dbfs": -78.71,
+  "near_ref_dbfs": -40.95,
+  "in_dbfs": -53.72,
+  "source_span_s": [
+   67.248,
+   70.219
+  ],
+  "suppress": [
+   [
+    0.0,
+    2.971
+   ]
+  ]
+ },
+ "90d_dt1": {
+  "role": "COLD-START double-talk, keep-only (near must survive)",
+  "group": "90d",
+  "label": "near 30 cm + far 200 cm",
+  "floor_dbfs": -78.71,
+  "near_ref_dbfs": -40.95,
+  "in_dbfs": -41.55,
+  "source_span_s": [
+   70.498,
+   86.134
+  ],
+  "keep": [
+   [
+    0.0,
+    15.636
+   ]
+  ]
+ },
+ "90d_near6": {
+  "role": "COLD-START lone near voice (keep)",
+  "group": "90d",
+  "label": "30 cm",
+  "floor_dbfs": -78.71,
+  "near_ref_dbfs": -40.95,
+  "in_dbfs": -39.04,
+  "source_span_s": [
+   86.269,
+   98.428
+  ],
+  "keep": [
+   [
+    0.0,
+    12.159
+   ]
+  ]
+ },
+ "90d_far6": {
+  "role": "COLD-START lone far voice, no near anchor (suppress)",
+  "group": "90d",
+  "label": "300 cm",
+  "floor_dbfs": -78.71,
+  "near_ref_dbfs": -40.95,
+  "in_dbfs": -51.61,
+  "source_span_s": [
+   107.023,
+   109.797
+  ],
+  "suppress": [
+   [
+    0.0,
+    2.774
+   ]
+  ]
+ },
+ "90d_dt2": {
+  "role": "COLD-START double-talk, keep-only (near must survive)",
+  "group": "90d",
+  "label": "near 30 cm + far 300 cm",
+  "floor_dbfs": -78.71,
+  "near_ref_dbfs": -40.95,
+  "in_dbfs": -41.27,
+  "source_span_s": [
+   109.879,
+   133.561
+  ],
+  "keep": [
+   [
+    0.0,
+    23.682
+   ]
+  ]
+ },
+ "270d_session": {
+  "role": "STREAM: full 270D recording (near anchor present)",
+  "group": "270d",
+  "keep": [
+   [
+    0.249,
+    12.853
+   ],
+   [
+    24.187,
+    25.808
+   ],
+   [
+    42.16,
+    44.579
+   ],
+   [
+    53.366,
+    54.578
+   ],
+   [
+    69.309,
+    71.091
+   ],
+   [
+    72.074,
+    86.381
+   ],
+   [
+    86.504,
+    98.056
+   ]
+  ],
+  "suppress": [
+   [
+    13.355,
+    24.127
+   ],
+   [
+    25.977,
+    42.138
+   ],
+   [
+    44.647,
+    52.578
+   ],
+   [
+    54.621,
+    69.255
+   ]
+  ],
+  "floor_dbfs": -78.53,
+  "near_ref_dbfs": -43.36,
+  "source": "real_record_test_270D.wav",
+  "duration_s": 98.328
+ },
+ "270d_near1": {
+  "role": "COLD-START lone near voice (keep)",
+  "group": "270d",
+  "label": "50 cm",
+  "floor_dbfs": -78.53,
+  "near_ref_dbfs": -43.36,
+  "in_dbfs": -43.96,
+  "source_span_s": [
+   0.249,
+   12.853
+  ],
+  "keep": [
+   [
+    0.0,
+    12.604
+   ]
+  ]
+ },
+ "270d_far1": {
+  "role": "COLD-START lone far voice, no near anchor (suppress)",
+  "group": "270d",
+  "label": "200 cm",
+  "floor_dbfs": -78.53,
+  "near_ref_dbfs": -43.36,
+  "in_dbfs": -54.02,
+  "source_span_s": [
+   13.355,
+   24.127
+  ],
+  "suppress": [
+   [
+    0.0,
+    10.772
+   ]
+  ]
+ },
+ "270d_near2": {
+  "role": "COLD-START lone near voice (keep)",
+  "group": "270d",
+  "label": "50 cm",
+  "floor_dbfs": -78.53,
+  "near_ref_dbfs": -43.36,
+  "in_dbfs": -45.07,
+  "source_span_s": [
+   24.187,
+   25.808
+  ],
+  "keep": [
+   [
+    0.0,
+    1.621
+   ]
+  ]
+ },
+ "270d_far2": {
+  "role": "COLD-START lone far voice, no near anchor (suppress)",
+  "group": "270d",
+  "label": "200 cm",
+  "floor_dbfs": -78.53,
+  "near_ref_dbfs": -43.36,
+  "in_dbfs": -48.97,
+  "source_span_s": [
+   25.977,
+   42.138
+  ],
+  "suppress": [
+   [
+    0.0,
+    16.161
+   ]
+  ]
+ },
+ "270d_near3": {
+  "role": "COLD-START lone near voice (keep)",
+  "group": "270d",
+  "label": "50 cm",
+  "floor_dbfs": -78.53,
+  "near_ref_dbfs": -43.36,
+  "in_dbfs": -45.63,
+  "source_span_s": [
+   42.16,
+   44.579
+  ],
+  "keep": [
+   [
+    0.0,
+    2.419
+   ]
+  ]
+ },
+ "270d_far3": {
+  "role": "COLD-START lone far voice, no near anchor (suppress)",
+  "group": "270d",
+  "label": "300 cm",
+  "floor_dbfs": -78.53,
+  "near_ref_dbfs": -43.36,
+  "in_dbfs": -53.55,
+  "source_span_s": [
+   44.647,
+   52.578
+  ],
+  "suppress": [
+   [
+    0.0,
+    7.931
+   ]
+  ]
+ },
+ "270d_near4": {
+  "role": "COLD-START lone near voice (keep)",
+  "group": "270d",
+  "label": "50 cm",
+  "floor_dbfs": -78.53,
+  "near_ref_dbfs": -43.36,
+  "in_dbfs": -42.53,
+  "source_span_s": [
+   53.366,
+   54.578
+  ],
+  "keep": [
+   [
+    0.0,
+    1.212
+   ]
+  ]
+ },
+ "270d_far4": {
+  "role": "COLD-START lone far voice, no near anchor (suppress)",
+  "group": "270d",
+  "label": "300 cm",
+  "floor_dbfs": -78.53,
+  "near_ref_dbfs": -43.36,
+  "in_dbfs": -52.53,
+  "source_span_s": [
+   54.621,
+   69.255
+  ],
+  "suppress": [
+   [
+    0.0,
+    14.634
+   ]
+  ]
+ },
+ "270d_near5": {
+  "role": "COLD-START lone near voice (keep)",
+  "group": "270d",
+  "label": "50 cm",
+  "floor_dbfs": -78.53,
+  "near_ref_dbfs": -43.36,
+  "in_dbfs": -43.04,
+  "source_span_s": [
+   69.309,
+   71.091
+  ],
+  "keep": [
+   [
+    0.0,
+    1.782
+   ]
+  ]
+ },
+ "270d_dt1": {
+  "role": "COLD-START double-talk, keep-only (near must survive)",
+  "group": "270d",
+  "label": "near 50 cm + far 200 cm",
+  "floor_dbfs": -78.53,
+  "near_ref_dbfs": -43.36,
+  "in_dbfs": -43.77,
+  "source_span_s": [
+   72.074,
+   86.381
+  ],
+  "keep": [
+   [
+    0.0,
+    14.307
+   ]
+  ]
+ },
+ "270d_dt2": {
+  "role": "COLD-START double-talk, keep-only (near must survive)",
+  "group": "270d",
+  "label": "near 50 cm + far 200 cm",
+  "floor_dbfs": -78.53,
+  "near_ref_dbfs": -43.36,
+  "in_dbfs": -42.05,
+  "source_span_s": [
+   86.504,
+   98.056
+  ],
+  "keep": [
+   [
+    0.0,
+    11.552
+   ]
+  ]
+ }
+}

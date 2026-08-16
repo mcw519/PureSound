@@ -1,0 +1,37 @@
+clip	role	system	keep_preserv_dB	keep_out_dBFS	supp_reduc_dB	supp_out_dBFS	residual_dB	sir_out_dB	headroom_dB	verdict
+90d_session	STREAM: full 90D recording (near anchor present)	ours	   -0.46	  -41.41	  -11.82	  -62.21	   16.50	   21.26	   28.32	SUPPRESS-PARTIAL
+90d_near1	COLD-START lone near voice (keep)	ours	   -0.04	  -43.97	     n/a	     n/a	     n/a	     n/a	     n/a	ok
+90d_far1	COLD-START lone far voice, no near anchor (suppress)	ours	     n/a	     n/a	   -8.18	  -59.75	   18.96	   18.80	   27.15	SUPPRESS-PARTIAL
+90d_near2	COLD-START lone near voice (keep)	ours	   -0.23	  -43.71	     n/a	     n/a	     n/a	     n/a	     n/a	ok
+90d_far2	COLD-START lone far voice, no near anchor (suppress)	ours	     n/a	     n/a	   -8.42	  -55.87	   22.84	   14.92	   31.25	SUPPRESS-PARTIAL
+90d_near3	COLD-START lone near voice (keep)	ours	   -0.20	  -43.15	     n/a	     n/a	     n/a	     n/a	     n/a	ok
+90d_far3	COLD-START lone far voice, no near anchor (suppress)	ours	     n/a	     n/a	   -5.72	  -58.92	   19.79	   17.97	   25.50	SUPPRESS-FAIL
+90d_near4	COLD-START lone near voice (keep)	ours	   -0.13	  -39.72	     n/a	     n/a	     n/a	     n/a	     n/a	ok
+90d_far4	COLD-START lone far voice, no near anchor (suppress)	ours	     n/a	     n/a	   -0.31	  -50.40	   28.31	    9.45	   28.62	SUPPRESS-FAIL
+90d_near5	COLD-START lone near voice (keep)	ours	   -0.09	  -38.85	     n/a	     n/a	     n/a	     n/a	     n/a	ok
+90d_far5	COLD-START lone far voice, no near anchor (suppress)	ours	     n/a	     n/a	   -0.06	  -53.78	   24.93	   12.83	   24.99	SUPPRESS-FAIL
+90d_dt1	COLD-START double-talk, keep-only (near must survive)	ours	   -1.79	  -43.34	     n/a	     n/a	     n/a	     n/a	     n/a	ok
+90d_near6	COLD-START lone near voice (keep)	ours	   -0.06	  -39.10	     n/a	     n/a	     n/a	     n/a	     n/a	ok
+90d_far6	COLD-START lone far voice, no near anchor (suppress)	ours	     n/a	     n/a	   -3.84	  -55.45	   23.26	   14.50	   27.10	SUPPRESS-FAIL
+90d_dt2	COLD-START double-talk, keep-only (near must survive)	ours	   -0.51	  -41.78	     n/a	     n/a	     n/a	     n/a	     n/a	ok
+270d_session	STREAM: full 270D recording (near anchor present)	ours	   -1.12	  -44.48	  -13.18	  -64.51	   14.02	   21.15	   27.20	SUPPRESS-PARTIAL
+270d_near1	COLD-START lone near voice (keep)	ours	   -0.03	  -43.99	     n/a	     n/a	     n/a	     n/a	     n/a	ok
+270d_far1	COLD-START lone far voice, no near anchor (suppress)	ours	     n/a	     n/a	   -4.61	  -58.62	   19.91	   15.26	   24.51	SUPPRESS-FAIL
+270d_near2	COLD-START lone near voice (keep)	ours	   -0.06	  -45.14	     n/a	     n/a	     n/a	     n/a	     n/a	ok
+270d_far2	COLD-START lone far voice, no near anchor (suppress)	ours	     n/a	     n/a	   -5.91	  -54.87	   23.66	   11.51	   29.56	SUPPRESS-FAIL
+270d_near3	COLD-START lone near voice (keep)	ours	   -0.26	  -45.89	     n/a	     n/a	     n/a	     n/a	     n/a	ok
+270d_far3	COLD-START lone far voice, no near anchor (suppress)	ours	     n/a	     n/a	   -5.07	  -58.62	   19.91	   15.26	   24.98	SUPPRESS-FAIL
+270d_near4	COLD-START lone near voice (keep)	ours	   -0.33	  -42.86	     n/a	     n/a	     n/a	     n/a	     n/a	ok
+270d_far4	COLD-START lone far voice, no near anchor (suppress)	ours	     n/a	     n/a	   -1.78	  -54.31	   24.22	   10.95	   26.00	SUPPRESS-FAIL
+270d_near5	COLD-START lone near voice (keep)	ours	   -0.68	  -43.72	     n/a	     n/a	     n/a	     n/a	     n/a	ok
+270d_dt1	COLD-START double-talk, keep-only (near must survive)	ours	   -0.99	  -44.77	     n/a	     n/a	     n/a	     n/a	     n/a	ok
+270d_dt2	COLD-START double-talk, keep-only (near must survive)	ours	   -2.27	  -44.31	     n/a	     n/a	     n/a	     n/a	     n/a	ok
+
+# keep_preserv_dB ~ 0 dB; < -3.0 dB = KEEP-VIOLATION (bot goes deaf to a user)
+# supp_reduc_dB very negative; > -6.0 dB = SUPPRESS-FAIL (non-user voice leaks)
+# residual_dB = output level above the recording's noise floor; > 12.0 dB with a
+#   passing reduction = SUPPRESS-PARTIAL (pushed, but the bystander is still above room tone)
+# sir_out_dB = how far the residual sits below the user's own voice (bigger is better)
+# headroom_dB = input level above the floor; < 6.0 dB = NOT-SCORABLE, there was
+#   nothing to remove and reduction_dB would only measure the floor
+# ours: FAIL -> 90d_far3:suppress, 90d_far4:suppress, 90d_far5:suppress, 90d_far6:suppress, 270d_far1:suppress, 270d_far2:suppress, 270d_far3:suppress, 270d_far4:suppress

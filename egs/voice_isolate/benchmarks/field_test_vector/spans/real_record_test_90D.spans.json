@@ -1,0 +1,105 @@
+{
+  "file": "real_record_test_90D.wav",
+  "sample_rate": 48000,
+  "duration_s": 134.8,
+  "spans": [
+    {
+      "start_s": 0.333,
+      "end_s": 15.215,
+      "duration_s": 14.882,
+      "tag": "near / keep",
+      "label": "30 cm"
+    },
+    {
+      "start_s": 15.337,
+      "end_s": 24.195,
+      "duration_s": 8.858,
+      "tag": "far / suppress",
+      "label": "200 cm"
+    },
+    {
+      "start_s": 24.252,
+      "end_s": 26.049,
+      "duration_s": 1.797,
+      "tag": "near / keep",
+      "label": "30 cm"
+    },
+    {
+      "start_s": 26.171,
+      "end_s": 35.393,
+      "duration_s": 9.222,
+      "tag": "far / suppress",
+      "label": "200 cm"
+    },
+    {
+      "start_s": 35.44,
+      "end_s": 37.856,
+      "duration_s": 2.416,
+      "tag": "near / keep",
+      "label": "30 cm"
+    },
+    {
+      "start_s": 38.044,
+      "end_s": 48.652,
+      "duration_s": 10.608,
+      "tag": "far / suppress",
+      "label": "300 cm"
+    },
+    {
+      "start_s": 48.697,
+      "end_s": 50.736,
+      "duration_s": 2.039,
+      "tag": "near / keep",
+      "label": "30 cm"
+    },
+    {
+      "start_s": 51.053,
+      "end_s": 58.798,
+      "duration_s": 7.745,
+      "tag": "far / suppress",
+      "label": "300 cm"
+    },
+    {
+      "start_s": 58.874,
+      "end_s": 66.979,
+      "duration_s": 8.105,
+      "tag": "near / keep",
+      "label": "30 cm"
+    },
+    {
+      "start_s": 67.248,
+      "end_s": 70.219,
+      "duration_s": 2.971,
+      "tag": "far / suppress",
+      "label": "300 cm"
+    },
+    {
+      "start_s": 70.498,
+      "end_s": 86.134,
+      "duration_s": 15.635,
+      "tag": "double-talk",
+      "label": "near 30 cm + far 200 cm"
+    },
+    {
+      "start_s": 86.269,
+      "end_s": 98.428,
+      "duration_s": 12.159,
+      "tag": "near / keep",
+      "label": "30 cm"
+    },
+    {
+      "start_s": 107.023,
+      "end_s": 109.797,
+      "duration_s": 2.774,
+      "tag": "far / suppress",
+      "label": "300 cm"
+    },
+    {
+      "start_s": 109.879,
+      "end_s": 133.561,
+      "duration_s": 23.682,
+      "tag": "double-talk",
+      "label": "near 30 cm + far 300 cm"
+    }
+  ]
+}

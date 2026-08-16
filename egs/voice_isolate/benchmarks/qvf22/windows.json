@@ -1,0 +1,6 @@
+{
+  "_comment": "Voicebot-correctness scorecard windows, labelled for THIS product (2026-07-03 decision): a conversational robot whose user is ALWAYS within ~1 m, no enrollment (blind). Consequence: any voice beyond ~1 m is by definition NOT the user, so it must be SUPPRESSED -- whether it competes with the near user or is the only voice present (a lone far voice = bystander/TV, never the user). So the objective is near-field (<1m) isolation: KEEP near speech, SUPPRESS everything farther. This is why clip2 (lone far speaker) is labelled 'suppress' here even though QVF2.2 keeps it -- QVF2.2 allows far-field users; this product does not. 'keep' spans: target ~= input (preservation ~0, else KEEP-VIOLATION = the near user was damaged). 'suppress' spans: target ~ silence (reduction very negative, else SUPPRESS-FAIL = a >1m voice leaked). Clip roles (DRR-proxy verified): scenario1 = lone near user (keep), scenario2 = lone FAR voice = non-user, should suppress, scenario3 = near user + far competitor (keep near 0-6.3 & 11.94-16.16, suppress far 7.36-11.94).",
+  "scenario1": {"role": "lone near-field user", "keep": [[0.0, 6.67]]},
+  "scenario2": {"role": "lone FAR voice = non-user (suppress)", "suppress": [[0.0, 6.67]]},
+  "scenario3": {"role": "near user + far competitor", "keep": [[0.0, 6.30], [11.94, 16.16]], "suppress": [[7.36, 11.94]]}
+}

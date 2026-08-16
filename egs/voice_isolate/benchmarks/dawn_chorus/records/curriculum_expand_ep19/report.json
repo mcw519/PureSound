@@ -1,0 +1,25 @@
+{
+  "dataset": "ai-coustics/dawn_chorus_en",
+  "n_eval": 40,
+  "ckpt": "exp/dpcrn_16k_la_curriculum_expand_0628/lightning_logs/version_0/checkpoints/epoch=19-step=10000.ckpt",
+  "query_distance": null,
+  "asr": "faster-whisper/small",
+  "si_sdr_mix_mean": -7.229031073595012,
+  "si_sdr_enh_mean": -8.27784338021886,
+  "si_sdr_i_mean": -1.0488123066238493,
+  "si_sdr_i_median": 0.07524938876141829,
+  "wer_raw": {
+    "wer": 0.392204628501827,
+    "substitution_rate": 0.14494518879415347,
+    "insertion_rate": 0.09622411693057248,
+    "deletion_rate": 0.1510353227771011,
+    "n_ref_words": 821
+  },
+  "wer_enhanced": {
+    "wer": 0.47868453105968334,
+    "substitution_rate": 0.20341047503045068,
+    "insertion_rate": 0.031668696711327646,
+    "deletion_rate": 0.243605359317905,
+    "n_ref_words": 821
+  }
+}
