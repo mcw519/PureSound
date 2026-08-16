@@ -20,6 +20,11 @@ private path.
 | [`wer_sets/`](wer_sets/) | LibriTTS test-clean + DNS-5 + BUT ReverbDB (public) | rebuildable | how to rebuild each of the four reverberation regimes |
 | [`dawn_chorus/`](dawn_chorus/) | `ai-coustics/dawn_chorus_en` (public) | external | per-checkpoint reports |
 | [`probes/`](probes/) | VOiCES, RealMAN (CC-BY) | external | probe outputs backing the cross-chain findings |
+| [`full_gate/`](full_gate/) | all of the above at once | — | one file per checkpoint: the complete nine-stage summary from `../run_full_benchmark.sh`, which is what a release decision is actually made on |
+
+**No single benchmark decides a release.** `dpcrn_v10` tops the field benchmark's cold-start
+column and fails the deployment gate; reading either one alone gets the decision wrong.
+`full_gate/` exists so the whole picture stays together.
 
 ## The field benchmark
 

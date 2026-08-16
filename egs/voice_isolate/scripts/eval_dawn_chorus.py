@@ -242,7 +242,7 @@ def main():
                    help="save mix/enhanced/ref/vad wavs for the first N samples")
     p.add_argument("--vad-threshold", type=float, default=0.5,
                    help="prob above which the saved VAD wav reads 0.9 (else 0)")
-    p.add_argument("--out", default="./egs/voice_isolate/data_report/dawn_chorus")
+    p.add_argument("--out", default=str(REPO_ROOT / "egs/voice_isolate/data_report/dawn_chorus"))
     args = p.parse_args()
 
     import pyarrow.parquet as pq

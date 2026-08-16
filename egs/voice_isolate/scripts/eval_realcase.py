@@ -133,7 +133,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("config_path")
     parser.add_argument("--ckpt", required=True)
-    parser.add_argument("--cases-dir", default="egs/voice_isolate/data_report/field_cases/test_vector_cases")
+    parser.add_argument("--cases-dir", default=str(REPO_ROOT / "egs/voice_isolate/data_report/field_cases/test_vector_cases"))
     parser.add_argument("--windows", default=None, help="windows.json (default: <cases-dir>/windows.json)")
     parser.add_argument("--device", default="cpu")
     parser.add_argument("--dry-blend", type=float, default=1.0,

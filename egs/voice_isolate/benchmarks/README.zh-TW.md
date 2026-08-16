@@ -17,6 +17,10 @@ RealMAN、ai-coustics Dawn Chorus——用這裡的腳本重建它們是預期�
 | [`wer_sets/`](wer_sets/) | LibriTTS test-clean + DNS-5 + BUT ReverbDB（公開） | 可重建 | 四種殘響 regime 各自的重建方式 |
 | [`dawn_chorus/`](dawn_chorus/) | `ai-coustics/dawn_chorus_en`（公開） | 外部託管 | 逐 checkpoint 的報告 |
 | [`probes/`](probes/) | VOiCES、RealMAN（CC-BY） | 外部託管 | 支撐跨鏈結論的探針輸出 |
+| [`full_gate/`](full_gate/) | 以上全部一次跑完 | — | 每個 checkpoint 一個檔：`../run_full_benchmark.sh` 的完整九關摘要，發版決定實際是根據它下的 |
+
+**沒有任何單一 benchmark 能決定發版。** `dpcrn_v10` 在田野 benchmark 的冷啟動欄位居首，卻沒過
+部署閘門；只讀其中一邊都會做出錯誤決定。`full_gate/` 的存在就是為了讓完整圖像留在一起。
 
 ## 田野 benchmark
 

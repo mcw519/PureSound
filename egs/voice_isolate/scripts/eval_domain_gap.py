@@ -135,7 +135,7 @@ def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--voices-root", required=True)
     ap.add_argument("--bank", required=True, help="synthetic bank view for the S leg")
-    ap.add_argument("--config", default="egs/voice_isolate/config/infer_dpcrn.yaml")
+    ap.add_argument("--config", default=str(REPO_ROOT / "egs/voice_isolate/config/infer_dpcrn.yaml"))
     ap.add_argument("--ckpt", default=None, help="checkpoint for the behavioral leg (optional)")
     ap.add_argument("--dry-blend", type=float, default=1.0)
     ap.add_argument("--rooms", nargs="*", default=["rm1", "rm2", "rm3", "rm4"])

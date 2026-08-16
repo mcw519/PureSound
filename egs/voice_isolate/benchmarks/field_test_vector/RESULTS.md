@@ -124,8 +124,25 @@ The old set labelled 26.6 s of far speech where there are 42.2 s, and the 15.6 s
 the shallow-suppression ones — so it overstated far suppression by 4.5 dB. The keep side was
 unaffected. Any figure quoted from `laptop90d_cases` on the suppress axis is void.
 
-## Not yet judged
+## What the rest of the gate said about v10
 
-This scorecard is one axis. `dpcrn_v10` has not been through the rest of the gate — Dawn Chorus
-WER/deletion, BUT-OFFICE, in-domain SI-SDRi, the held-out real far-field set, extreme reverb.
-`dpcrn_v8.ckpt` remains the default.
+This scorecard is one axis, and on its own it made v10 look like the winner. The full
+nine-stage gate ([`../full_gate/v10.txt`](../full_gate/v10.txt)) says otherwise:
+
+| gate | v8 | v9 | v10 |
+|---|---|---|---|
+| BUT-OFFICE WER vs mix — **primary deployment gate** | −0.024 | **−0.050** | **−0.004** (1-interferer subset: mix 0.518 → enh 0.526, *worse*) |
+| Dawn Chorus WER / deletion (raw 0.184) | 0.180 / 0.094 | **0.172 / 0.086** | 0.173 / 0.088 |
+| extreme-reverb monitor vs mix | +0.020 | **−0.003** | +0.017 |
+| turn-taking KEEP violations | 6 | 6 | **10** |
+| turn-taking SUPPRESS | 87/13 @ −16.14 | 80/20 @ −13.43 | **89/11 @ −15.98** |
+| in-domain SI-SDRi | +7.99 | **+8.10** | +7.56 |
+| cold-start far clearing −6 dB (this set) | 1/10 | 2/10 | **5/10** |
+
+So the cold-start curriculum bought exactly what it was built to buy — and paid for it on
+the gate that decides deployment. The office set's single-interferer half comes out worse
+than the unprocessed mixture, which is the failure this whole line of work exists to avoid.
+`dpcrn_v8.ckpt` remains the default; v10 is kept as the cold-start reference.
+
+The lesson is about the benchmark, not only the checkpoint: a recipe optimised against one
+axis will move that axis. This scorecard cannot be read alone.
