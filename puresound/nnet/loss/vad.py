@@ -135,6 +135,13 @@ class VADHeadBCELoss(nn.Module):
 
     uses_vad_logits = True
 
+    #: Which backbone side output and which config knob this loss depends on.
+    #: Subclasses re-point the dispatch flags at a different head, so the
+    #: "you forgot to enable the head" errors must name that head, not this one.
+    _logits_attr = "last_vad_logits"
+    _head_config_key = "vad_head"
+    _target_key = "vad_target"
+
     def __init__(
         self,
         false_positive_weight: float = 1.0,
@@ -153,13 +160,14 @@ class VADHeadBCELoss(nn.Module):
     ) -> torch.Tensor:
         if vad_logits is None:
             raise ValueError(
-                "VADHeadBCELoss requires the backbone to expose `last_vad_logits`; "
-                "enable a vad_head in the backbone config."
+                f"{type(self).__name__} requires the backbone to expose "
+                f"`{self._logits_attr}`; enable a {self._head_config_key} in the "
+                "backbone config."
             )
         if vad_target is None:
             raise ValueError(
-                "VADHeadBCELoss requires `vad_target`; enable `vad_label` in the "
-                "config to generate VAD labels."
+                f"{type(self).__name__} requires `{self._target_key}`; enable "
+                "`vad_label` in the config to generate VAD labels."
             )
 
         if vad_logits.dim() == 1:
@@ -203,10 +211,20 @@ class BackgroundVADHeadBCELoss(VADHeadBCELoss):
     learns "is non-target speech present now". It gives the bottleneck an
     explicit representation for background talkers without making background
     speech part of the enhanced output.
+
+    NOTE: no shipped backbone populates ``last_background_vad_logits`` today --
+    the head that did left with the conformer axis (380da2e), and the gate
+    infrastructure was deliberately kept for reuse on the real-data axis. So
+    this loss is a live hook waiting for a head, not a wired-up path: configure
+    it against a backbone without one and it raises below, naming the head it
+    actually wants.
     """
 
     uses_vad_logits = False
     uses_background_vad_logits = True
+    _logits_attr = "last_background_vad_logits"
+    _head_config_key = "background_vad_head"
+    _target_key = "background_vad_target"
 
 
 class F1_loss(_Loss):

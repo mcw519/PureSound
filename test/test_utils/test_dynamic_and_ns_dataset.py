@@ -1,3 +1,5 @@
+import random
+
 import torch
 
 from puresound.audio.vad import frame_count
@@ -35,6 +37,47 @@ def test_dynamic_dataset_filters_metadata_and_creates_vad_targets(
     assert dataset.sr_meta[16000]
     assert dataset.create_vad_target(wav, 16000).shape[0] == frame_count(1600, 80, 40)
     assert dataset.create_empty_vad_target(wav).sum() == 0
+
+
+def test_sr_keyed_utterance_pool_keeps_metafile_order(
+    tmp_path, write_puresound_metafile, monkeypatch
+):
+    """The sr-keyed branch must hand `random.sample` an ordered list.
+
+    It once built that pool with `list(set(...))`, so the index `random.sample`
+    draws landed in a str-hash-ordered sequence and the same per-item seed
+    picked a different utterance in every process -- silently defeating the
+    reproducibility the seeded sampler exists to provide. The failure is
+    invisible in-process (it only shows up across PYTHONHASHSEED), so pin the
+    observable invariant instead: the pool is exactly `sr_meta[sr][spk]`, in
+    metafile order, before and after `ignoring_utt_list` filtering.
+    """
+    metafile = write_puresound_metafile(tmp_path / "meta.csv", utterances_per_speaker=8)
+    dataset = DynamicBaseDataset(**_dataset_args(metafile))
+    expected = list(dataset.sr_meta[16000]["corpus_spk0"])
+    assert len(expected) == 8, "need a pool long enough that set order cannot coincide"
+
+    pools = []
+
+    def _spy(population, k):
+        pools.append(list(population))
+        return list(population)[:k]
+
+    monkeypatch.setattr(random, "sample", _spy)
+
+    dataset.choose_an_utterance_by_speaker_name(
+        target_speaker_name="corpus_spk0", select_with_sr_as_key=16000
+    )
+    assert pools == [expected]
+
+    pools.clear()
+    ignored = [expected[1], expected[5]]
+    dataset.choose_an_utterance_by_speaker_name(
+        target_speaker_name="corpus_spk0",
+        ignoring_utt_list=ignored,
+        select_with_sr_as_key=16000,
+    )
+    assert pools == [[key for key in expected if key not in set(ignored)]]
 
 
 def test_noise_suppression_dataset_returns_training_contract(

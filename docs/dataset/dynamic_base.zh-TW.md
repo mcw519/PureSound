@@ -105,10 +105,14 @@ use_speaker_as_key=True)` 解析 metafile，然後：
 | `gender_spks` | `{"m"/"f"/"other": [spkid, ...]}` |
 | `sr_meta` | `{sample_rate: {spkid: [uttid, ...]}}`（一個 `defaultdict`） |
 
-**副作用**：同時會把 `self.all_corpus_id`（篩選後倖存的 corpus id 集合）直接
-設到 `self` 上——這是在 4-tuple 回傳值*之外*額外做的事。因此以 bound method
-的方式呼叫 `gen_meta`（`init_necessary()` 就是這樣做的）會有超出回傳值本身的
-效果。
+**副作用**：同時會把 `self.all_corpus_id`（看到的 corpus id 集合）直接設到
+`self` 上——這是在 4-tuple 回傳值*之外*額外做的事。因此以 bound method 的方式
+呼叫 `gen_meta`（`init_necessary()` 就是這樣做的）會有超出回傳值本身的效果。
+注意這裡**沒有** corpus 層級的過濾：每個 corpus id 都會進 `all_corpus_id`。
+原本這裡寫過一個過濾器，但條件是 `len(...) < 0`，永遠不成立，所以從來沒有濾掉
+任何東西；它被刪除而不是修正，因為真的加上 min-speaker 過濾會改變訓練分佈。
+speaker 與 utterance 層級的過濾（`min_utts_in_spk`、`min_utt_length`）是實際
+有作用的，發生在上面。
 
 ---
 
@@ -177,7 +181,7 @@ waveform 做 reverb，而不是只能混合已經處理好殘響的訊號。
 `torch.rand(1) < augmentation_reverb_args["prob"]`。只要上述任何一個
 config 開關沒開，就一定回傳 `False`（不會消耗任何 RNG）。
 
-#### `apply_source_level_target_reverb(wav, sr, room_scene, distance_range_override=None) -> (noisy_target, clean_target, rir_metadata)`
+#### `apply_source_level_target_reverb(wav, sr, room_scene, distance_range_override=None) -> ForegroundReverb(noisy, clean, metadata)`
 
 把 room scene 的 RIR 以**foreground** source 的身份套用到 `wav` 上
 （`source_role="foreground"`、`rir_mode="full"`），做出 `noisy_target`。接著
@@ -193,11 +197,13 @@ config 開關沒開，就一定回傳 `False`（不會消耗任何 RNG）。
 `source_receiver_distance`）；若這個 RIR 其實是從資料夾來的而不是
 simulator，則是 `None`。
 
-#### `apply_source_level_interferer_reverb(wav, sr, room_scene, distance_range_override=None, source_role="interferer") -> reverb_wav`
+#### `apply_source_level_interferer_reverb(wav, sr, room_scene, distance_range_override=None, source_role="interferer") -> ReverbedSource(wav, metadata)`
 
 概念跟上面一樣，但用在非 target 的 source：以指定的 `source_role` 標籤套用
-room scene 的 `"full"` RIR（讓 room scene 可以獨立擺放多個 interferer），
-只回傳加了殘響的 waveform（沒有 clean 配對）。
+room scene 的 `"full"` RIR（讓 room scene 可以獨立擺放多個 interferer）。
+沒有 clean 配對，但這個 channel 的 `metadata` 會跟 waveform 一起回傳——呼叫端
+需要每個 interferer 的擺放資訊來記 RIR lineage，而在此之前唯一的取得方式是去
+讀 augmentor 的私有屬性 `_last_rir_meta`。
 
 ---
 
@@ -236,7 +242,12 @@ resample_to=self.target_sr)` 開檔。
   index 多，就只保留那個 channel（強制轉單聲道）
 - `select_with_sr_as_key` – 若有設定，候選池會限縮成
   `self.sr_meta[select_with_sr_as_key][target_speaker_name]`，而不是這個
-  speaker 完整的 utterance 清單，並且會 assert 開出來的檔案取樣率吻合
+  speaker 完整的 utterance 清單，並且會 assert 開出來的檔案取樣率吻合。兩個
+  分支的候選池都是**metafile 順序**，這正是固定 seed 能跨 process 抽到同一筆的
+  原因；這個分支以前會把池子過一次 `set`，因此依賴 `PYTHONHASHSEED`。只有
+  `target_sample_rate: null` 的 recipe 會走到這裡（`runner.py` 由它決定
+  `select_by_sr_first`），所以出貨的 recipe 都沒受影響——見
+  `test_sr_keyed_utterance_pool_keeps_metafile_order`
 - 若抽到的 utterance 是全靜音，最多遞迴重試 5 次，之後丟出
   `RuntimeError("Timeout, can't find a useful utterance.")`
 
@@ -263,8 +274,9 @@ target 跟它的 interferer 之間的相對音量關係。如果沒有任何一�
 
 ### Abstract / unimplemented methods
 
-- `__len__` – 在這一層沒有實作（`pass`，也就是回傳 `None`）；subclass
-  必須覆寫
+- `__len__` – 丟出 `NotImplementedError`；subclass 必須覆寫。動態合成沒有固定
+  的 epoch 大小，而訓練路徑的迭代是由自帶長度的 `batch_sampler` 驅動，所以
+  沒有人會去問 dataset 要長度
 - `__getitem__` – 丟出 `NotImplementedError`
 - `apply_audio_augmentation()` – 丟出 `NotImplementedError`
 

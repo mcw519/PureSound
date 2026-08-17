@@ -39,7 +39,10 @@ class DPRNNblock2D(nn.Module):
                     input_norm=True,
                 )
             else:
-                raise NameError
+                raise ValueError(
+                    f"unknown fused_type {self.fused_type!r}; only 'film' is "
+                    "implemented for embedding conditioning."
+                )
 
         self.intra_rnn = SingleRNN(
             "LSTM", input_size, hidden_size, bidirectional=True, dropout=dropout

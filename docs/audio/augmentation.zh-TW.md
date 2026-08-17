@@ -36,10 +36,11 @@ AudioEffectAugmentor()
 | `simulated_rir` | `OrderedDict()` | `apply_rir`(LRU cache,見下文) |
 | `_last_rir_meta` | `None` | 每一次 `apply_rir` 呼叫 |
 
-`_last_rir_meta` 讓已經把 `apply_rir` 回傳 tuple 解構掉的呼叫端,依然能夠
-取回最後一次的 RIR metadata(`getattr(augmentor, "_last_rir_meta", None)`)
-—— `puresound/task/ns.py` 就是這樣在不更動 `apply_rir` 本身回傳簽章的情況
-下,記錄每個 interferer 的 RIR 資訊。
+`_last_rir_meta` 是 debug / 檢視用的便利屬性:最近一次 `apply_rir` 的
+metadata。**library 內已經沒有任何讀取者。** 呼叫端一律從回傳值取
+(`RirApplied.detail.metadata`),那是唯一能把 metadata 正確歸屬到特定一次呼叫
+的方式——只要中間夾了別的卷積,這個屬性就會歸錯。`puresound/task/ns.py` 以前
+就是靠它記錄每個 interferer 的 RIR 資訊,現在不是了。
 
 ### 載入 noise / RIR pool
 
@@ -162,7 +163,7 @@ noise 跟房間通道做卷積,讓它跟語音共享同一個聲學空間),接�
 
 ### 殘響
 
-#### `apply_rir(wav, rir_mode: str = "image", sr: int = 16000, rir_id: Optional[str] = None, room_scene: Optional[dict] = None, source_role: str = "source", distance_range_override: Optional[List[float]] = None) -> (Tensor, (rir_id, {"mode": str, "metadata": Optional[dict]}))`
+#### `apply_rir(wav, rir_mode: str = "image", sr: int = 16000, rir_id: Optional[str] = None, room_scene: Optional[dict] = None, source_role: str = "source", distance_range_override: Optional[List[float]] = None) -> RirApplied`
 
 > **`rir_mode="image"` 本身不是一個合法的 mode。** 這個 repo 裡每一個
 > 真正的呼叫點都會明確傳入 `rir_mode` —— `"full"`、`"direct"`、或
@@ -202,7 +203,13 @@ RIR 來源,依優先順序(第一個符合的就用):
 4. **靜態資料夾 pool**(備援):如果 `rir_id is None`,從 `self.rir`
    (由 `load_rir_from_folder` 載入)隨機挑一個 key,否則直接查找。
 
-回傳 `(reverb_wav, (rir_id, {"mode": rir_mode, "metadata": rir_metadata}))`。
+回傳 `RirApplied(wav, RirDetail(rir_id, {"mode": rir_mode, "metadata": rir_metadata}))`。
+
+兩者都是剛好兩個欄位的 `NamedTuple`,所以既有的
+`wav, (rir_id, info) = aug.apply_rir(...)` 解包與 `info["metadata"]` 索引完全
+不受影響。新程式碼請用具名存取:`result.wav`、`result.detail.rir_id`、
+`result.detail.metadata`(一個 property,會從 info dict 取出 `"metadata"`;
+folder RIR 為 `None`)。
 資料夾 pool 來的 RIR,`rir_metadata` 是 `None`;其餘情況則是
 simulator/bank 的 metadata dict(房間尺寸、receiver、source、rt60、
 `source_role`、`source_receiver_distance`、`drr_db` —— 見

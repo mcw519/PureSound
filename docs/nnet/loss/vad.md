@@ -130,7 +130,14 @@ together with `backbone_args.vad_head: {enabled: True, hidden: 128, kernel_t: 5}
 class BackgroundVADHeadBCELoss(VADHeadBCELoss):
     uses_vad_logits = False
     uses_background_vad_logits = True
+    _logits_attr = "last_background_vad_logits"
+    _head_config_key = "background_vad_head"
+    _target_key = "background_vad_target"
 ```
+
+The three `_*` attributes only feed the error messages `VADHeadBCELoss.forward`
+raises when a required input is missing, so a misconfigured background head is
+told to enable `background_vad_head`, not the foreground `vad_head`.
 
 It **does not override `forward`** — it is the exact same strict,
 backpropagating BCE computation as `VADHeadBCELoss`, just re-pointed (via the

@@ -1,7 +1,11 @@
 import torch
 import pytest
 
-from puresound.nnet.loss import VADActivityLoss, VADHeadBCELoss
+from puresound.nnet.loss import (
+    BackgroundVADHeadBCELoss,
+    VADActivityLoss,
+    VADHeadBCELoss,
+)
 from puresound.recipes import init_loss_func
 from puresound.audio.vad import EnergyVADLabeler
 
@@ -105,3 +109,22 @@ def test_vad_head_bce_can_balance_imbalanced_frames():
         balanced(all_positive, target), balanced(all_negative, target), atol=1e-5
     )
     assert unbalanced(all_positive, target) > unbalanced(all_negative, target)
+
+
+def test_missing_head_errors_name_the_head_the_loss_actually_wants():
+    # No shipped backbone populates `last_background_vad_logits`, so the
+    # background loss reaches its None-logits guard whenever it is configured.
+    # It must not send the reader off to enable the FOREGROUND head, which they
+    # may already have on.
+    target = torch.zeros(1, 10)
+
+    with pytest.raises(ValueError, match=r"`last_vad_logits`.*vad_head"):
+        VADHeadBCELoss()(None, target)
+
+    with pytest.raises(
+        ValueError, match=r"`last_background_vad_logits`.*background_vad_head"
+    ):
+        BackgroundVADHeadBCELoss()(None, target)
+
+    with pytest.raises(ValueError, match=r"requires `background_vad_target`"):
+        BackgroundVADHeadBCELoss()(torch.zeros(1, 10), None)

@@ -352,7 +352,9 @@ class UnetTcn(Unet):
             print("GatedTCN would ignore dconv_norm configuration.")
             tcn_cls = GatedTCN
         else:
-            raise NameError
+            raise ValueError(
+                f"unknown tcn_layer {self.tcn_layer!r}; choose 'normal' or 'gated'."
+            )
 
         assert per_tcn_stack == len(tcn_with_embed)
         self.tcn_list = nn.ModuleList()

@@ -1,7 +1,7 @@
 import random
 from collections import defaultdict
 from copy import deepcopy
-from typing import Dict, List, Optional
+from typing import Dict, List, NamedTuple, Optional
 
 import numpy as np
 import torch
@@ -11,6 +11,21 @@ from puresound.audio.io import AudioIO
 from puresound.audio.noise import add_bg_white_noise
 from puresound.audio.vad import EnergyVADLabeler, create_vad_labeler, frame_count
 from puresound.dataset.parser import MetafileParser
+
+
+class ForegroundReverb(NamedTuple):
+    """Foreground after its room channel, with the reference it is scored against."""
+
+    noisy: torch.Tensor
+    clean: torch.Tensor
+    metadata: Optional[dict]
+
+
+class ReverbedSource(NamedTuple):
+    """One non-foreground source after its room channel, with that channel's metadata."""
+
+    wav: torch.Tensor
+    metadata: Optional[dict]
 
 
 class DynamicBaseDataset(torch.utils.data.Dataset):
@@ -114,8 +129,39 @@ class DynamicBaseDataset(torch.utils.data.Dataset):
         else:
             self.vad_labeler = create_vad_labeler(cfg)
 
+    # ------------------------------------------------------------------ #
+    # Derived audio parameters.
+    #
+    # Both fall back to the *incoming* file's rate, which ``__getitem__``
+    # records on ``self.ori_audio_sr`` as it opens the foreground utterance, so
+    # they are only meaningful inside item synthesis -- exactly the precondition
+    # the inline ``if_none_else(...)`` expressions they replace already carried.
+    # The two agree on when the fallback applies: ``training_sample_length`` is
+    # None if and only if ``target_sr`` is None (see __init__).
+    # ------------------------------------------------------------------ #
+    @property
+    def audio_sr(self) -> int:
+        """Sample rate every waveform on the synthesis path shares."""
+        return self.target_sr if self.target_sr is not None else self.ori_audio_sr
+
+    @property
+    def sample_length(self) -> int:
+        """Training crop length in samples, at ``audio_sr``."""
+        if self.training_sample_length is not None:
+            return self.training_sample_length
+        return int(self.ori_audio_sr * self.training_sample_length_in_seconds)
+
     def __len__(self):
-        pass
+        """Dynamic synthesis has no fixed epoch size.
+
+        Iteration is driven by a ``batch_sampler`` (see ``task.sampler``), which
+        carries its own length, so nothing on the training path asks the dataset
+        for one. Raising is the honest answer -- the previous ``pass`` returned
+        ``None``, which any caller would have hit as a bare ``TypeError``.
+        Lightning's ``sized_len`` treats both the same (it catches
+        ``NotImplementedError``), so this is not a behaviour change for it.
+        """
+        raise NotImplementedError
 
     def __getitem__(self):
         raise NotImplementedError
@@ -197,7 +243,6 @@ class DynamicBaseDataset(torch.utils.data.Dataset):
                 gender_meta["other"][cid].append(spk)
                 gender_spks["other"].append(spk)
 
-        _new_corpus_id = set()
         for cid in all_corpus_id:
             print(f"{cid:>10}:           male speakers = {len(gender_meta['m'][cid])}")
             print(f"{cid:>10}:         female speakers = {len(gender_meta['f'][cid])}")
@@ -205,22 +250,13 @@ class DynamicBaseDataset(torch.utils.data.Dataset):
                 f"{cid:>10}:  unknow gender speakers = {len(gender_meta['other'][cid])}"
             )
 
-            if len(gender_meta["other"][cid]) != 0:
-                if len(gender_meta["other"][cid]) < 0:
-                    print(
-                        f"remove corpus id {cid} because speaker numbers less than 4."
-                    )
-                else:
-                    _new_corpus_id.add(cid)
-            else:
-                if len(gender_meta["m"][cid]) < 0 or len(gender_meta["f"][cid]) < 0:
-                    print(
-                        f"remove corpus id {cid} because speaker numbers less than 4."
-                    )
-                else:
-                    _new_corpus_id.add(cid)
-
-        self.all_corpus_id = _new_corpus_id
+        # Every corpus is kept. A min-speaker filter used to sit here, but its
+        # condition was `len(...) < 0` -- never true -- so it has never dropped a
+        # corpus in this repo's history; the branches only differed by a print.
+        # Removed rather than "repaired" to the < 4 its message claimed:
+        # reinstating a real filter changes the training distribution and belongs
+        # in a deliberate experiment, not a cleanup.
+        self.all_corpus_id = set(all_corpus_id)
 
         total_male_speakers = 0
         total_female_speakers = 0
@@ -344,12 +380,16 @@ class DynamicBaseDataset(torch.utils.data.Dataset):
         sr: int,
         room_scene: dict,
         distance_range_override: Optional[List[float]] = None,
-    ) -> tuple[torch.Tensor, torch.Tensor, Optional[dict]]:
-        """Returns (noisy_target, clean_target, rir_metadata). rir_metadata
-        carries the realized placement (e.g. source_receiver_distance) so
-        callers can condition on where the foreground actually landed; None
-        when the RIR came from a folder instead of the simulator."""
-        noisy_target, (rir_id, rir_info) = self.augmentor.apply_rir(
+    ) -> "ForegroundReverb":
+        """Give the foreground its channel.
+
+        ``metadata`` carries the realized placement (e.g.
+        ``source_receiver_distance``) so callers can condition on where the
+        foreground actually landed; None when the RIR came from a folder instead
+        of the simulator. The result is a plain 3-tuple, so existing
+        ``noisy, clean, meta = ...`` unpacking is unaffected.
+        """
+        applied = self.augmentor.apply_rir(
             wav=wav,
             rir_mode="full",
             sr=sr,
@@ -357,18 +397,17 @@ class DynamicBaseDataset(torch.utils.data.Dataset):
             source_role="foreground",
             distance_range_override=distance_range_override,
         )
-        rir_metadata = rir_info.get("metadata") if isinstance(rir_info, dict) else None
         target_rir_type = self.augmentation_reverb_args["target_rir_type"]
         if target_rir_type == "anechoic":
             clean_target = wav
         else:
-            clean_target, _ = self.augmentor.apply_rir(
+            clean_target = self.augmentor.apply_rir(
                 wav=wav,
-                rir_id=rir_id,
+                rir_id=applied.detail.rir_id,
                 rir_mode=target_rir_type,
                 sr=sr,
-            )
-        return noisy_target, clean_target, rir_metadata
+            ).wav
+        return ForegroundReverb(applied.wav, clean_target, applied.detail.metadata)
 
     def apply_source_level_interferer_reverb(
         self,
@@ -377,8 +416,16 @@ class DynamicBaseDataset(torch.utils.data.Dataset):
         room_scene: dict,
         distance_range_override: Optional[List[float]] = None,
         source_role: str = "interferer",
-    ) -> torch.Tensor:
-        reverb_wav, _ = self.augmentor.apply_rir(
+    ) -> "ReverbedSource":
+        """Give one non-foreground source its channel.
+
+        Returns the metadata alongside the waveform rather than dropping it: the
+        caller needs per-interferer placement for its RIR lineage, and the only
+        other way to get it was to read the augmentor's ``_last_rir_meta``
+        between calls -- a side channel that silently mis-attributes as soon as
+        anything else convolves in between.
+        """
+        applied = self.augmentor.apply_rir(
             wav=wav,
             rir_mode="full",
             sr=sr,
@@ -386,7 +433,7 @@ class DynamicBaseDataset(torch.utils.data.Dataset):
             source_role=source_role,
             distance_range_override=distance_range_override,
         )
-        return reverb_wav
+        return ReverbedSource(applied.wav, applied.detail.metadata)
 
     def create_vad_target(self, clean_speech: torch.Tensor, sample_rate: int):
         if self.vad_labeler is None:
@@ -436,15 +483,26 @@ class DynamicBaseDataset(torch.utils.data.Dataset):
                         del target_speech_pool[ignored_key]
             target_speech_pool = list(target_speech_pool.keys())
         else:
-            target_speech_pool = deepcopy(
+            # Keep the pool an ordered LIST. Routing it through a set -- as this
+            # branch used to -- leaves `random.sample` below indexing into a
+            # str-hash-ordered sequence, so the SAME seed picks a DIFFERENT
+            # utterance in every process. That silently defeats the per-item
+            # seeding the seeded sampler exists for (see task/sampler.py), and
+            # it is invisible in-process: you only see it by comparing two runs
+            # under different PYTHONHASHSEED. Metafile order matches what the
+            # `select_with_sr_as_key is None` branch above already draws from.
+            #
+            # Only recipes with `target_sample_rate: null` reach this branch
+            # (runner.py sets select_by_sr_first from it), which is why no
+            # shipped recipe was affected.
+            target_speech_pool = list(
                 self.sr_meta[select_with_sr_as_key][target_speaker_name]
             )
-            check_key_list = set(target_speech_pool)
             if ignoring_utt_list is not None:
-                for ignored_key in ignoring_utt_list:
-                    if ignored_key in check_key_list:
-                        check_key_list.remove(ignored_key)
-            target_speech_pool = list(check_key_list)
+                ignored = set(ignoring_utt_list)
+                target_speech_pool = [
+                    key for key in target_speech_pool if key not in ignored
+                ]
 
         # Chooce only one utterance
         tgt_key = random.sample(target_speech_pool, k=1)[0]

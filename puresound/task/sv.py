@@ -25,7 +25,7 @@ class SpeakerEmbeddingDataset(DynamicBaseDataset):
         target_sr: Optional[int] = None,
         training_sample_length_in_seconds: float = 6.0,
         audio_gain_normalized_to: Optional[int] = None,
-        augmentation_speech_args: Optional[int] = None,
+        augmentation_speech_args: Optional[Dict] = None,
         augmentation_noise_args: Optional[Dict] = None,
         augmentation_reverb_args: Optional[Dict] = None,
         augmentation_speed_args: Optional[Dict] = None,

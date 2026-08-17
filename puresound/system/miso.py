@@ -174,7 +174,10 @@ class EncDecCondMaskBase(BaseLightningModule):
         elif self.mask_type == "mapping":
             enh = mask
         else:
-            raise NameError
+            raise ValueError(
+                f"unknown mask_type {self.mask_type!r}; choose one of "
+                "complex, deepfilter, wiener, mvdr, mapping."
+            )
 
         enh = self.feats.back_forward(enh)  # [N, CH, C, T]
 

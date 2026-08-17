@@ -38,11 +38,12 @@ Takes no arguments. State is empty until you call one of the loader methods:
 | `simulated_rir` | `OrderedDict()` | `apply_rir` (LRU cache, see below) |
 | `_last_rir_meta` | `None` | every `apply_rir` call |
 
-`_last_rir_meta` lets a caller that already consumed `apply_rir`'s return
-tuple recover the last RIR's metadata anyway
-(`getattr(augmentor, "_last_rir_meta", None)`) — used by
-`puresound/task/ns.py` for per-interferer RIR bookkeeping without changing
-`apply_rir`'s own return signature.
+`_last_rir_meta` is a debug/introspection convenience: the metadata of the
+most recent `apply_rir` call. **Nothing in the library reads it.** Callers take
+the metadata off the return value (`RirApplied.detail.metadata`), which is the
+only way to attribute it to a specific call — the attribute mis-attributes as
+soon as anything else convolves in between. `puresound/task/ns.py` used to read
+it for per-interferer RIR bookkeeping and no longer does.
 
 ### Loading noise / RIR pools
 
@@ -170,7 +171,7 @@ multi-SNR/list-output contract, no pool involved.
 
 ### Reverberation
 
-#### `apply_rir(wav, rir_mode: str = "image", sr: int = 16000, rir_id: Optional[str] = None, room_scene: Optional[dict] = None, source_role: str = "source", distance_range_override: Optional[List[float]] = None) -> (Tensor, (rir_id, {"mode": str, "metadata": Optional[dict]}))`
+#### `apply_rir(wav, rir_mode: str = "image", sr: int = 16000, rir_id: Optional[str] = None, room_scene: Optional[dict] = None, source_role: str = "source", distance_range_override: Optional[List[float]] = None) -> RirApplied`
 
 > **`rir_mode="image"` is not itself a valid mode.** Every real call site in
 > this repo passes `rir_mode` explicitly — `"full"`, `"direct"`, or
@@ -210,7 +211,13 @@ RIR source, in priority order (first match wins):
 4. **Static folder pool** (fallback): a random key from `self.rir` (loaded
    via `load_rir_from_folder`) if `rir_id is None`, else a direct lookup.
 
-Returns `(reverb_wav, (rir_id, {"mode": rir_mode, "metadata": rir_metadata}))`.
+Returns `RirApplied(wav, RirDetail(rir_id, {"mode": rir_mode, "metadata": rir_metadata}))`.
+
+Both are `NamedTuple`s of exactly two fields, so the historical
+`wav, (rir_id, info) = aug.apply_rir(...)` unpacking and `info["metadata"]`
+indexing are unchanged. New code should prefer the named access —
+`result.wav`, `result.detail.rir_id`, `result.detail.metadata` (a property that
+digs `"metadata"` out of the info dict, `None` for folder RIRs).
 `rir_metadata` is `None` for folder-pool RIRs, and the simulator/bank
 metadata dict otherwise (room dims, receiver, source, rt60, `source_role`,
 `source_receiver_distance`, `drr_db` — see [room_simulator.md](room_simulator.md)).

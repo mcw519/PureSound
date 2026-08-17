@@ -107,10 +107,15 @@ use_speaker_as_key=True)`, then:
 | `gender_spks` | `{"m"/"f"/"other": [spkid, ...]}` |
 | `sr_meta` | `{sample_rate: {spkid: [uttid, ...]}}` (a `defaultdict`) |
 
-**Side effect**: also sets `self.all_corpus_id` (the set of corpus ids that
-survived filtering) directly on `self` — in *addition to* the 4-tuple return.
-Calling `gen_meta` as a bound method (as `init_necessary()` does) therefore
-has an effect beyond its return value.
+**Side effect**: also sets `self.all_corpus_id` (the set of corpus ids seen)
+directly on `self` — in *addition to* the 4-tuple return. Calling `gen_meta` as
+a bound method (as `init_necessary()` does) therefore has an effect beyond its
+return value. Note there is no corpus-level filter: every corpus id reaches
+`all_corpus_id`. One used to be written here but its condition was `len(...) < 0`,
+which is never true, so it never removed anything; it was deleted rather than
+repaired, because a real min-speaker filter would change the training
+distribution. Speaker- and utterance-level filtering (`min_utts_in_spk`,
+`min_utt_length`) is real and happens above.
 
 ---
 
@@ -184,7 +189,7 @@ used, *and* `simulator["source_level"]` is set — then draws
 (deterministically, no RNG draw at all) whenever any of those config gates
 is off.
 
-#### `apply_source_level_target_reverb(wav, sr, room_scene, distance_range_override=None) -> (noisy_target, clean_target, rir_metadata)`
+#### `apply_source_level_target_reverb(wav, sr, room_scene, distance_range_override=None) -> ForegroundReverb(noisy, clean, metadata)`
 
 Applies the room scene's RIR to `wav` as the **foreground** source
 (`source_role="foreground"`, `rir_mode="full"`) to build `noisy_target`. Then
@@ -200,12 +205,14 @@ builds `clean_target`:
 `source_receiver_distance`) from the simulator, or `None` when the RIR
 actually came from a folder rather than the simulator.
 
-#### `apply_source_level_interferer_reverb(wav, sr, room_scene, distance_range_override=None, source_role="interferer") -> reverb_wav`
+#### `apply_source_level_interferer_reverb(wav, sr, room_scene, distance_range_override=None, source_role="interferer") -> ReverbedSource(wav, metadata)`
 
-Same idea for a non-target source: applies the room scene's `"full"` RIR
-under the given `source_role` tag (so the room scene can place multiple
-interferers independently) and returns only the reverberated waveform (no
-clean pair).
+Same idea for a non-target source: applies the room scene's `"full"` RIR under
+the given `source_role` tag (so the room scene can place multiple interferers
+independently). There is no clean pair, but the channel's `metadata` comes back
+alongside the waveform — the caller needs per-interferer placement for its RIR
+lineage, and the only other way to get it was to read the augmentor's private
+`_last_rir_meta` between calls.
 
 ---
 
@@ -246,7 +253,12 @@ resample_to=self.target_sr)`.
 - `select_with_sr_as_key` – if given, restricts the candidate pool to
   `self.sr_meta[select_with_sr_as_key][target_speaker_name]` instead of the
   speaker's full utterance list, and asserts the opened file's sample rate
-  matches
+  matches. Both branches draw from a pool in **metafile order**, which is what
+  makes a fixed seed reproduce the same pick across processes; this branch used
+  to route the pool through a `set` and so was `PYTHONHASHSEED`-dependent. Only
+  recipes with `target_sample_rate: null` reach it (`runner.py` derives
+  `select_by_sr_first` from that), so no shipped recipe was affected — see
+  `test_sr_keyed_utterance_pool_keeps_metafile_order`
 - if the drawn utterance is all-silent, retries recursively up to 5 times,
   then raises `RuntimeError("Timeout, can't find a useful utterance.")`
 
@@ -274,8 +286,10 @@ the list unchanged if nothing clips.
 
 ### Abstract / unimplemented methods
 
-- `__len__` – not implemented at this level (`pass`, i.e. returns `None`);
-  subclasses must override
+- `__len__` – raises `NotImplementedError`; subclasses must override. Dynamic
+  synthesis has no fixed epoch size, and iteration on the training path is
+  driven by a `batch_sampler` that carries its own length, so nothing asks the
+  dataset for one
 - `__getitem__` – raises `NotImplementedError`
 - `apply_audio_augmentation()` – raises `NotImplementedError`
 

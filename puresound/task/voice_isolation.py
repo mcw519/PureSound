@@ -13,7 +13,6 @@ from puresound.task.ns import (
     NoiseSuppressionCollateFunc,
     NoiseSuppressionDataset,
     RowPlan,
-    if_none_else,
 )
 
 
@@ -203,14 +202,11 @@ class VoiceIsolationDataset(NoiseSuppressionDataset):
             near_wav, _ = AudioIO.open(
                 f_path=near_pick["wav_path"],
                 target_lvl=self.audio_gain_normalized_to,
-                resample_to=if_none_else(self.target_sr, self.ori_audio_sr),
+                resample_to=self.audio_sr,
             )
             target_speech = self.align_audio_list(
                 wav_list=[near_wav[0].reshape(1, -1)],
-                length=if_none_else(
-                    self.training_sample_length,
-                    int(self.ori_audio_sr * self.training_sample_length_in_seconds),
-                ),
+                length=self.sample_length,
             )[0]
             plan.realnear_fg_metadata = {
                 "source_receiver_distance": near_pick.get("distance_m"),
@@ -269,16 +265,13 @@ class VoiceIsolationDataset(NoiseSuppressionDataset):
             n_interferers = int(add_n_cases_cfg)
         interfered_speech, realfar_meta = self._sample_realfar_interferers(
             n_interferers,
-            if_none_else(self.target_sr, self.ori_audio_sr),
+            self.audio_sr,
             prefer_room=plan.realnear_room,
             exclude_speaker=plan.realnear_speaker,
         )
         interfered_speech = self.align_audio_list(
             wav_list=interfered_speech,
-            length=if_none_else(
-                self.training_sample_length,
-                int(self.ori_audio_sr * self.training_sample_length_in_seconds),
-            ),
+            length=self.sample_length,
             padding_type="zero",
         )
         return target_speech, interfered_speech, realfar_meta

@@ -29,7 +29,7 @@ class TargetSpeakerExtractDataset(DynamicBaseDataset):
         training_sample_length_in_seconds: float = 6.0,
         enroll_speech_args: Optional[Dict] = None,
         audio_gain_normalized_to: Optional[int] = None,
-        augmentation_speech_args: Optional[int] = None,
+        augmentation_speech_args: Optional[Dict] = None,
         augmentation_noise_args: Optional[Dict] = None,
         augmentation_reverb_args: Optional[Dict] = None,
         augmentation_speed_args: Optional[Dict] = None,
@@ -326,12 +326,14 @@ class TargetSpeakerExtractDataset(DynamicBaseDataset):
                     ),
                     padding_type="zero",
                 )
+                # `.wav`: the helper now also returns the channel metadata, which
+                # this task does not record.
                 interfered_speech = [
                     self.apply_source_level_interferer_reverb(
                         wav=speech,
                         sr=if_none_else(self.target_sr, self.ori_audio_sr),
                         room_scene=room_scene,
-                    )
+                    ).wav
                     for speech in interfered_speech
                 ]
             else:

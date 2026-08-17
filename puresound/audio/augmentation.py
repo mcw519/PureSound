@@ -2,7 +2,7 @@ import math
 import random
 from collections import OrderedDict
 from itertools import count
-from typing import List, Optional
+from typing import List, NamedTuple, Optional, Tuple
 
 import torch
 import torchaudio
@@ -18,6 +18,38 @@ from puresound.audio.noise import add_bg_noise, add_bg_white_noise
 from puresound.audio.room_simulator import RoomImpulseResponseSimulator
 from puresound.audio.volume import rand_gain_distortion, wav_clipping
 from puresound.utils import recursive_read_folder
+
+
+class RirDetail(NamedTuple):
+    """Which channel ``apply_rir`` used, and what is known about it.
+
+    A plain 2-tuple by construction, so the historical
+    ``wav, (rir_id, info) = apply_rir(...)`` unpacking keeps working and ``info``
+    stays the same dict callers already index. New code should prefer
+    ``result.detail.metadata`` over digging in that dict.
+    """
+
+    rir_id: str
+    info: dict
+
+    @property
+    def metadata(self) -> Optional[dict]:
+        """Realized placement of this channel (distance, DRR, RT60, lineage).
+
+        None for folder RIRs, which carry no simulator/bank metadata.
+        """
+        return self.info.get("metadata") if isinstance(self.info, dict) else None
+
+
+class RirApplied(NamedTuple):
+    """Return of ``apply_rir``: the convolved waveform plus its channel detail.
+
+    Also a plain 2-tuple, so every existing ``wav, (rir_id, info) = ...`` call
+    site is unaffected.
+    """
+
+    wav: torch.Tensor
+    detail: RirDetail
 
 
 class AudioEffectAugmentor:
@@ -59,9 +91,12 @@ class AudioEffectAugmentor:
         self.simulated_rir = OrderedDict()
         self.simulated_rir_cache_size = 32
         self.simulated_rir_counter = count()
-        # Set by every apply_rir call so callers (e.g. eval set synthesis)
-        # can read per-source RIR metadata such as DRR without changing the
-        # public return signature. None for non-simulated RIRs.
+        # Debug/introspection convenience: the metadata of the most recent
+        # apply_rir call. Nothing in the library reads it -- callers take the
+        # metadata off the return value (``RirApplied.detail.metadata``), which
+        # is the only way to attribute it to a specific call. Kept because it is
+        # useful when poking at an augmentor from a REPL or an eval script.
+        # None for non-simulated RIRs.
         self._last_rir_meta: Optional[dict] = None
 
     def _cache_simulated_rir(self, rir_id: str, value: dict) -> None:
@@ -472,7 +507,7 @@ class AudioEffectAugmentor:
         room_scene: Optional[dict] = None,
         source_role: str = "source",
         distance_range_override: Optional[list[float]] = None,
-    ) -> torch.Tensor:
+    ) -> RirApplied:
         """
         Simulate reverberation data by convolue RIR in waveform by some specific paramters.
 
@@ -558,14 +593,16 @@ class AudioEffectAugmentor:
             wav=wav, impaulse=impaulse, sample_rate=sr, rir_mode=rir_mode
         )
         self._last_rir_meta = rir_metadata
-        return reverb_wav, (rir_id, {"mode": rir_mode, "metadata": rir_metadata})
+        return RirApplied(
+            reverb_wav, RirDetail(rir_id, {"mode": rir_mode, "metadata": rir_metadata})
+        )
 
     def apply_2nd_iir_response(
         self,
         wav: torch.Tensor,
         a_coeffs: Optional[torch.Tensor] = None,
         b_coeffs: Optional[torch.Tensor] = None,
-    ) -> torch.Tensor:
+    ) -> Tuple[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
         wav_aug, a_coeffs, b_coeffs = rand_add_2nd_filter_response(
             wav=wav, a=a_coeffs, b=b_coeffs
         )

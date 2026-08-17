@@ -1,3 +1,5 @@
+from typing import Tuple
+
 import torch
 
 from .lobe.multiframe import DeepFilter as DF
@@ -129,7 +131,7 @@ class Masker:
     @staticmethod
     def apply_wiener(
         tf_rep: torch.Tensor, est_ifc: torch.Tensor, est_cov: torch.Tensor, order: int
-    ) -> torch.Tensor:
+    ) -> Tuple[torch.Tensor, int]:
         """
         Applies a complex-valued 1 x order (N-taps) causal wiener filtering to a complex-valued representation.
 
@@ -164,7 +166,7 @@ class Masker:
         est_ifc: torch.Tensor,
         est_cov: torch.Tensor,
         order: int,
-    ) -> torch.Tensor:
+    ) -> Tuple[torch.Tensor, int]:
         """
         Applies a complex-valued 1x5 causal mvdr filtering to a complex-valued representation.
 

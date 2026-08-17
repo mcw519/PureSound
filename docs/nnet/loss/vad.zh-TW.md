@@ -124,7 +124,14 @@ gated-bottleneck 實驗
 class BackgroundVADHeadBCELoss(VADHeadBCELoss):
     uses_vad_logits = False
     uses_background_vad_logits = True
+    _logits_attr = "last_background_vad_logits"
+    _head_config_key = "background_vad_head"
+    _target_key = "background_vad_target"
 ```
+
+那三個 `_*` 屬性只餵給 `VADHeadBCELoss.forward` 在缺少必要輸入時拋出的錯誤
+訊息,好讓設定錯的背景 head 被告知要開 `background_vad_head`,而不是前景的
+`vad_head`。
 
 它**沒有覆寫 `forward`**——跟 `VADHeadBCELoss` 是完全相同、會真的
 backpropagate 的 BCE 運算,只是（透過上面這兩個 dispatch flag)改接到

@@ -199,7 +199,10 @@ class EncDecMaskBase(BaseLightningModule):
         elif self.mask_type == "mapping":
             enh = mask
         else:
-            raise NameError
+            raise ValueError(
+                f"unknown mask_type {self.mask_type!r}; choose one of "
+                "complex, deepfilter, wiener, mvdr, mapping."
+            )
 
         enh = self._spec_to_wav(enh)
 
@@ -293,6 +296,11 @@ class EncDecMaskBase(BaseLightningModule):
         # the forward() that precedes this call; route them to any loss that
         # opts in via uses_vad_logits (e.g. VADHeadBCELoss).
         vad_logits = getattr(self.backbone, "last_vad_logits", None)
+        # No shipped backbone populates this one -- the head that did left with
+        # the conformer axis (380da2e) while the gate infrastructure was kept for
+        # reuse. The branch stays wired so a backbone can grow the head back
+        # without touching this loop; until then BackgroundVADHeadBCELoss raises
+        # a message naming the head it wants.
         background_vad_logits = getattr(
             self.backbone,
             "last_background_vad_logits",
