@@ -552,8 +552,6 @@ class NoiseSuppressionDataset(DynamicBaseDataset):
                 target_speech = target_speech[0].view(1, -1)
 
         # Noise
-        # We collect added noises for if we need to use high SNR noisy speech as ground truth
-        added_noise = None
         if (
             self.augmentation_noise_args
             and self.augmentation_noise_args.used
@@ -599,15 +597,13 @@ class NoiseSuppressionDataset(DynamicBaseDataset):
                     )
                     return reverbed
 
-            noisy_speech, (added_noise, _, _) = self.augmentor.add_bg_noise(
+            noisy_speech, _ = self.augmentor.add_bg_noise(
                 wav=noisy_speech,
                 snr_list=[snr],
                 dynamic_type=dynamic_type,
                 sr=self.audio_sr,
                 noise_transform=noise_transform,
             )
-            added_noise = added_noise[0]
-
             # unwrap list
             noisy_speech = noisy_speech[0]
 
@@ -624,12 +620,9 @@ class NoiseSuppressionDataset(DynamicBaseDataset):
                     )
                     .item()
                 )
-                noisy_speech, (added_white_noise, _) = (
-                    self.augmentor.add_bg_white_noise(wav=noisy_speech, snr_list=[snr])
+                noisy_speech, _ = self.augmentor.add_bg_white_noise(
+                    wav=noisy_speech, snr_list=[snr]
                 )
-
-                # Mixing noise for later using
-                added_noise += added_white_noise[0]
 
         if isinstance(noisy_speech, list):
             noisy_speech = noisy_speech[0]
@@ -655,7 +648,6 @@ class NoiseSuppressionDataset(DynamicBaseDataset):
             floor_dbfs = torch.empty(1).uniform_(float(lo), float(hi)).item()
             floor = torch.randn_like(noisy_speech) * (10.0 ** (floor_dbfs / 20.0))
             noisy_speech = noisy_speech + floor
-            added_noise = floor if added_noise is None else added_noise + floor
 
         # Snapshot the clean target for VAD labeling before the downstream
         # distortion chain (SRC / IIR / HPF / volume / clipping). Silero VAD
@@ -664,13 +656,11 @@ class NoiseSuppressionDataset(DynamicBaseDataset):
         vad_reference = target_speech.clone()
 
         # SRC
-        flag_src = False
         if (
             self.augmentation_src_args
             and self.augmentation_src_args.used
             and torch.rand(1) < self.augmentation_src_args.prob
         ):
-            flag_src = True
             src_target = random.choices(
                 self.augmentation_src_args.src_range,
                 weights=self.augmentation_src_args.prob_each,
@@ -719,13 +709,11 @@ class NoiseSuppressionDataset(DynamicBaseDataset):
                 )
 
         # 2nd-IIR response
-        flag_iir = False
         if (
             self.augmentation_ir_response_args
             and self.augmentation_ir_response_args.used
             and torch.rand(1) < self.augmentation_ir_response_args.prob
         ):
-            flag_iir = True
             noisy_speech, (a_coeffs, b_coeffs) = self.augmentor.apply_2nd_iir_response(
                 wav=noisy_speech
             )
@@ -734,13 +722,11 @@ class NoiseSuppressionDataset(DynamicBaseDataset):
             )
 
         # HPF effects
-        flag_hpf = False
         if (
             self.augmentation_hpf_args
             and self.augmentation_hpf_args.used
             and torch.rand(1) < self.augmentation_hpf_args.prob
         ):
-            flag_hpf = True
             hpf_cutoff = random.choices(
                 self.augmentation_hpf_args.cutoff,
                 weights=self.augmentation_hpf_args.prob_each,
@@ -760,13 +746,11 @@ class NoiseSuppressionDataset(DynamicBaseDataset):
             )
 
         # Volume perturbed
-        flag_volume = False
         if (
             self.augmentation_volume_args
             and self.augmentation_volume_args.used
             and torch.rand(1) < self.augmentation_volume_args.prob
         ):
-            flag_volume = True
             vol_ratio = None
             min_quantile = None
             max_quantile = None
@@ -865,78 +849,10 @@ class NoiseSuppressionDataset(DynamicBaseDataset):
         if peak > 1.0:
             noisy_speech = noisy_speech / peak
             target_speech = target_speech / peak
-            if added_noise is not None:
-                added_noise = added_noise / peak
 
         # Snipts to training target sample length
         noisy_speech = noisy_speech[..., : self.sample_length]
         target_speech = target_speech[..., : self.sample_length]
-
-        # Wrap added_noise
-        if added_noise is not None:
-            if flag_src:
-                if src_backend == "sox":
-                    added_noise, _ = wav_resampling(
-                        wav=added_noise,
-                        origin_sr=self.audio_sr,
-                        target_sr=src_target,
-                        backend="sox",
-                    )
-                    added_noise, _ = wav_resampling(
-                        wav=added_noise,
-                        origin_sr=src_target,
-                        target_sr=self.audio_sr,
-                        backend="sox",
-                    )
-                else:
-                    added_noise, *src_info = wav_resampling(
-                        wav=added_noise,
-                        origin_sr=self.audio_sr,
-                        target_sr=src_target,
-                        backend="torchaudio",
-                        torch_backend_params=src_info[-1],
-                    )
-                    added_noise, *src_info = wav_resampling(
-                        wav=added_noise,
-                        origin_sr=src_target,
-                        target_sr=self.audio_sr,
-                        backend="torchaudio",
-                        torch_backend_params=src_info[-1],
-                    )
-
-            if flag_iir:
-                added_noise, _ = self.augmentor.apply_2nd_iir_response(
-                    wav=added_noise, a_coeffs=a_coeffs, b_coeffs=b_coeffs
-                )
-
-            if flag_hpf:
-                added_noise, _ = self.augmentor.apply_hpf(
-                    wav=added_noise,
-                    sr=self.audio_sr,
-                    cutoff_freq=hpf_cutoff,
-                    q_factor=q_factor,
-                )
-
-            if flag_volume:
-                if vol_ratio is not None:
-                    added_noise, _ = self.augmentor.sox_volume_perturbed(
-                        wav=added_noise,
-                        vol_ratio=vol_ratio,
-                        sr=self.audio_sr,
-                    )
-                else:
-                    added_noise, (_, _) = self.augmentor.apply_clipping_distortion(
-                        wav=added_noise,
-                        min_quantile=min_quantile,
-                        max_quantile=max_quantile,
-                    )
-
-            # NOTE the asymmetry with the two crops above, which use
-            # `self.sample_length`: this one reads the raw attribute, so on a
-            # `target_sr: null` recipe (where it is None) the slice is a no-op
-            # and added_noise stays longer than the pair it accompanies. Left as
-            # is -- aligning it would change what those recipes produce.
-            added_noise = added_noise[..., : self.training_sample_length]
 
         audio_sr = self.audio_sr
         vad_reference = vad_reference[..., : noisy_speech.shape[-1]]
@@ -954,9 +870,15 @@ class NoiseSuppressionDataset(DynamicBaseDataset):
                     sample_rate=audio_sr,
                 )
 
-        # Far parent target: the summed full-RIR interferer
-        # speech (post-SIR), zeros when no interferer is present. Used only by an
-        # optional far decoder + FarReconstructionLoss; harmless otherwise.
+        # Far parent target: the summed full-RIR interferer speech (post-SIR),
+        # zeros when no interferer is present.
+        #
+        # No loss consumes this. It was added for a far decoder that was never
+        # written -- the comment here used to name a `FarReconstructionLoss` that
+        # does not exist. It stays because it IS read: `scripts/eval_indomain.py`
+        # measures far-speech leakage against it, which is the near/far axis's
+        # main diagnostic. Treat it as an eval output, not a training target, and
+        # if you add that decoder, say so here.
         far_target = (
             background_speech_reference
             if background_speech_reference is not None
@@ -965,7 +887,6 @@ class NoiseSuppressionDataset(DynamicBaseDataset):
         sample = {
             "noisy_speech": noisy_speech,
             "clean_speech": target_speech,
-            "added_noise": added_noise,
             "consistency_noise": noisy_speech - target_speech,
             "far_target": far_target,
             "speaker_id": self.spk2idx[target_speaker],
@@ -1256,7 +1177,6 @@ class NoiseSuppressionCollateFunc:
             one batch -- (dict) -- {
                 "noisy_speech",
                 "clean_speech",
-                "added_noise",
                 "consistency_noise",
                 "speaker_id",
                 "audio_sr",

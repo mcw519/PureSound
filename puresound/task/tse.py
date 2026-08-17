@@ -150,7 +150,7 @@ class TargetSpeakerExtractDataset(DynamicBaseDataset):
                     .item()
                 )
 
-                enroll_speech, (added_noise, _, _) = self.enroll_augmentor.add_bg_noise(
+                enroll_speech, _ = self.enroll_augmentor.add_bg_noise(
                     wav=enroll_speech,
                     snr_list=[snr],
                     dynamic_type=False,
@@ -443,8 +443,6 @@ class TargetSpeakerExtractDataset(DynamicBaseDataset):
                 target_speech = target_speech[0].view(1, -1)
 
         # Noise
-        # We collect added noises for if we need to use high SNR noisy speech as ground truth
-        added_noise = None
         if (
             self.augmentation_noise_args
             and self.augmentation_noise_args.used
@@ -464,13 +462,12 @@ class TargetSpeakerExtractDataset(DynamicBaseDataset):
             if torch.rand(1) < self.augmentation_noise_args.prob / 4:
                 dynamic_type = True
 
-            noisy_speech, (added_noise, _, _) = self.augmentor.add_bg_noise(
+            noisy_speech, _ = self.augmentor.add_bg_noise(
                 wav=noisy_speech,
                 snr_list=[snr],
                 dynamic_type=dynamic_type,
                 sr=if_none_else(self.target_sr, self.ori_audio_sr),
             )
-            added_noise = added_noise[0]
 
             # unwrap list
             noisy_speech = noisy_speech[0]
@@ -488,24 +485,19 @@ class TargetSpeakerExtractDataset(DynamicBaseDataset):
                     )
                     .item()
                 )
-                noisy_speech, (added_white_noise, _) = (
-                    self.augmentor.add_bg_white_noise(wav=noisy_speech, snr_list=[snr])
+                noisy_speech, _ = self.augmentor.add_bg_white_noise(
+                    wav=noisy_speech, snr_list=[snr]
                 )
-
-                # Mixing noise for later using
-                added_noise += added_white_noise[0]
 
         if isinstance(noisy_speech, list):
             noisy_speech = noisy_speech[0]
 
         # SRC
-        flag_src = False
         if (
             self.augmentation_src_args
             and self.augmentation_src_args.used
             and torch.rand(1) < self.augmentation_src_args.prob
         ):
-            flag_src = True
             src_target = random.choices(
                 self.augmentation_src_args.src_range,
                 weights=self.augmentation_src_args.prob_each,
@@ -554,13 +546,11 @@ class TargetSpeakerExtractDataset(DynamicBaseDataset):
                 )
 
         # 2nd-IIR response
-        flag_iir = False
         if (
             self.augmentation_ir_response_args
             and self.augmentation_ir_response_args.used
             and torch.rand(1) < self.augmentation_ir_response_args.prob
         ):
-            flag_iir = True
             noisy_speech, (a_coeffs, b_coeffs) = self.augmentor.apply_2nd_iir_response(
                 wav=noisy_speech
             )
@@ -569,13 +559,11 @@ class TargetSpeakerExtractDataset(DynamicBaseDataset):
             )
 
         # HPF effects
-        flag_hpf = False
         if (
             self.augmentation_hpf_args
             and self.augmentation_hpf_args.used
             and torch.rand(1) < self.augmentation_hpf_args.prob
         ):
-            flag_hpf = True
             hpf_cutoff = random.choices(
                 self.augmentation_hpf_args.cutoff,
                 weights=self.augmentation_hpf_args.prob_each,
@@ -595,13 +583,11 @@ class TargetSpeakerExtractDataset(DynamicBaseDataset):
             )
 
         # Volume perturbed
-        flag_volume = False
         if (
             self.augmentation_volume_args
             and self.augmentation_volume_args.used
             and torch.rand(1) < self.augmentation_volume_args.prob
         ):
-            flag_volume = True
             vol_ratio = None
             min_quantile = None
             max_quantile = None
@@ -661,67 +647,6 @@ class TargetSpeakerExtractDataset(DynamicBaseDataset):
             ),
         ]
 
-        # Wrap added_noise
-        if added_noise is not None:
-            if flag_src:
-                if src_backend == "sox":
-                    added_noise, _ = wav_resampling(
-                        wav=added_noise,
-                        origin_sr=if_none_else(self.target_sr, self.ori_audio_sr),
-                        target_sr=src_target,
-                        backend="sox",
-                    )
-                    added_noise, _ = wav_resampling(
-                        wav=added_noise,
-                        origin_sr=src_target,
-                        target_sr=if_none_else(self.target_sr, self.ori_audio_sr),
-                        backend="sox",
-                    )
-                else:
-                    added_noise, *src_info = wav_resampling(
-                        wav=added_noise,
-                        origin_sr=if_none_else(self.target_sr, self.ori_audio_sr),
-                        target_sr=src_target,
-                        backend="torchaudio",
-                        torch_backend_params=src_info[-1],
-                    )
-                    added_noise, *src_info = wav_resampling(
-                        wav=added_noise,
-                        origin_sr=src_target,
-                        target_sr=if_none_else(self.target_sr, self.ori_audio_sr),
-                        backend="torchaudio",
-                        torch_backend_params=src_info[-1],
-                    )
-
-            if flag_iir:
-                added_noise, _ = self.augmentor.apply_2nd_iir_response(
-                    wav=added_noise, a_coeffs=a_coeffs, b_coeffs=b_coeffs
-                )
-
-            if flag_hpf:
-                added_noise, _ = self.augmentor.apply_hpf(
-                    wav=added_noise,
-                    sr=if_none_else(self.target_sr, self.ori_audio_sr),
-                    cutoff_freq=hpf_cutoff,
-                    q_factor=q_factor,
-                )
-
-            if flag_volume:
-                if vol_ratio is not None:
-                    added_noise, _ = self.augmentor.sox_volume_perturbed(
-                        wav=added_noise,
-                        vol_ratio=vol_ratio,
-                        sr=if_none_else(self.target_sr, self.ori_audio_sr),
-                    )
-                else:
-                    added_noise, (_, _) = self.augmentor.apply_clipping_distortion(
-                        wav=added_noise,
-                        min_quantile=min_quantile,
-                        max_quantile=max_quantile,
-                    )
-
-            added_noise = added_noise[..., : self.training_sample_length]
-
         # Warp target speech to zeros. The speaker id stays untouched: it is
         # still needed as a `spk2idx` key below (and this line used to assign
         # over it, making every inactive-target row raise there).
@@ -738,7 +663,6 @@ class TargetSpeakerExtractDataset(DynamicBaseDataset):
             "noisy_speech": noisy_speech,
             "clean_speech": target_speech,
             "enroll_speech": enroll_speech,
-            "added_noise": added_noise,
             "consistency_noise": noisy_speech - target_speech,
             "speaker_id": self.spk2idx[target_speaker],
             "audio_sr": audio_sr,
@@ -771,7 +695,6 @@ class TargetSpeakerExtractCollateFunc:
                 "noisy_speech",
                 "clean_speech",
                 "enroll_speech",
-                "added_noise",
                 "consistency_noise",
                 "speaker_id",
                 "audio_sr",

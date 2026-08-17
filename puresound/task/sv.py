@@ -207,7 +207,7 @@ class SpeakerEmbeddingDataset(DynamicBaseDataset):
             if torch.rand(1) < self.augmentation_noise_args.prob / 4:
                 dynamic_type = True
 
-            noisy_speech, (added_noise, _, _) = self.augmentor.add_bg_noise(
+            noisy_speech, _ = self.augmentor.add_bg_noise(
                 wav=noisy_speech,
                 snr_list=[snr],
                 dynamic_type=dynamic_type,
@@ -230,12 +230,9 @@ class SpeakerEmbeddingDataset(DynamicBaseDataset):
                     )
                     .item()
                 )
-                noisy_speech, (added_white_noise, _) = (
-                    self.augmentor.add_bg_white_noise(wav=noisy_speech, snr_list=[snr])
+                noisy_speech, _ = self.augmentor.add_bg_white_noise(
+                    wav=noisy_speech, snr_list=[snr]
                 )
-
-                # Mixing noise for later using
-                added_noise += added_white_noise[0]
 
         if isinstance(noisy_speech, list):
             noisy_speech = noisy_speech[0]

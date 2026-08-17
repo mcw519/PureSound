@@ -32,8 +32,11 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import random
 import sys
 from pathlib import Path
+
+import numpy as np
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
@@ -43,10 +46,20 @@ import torch  # noqa: E402
 
 from puresound.config import load_recipe  # noqa: E402
 
+#: Only the noise-suppression lineage accepts a per-item seed in its key (the
+#: 3-tuple the seeded sampler emits). Speaker-embedding and TSE take a plain
+#: (speaker, sr) pair, so an item there is only reproducible if every RNG is
+#: seeded around it -- do that rather than silently fingerprint noise.
+PER_ITEM_SEED_TASKS = frozenset({"voice_isolation", "noise_suppression"})
+
 TASK_DATASETS = {
     "voice_isolation": ("puresound.task.voice_isolation", "VoiceIsolationDataset"),
     "noise_suppression": ("puresound.task.ns", "NoiseSuppressionDataset"),
     "speaker_embedding": ("puresound.task.sv", "SpeakerEmbeddingDataset"),
+    "target_speaker_extraction": (
+        "puresound.task.tse",
+        "TargetSpeakerExtractDataset",
+    ),
 }
 
 
@@ -76,12 +89,27 @@ def capture(config_path: str, n_items: int) -> dict:
         dataset_role="train",
         pipeline_role=corpus.train_pipeline_role,
         **recipe.augmentation_kwargs(),
+        # The one argument that is not an augmentation block and not shared.
+        **(
+            {"enroll_speech_args": recipe.enroll_speech}
+            if recipe.task == "target_speaker_extraction"
+            else {}
+        ),
     )
 
     speakers = sorted(dataset.total_spks)
+    per_item_seed = recipe.task in PER_ITEM_SEED_TASKS
     out = {}
     for index in range(n_items):
-        key = (speakers[index % len(speakers)], corpus.target_sample_rate, 1000 + index)
+        seed = 1000 + index
+        speaker = speakers[index % len(speakers)]
+        if per_item_seed:
+            key = (speaker, corpus.target_sample_rate, seed)
+        else:
+            random.seed(seed)
+            np.random.seed(seed % (2**32))
+            torch.manual_seed(seed)
+            key = (speaker, corpus.target_sample_rate)
         sample = dataset[key]
         out[f"item{index:03d}"] = {k: _digest(v) for k, v in sorted(sample.items())}
     return out

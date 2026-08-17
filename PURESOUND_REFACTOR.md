@@ -692,16 +692,48 @@ keyword argument。
 git tracked（可由版本歷史復原），其餘 24 份原本受 `.gitignore` 排除，**無法由 git 復原**。
 它們引用的機制早已不存在，本來就無法重現當初的實驗。
 
+### 2026-08-17 — P2-6 完成（死 payload：`added_noise`）
+
+驗收：`ruff` 全綠；`--suite standard` **700 passed**；`tools/rng_fingerprint.py` 對兩條
+路徑做 before/after 比對——**改動前後只有 `added_noise` 這個 key 消失，其餘 hash 全部
+逐位元相同**（ns 路徑 864 → 840，差 24 = 每個 item 一個；TSE 路徑 144 → 128，差 16）。
+
+**刪了什麼**：`added_noise` 進 sample 字典但 collate 從不收它，全 repo 沒有任何地方讀
+`batch["added_noise"]`。維持它同步的是 4 組 flag + 延後重播（SRC / IIR / HPF / volume，
+各跨 159–212 行），也就是 A6 記的「pipeline 最脆弱的樣式」。
+
+| 檔案 | 淨變化 |
+|---|---:|
+| `task/ns.py` | −89 |
+| `task/tse.py` | −83（同一份逐字複製，B1 那 332 行重複的其中 78 行） |
+| `task/sv.py` | −6（純死區域變數；`added_noise += tensor` 那行本來就是壞的 list 運算，因為從不被讀所以沒人發現） |
+
+`AudioEffectAugmentor.add_bg_noise` 仍回傳它——那是 augmentor 的 API，不是這條 payload。
+
+**為什麼那 4 組重播不耗 RNG**（指紋證實，但值得寫下理由）：重播用的都是「已經抽好的
+參數」版本——`apply_2nd_iir_response(a_coeffs=, b_coeffs=)`、`apply_hpf(cutoff, q)`、
+`sox_volume_perturbed(vol_ratio=)`、`apply_clipping_distortion(min_quantile=,
+max_quantile=)`。隨機分支只在參數為 None 時才走。
+
+**`far_target` 不刪，改註解**：它的註解說是給 `FarReconstructionLoss` 用的，而那個 loss
+不存在。但它**有被讀**——`scripts/eval_indomain.py` 用它量遠場洩漏，那是近/遠場軸的主要
+診斷。改成如實描述「這是 eval 產出，不是訓練目標」。
+
+**順手修好的工具缺陷**：`tools/rng_fingerprint.py` 原本只支援 3-tuple 的 item key，對
+speaker_embedding 與 TSE（兩者的 `__getitem__` 只吃 2-tuple、沒有 per-item seed）會直接
+壞掉。現在對那兩個 task 改為在每個 item 前手動 seed 全部 RNG。
+
+**順手發現、未修**：`tse.py` 的 `add_n_cases` 只支援純量，不像 `ns.py` 會處理 `[lo, hi]`
+範圍——TSE recipe 寫成範圍會 crash。schema 允許兩種形態，所以這是 TSE 側的缺口。
+TSE 為凍結 legacy，記錄不修。
+
 ### 下一步
 
 1. **P2-6（清死旋鈕與死 payload）**——schema 已經把 33 份 config 的問題全部列出來了；
    `added_noise` 那塊（4 組 flag 重播、約 90 行、無人消費）也可以一起處理。
    此項已完成，包含現役設定與無法執行的 backup 設定。
-2. **P2-6 的另一半仍在**：`added_noise` 在 `ns.py` 有 29 處引用、4 組跨 159–212 行的
-   flag 重播，而 `NoiseSuppressionCollateFunc` 從不把它收進 batch，全 repo 沒有任何地方
-   讀 `batch["added_noise"]`。約 90 行可刪。刪除用 `tools/rng_fingerprint.py` 驗——它不
-   影響任何抽樣，但**必須實測**，因為它會經過 `apply_clipping_distortion`，要確認那條
-   路徑真的不耗 RNG。
-3. P2-1（拆裝置鏈）前置已備齊。先做 2-6 再做 2-1 會少做一半工：2-1 要重寫的正是
-   `added_noise` 那段。
-4. P1 已全部完成。
+2. **P2-1（拆裝置鏈）**——前置全部備齊，而且 2-6 已經把 `added_noise` 重播拿掉，
+   要重寫的那段現在只剩 noisy/target 兩條訊號，工作量比原估少一半。
+3. P2-2（拆 `_apply_overlap_gating`）、P2-3（streaming 抽共用基底，308 行重複）、
+   P2-4（輔助 head 掛載樣板化）。
+4. P1、P2-5、P2-6 已完成。
