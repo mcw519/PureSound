@@ -55,6 +55,78 @@ checked by eye"——那是徵狀，不是解法。
 `cfg.get("prob", 0.0)`。config 打錯字（`porb`）不會報錯，只會安靜地變成機率 0——做消融
 實驗時這是最貴的一種 bug。
 
+### A6. augmentation 軸的複雜度已經在腐蝕（2026-08-17 量測）⭐⭐⭐
+
+A1 原本被歸在 P3「等你要加第 3 個 augmentation block 再說」。量完之後這個判斷是錯的：
+腐蝕不是未來式，已經發生了。
+
+**config 側**
+
+| 量測 | 數字 |
+|---|---|
+| 現役 `train_dpcrn.yaml` 的 augmentation 頂層區塊 | 14 |
+| 其中的旋鈕（葉節點） | 71（整份 config 175 個、469 行） |
+| 巢狀最深 | 3 層 |
+| pipeline 讀得到的 config key | 62 個，散在 **128 個讀取點** |
+| 讀法 | **57 處硬取 `cfg["k"]`（缺就 KeyError）/ 71 處軟取 `cfg.get("k", 預設)`（缺就靜默用預設）** |
+| schema 驗證 | 無 |
+
+「硬取 vs 軟取」沒有規則可循——同一個 block 內兩種混用，所以「漏寫一個 key 會怎樣」
+無法從 config 本身判斷，得去翻程式碼。
+
+**已經累積的死旋鈕**：`augmentation_query_distance` 整叢 **10 個旋鈕**（`derive_from_bank`、
+`bank_margin`、`range`、`peak_distance`、`peak_prob`、`peak_half_width`、`near_floor`、
+`far_ceiling`、`gate_silence.prob`、`gate_silence.margin`）在 commit `380da2e` 移除
+distance-query 軸之後**沒有任何程式碼讀取**，卻仍存在於 **33 份 config**。同類的還有
+`prob_by_origin` / `turn_taking_prob_by_origin` / `real`。現役 default config 已清乾淨，
+但每一份 exp config 都還帶著——下次有人照抄 exp config 開新實驗，就會以為自己在調一個
+早就不存在的機制。
+
+沒有 schema 的直接後果就是這個：**刪掉機制不會讓它的 config 報錯**。
+
+**pipeline 側**
+
+| 量測 | 數字 |
+|---|---|
+| `ns.__getitem__` 的 `if` 分支 | 42 |
+| 其中以 `torch.rand` 抽機率的增強區塊 | 17 |
+| 一路帶下去、必須保持互相一致的訊號 | 8 |
+| `noisy_speech` 被重新指派 | 8 次 |
+| `target_speech` / `added_noise` | 各 6 次 |
+
+最脆弱的是 **flag + 延後重播** 這個樣式。SRC / IIR / HPF / volume 四段各自：先設
+`flag_*` 並保存抽到的參數，然後在**一兩百行之後**把同一組參數重播到 `added_noise` 上：
+
+| 耦合 | 設定於 | 重播於 | 跨距 |
+|---|---:|---:|---:|
+| `flag_src` | L649 | L855 | **212 行** |
+| `flag_iir` | L704 | L885 | 187 行 |
+| `flag_hpf` | L719 | L890 | 177 行 |
+| `flag_volume` | L745 | L898 | 159 行 |
+
+新增任何一段會動到 `noisy_speech` 的增強，都必須記得在 200 行外補一段對應的重播，否則
+`added_noise` 會與 `noisy_speech` 靜默不同步。沒有任何機制在檢查這件事。
+
+**而 `added_noise` 沒有人用。** 它進了 `sample` 字典（`ns.py:946`），但
+`NoiseSuppressionCollateFunc` **不會把它收進 batch**——它只出現在該 class 的一段
+docstring 註解裡。全 repo（`puresound/`、`egs/`、`test/`）沒有任何地方讀
+`batch["added_noise"]`。也就是說：整條 pipeline 裡最纏繞的一塊機制（4 組跨百行耦合、
+約 90 行程式碼），產出的東西在 batch 邊界就被丟掉了，而且沒人發現。
+
+同一類但程度較輕的還有 `far_target`：有被 collate，但唯一的消費者是一支 eval 腳本；
+它的註解說是給 `FarReconstructionLoss` 用的，而**那個 loss 不存在**。
+（對照組：`consistency_noise` 是活的——`ResidualReferenceLoss` 預設就讀它。）
+
+**這改變了什麼**
+
+A1（config 參數隧道）與 A6 是同一個問題的兩面：**一包沒有型別、沒有 schema、沒有
+擁有者的 dict，穿過 5 層再散進 128 個讀取點**。它的成本已經不是「未來加東西會麻煩」，
+而是三筆已發生的事實：33 份 config 帶著 10 個死旋鈕、四組跨百行的隱式耦合、以及一塊
+沒人要卻仍在維護的 90 行機制。
+
+計劃相應調整：把 config schema 驗證（原 P3-2）與死旋鈕/死 payload 清理拉到 **P2**，
+見下方 2-5 / 2-6。
+
 ### A2. 側通道狀態（temporal coupling）⭐⭐
 
 模組間靠「上一次呼叫留下的 attribute」溝通，共 4 組：
@@ -106,10 +178,13 @@ backbone 產生它（commit `380da2e` 移除 conformer 軸時，head 走了、lo
 保證 `contracts`/`scene`/`metrics` 不需要 torch 就能 import。這是整份 codebase 架構紀律
 最高的地方。
 
-**沒做完**：`rir/api.py` 自稱 "Stable public entry point"，但**零個生產呼叫端**——
-`egs/rir_generation` 全部直接深入 `physics.impedance.modes`（13 次）、
-`physics.wave.fdtd`（7 次）等內層模組；api.py 目前只被 `test_rir_r0_api_inventory.py`
-import。一個沒人走的正門，宣稱的穩定性沒有任何實際約束力。
+**空頭的第二套契約（已於 P1-5 處置）**：`rir/api.py` 自稱 "Stable public entry
+point"，但**零個生產呼叫端**——`egs/rir_generation` 全部直接深入
+`physics.impedance.modes`（13 次）、`physics.wave.fdtd`（7 次）等內層模組。而且它也服務
+不了：頂層 7 支腳本需要的 40 個符號裡 **25 個不在 api 的出口**，`phases/` 是 191 個裡缺
+173 個——那些正是 api 自己說「internal helper 或 stage-specific tool」的東西，代表它劃的
+線與呼叫端需要的線不是同一條。沒有呼叫者就沒有東西會在它壞掉時報錯，那個穩定性宣稱是
+空頭的。處置見 P1-5：保留 re-export，撤掉宣稱。
 
 ---
 
@@ -296,10 +371,10 @@ LightningModule 的 `forward()` 裡。docstring 誠實標了 "inference-only kno
 | # | 事項 | 做法 | 驗收 |
 |---|---|---|---|
 | 1-1 | 消除 `if_none_else` 三份定義 | 移到 `DynamicBaseDataset` 的 `@property audio_sr`；`tse/sv` 保留自己那份（凍結不動），只改 `ns.py`/`voice_isolation.py` | `ns.py` 的 36 處呼叫歸零；固定 seed 下前 32 個 item 逐位元相同 |
-| 1-2 | 統一 4 份 loss reduce 迴圈 | 抽 `BaseLightningModule._reduce_losses(...)` | 同上 |
-| 1-3 | 函式庫 `print` → `logging` | module logger；`gen_meta` 統計加 `rank_zero_only` | DDP 2 卡啟動時語料統計只印一次 |
+| 1-2 | 統一 4 份 loss reduce 迴圈（已完成） | `BaseLightningModule.reduce_losses(...)` | 見執行紀錄 |
+| 1-3 | 函式庫 `print` → `logging`（已完成） | module logger；rank 過濾放在 handler 上而非 `gen_meta` 裡——library 一律送出，由應用端的 handler 決定丟棄，`dataset/` 不必知道 rank 這件事 | 見執行紀錄 |
 | 1-4 | `AudioEffectAugmentor` 回傳值改 NamedTuple | `apply_rir` → `RirResult(wav, rir_id, mode, metadata)`；同時讓 `ns.py:216` **改讀回傳值**而非 `_last_rir_meta` | `_last_rir_meta` 的外部讀取歸零（grep 可驗證） |
-| 1-5 | 決斷 `rir/api.py` | 要嘛讓 `egs/rir_generation` 的 7 支頂層腳本改走 api（深入 import 留給 `phases/`），要嘛降級為 re-export 並拿掉「stable entry point」宣稱 | `test_rir_r0_api_inventory.py` 反映實際策略 |
+| 1-5 | 決斷 `rir/api.py`（已完成，選 B：撤掉宣稱） | 見執行紀錄 | — |
 | 1-6 | 修 C6：sr-keyed 選池不再繞 `set`（已完成） | `dataset/dynamic_base.py` `choose_an_utterance_by_speaker_name` | 見執行紀錄 |
 
 ### P2 — 中風險，需 bit-identical 驗證（約 3–5 天）
@@ -319,6 +394,12 @@ fixture 從 scratchpad 移進 `test/`。
 | 2-2 | 拆 `_apply_overlap_gating`（複雜度 14、142 行） | 拆成 `_turn_taking_envelope` / `_bernoulli_envelope`，共用 `_gate`/`_smooth_env` |
 | 2-3 | `streaming` 抽共用基底 | `StreamingFrameModelBase` 承載 `_require`/`_as_list`/`_down_step`/`_up_step`/ONNX 匯出/`*Ort`；`dpcrn`/`dparn` 只留 state 定義與 block step |
 | 2-4 | 輔助 head 掛載樣板化 | `AuxHeadMixin.attach_heads(cfg, enc_channels)` + `collect_side_outputs() -> dict`。**checkpoint key 必須維持 `backbone.vad_head.*`** |
+| 2-5 | **config schema 驗證**（原 P3-2，因 A6 提前） | 對 14 個 augmentation 區塊寫一份 schema，`load_hparam` 之後檢查：未知 key 直接報錯、缺 key 依 schema 決定「必填」或「預設值」。這同時消滅「硬取 vs 軟取」的隨機性——規則寫在 schema 裡，不在 128 個讀取點裡 |
+| 2-6 | 清死旋鈕與死 payload（依賴 2-5） | schema 一上線，33 份 config 的 `augmentation_query_distance` 等 10 個旋鈕會立刻報錯，順勢清掉；同時決斷 `added_noise`（無人讀 → 連同 4 組 flag 重播一起刪，約 −90 行）與 `far_target`（`FarReconstructionLoss` 不存在 → 補 loss 或降級為 eval-only 並標註） |
+
+**2-5 / 2-6 的驗收**：schema 上線後，現役 `train_dpcrn.yaml` 必須零錯誤通過；33 份 exp
+config 的死旋鈕全部被報出來；刪掉 `added_noise` 後 RNG 指紋逐位元不變（它不影響任何抽樣
+——但**必須實測**，因為它經過 `apply_clipping_distortion`，要確認那條路徑真的不耗 RNG）。
 
 **驗收**：2-1/2-2 後 RNG 指紋 test 逐位元通過；2-3 後 ONNX 匯出對同一 ckpt 產生數值相同
 的輸出（tol 1e-6）；2-4 後 `dpcrn_v8/v9/v10` 三個 ckpt 都能 `strict=True` 載入。
@@ -327,8 +408,8 @@ fixture 從 scratchpad 移進 `test/`。
 
 | # | 事項 | 觸發條件 |
 |---|---|---|
-| 3-1 | **Config 物件化**：20-tuple → 巢狀 dataclass（`AugmentationConfig` 聚合全部 `augmentation_*`），一路傳到 dataset 只剩 3–4 個參數 | 下次要新增第 3 個 augmentation block 時 |
-| 3-2 | **Config schema 驗證**：`load_hparam` 後跑 schema 檢查，未知 key 直接報錯 | 同 3-1 一起做（單獨做收益不足，配合 3-1 幾乎免費），可一次消滅「打錯字 → 靜默機率 0」 |
+| 3-1 | **Config 物件化**：20-tuple → 巢狀 dataclass（`AugmentationConfig` 聚合全部 `augmentation_*`），一路傳到 dataset 只剩 3–4 個參數 | 2-5 的 schema 落地之後——schema 本身就是 dataclass 的形狀，屆時物件化幾乎是把 schema 換個寫法 |
+| ~~3-2~~ | **Config schema 驗證** → 因 A6 提前為 **2-5** | — |
 | 3-3 | **Loss 分派改註冊制**：`loss.required_inputs = ("vad_logits",)` + `{name: provider}` 表取代 if/elif 鏈 | 下次要新增第 7 種 loss 簽章時 |
 | 3-4 | `runner.py` 泛化到 MISO/SV，收掉 tse/sv main 的 866 行重複 | TSE/SV 解凍時。**目前凍結中，不要碰** |
 | 3-5 | `dry_blend`/`spec_floor` 抽成獨立 `Postprocessor` | 要做 SDK 部署對齊時 |
@@ -441,8 +522,85 @@ test_sr_keyed_utterance_pool_keeps_metafile_order`：用 8 筆 utterance 的池�
 > process 內觀察的不變量（池子順序），代價是理論上有人能寫出「順序對、但仍不決定性」
 > 的實作騙過它——實務上不會發生。
 
+### 2026-08-17 — P1-2、P1-3 完成
+
+驗收：`ruff check` 全綠；`--suite standard` **617 → 628 passed**（+11 為新的 logging
+契約測試）；RNG 指紋在兩條路徑上都與 P1-6 後的基準逐位元相同。
+
+**1-2 — 四份 loss reduce 迴圈收成一份**
+
+`BaseLightningModule.reduce_losses(invoke, loss_funcs=None, weights=None)`：呼叫端只
+提供 `invoke(loss_func) -> tensor`，因為那是四處**唯一**不同的部分（SISO 依 dispatch
+flag 路由 backbone 側輸出、MISO 不路由、分類頭吃 `(pred, target)`）。
+
+- `siso.EncDecMaskBase.compute_loss`：6 段 dispatch 原封搬進一個 closure（順序語意的
+  註解一併搬過去），reduce 的部分消失。
+- `siso.EncPredClassBase.compute_loss`：13 行 → 1 行。
+- `miso.compute_loss` / `compute_loss2`：同上，後者用 `loss_funcs=` / `weights=` 指向
+  conditional 分支的那組。
+
+一處刻意的行為差異：累加改成 out-of-place（`total = total + w`），舊迴圈是 `+=` 直接
+在第一個 weighted tensor 上做 in-place。已驗證數值、總和與**梯度**三者都完全相同
+（3-loss 隨機輸入對照舊迴圈逐位元比對）。空 loss list 從回傳 `[]` 變成回傳 `None`
+——兩者都是壞掉的 recipe，`None` 至少誠實。
+
+**1-3 — `print` → `logging`**
+
+52 處 `print` 轉成 module logger（`logging.getLogger(__name__)`），跨 13 個檔案。
+level 依語意分派：語料統計 / augmentor 初始化 / ckpt 載入摘要 = INFO；設定被忽略、
+取樣率不符、空片段重試、參數對不上 = WARNING；`create_folder` 的 benign race = DEBUG。
+
+**保留唯一一個 `print`**：`base.on_test_epoch_end` 印的 metric 分數是 `--scoring`
+的產出，不是關於過程的訊息。走 logging 會讓「把吵雜訊息關掉」連帶把結果也關掉。
+
+新模組 `puresound/logging_setup.py`（**純 stdlib**——`puresound/__init__.py` 會匯入
+它，而 `import puresound` 不能拉進 torch，`test_rir_r0_import_boundaries.py` 在管這
+件事，已驗證仍為 torch-free）。設計上的兩個取捨：
+
+1. *為什麼 library 仍預設掛 handler*（一般而言是反模式）：`egs/` 與 `tools/` 底下有
+   84 個檔案 import 這個套件，其中 20 個會建 dataset / 載 ckpt / 開音檔，沒有任何一個
+   設定 logging。只掛 NullHandler 會讓它們靜默失去平常在讀的輸出。改成預設掛上、但
+   給三種接手方式（`PURESOUND_LOG_AUTOCONFIG=0` / `setLevel` /
+   `configure_library_logging(force=True)`），既不回歸也真的可控。
+2. *為什麼 rank 從環境變數讀而不是 `torch.distributed`*：最吵的輸出發生在建 dataset
+   時，那時 Lightning 還沒初始化 process group，`dist.is_initialized()` 在每個 rank
+   都是 False，問 torch 會得到「全部都是 rank 0」而印 N 次。
+
+輸出格式維持 `%(message)s` 並寫到 **stdout**，所以畫面與 shell 重導向的行為跟原本的
+`print` 完全一樣（已用語料統計逐行比對）。
+
+新測試 `test/test_utils/test_library_logging.py`（11 項）釘住三個性質：預設有輸出、
+可完全靜音、只有 rank 0 輸出（外加 `all_ranks` 豁免、rank 逐筆讀取、
+`configure_library_logging` 的冪等性與不碰他人 handler）。**已反向驗證**：拿掉 rank
+filter → 1 fail；拿掉 autoconfig 開關 → 1 fail；改寫到 stderr → 3 fail。
+
+文件：`docs/index.{md,zh-TW.md}` 新增「函式庫輸出」一節與 module overview 條目。
+
+### 2026-08-17 — P1-5 完成（選 B）
+
+兩個選項的實測差異：讓呼叫端改走 api（選項 A）需要 api 從 37 個出口長到 62 個，等於把
+`BankSplitPolicy`、`canonical_json_sha256` 這類內部細節升格成公開承諾——那是削弱分層而
+不是加強；或者維持 37 個讓腳本混用兩種 import 風格，比現在全部深入還難讀。選 B。
+
+改動：
+
+- `rir/api.py` 的 docstring 改成誠實描述——「常用符號的方便集合，**不是**穩定性邊界」，
+  並寫明真正被強制執行的契約在下一層（`contracts.py` + `test_rir_r0_import_boundaries.py`
+  的 LAYER_RANK 表，後者會讓跨層 import 直接 fail build）。
+- `test_rir_r0_api_inventory.py`：拿掉那組「essential 名單」斷言（在守一條沒有消費者的
+  線），保留「`__all__` 的名字都要解析得到」——那條仍有價值，是防 re-export 因為底層改名
+  而靜默腐爛。
+- 同步 4 份 docs（`rir_package_migration.{md,zh-TW}`、`rir_realism_algorithm.{md,zh-TW}`）
+  裡沿用「stable façade / 穩定表面」的說法。
+
+驗收：`--suite standard` 628 passed（不變）；`test_rir_r0_api_inventory.py` 與
+`test_rir_r0_import_boundaries.py` 82 passed。
+
 ### 下一步
 
-1. P1 剩下 1-2（loss reduce 迴圈）、1-3（`print` → `logging`）、1-5（`rir/api.py` 決斷）。
-2. P2 動之前先把 RNG 指紋 harness 入庫成 test——C6 修完後已無 flaky 障礙，只差搬
-   fixture。
+1. **P2-5 / P2-6（config schema + 清死旋鈕）建議優先**——見 A6，這不是預防性重構，是
+   已經發生的腐蝕：33 份 config 帶著 10 個死旋鈕、`added_noise` 那塊 90 行機制產出無人
+   消費。
+2. P2-1（拆裝置鏈）動之前先把 RNG 指紋 harness 入庫成 test——C6 修完後已無 flaky 障礙，
+   只差搬 fixture。
+3. P1 已全部完成。

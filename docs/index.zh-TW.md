@@ -21,6 +21,7 @@ PureSound 是一套模組化的音訊處理與深度學習框架，用於語音�
 | [puresound.streaming](streaming/index.md) | Streaming 推論與 ONNX Runtime 部署 |
 | [puresound.metrics](metrics.md) | 音訊品質評估 metrics |
 | [puresound.utils](utils.md) | 通用工具函式 |
+| `puresound.logging_setup` | 函式庫執行期輸出的去向，以及如何接手控制 |
 | [puresound.recipes](recipes.md) | 高階的模型初始化 recipes |
 
 ## Architecture Overview
@@ -36,6 +37,7 @@ puresound/
 ├── streaming/      # Streaming inference runtimes
 ├── task/           # Task-specific datasets (NS, near-field voice isolation, SV, TSE)
 ├── third_party/    # Vendored research code (e.g. pytARD for low-frequency RIR simulation)
+├── logging_setup.py # 函式庫 logging 契約（純 stdlib；由 __init__ 匯入）
 ├── metrics.py      # Evaluation metrics
 ├── utils.py        # Utilities
 └── recipes.py      # Model construction recipes
@@ -49,3 +51,24 @@ puresound/
 - **Multi-Task Support**：noise suppression（NS）、speaker verification（SV）、target speaker extraction（TSE）共用同一組 base classes——另外還有 `puresound.task.voice_isolation`，是目前開發最活躍的 recipe。Voice isolation 是建構在共用的 NS synthesis skeleton 之上、自成一格的任務（真實錄音列、`mix_mode`、turn-taking、distance/DRR 輔助標籤），不只是通用 NS 的一個變體——詳見 [task/index.md](task/index.md)。
 - **Flexible Masking**：支援 complex、real、polar、deep-filter、Wiener、MVDR 等多種 mask。
 - **Composable Augmentation**：透過 `AudioEffectAugmentor` 做可插拔式的音訊增強。
+
+## 函式庫輸出
+
+執行期間函式庫講的每一句話——語料統計、augmentor 初始化、checkpoint 載入報告、
+警告——都走 `puresound` 這個 logger 的 `logging`，不是 `print`。唯一的例外是
+`on_test_epoch_end`：它印的是 `--scoring` 的**結果**，不是關於過程的訊息。
+
+`import puresound` 會預設掛上一個 stdout handler，所以從來不設定 logging 的腳本
+輸出照舊。要接手控制：
+
+| 目的 | 做法 |
+|---|---|
+| 完全靜音 | 環境變數 `PURESOUND_LOG_AUTOCONFIG=0` |
+| 保留警告、去掉進度訊息 | `logging.getLogger("puresound").setLevel(logging.WARNING)` |
+| 自己決定輸出去哪 | `puresound.logging_setup.configure_library_logging(level=..., stream=..., force=True)` |
+
+記錄會被過濾成只有 rank 0 輸出，所以多卡訓練時語料統計只會印一次，而不是每張卡
+各印一次。真的需要每個 rank 都講的訊息可以用 `extra={"all_ranks": True}` 豁免。
+rank 是從 launcher 的環境變數（`RANK` / `LOCAL_RANK` / `SLURM_PROCID`）讀的，不是
+`torch.distributed`——因為這些輸出多半發生在建 dataset 的時候，那時 Lightning 還
+沒初始化 process group。

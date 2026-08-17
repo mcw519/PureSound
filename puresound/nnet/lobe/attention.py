@@ -1,8 +1,12 @@
+import logging
 import math
 from typing import Optional
 
 import torch
 import torch.nn as nn
+
+
+logger = logging.getLogger(__name__)
 
 
 class PositionalEncoding(nn.Module):
@@ -151,7 +155,7 @@ class MhaSelfAttenLayer(nn.Module):
 
         if not improved:
             if self.bidirectional:
-                print("Ignored bidirectional option since no LSTM here.")
+                logger.warning("Ignored bidirectional option since no LSTM here.")
 
             if position_encoding:
                 self.pos = PositionalEncoding(d_model=feats_dim, dropout=dropout)
@@ -166,7 +170,7 @@ class MhaSelfAttenLayer(nn.Module):
 
         else:
             if position_encoding:
-                print(
+                logger.warning(
                     "Ignored position_encoding option here replaced by LSTM modeling."
                 )
 

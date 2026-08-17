@@ -202,37 +202,23 @@ class EncDecCondMaskBase(BaseLightningModule):
         else:
             enhanced = enhanced[..., : target.shape[-1]]
 
-        losses = []
-        for idx, loss_func in enumerate(self.loss_func_list):
-            weighted = self.loss_func_list_w[idx]
+        # A narrower dispatch than siso.EncDecMaskBase.compute_loss on purpose:
+        # the side-output flags (uses_vad_logits / uses_dist_preds / ...) are
+        # SISO-only additions and no MISO recipe registers a loss that sets one.
+        def _invoke(loss_func):
             if getattr(loss_func, "uses_vad_target", False):
-                weighted_loss = weighted * loss_func(
-                    enhanced, target, vad_target=vad_target
-                )
-            else:
-                weighted_loss = weighted * loss_func(enhanced, target)
-            losses.append(weighted_loss.item())
-            if idx == 0:
-                overall_loss = weighted_loss
-            else:
-                overall_loss += weighted_loss
+                return loss_func(enhanced, target, vad_target=vad_target)
+            return loss_func(enhanced, target)
 
-        return overall_loss, losses
+        return self.reduce_losses(_invoke)
 
     def compute_loss2(self, pred: torch.Tensor, target: torch.Tensor):
         assert self.c_loss_func_list is not None
-
-        losses = []
-        for idx, loss_func in enumerate(self.c_loss_func_list):
-            weighted = self.c_loss_func_list_w[idx]
-            weighted_loss = weighted * loss_func(pred, target)
-            losses.append(weighted_loss.item())
-            if idx == 0:
-                overall_loss = weighted_loss
-            else:
-                overall_loss += weighted_loss
-
-        return overall_loss, losses
+        return self.reduce_losses(
+            lambda loss_func: loss_func(pred, target),
+            loss_funcs=self.c_loss_func_list,
+            weights=self.c_loss_func_list_w,
+        )
 
     def training_step(self, batch, batch_idx):
         noisy_speech = batch["noisy_speech"]

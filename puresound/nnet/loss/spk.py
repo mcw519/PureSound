@@ -1,9 +1,13 @@
+import logging
 import math
 from typing import Optional
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+
+
+logger = logging.getLogger(__name__)
 
 TORCH_PI = torch.acos(torch.zeros(1)).item() * 2
 
@@ -68,7 +72,7 @@ class AAMsoftmax(nn.Module):
         self.th = torch.cos(TORCH_PI - torch.tensor(self.m))
         self.mm = torch.sin(TORCH_PI - torch.tensor(self.m)) * self.m
 
-        print("Initialised AAMSoftmax margin %.3f scale %.3f" % (self.m, self.s))
+        logger.info("Initialised AAMSoftmax margin %.3f scale %.3f", self.m, self.s)
 
     def forward(self, x: torch.Tensor, label: torch.Tensor):
         if label.dim() == 2:

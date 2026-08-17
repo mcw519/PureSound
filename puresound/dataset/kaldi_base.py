@@ -1,3 +1,4 @@
+import logging
 import os
 from typing import Dict, Optional
 
@@ -5,6 +6,9 @@ import torch
 
 from puresound.audio.io import AudioIO, wav_resampling
 from puresound.utils import load_text_as_dict
+
+
+logger = logging.getLogger(__name__)
 
 
 class KaldiFormBaseDataset(torch.utils.data.Dataset):
@@ -87,8 +91,10 @@ class KaldiFormBaseDataset(torch.utils.data.Dataset):
                 target_lvl=self.audio_gain_normalized_to,
             )
             if _sr != sr:
-                print(
-                    f"Reference audio samplerate {_sr} isn't same as Noisy audio {sr}, resampling to {sr} by Sox backend."
+                logger.warning(
+                    "Reference audio samplerate %s isn't same as Noisy audio %s, "
+                    "resampling to %s by Sox backend.",
+                    _sr, sr, sr,
                 )
                 clean_speech, _ = wav_resampling(
                     wav=clean_speech, origin_sr=_sr, target_sr=sr, backend="sox"
@@ -118,7 +124,7 @@ class KaldiFormBaseDataset(torch.utils.data.Dataset):
     @folder_content.setter
     def folder_content(self, dct: Dict):
         self._folder_content.update(dct)
-        print(f"Updated the content: {self._folder_content.keys()}")
+        logger.info("Updated the content: %s", self._folder_content.keys())
         self._load_df(self.folder)
 
     def _load_df(self, folder: str) -> Dict:
@@ -141,7 +147,7 @@ class KaldiFormBaseDataset(torch.utils.data.Dataset):
             for f in load_dct.keys():
                 if not os.path.isfile(f"{folder}/{load_dct[f]}"):
                     # raise FileNotFoundError(f"{load_dct[f]} is not found")
-                    print("Only incerece mode doesn't need wav2ref file")
+                    logger.warning("Only incerece mode doesn't need wav2ref file")
                 else:
                     _temp = load_text_as_dict(f"{folder}/{load_dct[f]}")
                     for key in sorted(_temp.keys()):
@@ -151,7 +157,7 @@ class KaldiFormBaseDataset(torch.utils.data.Dataset):
                             else:
                                 self.df[key].update({f: _temp[key][0]})
                         except KeyError:
-                            print(f"Non match key {key}")
+                            logger.warning("Non match key %s", key)
 
         self.idx_df = self._idx2key(self.df)
 

@@ -1,7 +1,11 @@
+import logging
 from typing import Optional
 
 import torch
 import torch.nn as nn
+
+
+logger = logging.getLogger(__name__)
 
 
 class SDRLoss(nn.Module):
@@ -101,7 +105,7 @@ class SDRLoss(nn.Module):
         else:
             sdr_max = None
 
-        print(f"init loss function: {loss_func}")
+        logger.info("init loss function: %s", loss_func)
         return cls(
             scaled=scaled,
             scale_dependent=scale_dependent,

@@ -121,9 +121,12 @@ underscore got real names in their new home:
 
 Two things exist only on the new side:
 
-- **`puresound.audio.rir.api`** — a stable façade re-exporting the 37 names most
-  callers need. Convenient, but it loads the renderer stack (including `torch`);
-  import a layer module directly if you care about import cost.
+- **`puresound.audio.rir.api`** — a convenience bundle re-exporting 37 common
+  names. **Not a stability boundary**: nothing imports it, and it omits 25 of
+  the 40 symbols the top-level `egs/rir_generation` scripts need. Import the
+  layer module you mean; the enforced contracts are `contracts.py` and the
+  LAYER_RANK table in `test/test_rir_r0_import_boundaries.py`. Reaching here
+  also loads the renderer stack, `torch` included.
 - **`puresound.audio.rir.contracts`** — `RIRArray`, `RenderContext`,
   `BackendCapabilities`, `validate_rir_metadata`, `resolve_sound_speed`, and the
   dtype/layout constants. These formalize conventions the code already followed.

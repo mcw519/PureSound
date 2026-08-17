@@ -203,18 +203,23 @@ class TestDeclaredSurface:
             "backends from here is what the compatibility shim used to do."
         )
 
-    def test_api_facade_resolves_and_covers_the_main_entry_points(self):
+    def test_api_convenience_reexports_resolve(self):
+        """``api`` is a convenience bundle, not a stability boundary.
+
+        It used to be described as the package's stable public entry point and
+        this test asserted a list of "essential" names to hold that line. The
+        line was fictional: nothing imports the module, and it omits 25 of the
+        40 symbols the top-level ``egs/rir_generation`` scripts actually need.
+        Enforcing a contract no caller depends on only makes the contract
+        harder to change for no one's benefit -- see the module docstring.
+
+        What is still worth checking is that the re-exports are not broken:
+        a name in ``__all__`` that no longer resolves means a layer module
+        renamed something and this bundle silently rotted.
+        """
         api = importlib.import_module("puresound.audio.rir.api")
         missing = sorted(n for n in api.__all__ if not hasattr(api, n))
         assert not missing, f"api.__all__ names absent symbols: {missing}"
-        for essential in (
-            "generate_hybrid_rir",
-            "HybridRIRConfig",
-            "RoomSceneV2",
-            "analyze_rir",
-            "PreGeneratedReleaseBank",
-        ):
-            assert essential in api.__all__
 
 
 class TestPrivateBoundaries:

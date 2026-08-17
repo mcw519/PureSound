@@ -310,13 +310,13 @@ class EncDecMaskBase(BaseLightningModule):
         # routed to losses that opt in via uses_dist_preds.
         dist_preds = getattr(self.backbone, "last_dist_preds", None)
 
-        overall_loss = []
-        losses = []
-        for idx, loss_func in enumerate(self.loss_func_list):
-            weighted = self.loss_func_list_w[idx]
+        # Dispatch by opt-in flag. NOTE the order is load-bearing: a loss that
+        # wants a later input must switch the earlier flags off explicitly (see
+        # BackgroundVADHeadBCELoss setting `uses_vad_logits = False`).
+        def _invoke(loss_func):
             if getattr(loss_func, "uses_vad_logits", False):
-                weighted_loss = weighted * loss_func(vad_logits, vad_target)
-            elif getattr(loss_func, "uses_background_vad_logits", False):
+                return loss_func(vad_logits, vad_target)
+            if getattr(loss_func, "uses_background_vad_logits", False):
                 bg_target = (
                     None if batch is None else batch.get("background_vad_target")
                 )
@@ -329,31 +329,18 @@ class EncDecMaskBase(BaseLightningModule):
                 # crashing BackgroundVADHeadBCELoss on a None target.
                 if bg_target is None and background_vad_logits is not None:
                     bg_target = torch.zeros_like(background_vad_logits)
-                weighted_loss = weighted * loss_func(
-                    background_vad_logits,
-                    bg_target,
-                )
-            elif getattr(loss_func, "uses_dist_preds", False):
-                weighted_loss = weighted * loss_func(dist_preds, batch or {})
-            elif getattr(loss_func, "uses_batch", False):
-                weighted_loss = weighted * loss_func(enhanced, target, batch or {})
-            elif getattr(loss_func, "uses_vad_target", False):
-                weighted_loss = weighted * loss_func(
-                    enhanced, target, vad_target=vad_target
-                )
-            elif getattr(loss_func, "uses_inactive_labels", False):
-                weighted_loss = weighted * loss_func(
-                    enhanced, target, inactive_labels=inactive_labels
-                )
-            else:
-                weighted_loss = weighted * loss_func(enhanced, target)
-            losses.append(weighted_loss.item())
-            if idx == 0:
-                overall_loss = weighted_loss
-            else:
-                overall_loss += weighted_loss
+                return loss_func(background_vad_logits, bg_target)
+            if getattr(loss_func, "uses_dist_preds", False):
+                return loss_func(dist_preds, batch or {})
+            if getattr(loss_func, "uses_batch", False):
+                return loss_func(enhanced, target, batch or {})
+            if getattr(loss_func, "uses_vad_target", False):
+                return loss_func(enhanced, target, vad_target=vad_target)
+            if getattr(loss_func, "uses_inactive_labels", False):
+                return loss_func(enhanced, target, inactive_labels=inactive_labels)
+            return loss_func(enhanced, target)
 
-        return overall_loss, losses
+        return self.reduce_losses(_invoke)
 
     def training_step(self, batch, batch_idx):
         batch = self.ensure_vad_targets(batch)
@@ -573,18 +560,7 @@ class EncPredClassBase(BaseLightningModule):
         return pred
 
     def compute_loss(self, pred: torch.Tensor, target: torch.Tensor):
-        overall_loss = []
-        losses = []
-        for idx, loss_func in enumerate(self.loss_func_list):
-            weighted = self.loss_func_list_w[idx]
-            weighted_loss = weighted * loss_func(pred, target)
-            losses.append(weighted_loss.item())
-            if idx == 0:
-                overall_loss = weighted_loss
-            else:
-                overall_loss += weighted_loss
-
-        return overall_loss, losses
+        return self.reduce_losses(lambda loss_func: loss_func(pred, target))
 
     def training_step(self, batch, batch_idx):
         noisy_speech = batch["noisy_speech"]

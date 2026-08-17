@@ -20,6 +20,7 @@ PureSound is a modular audio processing and deep learning framework for speech e
 | [puresound.streaming](streaming/index.md) | Streaming inference and ONNX Runtime deployment |
 | [puresound.metrics](metrics.md) | Audio quality evaluation metrics |
 | [puresound.utils](utils.md) | General utility functions |
+| `puresound.logging_setup` | Where the library's runtime output goes, and how to take it over |
 | [puresound.recipes](recipes.md) | High-level model initialization recipes |
 
 ## Architecture Overview
@@ -35,6 +36,7 @@ puresound/
 ├── streaming/      # Streaming inference runtimes
 ├── task/           # Task-specific datasets (NS, near-field voice isolation, SV, TSE)
 ├── third_party/    # Vendored research code (e.g. pytARD for low-frequency RIR simulation)
+├── logging_setup.py # Library logging contract (stdlib only; imported by __init__)
 ├── metrics.py      # Evaluation metrics
 ├── utils.py        # Utilities
 └── recipes.py      # Model construction recipes
@@ -48,3 +50,27 @@ puresound/
 - **Multi-Task Support**: Shared base classes for noise suppression (NS), speaker verification (SV), and target speaker extraction (TSE) — plus `puresound.task.voice_isolation`, the most actively developed recipe today. Voice isolation is its own task built on the shared NS synthesis skeleton (real-recording rows, `mix_mode`, turn-taking, auxiliary distance/DRR labels), not just a variant of generic NS — see [task/index.md](task/index.md).
 - **Flexible Masking**: Support for complex, real, polar, deep-filter, Wiener, and MVDR masks.
 - **Composable Augmentation**: Pluggable audio augmentation via `AudioEffectAugmentor`.
+
+## Library Output
+
+Everything the library says at runtime — corpus statistics, augmentor setup,
+checkpoint-load reports, warnings — goes through `logging` on the `puresound`
+logger, not `print`. The single exception is `on_test_epoch_end`, which prints
+the metric scores because those are the result of `--scoring`, not a note about
+it.
+
+Importing `puresound` attaches one stdout handler by default, so scripts that
+never configure logging keep the output they had. To take control:
+
+| Goal | How |
+|---|---|
+| Silence the library entirely | `PURESOUND_LOG_AUTOCONFIG=0` in the environment |
+| Keep warnings, drop progress chatter | `logging.getLogger("puresound").setLevel(logging.WARNING)` |
+| Route it yourself | `puresound.logging_setup.configure_library_logging(level=..., stream=..., force=True)` |
+
+Records are filtered to rank zero, so a multi-GPU run prints the corpus
+statistics once rather than once per rank. A record that genuinely belongs on
+every rank opts out with `extra={"all_ranks": True}`. Rank is read from the
+launcher's environment (`RANK` / `LOCAL_RANK` / `SLURM_PROCID`) rather than
+`torch.distributed`, because most of this output is emitted while datasets are
+built — before Lightning initializes the process group.

@@ -1,3 +1,4 @@
+import logging
 import random
 from typing import Optional, Tuple
 
@@ -6,6 +7,9 @@ import torchaudio
 
 from .dsp import wav_resampling
 from .volume import normalize_waveform, rescale_waveform
+
+
+logger = logging.getLogger(__name__)
 
 
 class AudioIO:
@@ -57,7 +61,7 @@ class AudioIO:
 
         if normalized:
             if target_lvl is not None and verbose:
-                print(
+                logger.info(
                     "You choosed the waveform normalized, the target_lvl would not be used."
                 )
                 wav = normalize_waveform(wav=wav, amp_type="avg")
@@ -69,10 +73,10 @@ class AudioIO:
             avg_amp_rescale = torch.mean(torch.abs(wav), dim=-1)
 
         if verbose:
-            print(f"Open file: {f_path}")
-            print(f"Avg_amp: {avg_amp_ori.item()}")
+            logger.info("Open file: %s", f_path)
+            logger.info("Avg_amp: %s", avg_amp_ori.item())
             if not normalize_waveform and target_lvl is not None:
-                print(f"RMS_rescale: {avg_amp_rescale.item()}")
+                logger.info("RMS_rescale: %s", avg_amp_rescale.item())
 
         return wav, int(sr)
 

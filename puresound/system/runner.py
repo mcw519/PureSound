@@ -26,6 +26,7 @@ Wiring a recipe::
 """
 
 from __future__ import annotations
+import logging
 
 import argparse
 from dataclasses import dataclass
@@ -43,6 +44,9 @@ from puresound.recipes import init_loss_func, init_siso_model, load_siso_recipe_
 from puresound.system.optim import create_optimizer_and_scheduler
 from puresound.task.sampler import SpeakerSampler
 from puresound.utils import create_folder
+
+
+logger = logging.getLogger(__name__)
 
 
 def configure_torch_backends() -> None:
@@ -275,16 +279,22 @@ def run_training(args, cfg: RecipeConfig, train_dataloader, valid_dataloader) ->
     lightning_model.register_warmup_step(cfg.scheduler["warmup_step"])
 
     if args.pretrained_ckpt_path:
-        print("Loading the pretrained params only.")
+        logger.info("Loading the pretrained params only.")
         state_dict = torch.load(args.pretrained_ckpt_path, map_location="cpu")["state_dict"]
         # strict=False: warm-starting a model that ADDED params (e.g. new aux heads for
         # a curriculum stage) must keep those new params at init rather than error on
         # missing keys. Mismatches are reported.
         missing, unexpected = lightning_model.load_state_dict(state_dict, strict=False)
         if missing:
-            print(f"  [pretrained] {len(missing)} new param(s) kept at init: {missing[:4]}{' ...' if len(missing) > 4 else ''}")
+            logger.info(
+                "  [pretrained] %d new param(s) kept at init: %s%s",
+                len(missing), missing[:4], " ..." if len(missing) > 4 else "",
+            )
         if unexpected:
-            print(f"  [pretrained] {len(unexpected)} ckpt param(s) ignored: {unexpected[:4]}{' ...' if len(unexpected) > 4 else ''}")
+            logger.info(
+                "  [pretrained] %d ckpt param(s) ignored: %s%s",
+                len(unexpected), unexpected[:4], " ..." if len(unexpected) > 4 else "",
+            )
 
     lr_monitor = LearningRateMonitor(logging_interval="epoch")
     ckpt_monitor = ModelCheckpoint(

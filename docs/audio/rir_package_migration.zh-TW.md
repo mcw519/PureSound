@@ -122,9 +122,12 @@ canonical path 匯入。這份指南就是舊名到新名的對照表，之所�
 
 有兩樣東西只存在於新的一側：
 
-- **`puresound.audio.rir.api`** ——一個穩定的 façade，re-export 了大多數
-  呼叫端會用到的 37 個名稱。用起來方便，但它會載入整個 renderer stack
-  （包括 `torch`）；如果在意匯入成本，請直接匯入某一層的模組。
+- **`puresound.audio.rir.api`** ——一個方便用的集合，re-export 了 37 個常用
+  名稱。**它不是穩定性邊界**：沒有任何地方 import 它，而且頂層
+  `egs/rir_generation` 腳本需要的 40 個符號裡有 25 個它沒有。請直接匯入你要的
+  那一層；真正被強制執行的契約是 `contracts.py` 與
+  `test/test_rir_r0_import_boundaries.py` 的 LAYER_RANK 表。從這裡匯入還會載入
+  整個 renderer stack（含 `torch`）。
 - **`puresound.audio.rir.contracts`** —— `RIRArray`、`RenderContext`、
   `BackendCapabilities`、`validate_rir_metadata`、`resolve_sound_speed`，
   以及 dtype／layout 常數。這些把程式碼原本就在遵守的慣例正式定型

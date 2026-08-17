@@ -1,3 +1,4 @@
+import logging
 import random
 from copy import deepcopy
 from typing import Dict, Optional, Tuple
@@ -10,6 +11,9 @@ from puresound.audio.dsp import wav_resampling
 from puresound.audio.noise import add_bg_noise
 from puresound.audio.volume import rescale_waveform
 from puresound.dataset.dynamic_base import DynamicBaseDataset
+
+
+logger = logging.getLogger(__name__)
 
 
 def if_none_else(a, b):
@@ -67,24 +71,26 @@ class TargetSpeakerExtractDataset(DynamicBaseDataset):
             self.enroll_augmentor.load_bg_noise_from_folder(
                 self.enroll_speech_args["add_noise"]["noise_folder"]
             )
-            print(
-                f"Enroll-Augmentor finished load {len(self.enroll_augmentor.bg_noise.keys())} noises"
+            logger.info(
+                "Enroll-Augmentor finished load %d noises",
+                len(self.enroll_augmentor.bg_noise.keys()),
             )
 
         if self.enroll_speech_args["add_reverb"]["used"]:
             simulator_args = self.enroll_speech_args["add_reverb"].get("simulator")
             if simulator_args and simulator_args.get("used"):
                 self.enroll_augmentor.init_room_simulator(simulator_args)
-                print("Enroll-Augmentor initialized physics-based room simulator")
+                logger.info("Enroll-Augmentor initialized physics-based room simulator")
             else:
                 self.enroll_augmentor.load_rir_from_folder(
                     self.enroll_speech_args["add_reverb"]["rir_folder"]
                 )
-                print(
-                    f"Enroll-Augmentor finished load {len(self.enroll_augmentor.rir.keys())} rirs"
+                logger.info(
+                    "Enroll-Augmentor finished load %d rirs",
+                    len(self.enroll_augmentor.rir.keys()),
                 )
 
-        print("----" * 30)
+        logger.info("----" * 30)
 
     def get_enroll_speech(self, target_speaker, batch_sr):
         # Enrollment speech

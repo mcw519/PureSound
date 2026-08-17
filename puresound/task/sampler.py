@@ -1,9 +1,13 @@
+import logging
 import math
 import random
 from collections import defaultdict
 from typing import Dict, List, Optional
 
 import torch.distributed as dist
+
+
+logger = logging.getLogger(__name__)
 
 
 def _distributed_rank_world() -> tuple[int, int]:
@@ -61,8 +65,9 @@ class SpeakerSampler:
         if n_spks > len(self.spk_pool):
             self.n_per = math.ceil((n_spks * n_per) / len(self.spk_pool))
             self.n_spks = len(self.spk_pool)
-            print(
-                f"Sample larger than population, reset it to n_spk={self.n_spks} and n_per={self.n_per}."
+            logger.warning(
+                "Sample larger than population, reset it to n_spk=%s and n_per=%s.",
+                self.n_spks, self.n_per,
             )
 
         if fast_sampling:

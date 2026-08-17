@@ -1,3 +1,4 @@
+import logging
 from typing import Dict, List, Optional, Tuple
 
 import torch
@@ -8,6 +9,9 @@ from .conv_tasnet import TCN, GatedTCN
 from .lobe.activation import get_activation
 from .lobe.norm import get_norm, iLN
 from .lobe.rnn import FSMN, ConditionFSMN
+
+
+logger = logging.getLogger(__name__)
 
 
 class Unet(nn.Module):
@@ -349,7 +353,7 @@ class UnetTcn(Unet):
         if self.tcn_layer.lower() == "normal":
             tcn_cls = TCN
         elif self.tcn_layer.lower() == "gated":
-            print("GatedTCN would ignore dconv_norm configuration.")
+            logger.warning("GatedTCN would ignore dconv_norm configuration.")
             tcn_cls = GatedTCN
         else:
             raise ValueError(

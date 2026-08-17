@@ -1,9 +1,13 @@
-from typing import Any, List
+import logging
+from typing import Any, Callable, List, Optional
 
 import torch.nn as nn
 from lightning.pytorch import LightningModule
 
 from .logger import Logging
+
+
+logger = logging.getLogger(__name__)
 
 
 class BaseLightningModule(LightningModule):
@@ -36,6 +40,39 @@ class BaseLightningModule(LightningModule):
     ):
         self.loss_func_list = loss_func_list
         self.loss_func_list_w = loss_func_list_weights
+
+    def reduce_losses(
+        self,
+        invoke: Callable[[nn.Module], Any],
+        loss_funcs: Optional[nn.ModuleList] = None,
+        weights: Optional[List] = None,
+    ):
+        """Weighted sum of the registered losses, plus each one's scalar value.
+
+        ``invoke(loss_func)`` returns that loss's unweighted tensor. That call is
+        the only part that differs between modules -- SISO routes backbone side
+        outputs by dispatch flag, MISO does not, and the classifier heads take
+        ``(pred, target)`` -- so it is the only part left to the caller.
+
+        ``loss_funcs`` / ``weights`` default to the registered pair; pass them
+        explicitly for a secondary set (e.g. MISO's conditional-branch losses).
+
+        Returns ``(total, per_loss_values)``. ``total`` is None for an empty
+        loss list, which is a misconfigured recipe either way.
+        """
+        loss_funcs = self.loss_func_list if loss_funcs is None else loss_funcs
+        weights = self.loss_func_list_w if weights is None else weights
+
+        total = None
+        values = []
+        for loss_func, weight in zip(loss_funcs, weights):
+            weighted_loss = weight * invoke(loss_func)
+            values.append(weighted_loss.item())
+            # Out of place: the loop this replaces accumulated with `+=` onto
+            # the first weighted tensor, mutating it. Same value and same
+            # gradient, one less in-place op on a graph tensor.
+            total = weighted_loss if total is None else total + weighted_loss
+        return total, values
 
     def register_gpu_vad_labeler(self, labeler: Any):
         """Attach a batched GPU VAD labeler used to build ``vad_target`` from
@@ -122,7 +159,13 @@ class BaseLightningModule(LightningModule):
         self.puresound_logging.clear(key="epoch_train_loss")
 
     def on_test_epoch_end(self):
-        """Show the average metric scores."""
+        """Show the average metric scores.
+
+        `print`, not the logger, and deliberately the only one left in the
+        library: these numbers are what `--scoring` was RUN for, not a progress
+        note about it. Routing them through logging would let someone silence
+        the chatter (`setLevel(WARNING)`) and lose their results with it.
+        """
         scores = self.puresound_logging.average()
         for key in scores:
             print(key, scores[key].item())
@@ -155,11 +198,11 @@ class BaseLightningModule(LightningModule):
 
         for name, param in loaded_state.items():
             if name not in self_state:
-                print(f"{name} is not in the model.")
+                logger.warning("%s is not in the model.", name)
                 continue
 
             if "loss_func_list" in name and not load_loss_func:
-                print(f"Not loading {name} because load_loss_func={load_loss_func}")
+                logger.info("Not loading %s because load_loss_func=%s", name, load_loss_func)
                 check_key.remove(name)
                 continue
 
@@ -167,6 +210,6 @@ class BaseLightningModule(LightningModule):
             check_key.remove(name)
 
         if check_key == []:
-            print("Loaded params is ok.")
+            logger.info("Loaded params is ok.")
         else:
-            print(f"Needed param name but missing: {check_key}")
+            logger.warning("Needed param name but missing: %s", check_key)

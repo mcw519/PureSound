@@ -44,7 +44,8 @@ English version: `rir_realism_algorithm.md`
 | `puresound/audio/rir/calibration/` | M5 量測 campaign 契約與反演校準 |
 | `puresound/audio/rir/bank/` | M6 訓練 bank：契約、QC、release、評估、產線決策、實測 ingest |
 
-公開入口：`puresound.audio.rir.api` 重匯出穩定表面；
+入口：`puresound.audio.rir.api` 是方便用的集合，不是穩定性邊界（見
+`rir_package_migration.zh-TW.md`）——請直接匯入你要的那一層。
 `render/hybrid.py` 只有一個公開函式 `generate_hybrid_rir`（orchestration）。
 `render/backend.py` 定義 backend protocol 與 `BackendCapabilities`
 （含決定性宣告）。

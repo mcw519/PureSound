@@ -1,9 +1,13 @@
+import logging
 import io
 import os
 from typing import Dict, List, Optional
 
 import torch
 import yaml
+
+
+logger = logging.getLogger(__name__)
 
 
 def str2bool(v: str):
@@ -105,7 +109,7 @@ def create_folder(folder_name: str) -> None:
         if not os.path.isdir(folder_name):
             os.makedirs(folder_name, exist_ok=True)
     except FileExistsError:
-        print(f"File exists passing it: {folder_name}")
+        logger.debug("File exists passing it: %s", folder_name)
 
 
 def convolve(x: torch.Tensor, filter: torch.Tensor) -> torch.Tensor:

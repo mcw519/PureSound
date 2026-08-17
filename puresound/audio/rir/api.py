@@ -1,13 +1,31 @@
-"""Stable public entry point for the RIR domain.
+"""Convenience re-exports of the RIR symbols most callers reach for.
 
-Import from here unless you need something narrower.  The layer modules
-(``scene``, ``physics``, ``path_events``, ``render``, ``metrics``,
-``calibration``, ``bank``) remain importable directly and are the right choice
-when you want to avoid pulling in a dependency you do not need — importing
-this module loads the renderer stack, including ``torch``.
+**This is not a stability boundary, and importing from here buys you nothing a
+direct import does not.** It used to claim to be the package's stable public
+entry point. Measured against how the package is actually used, that claim was
+empty in both directions:
 
-Anything not re-exported here is either an internal helper or a stage-specific
-tool; reach into the layer module for those, and expect less stability.
+* Nothing imports it. Every caller -- the seven top-level scripts in
+  ``egs/rir_generation``, its ``tools/`` and ``phases/``, and the tests --
+  imports the layer module directly. A promise with no consumer has nothing
+  enforcing it, so it would have rotted silently.
+* It cannot serve them anyway. Of the 40 symbols the top-level scripts need,
+  25 are absent here; for ``phases/`` it is 173 of 191. Those are the bank
+  schemas, scene recipes and impedance solvers this module deliberately called
+  "internal helpers or stage-specific tools" -- which is to say the line it drew
+  and the line callers need are different lines.
+
+What actually holds this package together is one layer below and is mechanical:
+``contracts.py`` for the data contract, and the LAYER_RANK table in
+``test/test_rir_r0_import_boundaries.py``, which fails the build on a
+cross-layer import and keeps the schema/metrics modules importable without
+torch. Depend on those.
+
+So: import from the layer module you mean. Reach here only when you want
+several common names at once and do not mind that importing it loads the whole
+renderer stack, torch included. If ``rir/`` ever ships as a standalone package,
+design that surface then -- from what the consumers turn out to need, not from
+this list.
 """
 
 from __future__ import annotations

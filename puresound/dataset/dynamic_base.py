@@ -1,3 +1,4 @@
+import logging
 import random
 from collections import defaultdict
 from copy import deepcopy
@@ -11,6 +12,9 @@ from puresound.audio.io import AudioIO
 from puresound.audio.noise import add_bg_white_noise
 from puresound.audio.vad import EnergyVADLabeler, create_vad_labeler, frame_count
 from puresound.dataset.parser import MetafileParser
+
+
+logger = logging.getLogger(__name__)
 
 
 class ForegroundReverb(NamedTuple):
@@ -172,8 +176,8 @@ class DynamicBaseDataset(torch.utils.data.Dataset):
         """
         Generating the metadata, and also removed speaker whos utterances number less than min_utts_in_spk
         """
-        print("----" * 30)
-        print("Dataset creating and filtering")
+        logger.info("----" * 30)
+        logger.info("Dataset creating and filtering")
 
         meta = MetafileParser.read_from_metafile(
             f_path=metafile_path, use_speaker_as_key=True
@@ -189,7 +193,7 @@ class DynamicBaseDataset(torch.utils.data.Dataset):
                     del meta[spk]["utts"][utt]
                     remove_key_by_length += 1
 
-        print(
+        logger.info(
             f"remove {remove_key_by_length} utts which utts duration less than {min_utt_length} seconds."
         )
 
@@ -201,7 +205,7 @@ class DynamicBaseDataset(torch.utils.data.Dataset):
         for spk in delete_spk:
             del meta[spk]
 
-        print(
+        logger.info(
             f"Delete {len(delete_spk)} speakers which less than {min_utts_in_spk} utterances."
         )
 
@@ -244,9 +248,9 @@ class DynamicBaseDataset(torch.utils.data.Dataset):
                 gender_spks["other"].append(spk)
 
         for cid in all_corpus_id:
-            print(f"{cid:>10}:           male speakers = {len(gender_meta['m'][cid])}")
-            print(f"{cid:>10}:         female speakers = {len(gender_meta['f'][cid])}")
-            print(
+            logger.info(f"{cid:>10}:           male speakers = {len(gender_meta['m'][cid])}")
+            logger.info(f"{cid:>10}:         female speakers = {len(gender_meta['f'][cid])}")
+            logger.info(
                 f"{cid:>10}:  unknow gender speakers = {len(gender_meta['other'][cid])}"
             )
 
@@ -264,12 +268,12 @@ class DynamicBaseDataset(torch.utils.data.Dataset):
             total_male_speakers += len(gender_meta["m"][cid])
             total_female_speakers += len(gender_meta["f"][cid])
 
-        print(f"Overall have {len(self.all_corpus_id)} corpus, {self.all_corpus_id}")
-        print(f"Overall have {total_male_speakers} male speakers")
-        print(f"Overall have {total_female_speakers} female speakers")
-        print(f"Missed gender information: {missed_gender_info}")
-        print(f"Total speakers: {len(meta.keys())}")
-        print("----" * 30)
+        logger.info(f"Overall have {len(self.all_corpus_id)} corpus, {self.all_corpus_id}")
+        logger.info(f"Overall have {total_male_speakers} male speakers")
+        logger.info(f"Overall have {total_female_speakers} female speakers")
+        logger.info(f"Missed gender information: {missed_gender_info}")
+        logger.info(f"Total speakers: {len(meta.keys())}")
+        logger.info("----" * 30)
 
         # Generate meta and let SR as key
         sr_meta = defaultdict(lambda: defaultdict(list))
@@ -291,10 +295,10 @@ class DynamicBaseDataset(torch.utils.data.Dataset):
             if len(sr_meta[_sr].keys()) == 0:
                 del sr_meta[_sr]
 
-        print(f"Overall have {len(sr_meta.keys())} sample rate in all corpus")
+        logger.info(f"Overall have {len(sr_meta.keys())} sample rate in all corpus")
         for key in sorted(sr_meta.keys()):
-            print(f"{key:>8}: number of speakers = {len(sr_meta[key])}")
-        print("----" * 30)
+            logger.info(f"{key:>8}: number of speakers = {len(sr_meta[key])}")
+        logger.info("----" * 30)
         return meta, gender_meta, gender_spks, sr_meta
 
     def init_augmentor(self):
@@ -303,7 +307,7 @@ class DynamicBaseDataset(torch.utils.data.Dataset):
             self.augmentor.load_bg_noise_from_folder(
                 self.augmentation_noise_args["noise_folder"]
             )
-            print(
+            logger.info(
                 f"Augmentor finished load {len(self.augmentor.bg_noise.keys())} noises"
             )
 
@@ -325,7 +329,7 @@ class DynamicBaseDataset(torch.utils.data.Dataset):
                     pregenerated_config["usage_role"] = self.dataset_role
                     self.augmentor.init_room_bank(pregenerated_config)
                     mix = getattr(self.augmentor.room_bank, "describe", None)
-                    print(
+                    logger.info(
                         "Augmentor initialized pre-generated RIR bank "
                         f"(kind={self.augmentor.room_bank_kind}, "
                         f"items={len(self.augmentor.room_bank)}"
@@ -334,12 +338,12 @@ class DynamicBaseDataset(torch.utils.data.Dataset):
                     )
                 else:
                     self.augmentor.init_room_simulator(simulator_args)
-                    print("Augmentor initialized physics-based room simulator")
+                    logger.info("Augmentor initialized physics-based room simulator")
             else:
                 self.augmentor.load_rir_from_folder(
                     self.augmentation_reverb_args["rir_folder"]
                 )
-                print(f"Augmentor finished load {len(self.augmentor.rir.keys())} rirs")
+                logger.info(f"Augmentor finished load {len(self.augmentor.rir.keys())} rirs")
 
             drr_contrast_args = self.augmentation_reverb_args.get("drr_contrast")
             if drr_contrast_args and drr_contrast_args.get("used"):
@@ -355,12 +359,12 @@ class DynamicBaseDataset(torch.utils.data.Dataset):
                         f"random prob={knob['prob']}, near +{knob['near_boost_db']} dB, "
                         f"far -{knob['far_cut_db']} dB"
                     )
-                print(
+                logger.info(
                     "Augmentor initialized DRR-contrast augmentation "
                     f"({detail}, window {knob['direct_window_ms']} ms)"
                 )
 
-        print("----" * 30)
+        logger.info("----" * 30)
 
     def should_apply_source_level_reverb(self) -> bool:
         if not (self.augmentation_reverb_args and self.augmentation_reverb_args["used"]):
@@ -517,10 +521,11 @@ class DynamicBaseDataset(torch.utils.data.Dataset):
         while target_speech.abs().mean() == 0:
             if timeout < 5:
                 timeout += 1
-                print(
-                    f"Open an empty segment: {self.meta[target_speaker_name]['utts'][tgt_key]['path']}."
+                logger.warning(
+                    "Open an empty segment: %s.",
+                    self.meta[target_speaker_name]["utts"][tgt_key]["path"],
                 )
-                print(f"Retry {timeout} times.")
+                logger.warning("Retry %d times.", timeout)
                 target_speech, sr, (target_speaker_name, tgt_key) = (
                     self.choose_an_utterance_by_speaker_name(
                         target_speaker_name=target_speaker_name,

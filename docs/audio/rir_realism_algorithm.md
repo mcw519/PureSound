@@ -48,7 +48,9 @@ Package layout:
 | `puresound/audio/rir/calibration/` | M5 measurement-campaign contract and inverse calibration |
 | `puresound/audio/rir/bank/` | M6 training bank: contract, QC, release, evaluation, production decision, measured ingest |
 
-Public entry point: `puresound.audio.rir.api` re-exports the stable surface;
+Entry points: `puresound.audio.rir.api` is a convenience bundle, not a
+stability boundary (see `rir_package_migration.md`) — import the layer module
+you mean.  
 `render/hybrid.py` exposes exactly one public function, `generate_hybrid_rir`
 (orchestration). `render/backend.py` defines the backend protocol and
 `BackendCapabilities` (including the determinism declaration).

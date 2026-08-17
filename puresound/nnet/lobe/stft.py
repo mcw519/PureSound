@@ -1,8 +1,12 @@
+import logging
 from typing import Optional
 
 import numpy as np
 import torch
 from torch.nn.functional import fold
+
+
+logger = logging.getLogger(__name__)
 
 
 def create_fourier_kernels(
@@ -95,7 +99,7 @@ def create_fourier_kernels(
             wsin[k, 0, :] = np.sin(2 * np.pi * k * s / n_fft)
             wcos[k, 0, :] = np.cos(2 * np.pi * k * s / n_fft)
     else:
-        print("Please select the correct frequency scale, 'linear' or 'log'")
+        logger.warning("Please select the correct frequency scale, 'linear' or 'log'")
 
     return wsin.astype(np.float32), wcos.astype(np.float32), bins2freq, binslist
 
