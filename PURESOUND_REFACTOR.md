@@ -379,14 +379,18 @@ LightningModule 的 `forward()` 裡。docstring 誠實標了 "inference-only kno
 
 ### P2 — 中風險，需 bit-identical 驗證（約 3–5 天）
 
-**硬前提**：先寫一支「RNG 指紋」測試——固定 seed 跑 `VoiceIsolationDataset` 前 32 個
-item，把 `noisy_speech`/`clean_speech`/全部 metadata scalar 的 sha256 存成 golden
-fixture。**沒有這支 test 就不要開始 P2**：`ns.py` 的正確性有一半在 RNG 呼叫順序上，那是
-任何 code review 都看不出來的。
+**硬前提（已完成，2026-08-17）**：`ns.py` 的正確性有一半在 RNG 呼叫順序與「缺 key 時
+哪個預設值開火」上，兩者讀 code 都看不出來。現在有兩件工具：
 
-P1 期間已經做出一支可用的原型（見執行紀錄；1187 個雜湊、約 6 秒）。C6 / P1-6 修完後
-它兩條路徑都跨 `PYTHONHASHSEED` 穩定，所以 promote 成 repo 內的 test 只差把語料
-fixture 從 scratchpad 移進 `test/`。
+- `test/test_utils/test_synthesis_fingerprint.py`（2 項、約 6 秒）——**自我驗證、不需
+  golden 檔**。斷言「把每個旋鈕寫滿」與「只寫必填」合成出相同音訊，因為 model 預設值
+  就該等於讀取點原本內聯的值；以及同一 seed 兩次結果相同。
+- `tools/rng_fingerprint.py`——refactor 用的 before/after 比對。測試抓不到「兩份 config
+  一起移動」的變更（刪掉一個 stage、換兩個 RNG 抽取順序），那要靠基準比對。
+
+為什麼不放 golden 雜湊進測試：任何**刻意**的合成變更都得重生 golden 檔，而 reviewer
+無法分辨「合理重生」與「改壞了才重生」。before/after 本質上是 refactor 當下的工具，
+不是常駐斷言。
 
 | # | 事項 | 做法 |
 |---|---|---|
@@ -693,6 +697,11 @@ git tracked（可由版本歷史復原），其餘 24 份原本受 `.gitignore` 
 1. **P2-6（清死旋鈕與死 payload）**——schema 已經把 33 份 config 的問題全部列出來了；
    `added_noise` 那塊（4 組 flag 重播、約 90 行、無人消費）也可以一起處理。
    此項已完成，包含現役設定與無法執行的 backup 設定。
-2. P2-1（拆裝置鏈）動之前先把 RNG 指紋 harness 入庫成 test——C6 修完後已無 flaky 障礙，
-   只差搬 fixture。先做 2-6 再做 2-1 會少做一半工：2-1 要重寫的正是 `added_noise` 那段。
-3. P1 已全部完成。
+2. **P2-6 的另一半仍在**：`added_noise` 在 `ns.py` 有 29 處引用、4 組跨 159–212 行的
+   flag 重播，而 `NoiseSuppressionCollateFunc` 從不把它收進 batch，全 repo 沒有任何地方
+   讀 `batch["added_noise"]`。約 90 行可刪。刪除用 `tools/rng_fingerprint.py` 驗——它不
+   影響任何抽樣，但**必須實測**，因為它會經過 `apply_clipping_distortion`，要確認那條
+   路徑真的不耗 RNG。
+3. P2-1（拆裝置鏈）前置已備齊。先做 2-6 再做 2-1 會少做一半工：2-1 要重寫的正是
+   `added_noise` 那段。
+4. P1 已全部完成。
