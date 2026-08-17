@@ -12,38 +12,27 @@ model / loss list。Model 跟 loss 的型別都是用 `getattr` 在 `puresound.n
 `egs/voice_isolate/config/train_dpcrn.yaml`——這正是已發佈的 voice-isolate
 checkpoint 背後所用的 config。
 
-## `load_siso_recipe_config(f_path) -> Tuple`
+## 載入 recipe
 
-把一份 recipe YAML 解析成一個依位置排列的 20-tuple。呼叫端應該只拆出自己
-需要的欄位，並用 `*` 這種寫法去承接未來新增的欄位——這個 tuple 只會用
-append 的方式成長：
-
-| index | field | yaml section |
-|---|---|---|
-| 0 | corpus | `dataset` |
-| 1 | trainer | `trainer`（含 `lightning_trainer_args`） |
-| 2 | optimizer | `optimizer` |
-| 3 | scheduler | `scheduler` |
-| 4 | loss | `loss_func`（list） |
-| 5 | model | `model`（含 `lightning_module`） |
-| 6–13 | augmentation blocks | `augmentation_speech`、`_noise`、`_reverb`、`_speed`、`_ir_response`、`_src`、`_hpf`、`_volume` |
-| 14–16 | 其他 blocks | `augmentation_codec`、`_packet_loss`、`_target_absent` |
-| 17 | vad label | `vad_label` |
-| 18–19 | 真實錄音 blocks | `augmentation_realfar`、`augmentation_realnear`（只有 voice-isolation 會用到） |
-
-被 `used: False`（或整個沒寫）擋掉的 block 會變成 `None`——但**只有表格裡
-大部分的欄位是這樣**。精確地說：index 6–11、14–16、18–19 都會經過一個內部
-的 `_enabled_config()` 輔助函式，檢查 `item.get("used")`，假值就回傳
-`None`。而 index **12、13、17**（`augmentation_hpf`、`augmentation_volume`、
-`vad_label`）則是直接用單純的 `config.get(key)` 讀出來——只有當 YAML 裡
-根本*沒有這個 key* 時才會是 `None`；如果這個 block 有寫、但內部標成
-`used: False`，這三個欄位還是會照樣把整個 block 原封不動回傳（跟其餘
-十七個不一樣）。如果你要直接拿這三個欄位其中之一來用，得自己檢查
-`used`。
+Config 載入在 [`puresound.config`](configuration.md)，不在這裡。本模組只負責把
+一份已驗證的 recipe 所指名的物件建出來。
 
 ```python
-(corpus, trainer, _opt, _sch, _loss, model_dict, *rest) = load_siso_recipe_config(path)
+from puresound.config import load_recipe
+
+recipe = load_recipe(
+    path, expected_task="voice_isolation", expected_purpose="train"
+)
+model = init_siso_model(recipe.model)
+loss_list, loss_weights = init_loss_func(recipe.loss_func)
 ```
+
+`load_siso_recipe_config` 與它那個 20 元素的 tuple 已經移除。那個 tuple 存在的
+理由是讓呼叫端可以「解開 config」；typed recipe 自己就帶名字，所以
+`recipe.dataset.train_metafile` 取代 index 0，而 `recipe.augmentation_kwargs()`
+一次取代 index 6–19。哪些區塊在停用時會變成 `None`，現在由
+`BaseRecipe.augmentation_kwargs` 一處決定，而不是看某個 index 當初走的是
+`_enabled_config` 還是 `config.get`。
 
 ## `init_siso_model(model_dict) -> LightningModule`
 

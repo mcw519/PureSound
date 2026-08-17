@@ -35,6 +35,7 @@ SpeakerEmbeddingDataset(
     augmentation_hpf_args=None,
     augmentation_volume_args=None,
     dataset_role: str = "train",
+    pipeline_role: Optional[str] = None,
 )
 ```
 

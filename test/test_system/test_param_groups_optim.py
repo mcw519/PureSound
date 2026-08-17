@@ -4,6 +4,7 @@ import torch.nn as nn
 
 from puresound.nnet import ConvEncDec, FeatureEncoder
 from puresound.nnet.lobe.heads import VADHead
+from puresound.config.recipe import OptimizerConfig, SchedulerConfig
 from puresound.system.optim import create_optimizer_and_scheduler
 from puresound.system.siso import EncDecMaskBase
 
@@ -34,8 +35,10 @@ def test_param_groups_carry_lr_factors_into_optimizer():
 
     optimizer, scheduler = create_optimizer_and_scheduler(
         groups,
-        {"type": "AdamW", "learning_rate": 1e-3, "args": {"weight_decay": 0.0}},
-        {"type": "CosineAnnealingWarmRestarts", "args": {"T_0": 20}},
+        OptimizerConfig(type="AdamW", learning_rate=1e-3, args={"weight_decay": 0.0}),
+        SchedulerConfig(
+            type="CosineAnnealingWarmRestarts", warmup_step=0, args={"T_0": 20}
+        ),
     )
     lrs = [g["lr"] for g in optimizer.param_groups]
     assert lrs == [1e-4, 5e-4, 1e-3]          # learning_rate * lr_factor, group order

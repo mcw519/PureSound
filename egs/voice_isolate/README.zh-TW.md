@@ -104,8 +104,8 @@ backbone 本身，而非資料或 loss——TS-Conformer 無法 overfit 最難�
 （complex ratio mask）之後立刻清掉了每一個 in-domain bucket。後續一次
 「冷啟動 + 全量 RIR bank + `target_absent`」的組合，在真實域引發了過度抑制的
 災難性結果（Dawn WER 0.626，SI-SDRi −9.53）——這就是目前 pipeline 採用分級
-RIR curriculum、且 `target_absent: OFF` 的原因。這段歷史中所有被取代的
-config 都保留在 `config/exp/backup/` 以利重現。
+RIR curriculum、且 `target_absent: OFF` 的原因。已被取代且無法執行的 config 已從
+現行設定樹移除；原始內容仍可由版本控制歷史取得。
 
 ## 評估
 

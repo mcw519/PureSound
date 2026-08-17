@@ -456,20 +456,13 @@ def create_streaming_dpcrn_model(system_model: nn.Module) -> StreamingDpcrnFrame
 
 
 def load_streaming_dpcrn_model(config_path: str | Path, checkpoint_path: str | Path | None = None) -> StreamingDpcrnFrameModel:
-    from puresound.recipes import init_siso_model, load_siso_recipe_config
+    from puresound.config import load_recipe
+    from puresound.recipes import init_siso_model
 
     config_path = Path(config_path)
     config = load_hparam(str(config_path))
     validate_streaming_dpcrn_config(config)
-    (
-        _dataset,
-        _trainer,
-        _optim,
-        _scheduler,
-        _loss,
-        model_dict,
-        *_rest,
-    ) = load_siso_recipe_config(str(config_path))
+    model_dict = load_recipe(config_path).model
     system_model = init_siso_model(model_dict)
     if checkpoint_path:
         checkpoint = torch.load(str(checkpoint_path), map_location="cpu")

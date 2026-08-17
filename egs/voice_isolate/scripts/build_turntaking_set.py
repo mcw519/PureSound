@@ -79,30 +79,41 @@ def main() -> None:
     os.chdir(REPO / "egs/voice_isolate")
     import torch
     from puresound.audio.io import AudioIO
-    from puresound.recipes import load_siso_recipe_config
+    from puresound.config import load_recipe, with_overrides
     import egs.voice_isolate.main as M
 
-    cfg = load_siso_recipe_config(str(Path(args.config_path).resolve()))
-    (corpus, trainer, _opt, _sch, _loss, _md, a_sp, a_no, a_rv, a_spd,
-     a_ir, a_src, a_hpf, a_vol, a_cod, a_pl, a_ta, a_vad, *rest) = cfg
-    a_realfar = rest[0] if len(rest) > 0 else None
-    a_realnear = rest[1] if len(rest) > 1 else None
-    trainer["num_workers"] = 0
+    recipe = load_recipe(
+        str(Path(args.config_path).resolve()),
+        expected_task="voice_isolation",
+        expected_purpose="train",
+    )
+    dataset_overrides = {}
     if args.length_seconds is not None:
-        corpus["training_length_seconds"] = float(args.length_seconds)
+        dataset_overrides["training_length_seconds"] = float(args.length_seconds)
+    reverb_overrides = {}
     if args.rir_folder is not None:
-        a_rv["simulator"]["pregenerated"]["folder"] = args.rir_folder
-    a_sp["overlap_control"]["turn_taking_prob"] = 1.0  # force turn-taking on every row
-    a_sp["prob"] = 1.0                                  # always add an interferer
-    if a_ta:
-        a_ta["used"] = False  # keep target present so the pair is audible
+        reverb_overrides = {
+            "simulator": {"pregenerated": {"folder": args.rir_folder}}
+        }
+    recipe = with_overrides(
+        recipe,
+        trainer={"num_workers": 0},
+        dataset=dataset_overrides,
+        # force turn-taking on every row, and always add an interferer
+        augmentation_speech={"prob": 1.0, "overlap_control": {"turn_taking_prob": 1.0}},
+        **({"augmentation_reverb": reverb_overrides} if reverb_overrides else {}),
+        # keep the target present so the pair is audible
+        **(
+            {"augmentation_target_absent": {"used": False}}
+            if recipe.augmentation_target_absent is not None
+            else {}
+        ),
+    )
 
     torch.manual_seed(args.seed)
-    _tr, valid_dl = M.init_dataloader(
-        corpus, trainer, a_sp, a_no, a_rv, a_spd, a_ir, a_src, a_hpf,
-        a_vol, a_cod, a_pl, a_ta, a_vad, a_realfar, a_realnear)
+    _tr, valid_dl = M.init_dataloader(recipe)
 
-    sr = int(corpus.get("target_sample_rate", 16000))
+    sr = int(recipe.dataset.target_sample_rate or 16000)
     out = Path(args.out_dir)
     out.mkdir(parents=True, exist_ok=True)
     manifest = open(out / "manifest.jsonl", "w")

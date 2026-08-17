@@ -21,6 +21,7 @@ PureSound is a modular audio processing and deep learning framework for speech e
 | [puresound.metrics](metrics.md) | Audio quality evaluation metrics |
 | [puresound.utils](utils.md) | General utility functions |
 | `puresound.logging_setup` | Where the library's runtime output goes, and how to take it over |
+| [`puresound.config`](configuration.md) | Pydantic task recipes, capability models, migration, and validation |
 | [puresound.recipes](recipes.md) | High-level model initialization recipes |
 
 ## Architecture Overview
@@ -37,6 +38,7 @@ puresound/
 ├── task/           # Task-specific datasets (NS, near-field voice isolation, SV, TSE)
 ├── third_party/    # Vendored research code (e.g. pytARD for low-frequency RIR simulation)
 ├── logging_setup.py # Library logging contract (stdlib only; imported by __init__)
+├── config/         # Typed recipe/capability models and the shared loader
 ├── metrics.py      # Evaluation metrics
 ├── utils.py        # Utilities
 └── recipes.py      # Model construction recipes
@@ -50,6 +52,27 @@ puresound/
 - **Multi-Task Support**: Shared base classes for noise suppression (NS), speaker verification (SV), and target speaker extraction (TSE) — plus `puresound.task.voice_isolation`, the most actively developed recipe today. Voice isolation is its own task built on the shared NS synthesis skeleton (real-recording rows, `mix_mode`, turn-taking, auxiliary distance/DRR labels), not just a variant of generic NS — see [task/index.md](task/index.md).
 - **Flexible Masking**: Support for complex, real, polar, deep-filter, Wiener, and MVDR masks.
 - **Composable Augmentation**: Pluggable audio augmentation via `AudioEffectAugmentor`.
+
+## Configuration Validation
+
+Every recipe is parsed into a typed Pydantic model before a dataset, model or
+trainer exists — see [configuration.md](configuration.md). `puresound.config.load_recipe`
+is the only entry point; there is no dict path around it.
+
+An unknown key is an error, not a default. Two failures motivated this: a typo
+(`porb: 0.5`) used to run its block at probability zero without complaint, and
+removing a mechanism did not remove its knobs — the ten
+`augmentation_query_distance` knobs outlived their code in 33 configs.
+
+The task discriminator picks the model, so a block only exists for the tasks
+that consume it: `augmentation_realfar` is a `voice_isolation` field and nothing
+else, and `augmentation_speed` means `speed_range` to the enhancement tasks and
+`speed_change` to speaker embedding. Blocks handed straight to a constructor
+(the RIR bank loader, the room simulator, the VAD labeler) forward only the keys
+the recipe actually wrote, so the component's own defaults still apply.
+
+Field defaults on those models are behavioural: the datasets read them by
+attribute, so a default here is the value the pipeline uses.
 
 ## Library Output
 

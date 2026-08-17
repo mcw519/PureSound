@@ -48,7 +48,8 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from puresound.audio.io import AudioIO
-from puresound.recipes import init_siso_model, load_siso_recipe_config
+from puresound.config import load_recipe
+from puresound.recipes import init_siso_model
 
 # Foreground-loudspeaker distance per (room, mic id) in the VOiCES release, metres.
 # rm1/rm2 from the corpus README mic table; rm3/rm4 from recording_data distances.csv
@@ -77,7 +78,9 @@ DISTANCE_BUCKETS = [(0.0, 1.0), (1.0, 2.0), (2.0, 3.0), (3.0, 5.0), (5.0, 99.0)]
 
 
 def load_model(config_path: str, ckpt_path: str, device: torch.device) -> torch.nn.Module:
-    model = init_siso_model(load_siso_recipe_config(config_path)[5])
+    model = init_siso_model(
+        load_recipe(config_path, expected_task="voice_isolation").model
+    )
     checkpoint = torch.load(ckpt_path, map_location=device)
     state_dict = (
         checkpoint["state_dict"]

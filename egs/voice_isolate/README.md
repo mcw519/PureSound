@@ -100,8 +100,8 @@ the data/loss — TS-Conformer couldn't overfit the hardest batches (enh→targe
 DPARN/DPCRN could (+4–5 dB). Switching to DPCRN (complex ratio mask) immediately cleared every
 in-domain bucket. A subsequent cold-start-on-full-RIR-bank + `target_absent` combination caused a real-domain
 over-suppression catastrophe (Dawn WER 0.626, SI-SDRi −9.53) — this is why the current pipeline is a
-graded RIR curriculum with `target_absent: OFF`. Superseded configs for all of this are kept in
-`config/exp/backup/` for reproducibility.
+graded RIR curriculum with `target_absent: OFF`. Superseded, non-executable configs were removed;
+their exact contents remain available from version-control history.
 
 ## Evaluation
 

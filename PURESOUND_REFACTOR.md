@@ -394,7 +394,7 @@ fixture 從 scratchpad 移進 `test/`。
 | 2-2 | 拆 `_apply_overlap_gating`（複雜度 14、142 行） | 拆成 `_turn_taking_envelope` / `_bernoulli_envelope`，共用 `_gate`/`_smooth_env` |
 | 2-3 | `streaming` 抽共用基底 | `StreamingFrameModelBase` 承載 `_require`/`_as_list`/`_down_step`/`_up_step`/ONNX 匯出/`*Ort`；`dpcrn`/`dparn` 只留 state 定義與 block step |
 | 2-4 | 輔助 head 掛載樣板化 | `AuxHeadMixin.attach_heads(cfg, enc_channels)` + `collect_side_outputs() -> dict`。**checkpoint key 必須維持 `backbone.vad_head.*`** |
-| 2-5 | **config schema 驗證**（原 P3-2，因 A6 提前） | 對 14 個 augmentation 區塊寫一份 schema，`load_hparam` 之後檢查：未知 key 直接報錯、缺 key 依 schema 決定「必填」或「預設值」。這同時消滅「硬取 vs 軟取」的隨機性——規則寫在 schema 裡，不在 128 個讀取點裡 |
+| 2-5 | **config schema 驗證**（已完成） | 見執行紀錄 |
 | 2-6 | 清死旋鈕與死 payload（依賴 2-5） | schema 一上線，33 份 config 的 `augmentation_query_distance` 等 10 個旋鈕會立刻報錯，順勢清掉；同時決斷 `added_noise`（無人讀 → 連同 4 組 flag 重播一起刪，約 −90 行）與 `far_target`（`FarReconstructionLoss` 不存在 → 補 loss 或降級為 eval-only 並標註） |
 
 **2-5 / 2-6 的驗收**：schema 上線後，現役 `train_dpcrn.yaml` 必須零錯誤通過；33 份 exp
@@ -596,11 +596,103 @@ filter → 1 fail；拿掉 autoconfig 開關 → 1 fail；改寫到 stderr → 3
 驗收：`--suite standard` 628 passed（不變）；`test_rir_r0_api_inventory.py` 與
 `test_rir_r0_import_boundaries.py` 82 passed。
 
+### 2026-08-17 — P2-5 完成（config schema 驗證）
+
+驗收：`ruff check` 全綠；`--suite standard` **628 → 651 passed**（+23 新測試）；
+**7 份出貨 config 全部零錯誤通過**；33 份帶死旋鈕的 exp config 全部被報出來。
+
+新模組 `puresound/config_schema.py`，掛在 `recipes.load_siso_recipe_config`——那是唯一
+的匯流點（兩個訓練進入點、streaming 匯出器、12 支 eval 腳本都走它），所以檢查發生在
+任何音訊被合成之前。
+
+**規則**（都不是憑品味，是從程式碼實際讀法推導的）
+
+- 未知 key → 錯誤。未知的 `augmentation_*` 頂層區塊 → 錯誤。
+- `REQUIRED` = 程式碼硬取 `cfg["k"]`；`OPTIONAL` = 走 `cfg.get("k", 預設)`。這一條直接
+  消滅了 A6 記的「57 處硬取 vs 71 處軟取、沒有規則」——規則現在寫在 schema 一個地方，
+  不散在 128 個讀取點。
+- 必填只在區塊**啟用時**檢查（停用的區塊被 `_enabled_config` 擋在 dataset 之前，根本
+  不會被讀）。例外是 `used` 本身：`augmentation_hpf` / `augmentation_volume` 走
+  `config.get(...)` 而非 `_enabled_config`，即使關閉也會進到 dataset 並硬取 `used`。
+- `Delegated` 標記那些整包被 spread 進建構子的 sub-block（bank loader、room simulator、
+  VAD labeler）——它們自己就會拒絕未知 keyword argument，在 schema 再抄一份只會腐爛。
+  先例是 `init_drr_contrast`，它本來就對自己那塊做這件事；2-5 等於把它推廣到全部。
+- 所有問題一次報完，不是遇到第一個就停——帶 10 個死旋鈕的 config 應該一次講完。
+
+**dry run 抓到一個我原本寫錯的 schema**：`augmentation_speed` 有**兩種方言**——
+NS / voice_isolation 讀 `speed_range`（[lo, hi] 區間），speaker_embedding 讀
+`speed_change`（離散清單）+ `treat_as_new_speaker`。兩者都不能單獨標 REQUIRED，否則會
+打死另一個 task。改用 `ANY_OF` 表達「兩者擇一」。**這本身是 A6 的又一個切面**：同一個
+區塊名底下長出兩套互不相容的方言，因為那個名字沒有擁有者。統一它是對凍結 task 的行為
+變更，記為發現、不在此處理。
+
+當時掃出的 33 份失敗 exp config 後續已完成清理：現役 8 份移除死旋鈕，25 份無法執行的
+backup config 從 live config tree 刪除，歷史內容交由版本控制保存。
+
+**刻意不做型別檢查**：`prob: "0.5"` 這種錯誤目前仍會通過 schema（但會在 `float()` 轉換
+時炸）。加型別檢查會擴大誤判面，而靜默失效的那一類是 key 名，不是型別。列為可選延伸。
+
+### 2026-08-17 — Pydantic canonical schema v2（取代 2-5，並吃掉 A1 / A4 / 3-1 / 3-2）
+
+config 機制整個換成 Pydantic v2 的 typed recipe（`puresound/config/`），舊時代路徑全部
+移除。經過兩輪：先做出可運作的 typed 遷移，再收斂成 canonical v2。
+
+驗收：`ruff` 全綠；`--suite standard` **698 passed**；35 份現役 recipe 全數 strict 驗證
+通過並納入回歸測試；**RNG 指紋 1187 雜湊 × 2 份 fixture 對照「遷移前 dict 時代」的基準
+逐位元相同**。
+
+那 2 份 fixture 是本案的安全網：一份「全寫滿」、一份「只寫必填」。後者讓 49 個原本寫在
+讀取點的預設值全部開火——搬錯任何一個，minimal 會偏離而 full 不動。這是風險最集中處，
+因為 model 原本是 `fade_samples: int | None = None` 而讀取點是 `.get("fade_samples", 400)`。
+
+**review 過程中找到並修掉的實質 bug**：`to_legacy_dict` 的 `exclude_none=True` 會刪掉
+明確寫成 `null` 的 key，而執行期硬取——`egs/noise_suppression/config/dpcrn.yaml --training`
+會在 `KeyError: 'gain_normalized_to'` 死在啟動。測試抓不到，因為沒有測試建 dataloader。
+
+**最終形態**
+
+- **canonical v2**：`schema_version` / `purpose` / `task` 全部必填。不推斷 legacy 格式、
+  不接受 task alias、沒有 normalization 層——loader 只剩 76 行。
+- **strict mode**：禁止 numeric string 等隱式轉型。現役 YAML 同步修正（只有型別寫法，
+  例如 `filter_min_utterance_per_speaker: 1.` → `1`，無任何數值變更）。
+- **A1 參數隧道消失**：20-tuple loader、20 欄位 `RecipeConfig`、17 參數的
+  `build_dataloaders` 全部刪除；`BaseRecipe.augmentation_kwargs()` 由 model 欄位自動
+  推導轉發清單。
+- **A4 重複消失**：`speaker_embedding` 與 `target_speaker_extraction` 兩支 main 自帶的
+  dataloader builder 改為委派 `runner.build_dataloaders`。
+- **`dataset_role` 與 `pipeline_role` 分離**：前者是這個 split 的身分，後者是它從哪個
+  RIR bank split 取樣。舊行為是兩者都吃 `dataset_role` 的預設值 `"train"`——也就是
+  validation 其實在用 train 的 bank split。現在改成明示：4 份 release-bank config 都寫上
+  `validation_pipeline_role: train` 並附理由（房間泛化另跑一輪對 `split: test`），
+  行為不變但決定變成可見的。
+- **speed 方言由 task class 在任何資料 I/O 之前選定**（`speed_augmentation_model`
+  class attribute），錯誤的 Pydantic model 會被重新驗證。
+- 停用的 augmentation 一律傳 `None`（已實測與傳 `used: False` 行為等價）。
+- 移除：TSE `add_ir_response` 死旋鈕、inference 的 optimizer/scheduler/loss placeholder、
+  重複的 `runner.load_config`、TSE 自己的 loss builder、公開 parsing helper。
+- `init_siso_model` 不再就地改 `recipe.model`（改成複製 `features` 再注入 peq）。
+
+**三個設計決定**
+
+1. **dataset 邊界接受 model 或 mapping**（`as_block`）：直接建構 dataset 的測試與腳本
+   也會過 schema——比遷移前強，遷移前那條路完全沒有驗證。
+2. **`with_overrides`**：model 是 frozen，eval 腳本不能再就地改 dict；覆寫走同一套驗證，
+   `training_length_seconds=-1` 在覆寫當下就被拒。
+3. **`PURESOUND_CONFIG_SCHEMA=warn` 逃生門移除**：typed 之後沒有降級態可回傳。
+
+**仍是 dict 的地方（刻意）**：`model` 區塊、`optimizer.args` / `scheduler.args` /
+`loss_func[].args` / `vad_label.args`。它們是 spread 進建構子的，建構子自己會拒絕未知
+keyword argument。
+
+**已刪除且部分不可復原**：`config/exp/backup/` 的 25 份設定與該空目錄。其中 1 份是
+git tracked（可由版本歷史復原），其餘 24 份原本受 `.gitignore` 排除，**無法由 git 復原**。
+它們引用的機制早已不存在，本來就無法重現當初的實驗。
+
 ### 下一步
 
-1. **P2-5 / P2-6（config schema + 清死旋鈕）建議優先**——見 A6，這不是預防性重構，是
-   已經發生的腐蝕：33 份 config 帶著 10 個死旋鈕、`added_noise` 那塊 90 行機制產出無人
-   消費。
+1. **P2-6（清死旋鈕與死 payload）**——schema 已經把 33 份 config 的問題全部列出來了；
+   `added_noise` 那塊（4 組 flag 重播、約 90 行、無人消費）也可以一起處理。
+   此項已完成，包含現役設定與無法執行的 backup 設定。
 2. P2-1（拆裝置鏈）動之前先把 RNG 指紋 harness 入庫成 test——C6 修完後已無 flaky 障礙，
-   只差搬 fixture。
+   只差搬 fixture。先做 2-6 再做 2-1 會少做一半工：2-1 要重寫的正是 `added_noise` 那段。
 3. P1 已全部完成。

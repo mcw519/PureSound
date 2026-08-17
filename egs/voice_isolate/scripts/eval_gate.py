@@ -39,7 +39,8 @@ if str(REPO) not in sys.path:
     sys.path.insert(0, str(REPO))
 
 import egs.voice_isolate.main as recipe_main  # noqa: E402
-from puresound.recipes import init_siso_model, load_siso_recipe_config  # noqa: E402
+from puresound.config import load_recipe, with_overrides
+from puresound.recipes import init_siso_model  # noqa: E402
 
 
 def main() -> None:
@@ -60,60 +61,24 @@ def main() -> None:
     os.chdir(RECIPE_DIR)
     torch.manual_seed(args.seed)
 
-    (
-        corpus,
-        trainer,
-        _optim,
-        _scheduler,
-        _loss,
-        model_dict,
-        aug_speech,
-        aug_noise,
-        aug_reverb,
-        aug_speed,
-        aug_ir,
-        aug_src,
-        aug_hpf,
-        aug_volume,
-        aug_codec,
-        aug_packet_loss,
-        aug_target_absent,
-        vad_label,
-        *rest,  # absorb recipe-tuple growth (new augmentation blocks append)
-    ) = load_siso_recipe_config(config_path)
-    aug_realfar = rest[0] if len(rest) > 0 else None
-    aug_realnear = rest[1] if len(rest) > 1 else None
-
-    corpus["training_length_seconds"] = args.seconds
-    trainer.update(
-        {
+    recipe = with_overrides(
+        load_recipe(
+            config_path,
+            expected_task="voice_isolation",
+            expected_purpose="train",
+        ),
+        dataset={"training_length_seconds": args.seconds},
+        trainer={
             "valid_iter_per_epoch": args.n_batches,
             "valid_seed": args.seed,
             "n_spk_per_batch": args.batch_size,
             "n_utt_per_speaker": 1,
             "num_workers": 8,
-        }
+        },
     )
-    _, valid_loader = recipe_main.init_dataloader(
-        corpus,
-        trainer,
-        aug_speech,
-        aug_noise,
-        aug_reverb,
-        aug_speed,
-        aug_ir,
-        aug_src,
-        aug_hpf,
-        aug_volume,
-        aug_codec,
-        aug_packet_loss,
-        aug_target_absent,
-        vad_label,
-        aug_realfar,
-        aug_realnear,
-    )
+    _, valid_loader = recipe_main.init_dataloader(recipe)
 
-    model = init_siso_model(model_dict)
+    model = init_siso_model(recipe.model)
     state_dict = torch.load(ckpt_path, map_location="cpu")["state_dict"]
     state_dict = {
         key: value

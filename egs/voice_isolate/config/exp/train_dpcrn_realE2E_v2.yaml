@@ -14,8 +14,13 @@
 # improve vs mix, turn-taking KEEP violations <=10, probe voices_near_e2e+noise back to
 # wide level (median AND p25); KEEP most of round-1's held-out far suppression (<=-7dB).
 # Full rationale/history: ../EXPERIMENT_LOG.md / ../NEXT_STEPS.md 2026-07-20.
+# Recipe schema v2: `task` selects the model that validates this file
+# (puresound/config/recipe.py); `purpose` picks training vs model-only.
+schema_version: 2
+purpose: train
+task: voice_isolation
+
 dataset:
-  task: voice_isolation
   train_metafile: data/dns5-read.train.list
   valid_metafile: data/dns5-read.dev.list
   test_folder: data/test
@@ -24,7 +29,7 @@ dataset:
   gain_normalized_to: -28
   training_length_seconds: 6.
   filter_min_utterance_length: 2 # 4.
-  filter_min_utterance_per_speaker: 1.
+  filter_min_utterance_per_speaker: 1
 
 # The first sampled speaker is the near-field foreground; the rest are far-field
 # interferers to suppress.

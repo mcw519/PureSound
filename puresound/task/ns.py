@@ -9,7 +9,17 @@ from torch.nn.utils.rnn import pad_sequence
 
 from puresound.audio.dsp import wav_resampling
 from puresound.audio.noise import add_bg_noise
-from puresound.dataset.dynamic_base import DynamicBaseDataset
+from puresound.config.augmentation import (
+    CodecAugmentation,
+    OverlapControlConfig,
+    PacketLossAugmentation,
+    TargetAbsentAugmentation,
+)
+from puresound.dataset.dynamic_base import (
+    AugmentationArg,
+    DynamicBaseDataset,
+    as_block,
+)
 
 
 RIR_PROVENANCE_KEYS = (
@@ -55,19 +65,20 @@ class NoiseSuppressionDataset(DynamicBaseDataset):
         target_sr: Optional[int] = None,
         training_sample_length_in_seconds: float = 6.0,
         audio_gain_normalized_to: Optional[int] = None,
-        augmentation_speech_args: Optional[Dict] = None,
-        augmentation_noise_args: Optional[Dict] = None,
-        augmentation_reverb_args: Optional[Dict] = None,
-        augmentation_speed_args: Optional[Dict] = None,
-        augmentation_ir_response_args: Optional[Dict] = None,
-        augmentation_src_args: Optional[Dict] = None,
-        augmentation_hpf_args: Optional[Dict] = None,
-        augmentation_volume_args: Optional[Dict] = None,
-        augmentation_codec_args: Optional[Dict] = None,
-        augmentation_packet_loss_args: Optional[Dict] = None,
-        augmentation_target_absent_args: Optional[Dict] = None,
-        vad_label_args: Optional[Dict] = None,
+        augmentation_speech_args: AugmentationArg = None,
+        augmentation_noise_args: AugmentationArg = None,
+        augmentation_reverb_args: AugmentationArg = None,
+        augmentation_speed_args: AugmentationArg = None,
+        augmentation_ir_response_args: AugmentationArg = None,
+        augmentation_src_args: AugmentationArg = None,
+        augmentation_hpf_args: AugmentationArg = None,
+        augmentation_volume_args: AugmentationArg = None,
+        augmentation_codec_args: AugmentationArg = None,
+        augmentation_packet_loss_args: AugmentationArg = None,
+        augmentation_target_absent_args: AugmentationArg = None,
+        vad_label_args: AugmentationArg = None,
         dataset_role: str = "train",
+        pipeline_role: str | None = None,
     ):
         super().__init__(
             metafile_path=metafile_path,
@@ -86,15 +97,26 @@ class NoiseSuppressionDataset(DynamicBaseDataset):
             augmentation_volume_args=augmentation_volume_args,
             vad_label_args=vad_label_args,
             dataset_role=dataset_role,
+            pipeline_role=pipeline_role,
         )
-        self.augmentation_codec_args = augmentation_codec_args
-        self.augmentation_packet_loss_args = augmentation_packet_loss_args
-        self.augmentation_target_absent_args = augmentation_target_absent_args
+        self.augmentation_codec_args = as_block(
+            augmentation_codec_args, CodecAugmentation
+        )
+        self.augmentation_packet_loss_args = as_block(
+            augmentation_packet_loss_args, PacketLossAugmentation
+        )
+        self.augmentation_target_absent_args = as_block(
+            augmentation_target_absent_args, TargetAbsentAugmentation
+        )
         # Fail fast instead of silently ignoring a task-specific block: mix_mode
         # describes near/far level relationships, which only the voice-isolation
         # dataset implements.
-        mm_cfg = (augmentation_speech_args or {}).get("mix_mode") if isinstance(augmentation_speech_args, dict) else None
-        if type(self) is NoiseSuppressionDataset and mm_cfg and mm_cfg.get("used", False):
+        mm_cfg = (
+            self.augmentation_speech_args.mix_mode
+            if self.augmentation_speech_args
+            else None
+        )
+        if type(self) is NoiseSuppressionDataset and mm_cfg and mm_cfg.used:
             raise ValueError(
                 "augmentation_speech.mix_mode needs dataset.task: voice_isolation"
             )
@@ -123,7 +145,7 @@ class NoiseSuppressionDataset(DynamicBaseDataset):
 
         spk_pool = set(spk_pool)
         spk_pool.remove(target_speaker)
-        add_n_cases_cfg = self.augmentation_speech_args["add_n_cases"]
+        add_n_cases_cfg = self.augmentation_speech_args.add_n_cases
         if isinstance(add_n_cases_cfg, (list, tuple)):
             lo, hi = int(add_n_cases_cfg[0]), int(add_n_cases_cfg[1])
             n_interferers = random.randint(lo, hi)
@@ -163,19 +185,19 @@ class NoiseSuppressionDataset(DynamicBaseDataset):
         # pre-generated bank the "media" role draws from the same far pool as a
         # plain interferer; only the on-the-fly room simulator places media
         # sources wall-adjacent.
-        media_cfg = self.augmentation_speech_args.get("media_voice")
+        media_cfg = self.augmentation_speech_args.media_voice
         media_flags = [
             bool(
                 media_cfg
-                and media_cfg.get("used", False)
-                and torch.rand(1).item() < float(media_cfg.get("prob", 0.0))
+                and media_cfg.used
+                and torch.rand(1).item() < media_cfg.prob
             )
             for _ in interfered_speech
         ]
         if any(media_flags):
-            hp_lo, hp_hi = media_cfg.get("hp_cutoff_range", [200, 400])
-            lp_lo, lp_hi = media_cfg.get("lp_cutoff_range", [3500, 7000])
-            cp_lo, cp_hi = media_cfg.get("compress_power_range", [0.6, 0.9])
+            hp_lo, hp_hi = media_cfg.hp_cutoff_range
+            lp_lo, lp_hi = media_cfg.lp_cutoff_range
+            cp_lo, cp_hi = media_cfg.compress_power_range
             for idx, is_media in enumerate(media_flags):
                 if not is_media:
                     continue
@@ -230,12 +252,10 @@ class NoiseSuppressionDataset(DynamicBaseDataset):
         cfg = self.augmentation_target_absent_args
         target_absent = (
             cfg is not None
-            and cfg.get("used", False)
-            and torch.rand(1).item() < float(cfg.get("prob", 0.0))
+            and cfg.used
+            and torch.rand(1).item() < cfg.prob
         )
-        force_interferer = bool(
-            target_absent and cfg is not None and cfg.get("force_interferer", False)
-        )
+        force_interferer = bool(target_absent and cfg is not None and cfg.force_interferer)
         return (
             RowPlan(target_absent=target_absent, force_interferer=force_interferer),
             target_speech,
@@ -294,8 +314,8 @@ class NoiseSuppressionDataset(DynamicBaseDataset):
         sir = (
             torch.FloatTensor(1)
             .uniform_(
-                self.augmentation_speech_args["snr_range"][0],
-                self.augmentation_speech_args["snr_range"][1],
+                self.augmentation_speech_args.snr_range[0],
+                self.augmentation_speech_args.snr_range[1],
             )
             .item()
         )
@@ -365,11 +385,11 @@ class NoiseSuppressionDataset(DynamicBaseDataset):
         interfered_speech = []
         if (
             self.augmentation_speech_args
-            and self.augmentation_speech_args["used"]
+            and self.augmentation_speech_args.used
             and (
                 force_interferer
                 or plan.force_speech_interferers
-                or torch.rand(1) < self.augmentation_speech_args["prob"]
+                or torch.rand(1) < self.augmentation_speech_args.prob
             )
         ):
             target_speech, interfered_speech, itf_meta = self._sample_interferers(
@@ -411,7 +431,7 @@ class NoiseSuppressionDataset(DynamicBaseDataset):
             )
 
             # Treating all speech clips as target speech
-            if self.augmentation_speech_args["is_target"]:
+            if self.augmentation_speech_args.is_target:
                 target_speech = noisy_speech.clone()
 
         # Target-absent gating: strip the foreground contribution from the
@@ -432,15 +452,15 @@ class NoiseSuppressionDataset(DynamicBaseDataset):
         # requested band); a true near-field echo channel needs the on-the-fly
         # simulator.
         echo_cfg = (
-            self.augmentation_speech_args.get("echo_playback")
+            self.augmentation_speech_args.echo_playback
             if self.augmentation_speech_args
             else None
         )
         if (
             echo_cfg
-            and echo_cfg.get("used", False)
+            and echo_cfg.used
             and source_level_reverb
-            and torch.rand(1).item() < float(echo_cfg.get("prob", 0.0))
+            and torch.rand(1).item() < echo_cfg.prob
         ):
             if self.target_sr is not None:
                 echo_pool = set(self.total_spks)
@@ -464,9 +484,9 @@ class NoiseSuppressionDataset(DynamicBaseDataset):
                 wav=echo_speech,
                 sr=self.audio_sr,
                 room_scene=room_scene,
-                distance_range_override=echo_cfg.get("distance_range", [0.2, 1.0]),
+                distance_range_override=list(echo_cfg.distance_range),
             ).wav
-            erle_lo, erle_hi = echo_cfg.get("erle_db_range", [20.0, 35.0])
+            erle_lo, erle_hi = echo_cfg.erle_db_range
             erle_db = torch.empty(1).uniform_(float(erle_lo), float(erle_hi)).item()
             noisy_speech, _ = add_bg_noise(
                 wav=noisy_speech, noise=[echo_speech], snr_list=[erle_db]
@@ -481,14 +501,14 @@ class NoiseSuppressionDataset(DynamicBaseDataset):
         # Speed Perturbation
         if (
             self.augmentation_speed_args
-            and self.augmentation_speed_args["used"]
-            and torch.rand(1) < self.augmentation_speed_args["prob"]
+            and self.augmentation_speed_args.used
+            and torch.rand(1) < self.augmentation_speed_args.prob
         ):
             # include the range top: a bare arange(lo, hi, step) excludes hi,
             # which silently removed the speed-up half of the perturbation
             speed = torch.arange(
-                self.augmentation_speed_args["speed_range"][0],
-                self.augmentation_speed_args["speed_range"][1] + 0.025,
+                self.augmentation_speed_args.speed_range[0],
+                self.augmentation_speed_args.speed_range[1] + 0.025,
                 0.05,
             )
             speed = random.choice(speed)
@@ -507,10 +527,10 @@ class NoiseSuppressionDataset(DynamicBaseDataset):
         # channel must stay exactly as the foreground provided it)
         if (
             self.augmentation_reverb_args
-            and self.augmentation_reverb_args["used"]
+            and self.augmentation_reverb_args.used
             and not source_level_reverb
             and not plan.skip_whole_mix_reverb
-            and torch.rand(1) < self.augmentation_reverb_args["prob"]
+            and torch.rand(1) < self.augmentation_reverb_args.prob
         ):
             # RIR's target for noisy is full
             noisy_speech, (rir_id, _) = self.augmentor.apply_rir(
@@ -519,11 +539,11 @@ class NoiseSuppressionDataset(DynamicBaseDataset):
                 sr=self.audio_sr,
             )
             # Warping target speech for same RIR but different rir mode
-            if self.augmentation_reverb_args["target_rir_type"] != "anechoic":
+            if self.augmentation_reverb_args.target_rir_type != "anechoic":
                 target_speech, _ = self.augmentor.apply_rir(
                     wav=target_speech,
                     rir_id=rir_id,
-                    rir_mode=self.augmentation_reverb_args["target_rir_type"],
+                    rir_mode=self.augmentation_reverb_args.target_rir_type,
                     sr=self.audio_sr,
                 )
 
@@ -536,15 +556,15 @@ class NoiseSuppressionDataset(DynamicBaseDataset):
         added_noise = None
         if (
             self.augmentation_noise_args
-            and self.augmentation_noise_args["used"]
-            and torch.rand(1) < self.augmentation_noise_args["prob"]
+            and self.augmentation_noise_args.used
+            and torch.rand(1) < self.augmentation_noise_args.prob
         ):
             dynamic_type = False
             snr = (
                 torch.FloatTensor(1)
                 .uniform_(
-                    self.augmentation_noise_args["snr_range"][0],
-                    self.augmentation_noise_args["snr_range"][1],
+                    self.augmentation_noise_args.snr_range[0],
+                    self.augmentation_noise_args.snr_range[1],
                 )
                 .item()
             )
@@ -552,7 +572,7 @@ class NoiseSuppressionDataset(DynamicBaseDataset):
             noise_snr = snr
 
             # 1 / 4 cases add dynamic noise type
-            if torch.rand(1) < self.augmentation_noise_args["prob"] / 4:
+            if torch.rand(1) < self.augmentation_noise_args.prob / 4:
                 dynamic_type = True
 
             # Room coloring: give the noise a channel of the SAME room the
@@ -560,12 +580,12 @@ class NoiseSuppressionDataset(DynamicBaseDataset):
             # with the mixture instead of arriving dry from nowhere. Guarded:
             # an absent/disabled block never touches the RNG stream.
             noise_transform = None
-            room_cfg = self.augmentation_noise_args.get("room_coloring")
+            room_cfg = self.augmentation_noise_args.room_coloring
             if (
                 room_cfg
-                and room_cfg.get("used", False)
+                and room_cfg.used
                 and room_scene is not None
-                and torch.rand(1).item() < float(room_cfg.get("prob", 0.0))
+                and torch.rand(1).item() < room_cfg.prob
             ):
                 mix_sr = self.audio_sr
 
@@ -594,13 +614,13 @@ class NoiseSuppressionDataset(DynamicBaseDataset):
             # if dynamic is False, 1 / 4 add white noise
             if (
                 not dynamic_type
-                and torch.rand(1) < self.augmentation_noise_args["prob_white_noise"]
+                and torch.rand(1) < self.augmentation_noise_args.prob_white_noise
             ):
                 snr = (
                     torch.FloatTensor(1)
                     .uniform_(
-                        self.augmentation_noise_args["white_noise_snr_range"][0],
-                        self.augmentation_noise_args["white_noise_snr_range"][1],
+                        self.augmentation_noise_args.white_noise_snr_range[0],
+                        self.augmentation_noise_args.white_noise_snr_range[1],
                     )
                     .item()
                 )
@@ -621,13 +641,17 @@ class NoiseSuppressionDataset(DynamicBaseDataset):
         # mixture only, before the device chain, so it inherits the device
         # response like real capsule noise. Guarded: absent/disabled block
         # never touches the RNG stream.
-        floor_cfg = (self.augmentation_noise_args or {}).get("absolute_floor")
+        floor_cfg = (
+            self.augmentation_noise_args.absolute_floor
+            if self.augmentation_noise_args
+            else None
+        )
         if (
             floor_cfg
-            and floor_cfg.get("used", False)
-            and torch.rand(1).item() < float(floor_cfg.get("prob", 0.0))
+            and floor_cfg.used
+            and torch.rand(1).item() < floor_cfg.prob
         ):
-            lo, hi = floor_cfg.get("level_dbfs_range", [-55.0, -35.0])
+            lo, hi = floor_cfg.level_dbfs_range
             floor_dbfs = torch.empty(1).uniform_(float(lo), float(hi)).item()
             floor = torch.randn_like(noisy_speech) * (10.0 ** (floor_dbfs / 20.0))
             noisy_speech = noisy_speech + floor
@@ -643,13 +667,13 @@ class NoiseSuppressionDataset(DynamicBaseDataset):
         flag_src = False
         if (
             self.augmentation_src_args
-            and self.augmentation_src_args["used"]
-            and torch.rand(1) < self.augmentation_src_args["prob"]
+            and self.augmentation_src_args.used
+            and torch.rand(1) < self.augmentation_src_args.prob
         ):
             flag_src = True
             src_target = random.choices(
-                self.augmentation_src_args["src_range"],
-                weights=self.augmentation_src_args["prob_each"],
+                self.augmentation_src_args.src_range,
+                weights=self.augmentation_src_args.prob_each,
             )[0]
 
             if torch.rand(1) < 0.5:
@@ -698,8 +722,8 @@ class NoiseSuppressionDataset(DynamicBaseDataset):
         flag_iir = False
         if (
             self.augmentation_ir_response_args
-            and self.augmentation_ir_response_args["used"]
-            and torch.rand(1) < self.augmentation_ir_response_args["prob"]
+            and self.augmentation_ir_response_args.used
+            and torch.rand(1) < self.augmentation_ir_response_args.prob
         ):
             flag_iir = True
             noisy_speech, (a_coeffs, b_coeffs) = self.augmentor.apply_2nd_iir_response(
@@ -713,13 +737,13 @@ class NoiseSuppressionDataset(DynamicBaseDataset):
         flag_hpf = False
         if (
             self.augmentation_hpf_args
-            and self.augmentation_hpf_args["used"]
-            and torch.rand(1) < self.augmentation_hpf_args["prob"]
+            and self.augmentation_hpf_args.used
+            and torch.rand(1) < self.augmentation_hpf_args.prob
         ):
             flag_hpf = True
             hpf_cutoff = random.choices(
-                self.augmentation_hpf_args["cutoff"],
-                weights=self.augmentation_hpf_args["prob_each"],
+                self.augmentation_hpf_args.cutoff,
+                weights=self.augmentation_hpf_args.prob_each,
             )[0]
             q_factor = torch.FloatTensor(1).normal_(mean=0.707, std=0.1).clip(0.3, 1.3)
             noisy_speech, _ = self.augmentor.apply_hpf(
@@ -739,21 +763,21 @@ class NoiseSuppressionDataset(DynamicBaseDataset):
         flag_volume = False
         if (
             self.augmentation_volume_args
-            and self.augmentation_volume_args["used"]
-            and torch.rand(1) < self.augmentation_volume_args["prob"]
+            and self.augmentation_volume_args.used
+            and torch.rand(1) < self.augmentation_volume_args.prob
         ):
             flag_volume = True
             vol_ratio = None
             min_quantile = None
             max_quantile = None
-            if torch.rand(1) < self.augmentation_volume_args["clipping_prob"]:
+            if torch.rand(1) < self.augmentation_volume_args.clipping_prob:
                 min_q = torch.FloatTensor(1).uniform_(
-                    self.augmentation_volume_args["clipping_range"]["min"][0],
-                    self.augmentation_volume_args["clipping_range"]["min"][1],
+                    self.augmentation_volume_args.clipping_range.min[0],
+                    self.augmentation_volume_args.clipping_range.min[1],
                 )
                 max_q = torch.FloatTensor(1).uniform_(
-                    self.augmentation_volume_args["clipping_range"]["max"][0],
-                    self.augmentation_volume_args["clipping_range"]["max"][1],
+                    self.augmentation_volume_args.clipping_range.max[0],
+                    self.augmentation_volume_args.clipping_range.max[1],
                 )
                 noisy_speech, (min_quantile, max_quantile) = (
                     self.augmentor.apply_clipping_distortion(
@@ -770,8 +794,8 @@ class NoiseSuppressionDataset(DynamicBaseDataset):
                 gain = (
                     torch.FloatTensor(1)
                     .uniform_(
-                        self.augmentation_volume_args["perturbed_range"][0],
-                        self.augmentation_volume_args["perturbed_range"][1],
+                        self.augmentation_volume_args.perturbed_range[0],
+                        self.augmentation_volume_args.perturbed_range[1],
                     )
                     .item()
                 )
@@ -790,18 +814,16 @@ class NoiseSuppressionDataset(DynamicBaseDataset):
         # Applied to noisy_speech only -- target_speech is the clean reference.
         if (
             self.augmentation_codec_args
-            and self.augmentation_codec_args.get("used")
-            and torch.rand(1) < self.augmentation_codec_args["prob"]
+            and self.augmentation_codec_args.used
+            and torch.rand(1) < self.augmentation_codec_args.prob
         ):
-            codecs = self.augmentation_codec_args["codecs"]
-            prob_each = self.augmentation_codec_args.get("prob_each")
+            codecs = self.augmentation_codec_args.codecs
+            prob_each = self.augmentation_codec_args.prob_each
             if prob_each:
                 codec_name = random.choices(codecs, weights=prob_each, k=1)[0]
             else:
                 codec_name = random.choice(codecs)
-            bitrate_range = self.augmentation_codec_args.get("bitrate_range", {}).get(
-                codec_name
-            )
+            bitrate_range = self.augmentation_codec_args.bitrate_range.get(codec_name)
             bit_rate = (
                 random.randint(int(bitrate_range[0]), int(bitrate_range[1]))
                 if bitrate_range
@@ -817,13 +839,13 @@ class NoiseSuppressionDataset(DynamicBaseDataset):
         # Packet loss (VoIP transmission artifact).
         if (
             self.augmentation_packet_loss_args
-            and self.augmentation_packet_loss_args.get("used")
-            and torch.rand(1) < self.augmentation_packet_loss_args["prob"]
+            and self.augmentation_packet_loss_args.used
+            and torch.rand(1) < self.augmentation_packet_loss_args.prob
         ):
             packet_ms = random.choice(
-                self.augmentation_packet_loss_args["packet_ms_choices"]
+                self.augmentation_packet_loss_args.packet_ms_choices
             )
-            lo, hi = self.augmentation_packet_loss_args["loss_rate_range"]
+            lo, hi = self.augmentation_packet_loss_args.loss_rate_range
             loss_rate = random.uniform(float(lo), float(hi))
             noisy_speech, _ = self.augmentor.apply_packet_loss(
                 wav=noisy_speech,
@@ -1028,7 +1050,7 @@ class NoiseSuppressionDataset(DynamicBaseDataset):
         )
 
     def _sample_turn_script(
-        self, n_frames: int, hop: int, sr: int, overlap_cfg: dict
+        self, n_frames: int, hop: int, sr: int, overlap_cfg: OverlapControlConfig
     ) -> tuple:
         """Sample a conversational turn script on the VAD frame grid.
 
@@ -1039,11 +1061,11 @@ class NoiseSuppressionDataset(DynamicBaseDataset):
         anchor), which the per-frame Bernoulli fill can never produce.
         Returns (near_frames, far_frames) boolean masks over the frame grid.
         """
-        near_len = overlap_cfg.get("turn_near_seconds", [1.5, 3.0])
-        far_len = overlap_cfg.get("turn_far_seconds", [2.0, 4.5])
-        gap_rng = overlap_cfg.get("turn_gap_seconds", [0.0, 0.4])
-        ovl_rng = overlap_cfg.get("turn_overlap_seconds", [0.0, 0.3])
-        far_first = torch.rand(1).item() < float(overlap_cfg.get("far_first_prob", 0.5))
+        near_len = overlap_cfg.turn_near_seconds
+        far_len = overlap_cfg.turn_far_seconds
+        gap_rng = overlap_cfg.turn_gap_seconds
+        ovl_rng = overlap_cfg.turn_overlap_seconds
+        far_first = torch.rand(1).item() < overlap_cfg.far_first_prob
 
         fps = float(sr) / float(hop)
         near_mask = torch.zeros(n_frames, dtype=torch.bool)
@@ -1101,8 +1123,12 @@ class NoiseSuppressionDataset(DynamicBaseDataset):
 
         Returns ``(target_speech, target_mix, interferers)``.
         """
-        overlap_cfg = (self.augmentation_speech_args or {}).get("overlap_control")
-        if not overlap_cfg or not overlap_cfg.get("used"):
+        overlap_cfg = (
+            self.augmentation_speech_args.overlap_control
+            if self.augmentation_speech_args
+            else None
+        )
+        if overlap_cfg is None or not overlap_cfg.used:
             return target_speech, target_mix, interferers
         if self.gating_vad_labeler is None or not interferers:
             return target_speech, target_mix, interferers
@@ -1116,7 +1142,7 @@ class NoiseSuppressionDataset(DynamicBaseDataset):
         hop = self.gating_vad_labeler.hop_length
         n_frames = target_vad.shape[0]
 
-        fade_samples = int(overlap_cfg.get("fade_samples", 400))
+        fade_samples = overlap_cfg.fade_samples
         fade_kernel = torch.hann_window(fade_samples * 2 + 1)
         fade_kernel = fade_kernel / fade_kernel.sum().clamp_min(1e-6)
         fade_kernel = fade_kernel.view(1, 1, -1)
@@ -1147,7 +1173,7 @@ class NoiseSuppressionDataset(DynamicBaseDataset):
         if turn_taking_prob_override is not None:
             turn_taking_prob = float(turn_taking_prob_override)
         else:
-            turn_taking_prob = float(overlap_cfg.get("turn_taking_prob", 0.0))
+            turn_taking_prob = overlap_cfg.turn_taking_prob
         if (
             allow_turn_taking
             and turn_taking_prob > 0.0
@@ -1168,11 +1194,11 @@ class NoiseSuppressionDataset(DynamicBaseDataset):
             self._last_turn_taking = 1.0
             return target_speech, target_mix, gated
 
-        no_overlap_prob = float(overlap_cfg.get("no_overlap_prob", 0.25))
-        high_overlap_prob = float(overlap_cfg.get("high_overlap_prob", 0.25))
-        mid_range = overlap_cfg.get("mid_overlap_range", [0.1, 0.5])
-        high_range = overlap_cfg.get("high_overlap_range", [0.5, 1.0])
-        fill_range = overlap_cfg.get("fill_on_silent_range", [0.3, 0.5])
+        no_overlap_prob = overlap_cfg.no_overlap_prob
+        high_overlap_prob = overlap_cfg.high_overlap_prob
+        mid_range = overlap_cfg.mid_overlap_range
+        high_range = overlap_cfg.high_overlap_range
+        fill_range = overlap_cfg.fill_on_silent_range
 
         gated = []
         union_wanted = torch.zeros(n_frames, dtype=torch.bool)

@@ -50,8 +50,13 @@
 # A pass means holding all of that and improving something; holding it while
 # improving nothing means M6's rooms add no information this task can use.
 #
+# Recipe schema v2: `task` selects the model that validates this file
+# (puresound/config/recipe.py); `purpose` picks training vs model-only.
+schema_version: 2
+purpose: train
+task: voice_isolation
+
 dataset:
-  task: voice_isolation
   train_metafile: data/dns5-read.train.list
   valid_metafile: data/dns5-read.dev.list
   test_folder: data/test
@@ -60,7 +65,9 @@ dataset:
   gain_normalized_to: -28
   training_length_seconds: 6.
   filter_min_utterance_length: 2 # 4.
-  filter_min_utterance_per_speaker: 1.
+  filter_min_utterance_per_speaker: 1
+  # Keep validation on the same room distribution as training for this run.
+  validation_pipeline_role: train
 
 # The first sampled speaker is the near-field foreground; the rest are far-field
 # interferers to suppress.

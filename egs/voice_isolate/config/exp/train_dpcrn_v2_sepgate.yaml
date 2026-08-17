@@ -7,8 +7,13 @@
 #   global over-suppression -- the Azure-STT deletion blow-up wide_antisup avoided). The gate gets its
 #   label-0 frames from turn-taking far-only turns instead (bounded, correct-to-silence within mixed rows).
 #   training_length_seconds lengthened to 10 s so 2-3 turns fit (gate can learn the near<->far switch).
+# Recipe schema v2: `task` selects the model that validates this file
+# (puresound/config/recipe.py); `purpose` picks training vs model-only.
+schema_version: 2
+purpose: train
+task: voice_isolation
+
 dataset:
-  task: voice_isolation
   train_metafile: data/dns5-read.train.list
   valid_metafile: data/dns5-read.dev.list
   test_folder: data/test
@@ -17,7 +22,7 @@ dataset:
   gain_normalized_to: -28
   training_length_seconds: 6.   # was 6.; lengthened for multi-turn turn-taking (gate switch signal)
   filter_min_utterance_length: 2 # 4.
-  filter_min_utterance_per_speaker: 1.
+  filter_min_utterance_per_speaker: 1
 
 # The first sampled speaker is the near-field foreground; the rest are far-field
 # interferers to suppress.

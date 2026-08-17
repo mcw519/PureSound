@@ -24,16 +24,17 @@ DynamicBaseDataset(
     target_sr: Optional[int] = None,
     training_sample_length_in_seconds: float = 6.0,
     audio_gain_normalized_to: Optional[int] = None,
-    augmentation_speech_args: Optional[Dict] = None,
-    augmentation_noise_args: Optional[Dict] = None,
-    augmentation_reverb_args: Optional[Dict] = None,
-    augmentation_speed_args: Optional[Dict] = None,
-    augmentation_ir_response_args: Optional[Dict] = None,
-    augmentation_src_args: Optional[Dict] = None,
-    augmentation_hpf_args: Optional[Dict] = None,
-    augmentation_volume_args: Optional[Dict] = None,
-    vad_label_args: Optional[Dict] = None,
+    augmentation_speech_args: AugmentationArg = None,
+    augmentation_noise_args: AugmentationArg = None,
+    augmentation_reverb_args: AugmentationArg = None,
+    augmentation_speed_args: AugmentationArg = None,
+    augmentation_ir_response_args: AugmentationArg = None,
+    augmentation_src_args: AugmentationArg = None,
+    augmentation_hpf_args: AugmentationArg = None,
+    augmentation_volume_args: AugmentationArg = None,
+    vad_label_args: AugmentationArg = None,
     dataset_role: str = "train",
+    pipeline_role: Optional[str] = None,
 )
 ```
 
@@ -55,14 +56,14 @@ DynamicBaseDataset(
 - `augmentation_speech_args`、`augmentation_noise_args`、
   `augmentation_reverb_args`、`augmentation_speed_args`、
   `augmentation_ir_response_args`、`augmentation_src_args`、
-  `augmentation_hpf_args`、`augmentation_volume_args` – 原始的 config block，
-  原封不動存到 `self` 上；這裡只會真正用到
+  `augmentation_hpf_args`、`augmentation_volume_args` – 經過驗證的 Pydantic
+  capability model；也可傳 mapping，由這個邊界負責驗證。這裡只會真正用到
   `augmentation_noise_args` 跟 `augmentation_reverb_args`（在
   `init_augmentor()` 裡）—— 其餘的由 subclass 的 `__getitem__` 自行讀取
 - `vad_label_args` – 見下方 [VAD-labeler 分派邏輯](#vad-labeler-分派邏輯-init_vad_labeler)
-- `dataset_role`（預設 `"train"`）– 必須是 `"train"` / `"validation"` /
-  `"test"` 其中之一，否則 `__init__` 會丟出 `ValueError`；也會控管
-  pre-generated RIR bank 的選取（見下方）
+- `dataset_role`（預設 `"train"`）– 真正的 dataset stage。
+- `pipeline_role`（預設等於 `dataset_role`）– 供 RIR bank 等 stage-sensitive
+  capability 選擇資料來源分布。
 
 ### Initialization sequence
 
@@ -133,13 +134,13 @@ speaker 與 utterance 層級的過濾（`min_utts_in_spk`、`min_utt_length`）�
   | `simulator.used`，但沒有 `pregenerated` block（或 `pregenerated.used` 為 false） | 物理模擬的 room simulator —— `self.augmentor.init_room_simulator(simulator_args)` |
   | 沒有 `simulator` key，或 `simulator.used` 為假值 | 靜態 RIR 資料夾 —— `self.augmentor.load_rir_from_folder(augmentation_reverb_args["rir_folder"])` |
 
-  **Pre-generated bank 的 `usage_role` 陷阱**：pregenerated config 自己可能
+  **Pre-generated bank 的 `usage_role` contract**：pregenerated config 自己可能
   設了 `usage_role`（例如把某個 bank split 釘死給
   `"train"`/`"validation"`/`"test"` 用）。如果有設定、但跟這個 dataset
-  instance 的 `dataset_role` 對不上，`init_augmentor()` 會丟出
-  `ValueError`。如果沒設定，會被靜默地強制改成 `self.dataset_role` 才呼叫
-  `init_room_bank()`——所以即使 RIR bank config 裡完全沒提到 `usage_role`，
-  一個 train-role 的 dataset 也一定只會從 train-role 的 bank split 抽資料。
+  instance 的 `pipeline_role` 對不上，`init_augmentor()` 會丟出
+  `ValueError`。如果沒設定，呼叫 `init_room_bank()` 前會填成
+  `self.pipeline_role`。共用 runner 會明確區分 train/validation dataset role，
+  並從 typed dataset config 讀取各 stage 的 pipeline role。
 
 ---
 

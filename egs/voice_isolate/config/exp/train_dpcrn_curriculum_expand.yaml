@@ -2,8 +2,13 @@
 # Warm-start from pretrained_ckpt/dpcrn_v1.ckpt (--pretrained_ckpt_path).
 # Pipeline position, warm-start lineage, and judged results: see ../README.md.
 # Full rationale and per-epoch history: see ../EXPERIMENT_LOG.md.
+# Recipe schema v2: `task` selects the model that validates this file
+# (puresound/config/recipe.py); `purpose` picks training vs model-only.
+schema_version: 2
+purpose: train
+task: voice_isolation
+
 dataset:
-  task: voice_isolation
   train_metafile: data/dns5-read.train.list
   valid_metafile: data/dns5-read.dev.list
   test_folder: data/test
@@ -12,7 +17,7 @@ dataset:
   gain_normalized_to: -28
   training_length_seconds: 6.
   filter_min_utterance_length: 2 # 4.
-  filter_min_utterance_per_speaker: 1.
+  filter_min_utterance_per_speaker: 1
 
 # The first sampled speaker is the near-field foreground; the rest are far-field
 # interferers to suppress.
@@ -73,20 +78,6 @@ augmentation_target_absent:
 
 # OFF: runtime distance query. This is a fixed near-field task (keep the bank
 # near channel, suppress far); the scalar-query / FiLM mechanism is not used.
-augmentation_query_distance:
-  used: False
-  derive_from_bank: True
-  bank_margin: 0.2
-  range: [0.8, 1.2]
-  peak_distance: 1.0
-  peak_prob: 0.3
-  peak_half_width: 0.2
-  near_floor: 0.3
-  far_ceiling: 5.0
-  gate_silence:
-    prob: 0.2
-    margin: 0.15
-
 augmentation_noise:
   used: True
   prob: 0.8
@@ -241,13 +232,6 @@ scheduler:
 
 # OFF: counterfactual query-distance loss (only relevant to the abandoned
 # runtime-distance-query task).
-qd_contrastive:
-  used: False
-  weight: 1.0
-  margin: 0.15
-  near_floor: 0.3
-  apply_prob: 1.0
-
 loss_func:
   - type: SDRLoss
     weighted: 1.

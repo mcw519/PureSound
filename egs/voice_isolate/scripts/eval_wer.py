@@ -23,7 +23,8 @@ from pathlib import Path
 RECIPE_DIR = Path(__file__).resolve().parents[1]; REPO = Path(__file__).resolve().parents[3]
 if str(REPO) not in sys.path: sys.path.insert(0, str(REPO))
 import numpy as np, torch, soundfile as sf  # noqa: E402
-from puresound.recipes import init_siso_model, load_siso_recipe_config  # noqa: E402
+from puresound.config import load_recipe  # noqa: E402
+from puresound.recipes import init_siso_model  # noqa: E402
 
 def si_sdr(est, ref, eps=1e-8):
     est = est.reshape(-1)-est.reshape(-1).mean(); ref = ref.reshape(-1)-ref.reshape(-1).mean()
@@ -51,7 +52,9 @@ def main():
     items=[json.loads(l) for l in open(sd/"manifest.jsonl",encoding="utf-8")]
     if args.limit: items=items[:args.limit]
 
-    model=init_siso_model(load_siso_recipe_config(cfg_path)[5])
+    model=init_siso_model(
+        load_recipe(cfg_path, expected_task="voice_isolation").model
+    )
     state=torch.load(ckpt,map_location="cpu")["state_dict"]
     miss,unexp=model.load_state_dict(state,strict=False)
     print(f"[load] missing={len(miss)} unexpected={len(unexp)}; ckpt={ckpt}",flush=True)

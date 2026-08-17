@@ -18,11 +18,11 @@ from puresound.streaming import (
 # defaults). Kept inline rather than pointing at an egs/ recipe so this test
 # doesn't depend on any specific recipe directory existing.
 MINIMAL_DPARN_CONFIG = {
+    "schema_version": 2,
+    "purpose": "inference",
+    "task": "noise_suppression",
     "dataset": {"target_sample_rate": 16000},
     "trainer": {"work_folder": "./exp"},
-    "optimizer": {"type": "AdamW", "learning_rate": 0.001, "args": {}},
-    "scheduler": {"type": "CosineAnnealingWarmRestarts", "args": {"T_0": 20}},
-    "loss_func": [],
     "model": {
         "lightning_module": {
             "type": "EncDecMaskBase",

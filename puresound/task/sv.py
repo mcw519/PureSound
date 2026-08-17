@@ -6,7 +6,11 @@ import torch
 from torch.nn.utils.rnn import pad_sequence
 
 from puresound.audio.noise import add_bg_noise
-from puresound.dataset.dynamic_base import DynamicBaseDataset
+from puresound.config.augmentation import DiscreteSpeedAugmentation
+from puresound.dataset.dynamic_base import (
+    AugmentationArg,
+    DynamicBaseDataset,
+)
 
 
 def if_none_else(a, b):
@@ -17,6 +21,8 @@ def if_none_else(a, b):
 
 
 class SpeakerEmbeddingDataset(DynamicBaseDataset):
+    speed_augmentation_model = DiscreteSpeedAugmentation
+
     def __init__(
         self,
         metafile_path: str,
@@ -25,15 +31,16 @@ class SpeakerEmbeddingDataset(DynamicBaseDataset):
         target_sr: Optional[int] = None,
         training_sample_length_in_seconds: float = 6.0,
         audio_gain_normalized_to: Optional[int] = None,
-        augmentation_speech_args: Optional[Dict] = None,
-        augmentation_noise_args: Optional[Dict] = None,
-        augmentation_reverb_args: Optional[Dict] = None,
-        augmentation_speed_args: Optional[Dict] = None,
-        augmentation_ir_response_args: Optional[Dict] = None,
-        augmentation_src_args: Optional[Dict] = None,
-        augmentation_hpf_args: Optional[Dict] = None,
-        augmentation_volume_args: Optional[Dict] = None,
+        augmentation_speech_args: AugmentationArg = None,
+        augmentation_noise_args: AugmentationArg = None,
+        augmentation_reverb_args: AugmentationArg = None,
+        augmentation_speed_args: AugmentationArg = None,
+        augmentation_ir_response_args: AugmentationArg = None,
+        augmentation_src_args: AugmentationArg = None,
+        augmentation_hpf_args: AugmentationArg = None,
+        augmentation_volume_args: AugmentationArg = None,
         dataset_role: str = "train",
+        pipeline_role: str | None = None,
     ):
         super().__init__(
             metafile_path=metafile_path,
@@ -51,6 +58,7 @@ class SpeakerEmbeddingDataset(DynamicBaseDataset):
             augmentation_hpf_args=augmentation_hpf_args,
             augmentation_volume_args=augmentation_volume_args,
             dataset_role=dataset_role,
+            pipeline_role=pipeline_role,
         )
 
     @property
@@ -81,8 +89,8 @@ class SpeakerEmbeddingDataset(DynamicBaseDataset):
         interfered_speech = []
         if (
             self.augmentation_speech_args
-            and self.augmentation_speech_args["used"]
-            and torch.rand(1) < self.augmentation_speech_args["prob"]
+            and self.augmentation_speech_args.used
+            and torch.rand(1) < self.augmentation_speech_args.prob
         ):
             # Samples speakers from overall speaker pool
             if self.target_sr is not None:
@@ -94,7 +102,7 @@ class SpeakerEmbeddingDataset(DynamicBaseDataset):
             spk_pool = set(spk_pool)
             spk_pool.remove(target_speaker)
             interference_spk_list = random.sample(
-                sorted(spk_pool), k=self.augmentation_speech_args["add_n_cases"]
+                sorted(spk_pool), k=self.augmentation_speech_args.add_n_cases
             )
             interference_sr = None if self.target_sr is not None else self.ori_audio_sr
             for spk in interference_spk_list:
@@ -132,8 +140,8 @@ class SpeakerEmbeddingDataset(DynamicBaseDataset):
             sir = (
                 torch.FloatTensor(1)
                 .uniform_(
-                    self.augmentation_speech_args["snr_range"][0],
-                    self.augmentation_speech_args["snr_range"][1],
+                    self.augmentation_speech_args.snr_range[0],
+                    self.augmentation_speech_args.snr_range[1],
                 )
                 .item()
             )
@@ -151,12 +159,12 @@ class SpeakerEmbeddingDataset(DynamicBaseDataset):
         sp_idx = None
         if (
             self.augmentation_speed_args
-            and self.augmentation_speed_args["used"]
-            and torch.rand(1) < self.augmentation_speed_args["prob"]
+            and self.augmentation_speed_args.used
+            and torch.rand(1) < self.augmentation_speed_args.prob
         ):
-            speed = torch.arange(len(self.augmentation_speed_args["speed_change"]))
+            speed = torch.arange(len(self.augmentation_speed_args.speed_change))
             sp_idx = random.choice(speed)
-            speed = self.augmentation_speed_args["speed_change"][sp_idx]
+            speed = self.augmentation_speed_args.speed_change[sp_idx]
             noisy_speech, (speed) = self.augmentor.sox_speed_perturbed(
                 wav=noisy_speech,
                 speed=speed,
@@ -166,8 +174,8 @@ class SpeakerEmbeddingDataset(DynamicBaseDataset):
         # Reverb
         if (
             self.augmentation_reverb_args
-            and self.augmentation_reverb_args["used"]
-            and torch.rand(1) < self.augmentation_reverb_args["prob"]
+            and self.augmentation_reverb_args.used
+            and torch.rand(1) < self.augmentation_reverb_args.prob
         ):
             # RIR's target for noisy is full
             noisy_speech, (rir_id, _) = self.augmentor.apply_rir(
@@ -182,21 +190,21 @@ class SpeakerEmbeddingDataset(DynamicBaseDataset):
         # We collect added noises for if we need to use high SNR noisy speech as ground truth
         if (
             self.augmentation_noise_args
-            and self.augmentation_noise_args["used"]
-            and torch.rand(1) < self.augmentation_noise_args["prob"]
+            and self.augmentation_noise_args.used
+            and torch.rand(1) < self.augmentation_noise_args.prob
         ):
             dynamic_type = False
             snr = (
                 torch.FloatTensor(1)
                 .uniform_(
-                    self.augmentation_noise_args["snr_range"][0],
-                    self.augmentation_noise_args["snr_range"][1],
+                    self.augmentation_noise_args.snr_range[0],
+                    self.augmentation_noise_args.snr_range[1],
                 )
                 .item()
             )
 
             # 1 / 4 cases add dynamic noise type
-            if torch.rand(1) < self.augmentation_noise_args["prob"] / 4:
+            if torch.rand(1) < self.augmentation_noise_args.prob / 4:
                 dynamic_type = True
 
             noisy_speech, (added_noise, _, _) = self.augmentor.add_bg_noise(
@@ -212,13 +220,13 @@ class SpeakerEmbeddingDataset(DynamicBaseDataset):
             # if dynamic is False, 1 / 4 add white noise
             if (
                 dynamic_type == False
-                and torch.rand(1) < self.augmentation_noise_args["prob_white_noise"]
+                and torch.rand(1) < self.augmentation_noise_args.prob_white_noise
             ):
                 snr = (
                     torch.FloatTensor(1)
                     .uniform_(
-                        self.augmentation_noise_args["white_noise_snr_range"][0],
-                        self.augmentation_noise_args["white_noise_snr_range"][1],
+                        self.augmentation_noise_args.white_noise_snr_range[0],
+                        self.augmentation_noise_args.white_noise_snr_range[1],
                     )
                     .item()
                 )
@@ -235,12 +243,12 @@ class SpeakerEmbeddingDataset(DynamicBaseDataset):
         # SRC
         if (
             self.augmentation_src_args
-            and self.augmentation_src_args["used"]
-            and torch.rand(1) < self.augmentation_src_args["prob"]
+            and self.augmentation_src_args.used
+            and torch.rand(1) < self.augmentation_src_args.prob
         ):
             src_target = random.choices(
-                self.augmentation_src_args["src_range"],
-                weights=self.augmentation_src_args["prob_each"],
+                self.augmentation_src_args.src_range,
+                weights=self.augmentation_src_args.prob_each,
             )[0]
 
             if torch.rand(1) < 0.5:
@@ -258,20 +266,20 @@ class SpeakerEmbeddingDataset(DynamicBaseDataset):
         # 2nd-IIR response
         if (
             self.augmentation_ir_response_args
-            and self.augmentation_ir_response_args["used"]
-            and torch.rand(1) < self.augmentation_ir_response_args["prob"]
+            and self.augmentation_ir_response_args.used
+            and torch.rand(1) < self.augmentation_ir_response_args.prob
         ):
             noisy_speech, _ = self.augmentor.apply_2nd_iir_response(wav=noisy_speech)
 
         # HPF effects
         if (
             self.augmentation_hpf_args
-            and self.augmentation_hpf_args["used"]
-            and torch.rand(1) < self.augmentation_hpf_args["prob"]
+            and self.augmentation_hpf_args.used
+            and torch.rand(1) < self.augmentation_hpf_args.prob
         ):
             hpf_cutoff = random.choices(
-                self.augmentation_hpf_args["cutoff"],
-                weights=self.augmentation_hpf_args["prob_each"],
+                self.augmentation_hpf_args.cutoff,
+                weights=self.augmentation_hpf_args.prob_each,
             )[0]
             q_factor = torch.FloatTensor(1).normal_(mean=0.707, std=0.1).clip(0.3, 1.3)
             noisy_speech, _ = self.augmentor.apply_hpf(
@@ -284,17 +292,17 @@ class SpeakerEmbeddingDataset(DynamicBaseDataset):
         # Volume perturbed
         if (
             self.augmentation_volume_args
-            and self.augmentation_volume_args["used"]
-            and torch.rand(1) < self.augmentation_volume_args["prob"]
+            and self.augmentation_volume_args.used
+            and torch.rand(1) < self.augmentation_volume_args.prob
         ):
-            if torch.rand(1) < self.augmentation_volume_args["clipping_prob"]:
+            if torch.rand(1) < self.augmentation_volume_args.clipping_prob:
                 min = torch.FloatTensor(1).uniform_(
-                    self.augmentation_volume_args["clipping_range"]["min"][0],
-                    self.augmentation_volume_args["clipping_range"]["min"][1],
+                    self.augmentation_volume_args.clipping_range.min[0],
+                    self.augmentation_volume_args.clipping_range.min[1],
                 )
                 max = torch.FloatTensor(1).uniform_(
-                    self.augmentation_volume_args["clipping_range"]["max"][0],
-                    self.augmentation_volume_args["clipping_range"]["max"][1],
+                    self.augmentation_volume_args.clipping_range.max[0],
+                    self.augmentation_volume_args.clipping_range.max[1],
                 )
                 noisy_speech, _ = self.augmentor.apply_clipping_distortion(
                     wav=noisy_speech, min_quantile=min, max_quantile=max
@@ -303,8 +311,8 @@ class SpeakerEmbeddingDataset(DynamicBaseDataset):
                 gain = (
                     torch.FloatTensor(1)
                     .uniform_(
-                        self.augmentation_volume_args["perturbed_range"][0],
-                        self.augmentation_volume_args["perturbed_range"][1],
+                        self.augmentation_volume_args.perturbed_range[0],
+                        self.augmentation_volume_args.perturbed_range[1],
                     )
                     .item()
                 )
@@ -323,7 +331,7 @@ class SpeakerEmbeddingDataset(DynamicBaseDataset):
             ),
         ]
 
-        if sp_idx is not None and self.augmentation_speed_args["treat_as_new_speaker"]:
+        if sp_idx is not None and self.augmentation_speed_args.treat_as_new_speaker:
             spk2idx_shift = (sp_idx + 1) * len(self.spk2idx)
         else:
             spk2idx_shift = 0

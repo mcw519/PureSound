@@ -24,16 +24,17 @@ DynamicBaseDataset(
     target_sr: Optional[int] = None,
     training_sample_length_in_seconds: float = 6.0,
     audio_gain_normalized_to: Optional[int] = None,
-    augmentation_speech_args: Optional[Dict] = None,
-    augmentation_noise_args: Optional[Dict] = None,
-    augmentation_reverb_args: Optional[Dict] = None,
-    augmentation_speed_args: Optional[Dict] = None,
-    augmentation_ir_response_args: Optional[Dict] = None,
-    augmentation_src_args: Optional[Dict] = None,
-    augmentation_hpf_args: Optional[Dict] = None,
-    augmentation_volume_args: Optional[Dict] = None,
-    vad_label_args: Optional[Dict] = None,
+    augmentation_speech_args: AugmentationArg = None,
+    augmentation_noise_args: AugmentationArg = None,
+    augmentation_reverb_args: AugmentationArg = None,
+    augmentation_speed_args: AugmentationArg = None,
+    augmentation_ir_response_args: AugmentationArg = None,
+    augmentation_src_args: AugmentationArg = None,
+    augmentation_hpf_args: AugmentationArg = None,
+    augmentation_volume_args: AugmentationArg = None,
+    vad_label_args: AugmentationArg = None,
     dataset_role: str = "train",
+    pipeline_role: Optional[str] = None,
 )
 ```
 
@@ -56,14 +57,15 @@ default — there is **no `**kwargs`** catch-all. Every length is in
 - `augmentation_speech_args`, `augmentation_noise_args`,
   `augmentation_reverb_args`, `augmentation_speed_args`,
   `augmentation_ir_response_args`, `augmentation_src_args`,
-  `augmentation_hpf_args`, `augmentation_volume_args` – raw config blocks,
-  stored as-is on `self`; only `augmentation_noise_args` and
+  `augmentation_hpf_args`, `augmentation_volume_args` – validated Pydantic
+  capability models (a mapping is accepted and validated at this boundary);
+  only `augmentation_noise_args` and
   `augmentation_reverb_args` are consumed here (in `init_augmentor()`) — the
   rest are read by subclasses' `__getitem__`
 - `vad_label_args` – see [VAD-labeler dispatch](#vad-labeler-dispatch-init_vad_labeler) below
-- `dataset_role` (default `"train"`) – must be `"train"` / `"validation"` /
-  `"test"` or `__init__` raises `ValueError`; also gates pre-generated RIR
-  bank selection (see below)
+- `dataset_role` (default `"train"`) – the actual dataset stage.
+- `pipeline_role` (defaults to `dataset_role`) – the source distribution used
+  by stage-sensitive capabilities such as a pre-generated RIR bank.
 
 ### Initialization sequence
 
@@ -136,14 +138,13 @@ Takes **no arguments** — reads `self.augmentation_noise_args` and
   | `simulator.used`, and no `pregenerated` block (or `pregenerated.used` false) | physics-based room simulator — `self.augmentor.init_room_simulator(simulator_args)` |
   | no `simulator` key, or `simulator.used` falsy | static RIR folder — `self.augmentor.load_rir_from_folder(augmentation_reverb_args["rir_folder"])` |
 
-  **Pre-generated bank `usage_role` gotcha**: the pregenerated config may set
+  **Pre-generated bank `usage_role` contract**: the pregenerated config may set
   its own `usage_role` (e.g. to pin a bank split to
   `"train"`/`"validation"`/`"test"`). If it is set and does not match this
-  dataset instance's `dataset_role`, `init_augmentor()` raises `ValueError`.
-  If it is unset, it is silently forced to `self.dataset_role` before
-  `init_room_bank()` runs — so a train-role dataset always draws from the
-  train-role bank split even if the RIR bank config itself never mentions
-  `usage_role`.
+  dataset instance's `pipeline_role`, `init_augmentor()` raises `ValueError`.
+  If it is unset, it is set to `self.pipeline_role` before `init_room_bank()`.
+  The shared runner passes distinct train/validation dataset roles and reads
+  their pipeline roles from the typed `dataset` config.
 
 ---
 

@@ -1,3 +1,9 @@
+# Recipe schema v2: `task` selects the model that validates this file
+# (puresound/config/recipe.py); `purpose` picks training vs model-only.
+schema_version: 2
+purpose: train
+task: noise_suppression
+
 dataset:
   train_metafile: ./data/train
   valid_metafile: ./data/valid
@@ -7,7 +13,7 @@ dataset:
   gain_normalized_to: # ex: -28
   training_length_seconds: 6.
   filter_min_utterance_length: 4.
-  filter_min_utterance_per_speaker: 5.
+  filter_min_utterance_per_speaker: 5
 
 augmentation_speech:
   used: False

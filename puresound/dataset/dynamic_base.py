@@ -2,12 +2,25 @@ import logging
 import random
 from collections import defaultdict
 from copy import deepcopy
-from typing import Dict, List, NamedTuple, Optional
+from typing import List, Mapping, NamedTuple, Optional, TypeVar, Union
 
 import numpy as np
 import torch
+from pydantic import BaseModel
 
 from puresound.audio.augmentation import AudioEffectAugmentor
+from puresound.config import delegated_kwargs
+from puresound.config.augmentation import (
+    ContinuousSpeedAugmentation,
+    HighPassAugmentation,
+    NoiseAugmentation,
+    ReverbAugmentation,
+    SimpleProbAugmentation,
+    SourceRateAugmentation,
+    SpeechAugmentation,
+    VadLabelConfig,
+    VolumeAugmentation,
+)
 from puresound.audio.io import AudioIO
 from puresound.audio.noise import add_bg_white_noise
 from puresound.audio.vad import EnergyVADLabeler, create_vad_labeler, frame_count
@@ -15,6 +28,28 @@ from puresound.dataset.parser import MetafileParser
 
 
 logger = logging.getLogger(__name__)
+
+
+#: A dataset argument may arrive as its validated model or as a plain mapping.
+AugmentationArg = Union[BaseModel, Mapping, None]
+BlockModel = TypeVar("BlockModel", bound=BaseModel)
+
+
+def as_block(value: AugmentationArg, model: type[BlockModel]) -> BlockModel | None:
+    """Accept either a validated config block or a mapping to validate into one.
+
+    A recipe always hands over models. Tests and one-off scripts build the
+    blocks inline, and routing those through the same model is what makes the
+    schema the single gate: constructing a dataset directly no longer skips the
+    validation a recipe gets.
+    """
+    if value is None:
+        return value
+    if isinstance(value, model):
+        return value
+    if isinstance(value, BaseModel):
+        value = value.model_dump(mode="python")
+    return model.model_validate(value)
 
 
 class ForegroundReverb(NamedTuple):
@@ -33,6 +68,8 @@ class ReverbedSource(NamedTuple):
 
 
 class DynamicBaseDataset(torch.utils.data.Dataset):
+    speed_augmentation_model = ContinuousSpeedAugmentation
+
     def __init__(
         self,
         metafile_path: str,
@@ -41,16 +78,17 @@ class DynamicBaseDataset(torch.utils.data.Dataset):
         target_sr: Optional[int] = None,
         training_sample_length_in_seconds: float = 6.0,
         audio_gain_normalized_to: Optional[int] = None,
-        augmentation_speech_args: Optional[Dict] = None,
-        augmentation_noise_args: Optional[Dict] = None,
-        augmentation_reverb_args: Optional[Dict] = None,
-        augmentation_speed_args: Optional[Dict] = None,
-        augmentation_ir_response_args: Optional[Dict] = None,
-        augmentation_src_args: Optional[Dict] = None,
-        augmentation_hpf_args: Optional[Dict] = None,
-        augmentation_volume_args: Optional[Dict] = None,
-        vad_label_args: Optional[Dict] = None,
+        augmentation_speech_args: AugmentationArg = None,
+        augmentation_noise_args: AugmentationArg = None,
+        augmentation_reverb_args: AugmentationArg = None,
+        augmentation_speed_args: AugmentationArg = None,
+        augmentation_ir_response_args: AugmentationArg = None,
+        augmentation_src_args: AugmentationArg = None,
+        augmentation_hpf_args: AugmentationArg = None,
+        augmentation_volume_args: AugmentationArg = None,
+        vad_label_args: AugmentationArg = None,
         dataset_role: str = "train",
+        pipeline_role: str | None = None,
     ):
         super().__init__()
         # Matafile related
@@ -70,20 +108,42 @@ class DynamicBaseDataset(torch.utils.data.Dataset):
             self.training_sample_length = None
 
         # Augmentation related
-        self.augmentation_speech_args = augmentation_speech_args
-        self.augmentation_noise_args = augmentation_noise_args
-        self.augmentation_reverb_args = augmentation_reverb_args
-        self.augmentation_speed_args = augmentation_speed_args
-        self.augmentation_ir_response_args = augmentation_ir_response_args
-        self.augmentation_src_args = augmentation_src_args
-        self.augmentation_hpf_args = augmentation_hpf_args
-        self.augmentation_volume_args = augmentation_volume_args
-        self.vad_label_args = vad_label_args
+        self.augmentation_speech_args = as_block(
+            augmentation_speech_args, SpeechAugmentation
+        )
+        self.augmentation_noise_args = as_block(
+            augmentation_noise_args, NoiseAugmentation
+        )
+        self.augmentation_reverb_args = as_block(
+            augmentation_reverb_args, ReverbAugmentation
+        )
+        # Tasks bind their speed dialect through ``speed_augmentation_model``.
+        self.augmentation_speed_args = as_block(
+            augmentation_speed_args, self.speed_augmentation_model
+        )
+        self.augmentation_ir_response_args = as_block(
+            augmentation_ir_response_args, SimpleProbAugmentation
+        )
+        self.augmentation_src_args = as_block(
+            augmentation_src_args, SourceRateAugmentation
+        )
+        self.augmentation_hpf_args = as_block(
+            augmentation_hpf_args, HighPassAugmentation
+        )
+        self.augmentation_volume_args = as_block(
+            augmentation_volume_args, VolumeAugmentation
+        )
+        self.vad_label_args = as_block(vad_label_args, VadLabelConfig)
         self.dataset_role = str(dataset_role)
         if self.dataset_role not in {"train", "validation", "test"}:
             raise ValueError(
                 "dataset_role must be train, validation, or test"
             )
+        self.pipeline_role = (
+            self.dataset_role if pipeline_role is None else str(pipeline_role)
+        )
+        if self.pipeline_role not in {"train", "validation", "test"}:
+            raise ValueError("pipeline_role must be train, validation, or test")
         self.vad_labeler = None
 
         self.init_necessary()
@@ -116,22 +176,22 @@ class DynamicBaseDataset(torch.utils.data.Dataset):
         # lifting Silero out of the per-sample worker path entirely.
         self.defer_vad_to_gpu = False
 
-        if not cfg or not cfg.get("used"):
+        if cfg is None or not cfg.used:
             self.vad_labeler = None
             return
 
-        args = dict(cfg.get("args", {}))
-        frame_length = args.get("frame_length", cfg.get("frame_length", 400))
-        hop_length = args.get("hop_length", cfg.get("hop_length", 160))
+        # `args` is the labeler constructor's own namespace and wins over the
+        # block-level shorthand, as it always has.
         self.gating_vad_labeler = EnergyVADLabeler(
-            frame_length=frame_length, hop_length=hop_length
+            frame_length=cfg.args.get("frame_length", cfg.frame_length),
+            hop_length=cfg.args.get("hop_length", cfg.hop_length),
         )
 
-        if cfg.get("backend", "energy").lower() == "silero":
+        if cfg.backend == "silero":
             self.defer_vad_to_gpu = True
             self.vad_labeler = None
         else:
-            self.vad_labeler = create_vad_labeler(cfg)
+            self.vad_labeler = create_vad_labeler(delegated_kwargs(cfg))
 
     # ------------------------------------------------------------------ #
     # Derived audio parameters.
@@ -305,28 +365,28 @@ class DynamicBaseDataset(torch.utils.data.Dataset):
         self.augmentor = AudioEffectAugmentor()
         if self.augmentation_noise_args is not None:
             self.augmentor.load_bg_noise_from_folder(
-                self.augmentation_noise_args["noise_folder"]
+                self.augmentation_noise_args.noise_folder
             )
             logger.info(
                 f"Augmentor finished load {len(self.augmentor.bg_noise.keys())} noises"
             )
 
         if self.augmentation_reverb_args is not None:
-            simulator_args = self.augmentation_reverb_args.get("simulator")
-            if simulator_args and simulator_args.get("used"):
-                pregenerated_args = simulator_args.get("pregenerated")
-                if pregenerated_args and pregenerated_args.get("used"):
-                    pregenerated_config = dict(pregenerated_args)
-                    configured_role = pregenerated_config.get("usage_role")
+            simulator_args = self.augmentation_reverb_args.simulator
+            if simulator_args is not None and simulator_args.used:
+                pregenerated_args = simulator_args.pregenerated
+                if pregenerated_args is not None and pregenerated_args.used:
+                    pregenerated_config = delegated_kwargs(pregenerated_args)
+                    configured_role = pregenerated_args.usage_role
                     if (
                         configured_role is not None
-                        and str(configured_role) != self.dataset_role
+                        and str(configured_role) != self.pipeline_role
                     ):
                         raise ValueError(
                             "pregenerated RIR usage_role does not match "
-                            "the dataset_role"
+                            "the pipeline_role"
                         )
-                    pregenerated_config["usage_role"] = self.dataset_role
+                    pregenerated_config["usage_role"] = self.pipeline_role
                     self.augmentor.init_room_bank(pregenerated_config)
                     mix = getattr(self.augmentor.room_bank, "describe", None)
                     logger.info(
@@ -337,17 +397,19 @@ class DynamicBaseDataset(torch.utils.data.Dataset):
                         + ")"
                     )
                 else:
-                    self.augmentor.init_room_simulator(simulator_args)
+                    self.augmentor.init_room_simulator(
+                        delegated_kwargs(simulator_args)
+                    )
                     logger.info("Augmentor initialized physics-based room simulator")
             else:
                 self.augmentor.load_rir_from_folder(
-                    self.augmentation_reverb_args["rir_folder"]
+                    self.augmentation_reverb_args.rir_folder
                 )
                 logger.info(f"Augmentor finished load {len(self.augmentor.rir.keys())} rirs")
 
-            drr_contrast_args = self.augmentation_reverb_args.get("drr_contrast")
-            if drr_contrast_args and drr_contrast_args.get("used"):
-                self.augmentor.init_drr_contrast(drr_contrast_args)
+            drr_contrast_args = self.augmentation_reverb_args.drr_contrast
+            if drr_contrast_args is not None and drr_contrast_args.used:
+                self.augmentor.init_drr_contrast(delegated_kwargs(drr_contrast_args))
                 knob = self.augmentor.drr_contrast
                 if knob["mode"] == "deterministic":
                     detail = (
@@ -367,16 +429,13 @@ class DynamicBaseDataset(torch.utils.data.Dataset):
         logger.info("----" * 30)
 
     def should_apply_source_level_reverb(self) -> bool:
-        if not (self.augmentation_reverb_args and self.augmentation_reverb_args["used"]):
+        reverb = self.augmentation_reverb_args
+        if reverb is None or not reverb.used:
             return False
-        simulator_args = self.augmentation_reverb_args.get("simulator")
-        if not (
-            simulator_args
-            and simulator_args.get("used")
-            and simulator_args.get("source_level")
-        ):
+        simulator = reverb.simulator
+        if simulator is None or not simulator.used or not simulator.source_level:
             return False
-        return (torch.rand(1) < self.augmentation_reverb_args["prob"]).item()
+        return (torch.rand(1) < reverb.prob).item()
 
     def apply_source_level_target_reverb(
         self,
@@ -401,7 +460,7 @@ class DynamicBaseDataset(torch.utils.data.Dataset):
             source_role="foreground",
             distance_range_override=distance_range_override,
         )
-        target_rir_type = self.augmentation_reverb_args["target_rir_type"]
+        target_rir_type = self.augmentation_reverb_args.target_rir_type
         if target_rir_type == "anechoic":
             clean_target = wav
         else:

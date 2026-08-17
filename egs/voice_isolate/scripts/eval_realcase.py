@@ -75,7 +75,8 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from puresound.audio.io import AudioIO
-from puresound.recipes import init_siso_model, load_siso_recipe_config
+from puresound.config import load_recipe
+from puresound.recipes import init_siso_model
 
 SUPPRESS_FAIL_DB = -6.0     # suppress-span reduction shallower than this = leak
 SUPPRESS_PARTIAL_DB = 12.0  # residual this far above the floor = audible bystander
@@ -85,7 +86,9 @@ FRAME, HOP = 1600, 800      # 100 ms / 50 ms, for the floor estimate
 
 
 def load_model(config_path: str, ckpt_path: str, device: torch.device) -> torch.nn.Module:
-    model = init_siso_model(load_siso_recipe_config(config_path)[5])
+    model = init_siso_model(
+        load_recipe(config_path, expected_task="voice_isolation").model
+    )
     checkpoint = torch.load(ckpt_path, map_location=device)
     state_dict = checkpoint["state_dict"] if isinstance(checkpoint, dict) and "state_dict" in checkpoint else checkpoint
     if hasattr(model, "reload_checkpoint"):

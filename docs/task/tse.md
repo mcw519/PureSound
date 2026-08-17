@@ -28,7 +28,7 @@ TargetSpeakerExtractDataset(
     min_utts_in_each_speaker: int = 5,
     target_sr: Optional[int] = None,
     training_sample_length_in_seconds: float = 6.0,
-    enroll_speech_args: Optional[Dict] = None,
+    enroll_speech_args: EnrollmentConfig | Mapping | None = None,
     audio_gain_normalized_to: Optional[int] = None,
     augmentation_speech_args=None,   # interferers: used/prob/add_n_cases(int)/snr_range/is_target
     augmentation_noise_args=None,
@@ -40,6 +40,7 @@ TargetSpeakerExtractDataset(
     augmentation_volume_args=None,
     vad_label_args=None,
     dataset_role: str = "train",
+    pipeline_role: Optional[str] = None,
 )
 ```
 
@@ -51,14 +52,11 @@ one whole-mix RIR applied after the interferer mix. `add_n_cases` is a plain
 `int` here too (not the `[low, high]` range `task.ns`/`task.voice_isolation`
 also accept).
 
-### `enroll_speech_args` is required despite the `Optional` type hint
+### `enroll_speech_args` is required
 
-The constructor calls `self.init_enroll_augmentor()` unconditionally, which
-immediately evaluates `self.enroll_speech_args["add_noise"]["used"]` --
-passing the literal default, `None`, raises `TypeError: 'NoneType' object is
-not subscriptable` before a single item is ever fetched. In practice
-`enroll_speech_args` must always be a dict with every one of these top-level
-keys present (each at least `{"used": False}` to turn it off):
+The dataset accepts an `EnrollmentConfig` or mapping and validates it through
+the same Pydantic model as the recipe. Passing `None` raises a direct
+`ValueError("enroll_speech_args is required")` before initialization.
 
 | Key | Purpose |
 |---|---|

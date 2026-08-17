@@ -11,26 +11,28 @@ The split is deliberate. A recipe owns its task; it does not own argparse.
 
 Wiring a recipe::
 
+    from puresound.config import load_recipe
     from puresound.system import runner
 
-    def init_dataloader(corpus_dict, trainer_dict, ...):
+    def init_dataloader(recipe):
         return runner.build_dataloaders(
             dataset_cls=MyDataset, collate_fn=MyCollateFunc(),
-            corpus_dict=corpus_dict, trainer_dict=trainer_dict, ...
+            recipe=recipe,
         )
 
     if __name__ == "__main__":
         args = runner.build_arg_parser("...").parse_args()
-        cfg = runner.RecipeConfig.load(args.config_path)
-        runner.run_stages(args, cfg, *(init_dataloader(...) if training else (None, None)))
+        cfg = load_recipe(
+            args.config_path, expected_task="my_task", expected_purpose="train"
+        )
+        runner.run_stages(args, cfg, *(init_dataloader(cfg) if training else (None, None)))
 """
 
 from __future__ import annotations
 import logging
 
 import argparse
-from dataclasses import dataclass
-from typing import Any, Dict, Optional, Tuple
+from typing import Dict, Optional, Tuple
 
 import lightning as L
 import torch
@@ -38,9 +40,10 @@ from lightning.pytorch.callbacks import LearningRateMonitor, ModelCheckpoint
 from lightning.pytorch.strategies import DDPStrategy
 
 from puresound.audio.io import AudioIO
+from puresound.config import BaseRecipe, SisoRecipe
 from puresound.dataset.kaldi_base import KaldiFormBaseDataset
 from puresound.metrics import Metrics
-from puresound.recipes import init_loss_func, init_siso_model, load_siso_recipe_config
+from puresound.recipes import init_loss_func, init_siso_model
 from puresound.system.optim import create_optimizer_and_scheduler
 from puresound.task.sampler import SpeakerSampler
 from puresound.utils import create_folder
@@ -65,124 +68,74 @@ def configure_torch_backends() -> None:
     torch.set_float32_matmul_precision("high")
 
 
-@dataclass(frozen=True)
-class RecipeConfig:
-    """Named view over ``load_siso_recipe_config``'s positional tuple.
-
-    That function stays as it is -- ten scripts unpack its tuple -- but a recipe reading
-    twenty positional fields cannot be checked by eye, so the driver uses names.
-    """
-
-    corpus: Dict
-    trainer: Dict
-    optimizer: Dict
-    scheduler: Dict
-    loss: Any
-    model: Dict
-    aug_speech: Optional[Dict]
-    aug_noise: Optional[Dict]
-    aug_reverb: Optional[Dict]
-    aug_speed: Optional[Dict]
-    aug_ir: Optional[Dict]
-    aug_src: Optional[Dict]
-    aug_hpf: Optional[Dict]
-    aug_volume: Optional[Dict]
-    aug_codec: Optional[Dict]
-    aug_packet_loss: Optional[Dict]
-    aug_target_absent: Optional[Dict]
-    vad_label: Optional[Dict]
-    aug_realfar: Optional[Dict] = None
-    aug_realnear: Optional[Dict] = None
-
-    @classmethod
-    def load(cls, config_path: str) -> "RecipeConfig":
-        return cls(*load_siso_recipe_config(config_path))
-
-    @property
-    def task(self) -> str:
-        return self.corpus.get("task", "noise_suppression")
-
-
 def build_dataloaders(
     *,
     dataset_cls,
     collate_fn,
-    corpus_dict: Dict,
-    trainer_dict: Dict,
-    aug_speech_dict: Dict,
-    aug_noise_dict: Dict,
-    aug_reverb_dict: Dict,
-    aug_speed_dict: Dict,
-    aug_ir_dict: Dict,
-    aug_src_dict: Dict,
-    aug_hpf_dict: Dict,
-    aug_volume_dict: Dict,
-    aug_codec_dict: Dict,
-    aug_packet_loss_dict: Dict,
-    aug_target_absent_dict: Dict,
-    vad_label_dict: Dict,
+    recipe: BaseRecipe,
     task_kwargs: Optional[Dict] = None,
 ) -> Tuple[torch.utils.data.DataLoader, torch.utils.data.DataLoader]:
     """Train and validation dataloaders for a dynamic-synthesis dataset.
 
-    ``task_kwargs`` carries the arguments only one task's dataset accepts (the
-    real-recording pools, for instance); everything else is common.
+    ``task_kwargs`` carries arguments only one task's dataset accepts and that
+    do not come from the recipe; everything else is read off the typed recipe.
     """
+    corpus = recipe.dataset
+    trainer = recipe.trainer
     common = dict(
-        min_utt_length_in_seconds=corpus_dict["filter_min_utterance_length"],
-        min_utts_in_each_speaker=corpus_dict["filter_min_utterance_per_speaker"],
-        target_sr=corpus_dict["target_sample_rate"],
-        training_sample_length_in_seconds=corpus_dict["training_length_seconds"],
-        audio_gain_normalized_to=corpus_dict["gain_normalized_to"],
-        augmentation_speech_args=aug_speech_dict,
-        augmentation_noise_args=aug_noise_dict,
-        augmentation_reverb_args=aug_reverb_dict,
-        augmentation_speed_args=aug_speed_dict,
-        augmentation_ir_response_args=aug_ir_dict,
-        augmentation_src_args=aug_src_dict,
-        augmentation_hpf_args=aug_hpf_dict,
-        augmentation_volume_args=aug_volume_dict,
-        augmentation_codec_args=aug_codec_dict,
-        augmentation_packet_loss_args=aug_packet_loss_dict,
-        augmentation_target_absent_args=aug_target_absent_dict,
-        vad_label_args=vad_label_dict,
+        min_utt_length_in_seconds=corpus.filter_min_utterance_length,
+        min_utts_in_each_speaker=corpus.filter_min_utterance_per_speaker,
+        target_sr=corpus.target_sample_rate,
+        training_sample_length_in_seconds=corpus.training_length_seconds,
+        audio_gain_normalized_to=corpus.gain_normalized_to,
+        **recipe.augmentation_kwargs(),
         **(task_kwargs or {}),
     )
-    select_by_sr_first = False if corpus_dict["target_sample_rate"] else True
+    select_by_sr_first = not corpus.target_sample_rate
 
-    train_dataset = dataset_cls(metafile_path=corpus_dict["train_metafile"], **common)
+    train_dataset = dataset_cls(
+        metafile_path=corpus.train_metafile,
+        dataset_role="train",
+        pipeline_role=corpus.train_pipeline_role,
+        **common,
+    )
     train_sampler = SpeakerSampler(
         data=train_dataset.meta,
-        total_batch=trainer_dict["train_iter_per_epoch"],
-        n_spks=trainer_dict["n_spk_per_batch"],
-        n_per=trainer_dict["n_utt_per_speaker"],
+        total_batch=trainer.train_iter_per_epoch,
+        n_spks=trainer.n_spk_per_batch,
+        n_per=trainer.n_utt_per_speaker,
         select_by_sr_first=select_by_sr_first,
     )
     train_dataloader = torch.utils.data.DataLoader(
         dataset=train_dataset,
         batch_sampler=train_sampler,
         pin_memory=True,
-        num_workers=trainer_dict["num_workers"],
+        num_workers=trainer.num_workers,
         collate_fn=collate_fn,
     )
 
-    valid_dataset = dataset_cls(metafile_path=corpus_dict["valid_metafile"], **common)
+    valid_dataset = dataset_cls(
+        metafile_path=corpus.valid_metafile,
+        dataset_role="validation",
+        pipeline_role=corpus.validation_pipeline_role,
+        **common,
+    )
     # Seeded sampler -> same valid batches every epoch, and per-item seeds make the
     # on-the-fly synthesis reproducible, so val metrics are comparable across epochs
     # and runs.
     valid_sampler = SpeakerSampler(
         data=valid_dataset.meta,
-        total_batch=trainer_dict["valid_iter_per_epoch"],
-        n_spks=trainer_dict["n_spk_per_batch"],
-        n_per=trainer_dict["n_utt_per_speaker"],
+        total_batch=trainer.valid_iter_per_epoch,
+        n_spks=trainer.n_spk_per_batch,
+        n_per=trainer.n_utt_per_speaker,
         select_by_sr_first=select_by_sr_first,
-        seed=trainer_dict.get("valid_seed", 1234),
+        seed=trainer.valid_seed,
     )
     valid_dataloader = torch.utils.data.DataLoader(
         dataset=valid_dataset,
         batch_sampler=valid_sampler,
         pin_memory=True,
-        num_workers=trainer_dict["num_workers"],
+        num_workers=trainer.num_workers,
         collate_fn=collate_fn,
     )
 
@@ -248,35 +201,32 @@ def dump_training_samples(train_dataloader, out_folder: str = "./dummy_samples",
             )
 
 
-def run_training(args, cfg: RecipeConfig, train_dataloader, valid_dataloader) -> None:
-    loss_func_list, loss_func_list_w = init_loss_func(hparam_conf=cfg.loss)
+def run_training(args, recipe: SisoRecipe, train_dataloader, valid_dataloader) -> None:
+    loss_func_list, loss_func_list_w = init_loss_func(recipe.loss_func)
 
-    lightning_model = init_siso_model(cfg.model)
+    lightning_model = init_siso_model(recipe.model)
     lightning_model.register_loss_func(loss_func_list, loss_func_list_w)
 
     # Silero VAD labels are computed batched on GPU (lifted out of the DataLoader
     # workers); the dataset emits `vad_reference` and the module labels the batch in
     # on_after_batch_transfer.
-    if (
-        cfg.vad_label
-        and cfg.vad_label.get("used")
-        and cfg.vad_label.get("backend", "energy").lower() == "silero"
-    ):
+    vad_label = recipe.vad_label
+    if vad_label is not None and vad_label.used and vad_label.backend == "silero":
         from puresound.audio.vad import BatchedSileroVADLabeler
 
         lightning_model.register_gpu_vad_labeler(
-            BatchedSileroVADLabeler(**cfg.vad_label.get("args", {}))
+            BatchedSileroVADLabeler(**vad_label.args)
         )
 
     param_groups = lightning_model.get_total_param_groups()
     optimizer, scheduler = create_optimizer_and_scheduler(
         overall_params_and_lr_factor=param_groups,
-        optimizer_args=cfg.optimizer,
-        scheduler_args=cfg.scheduler,
+        optimizer_args=recipe.optimizer,
+        scheduler_args=recipe.scheduler,
     )
     lightning_model.register_optimizer(optimizer)
     lightning_model.register_scheduler(scheduler)
-    lightning_model.register_warmup_step(cfg.scheduler["warmup_step"])
+    lightning_model.register_warmup_step(recipe.scheduler.warmup_step)
 
     if args.pretrained_ckpt_path:
         logger.info("Loading the pretrained params only.")
@@ -313,9 +263,9 @@ def run_training(args, cfg: RecipeConfig, train_dataloader, valid_dataloader) ->
     strategy = (
         DDPStrategy(
             gradient_as_bucket_view=True,
-            find_unused_parameters=cfg.trainer.get("find_unused_parameters", False),
+            find_unused_parameters=recipe.trainer.find_unused_parameters,
         )
-        if cfg.trainer["num_gpus"] > 1
+        if recipe.trainer.num_gpus > 1
         else "auto"
     )
     # Precision defaults to full precision (Lightning's 32-true) and is config-driven:
@@ -325,14 +275,14 @@ def run_training(args, cfg: RecipeConfig, train_dataloader, valid_dataloader) ->
     # range, no GradScaler); measured ~1.57x faster steps and ~40% less activation
     # memory on Ampere when enabled.
     trainer = L.Trainer(
-        **cfg.trainer["lightning_trainer_args"],
-        accelerator="gpu" if cfg.trainer["num_gpus"] > 0 else "cpu",
-        devices=cfg.trainer["num_gpus"],
+        **recipe.trainer.lightning_trainer_args,
+        accelerator="gpu" if recipe.trainer.num_gpus > 0 else "cpu",
+        devices=recipe.trainer.num_gpus,
         strategy=strategy,
-        limit_train_batches=cfg.trainer["train_iter_per_epoch"],
-        limit_val_batches=cfg.trainer["valid_iter_per_epoch"],
+        limit_train_batches=recipe.trainer.train_iter_per_epoch,
+        limit_val_batches=recipe.trainer.valid_iter_per_epoch,
         use_distributed_sampler=False,
-        default_root_dir=cfg.trainer["work_folder"],
+        default_root_dir=recipe.trainer.work_folder,
         callbacks=[lr_monitor, ckpt_monitor],
         profiler="simple",
         sync_batchnorm=True,
@@ -347,20 +297,20 @@ def run_training(args, cfg: RecipeConfig, train_dataloader, valid_dataloader) ->
     )
 
 
-def _test_dataloader(cfg: RecipeConfig, mode: str, resample_to: Optional[int]):
+def _test_dataloader(recipe: SisoRecipe, mode: str, resample_to: Optional[int]):
     dataset = KaldiFormBaseDataset(
-        folder=cfg.corpus["test_folder"], mode=mode, resample_to=resample_to
+        folder=recipe.dataset.test_folder, mode=mode, resample_to=resample_to
     )
     return torch.utils.data.DataLoader(
         dataset=dataset, pin_memory=True, num_workers=4, batch_size=1, shuffle=False
     )
 
 
-def run_scoring(args, cfg: RecipeConfig) -> None:
-    test_dataloader = _test_dataloader(cfg, "dev", args.inference_sr)
+def run_scoring(args, recipe: SisoRecipe) -> None:
+    test_dataloader = _test_dataloader(recipe, "dev", args.inference_sr)
     trainer = L.Trainer(inference_mode=True)
     state_dict = torch.load(args.ckpt_path, map_location="cpu")["state_dict"]
-    lightning_model = init_siso_model(cfg.model)
+    lightning_model = init_siso_model(recipe.model)
     lightning_model.reload_checkpoint(state_dict)
     lightning_model.register_metrics_func(
         {
@@ -376,26 +326,26 @@ def run_scoring(args, cfg: RecipeConfig) -> None:
     trainer.test(lightning_model, dataloaders=test_dataloader)
 
 
-def run_inference(args, cfg: RecipeConfig) -> None:
-    test_dataloader = _test_dataloader(cfg, "eval", args.inference_sr)
+def run_inference(args, recipe: SisoRecipe) -> None:
+    test_dataloader = _test_dataloader(recipe, "eval", args.inference_sr)
     trainer = L.Trainer(
-        inference_mode=True, default_root_dir=cfg.corpus["proc_output_folder"]
+        inference_mode=True, default_root_dir=recipe.dataset.proc_output_folder
     )
     state_dict = torch.load(args.ckpt_path, map_location="cpu")["state_dict"]
-    lightning_model = init_siso_model(cfg.model)
+    lightning_model = init_siso_model(recipe.model)
     lightning_model.reload_checkpoint(state_dict)
-    create_folder(cfg.corpus["proc_output_folder"])
-    lightning_model.register_proc_output_folder(cfg.corpus["proc_output_folder"])
+    create_folder(recipe.dataset.proc_output_folder)
+    lightning_model.register_proc_output_folder(recipe.dataset.proc_output_folder)
     trainer.predict(lightning_model, dataloaders=test_dataloader)
 
 
-def run_stages(args, cfg: RecipeConfig, train_dataloader=None, valid_dataloader=None) -> None:
+def run_stages(args, recipe: SisoRecipe, train_dataloader=None, valid_dataloader=None) -> None:
     """Run whichever stages the CLI asked for, in the order they depend on each other."""
     if args.dump_training_samples:
         dump_training_samples(train_dataloader)
     if args.training:
-        run_training(args, cfg, train_dataloader, valid_dataloader)
+        run_training(args, recipe, train_dataloader, valid_dataloader)
     if args.scoring:
-        run_scoring(args, cfg)
+        run_scoring(args, recipe)
     if args.inference:
-        run_inference(args, cfg)
+        run_inference(args, recipe)

@@ -19,33 +19,17 @@
 #
 # Used by: scripts/demo.py (gradio), scripts/streaming_onnx.py (ONNX export) and any
 # one-off enhance script that only has to build the model (no dataset/augmentation).
-# trainer/optimizer/scheduler/loss_func below are unused placeholders, present only
-# because the config loader (puresound.recipes.load_siso_recipe_config) requires the
-# keys to exist.
+# `trainer.work_folder` is used by the demo to discover checkpoints. No training
+# optimizer, scheduler or loss payload belongs in this model-only recipe.
+schema_version: 2
+purpose: inference
+task: voice_isolation
+
 dataset:
   target_sample_rate: 16000
 
 trainer:
   work_folder: pretrained_ckpt
-
-optimizer:
-  type: AdamW
-  learning_rate: 0.001
-  args:
-    weight_decay: 0.00001
-    betas:
-     - 0.9
-     - 0.999
-
-scheduler:
-  type: CosineAnnealingWarmRestarts
-  warmup_step: 250
-  args:
-    T_0: 20
-    T_mult: 1
-    eta_min: 0.00001
-
-loss_func: []
 
 model:
   lightning_module:

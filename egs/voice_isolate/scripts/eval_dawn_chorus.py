@@ -38,7 +38,8 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from puresound.audio.dsp import wav_resampling
-from puresound.recipes import init_siso_model, load_siso_recipe_config
+from puresound.config import load_recipe
+from puresound.recipes import init_siso_model
 
 DATASET_REPO = "ai-coustics/dawn_chorus_en"
 
@@ -70,9 +71,9 @@ def load_wav_bytes(blob: bytes, target_sr: int) -> np.ndarray:
 
 
 def load_model(config_path: str, ckpt_path: str, device: str):
-    config_tuple = load_siso_recipe_config(config_path)
-    model_dict = config_tuple[5]
-    model = init_siso_model(model_dict)
+    model = init_siso_model(
+        load_recipe(config_path, expected_task="voice_isolation").model
+    )
     state = torch.load(ckpt_path, map_location="cpu")["state_dict"]
     model.reload_checkpoint(state, load_loss_func=False)
     model.eval()

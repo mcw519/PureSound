@@ -41,14 +41,17 @@ if str(REPO) not in sys.path:
     sys.path.insert(0, str(REPO))
 
 from puresound.audio.io import AudioIO  # noqa: E402
-from puresound.recipes import init_siso_model, load_siso_recipe_config  # noqa: E402
+from puresound.config import load_recipe  # noqa: E402
+from puresound.recipes import init_siso_model  # noqa: E402
 
 KEEP_VIOLATION_DB = -3.0   # keep-span preservation below this = user/foreground killed
 SUPPRESS_FAIL_DB = -6.0    # suppress-span reduction shallower than this = far leak
 
 
 def load_model(config_path: str, ckpt_path: str, device: torch.device) -> torch.nn.Module:
-    model = init_siso_model(load_siso_recipe_config(config_path)[5])
+    model = init_siso_model(
+        load_recipe(config_path, expected_task="voice_isolation").model
+    )
     ckpt = torch.load(ckpt_path, map_location=device)
     sd = ckpt["state_dict"] if isinstance(ckpt, dict) and "state_dict" in ckpt else ckpt
     if hasattr(model, "reload_checkpoint"):

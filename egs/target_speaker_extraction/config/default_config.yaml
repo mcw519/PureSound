@@ -1,3 +1,9 @@
+# Recipe schema v2: `task` selects the model that validates this file
+# (puresound/config/recipe.py); `purpose` picks training vs model-only.
+schema_version: 2
+purpose: train
+task: target_speaker_extraction
+
 dataset:
   train_metafile: ./data/libri_train
   valid_metafile: ./data/libri_valid
@@ -7,7 +13,7 @@ dataset:
   gain_normalized_to: -28
   training_length_seconds: 6.
   filter_min_utterance_length: 4.
-  filter_min_utterance_per_speaker: 5.
+  filter_min_utterance_per_speaker: 5
 
 enroll_speech:
   enroll_length_seconds: 6
@@ -61,10 +67,6 @@ enroll_speech:
       max:
         - 0.9
         - 1.0
-  add_ir_response:
-    used: False
-    prob: 0.5
-
 augmentation_speech:
   used: True
   is_target: False

@@ -9,6 +9,13 @@ from torch.nn.utils.rnn import pad_sequence
 
 from puresound.audio.io import AudioIO
 from puresound.audio.noise import add_bg_noise
+from puresound.config.augmentation import (
+    MixModeConfig,
+    MixModeEntry,
+    RealFarAugmentation,
+    RealNearAugmentation,
+)
+from puresound.dataset.dynamic_base import AugmentationArg, as_block
 from puresound.task.ns import (
     NoiseSuppressionCollateFunc,
     NoiseSuppressionDataset,
@@ -98,15 +105,19 @@ class VoiceIsolationDataset(NoiseSuppressionDataset):
     def __init__(
         self,
         *args,
-        augmentation_realfar_args: Optional[Dict] = None,
-        augmentation_realnear_args: Optional[Dict] = None,
+        augmentation_realfar_args: AugmentationArg = None,
+        augmentation_realnear_args: AugmentationArg = None,
         **kwargs,
     ):
         super().__init__(*args, **kwargs)
-        self.augmentation_realfar_args = augmentation_realfar_args
-        self._realfar_pool = self._load_real_pool(augmentation_realfar_args)
-        self.augmentation_realnear_args = augmentation_realnear_args
-        self._realnear_pool = self._load_real_pool(augmentation_realnear_args)
+        self.augmentation_realfar_args = as_block(
+            augmentation_realfar_args, RealFarAugmentation
+        )
+        self._realfar_pool = self._load_real_pool(self.augmentation_realfar_args)
+        self.augmentation_realnear_args = as_block(
+            augmentation_realnear_args, RealNearAugmentation
+        )
+        self._realnear_pool = self._load_real_pool(self.augmentation_realnear_args)
 
     # ------------------------------------------------------------------ #
     # real-recording pools
@@ -115,9 +126,9 @@ class VoiceIsolationDataset(NoiseSuppressionDataset):
         """Load a real-recording pool manifest (one JSON object per line; see
         egs/voice_isolate/scripts/build_real_recording_pool.py). Returns [] when
         the block is absent/disabled so the row hooks are no-ops."""
-        if not (cfg and cfg.get("used")):
+        if cfg is None or not cfg.used:
             return []
-        manifest = cfg["pool_manifest"]
+        manifest = cfg.pool_manifest
         pool: List[Dict] = []
         with open(manifest, encoding="utf-8") as fh:
             for line in fh:
@@ -193,8 +204,8 @@ class VoiceIsolationDataset(NoiseSuppressionDataset):
         # The corpus utterance drawn upstream is discarded; batching/speaker
         # semantics stay untouched.
         realnear_cfg = self.augmentation_realnear_args
-        if realnear_cfg is not None and realnear_cfg.get("used", False) and self._realnear_pool:
-            plan.use_realnear = torch.rand(1).item() < float(realnear_cfg.get("prob", 0.0))
+        if realnear_cfg is not None and realnear_cfg.used and self._realnear_pool:
+            plan.use_realnear = torch.rand(1).item() < realnear_cfg.prob
         if plan.use_realnear:
             near_pick = random.choice(self._realnear_pool)
             plan.realnear_room = near_pick.get("room")
@@ -223,15 +234,15 @@ class VoiceIsolationDataset(NoiseSuppressionDataset):
             # applies.
             plan.use_realfar = bool(self._realfar_pool)
         else:
-            if realfar_cfg is not None and realfar_cfg.get("used", False) and self._realfar_pool:
-                plan.use_realfar = torch.rand(1).item() < float(realfar_cfg.get("prob", 0.0))
+            if realfar_cfg is not None and realfar_cfg.used and self._realfar_pool:
+                plan.use_realfar = torch.rand(1).item() < realfar_cfg.prob
             if plan.use_realfar:
                 # Real-far rows decide lone-far (target-absent) by their OWN
                 # prob, independently of the synthetic target-absent rate: the
                 # two far-field sources need separate pressure to be tuned
                 # separately.
                 plan.target_absent = (
-                    torch.rand(1).item() < float(realfar_cfg.get("lone_far_prob", 0.0))
+                    torch.rand(1).item() < realfar_cfg.lone_far_prob
                 )
                 plan.force_interferer = plan.target_absent
             else:
@@ -258,7 +269,7 @@ class VoiceIsolationDataset(NoiseSuppressionDataset):
         # Real far interferers: finished loudspeaker->air->mic recordings
         # inserted directly, with no RIR applied. The near foreground still
         # carries its channel from the foreground-preparation step.
-        add_n_cases_cfg = self.augmentation_speech_args["add_n_cases"]
+        add_n_cases_cfg = self.augmentation_speech_args.add_n_cases
         if isinstance(add_n_cases_cfg, (list, tuple)):
             n_interferers = random.randint(int(add_n_cases_cfg[0]), int(add_n_cases_cfg[1]))
         else:
@@ -281,9 +292,9 @@ class VoiceIsolationDataset(NoiseSuppressionDataset):
         # stretches supply absolute-suppress supervision for real far voices
         # while the near foreground stays present elsewhere in the row.
         if plan.use_realnear and self.augmentation_realnear_args is not None:
-            return self.augmentation_realnear_args.get("turn_taking_prob")
+            return self.augmentation_realnear_args.turn_taking_prob
         if plan.use_realfar and self.augmentation_realfar_args is not None:
-            return self.augmentation_realfar_args.get("turn_taking_prob")
+            return self.augmentation_realfar_args.turn_taking_prob
         return None
 
     def _mix_foreground_with_interferers(
@@ -300,12 +311,16 @@ class VoiceIsolationDataset(NoiseSuppressionDataset):
         # plus jitter); the other rescale modes draw a mode-specific SIR range.
         # Real-far rows skip mix_mode -- the simulated-near vs real-recorded-far
         # level ratio is not physically meaningful -- and use the hard SIR draw.
-        mm_cfg = (self.augmentation_speech_args or {}).get("mix_mode")
-        if not (mm_cfg and mm_cfg.get("used", False) and not plan.use_realfar):
+        mm_cfg = (
+            self.augmentation_speech_args.mix_mode
+            if self.augmentation_speech_args
+            else None
+        )
+        if not (mm_cfg and mm_cfg.used and not plan.use_realfar):
             return super()._mix_foreground_with_interferers(fg_wav, interfered_speech, plan)
         mode = self._sample_mix_mode(mm_cfg)
-        mix_mode_name = mode.get("name", "physical")
-        if mode.get("distance_level", False):
+        mix_mode_name = mode.name
+        if mode.distance_level:
             sir = self._distance_level_sir(mode, fg_metadata, interferer_metadata)
             if sir is None:
                 # geometry unavailable on this row -- fall back to the legacy
@@ -317,7 +332,7 @@ class VoiceIsolationDataset(NoiseSuppressionDataset):
                 wav=fg_wav, noise=[interfered_speech], snr_list=[sir],
             )
             return noisy_speech[0], interfered_speech[0], "distance_level", sir
-        if mode.get("physical", False):
+        if mode.physical:
             # No relative rescale: sum at natural post-RIR levels.
             noisy_speech = fg_wav + interfered_speech
             background_speech_reference = interfered_speech
@@ -325,7 +340,7 @@ class VoiceIsolationDataset(NoiseSuppressionDataset):
             itf_p = float(interfered_speech.pow(2).sum())
             realized_speech_sir = float(10.0 * np.log10((fg_p + 1e-8) / (itf_p + 1e-8)))
         else:
-            lo, hi = mode["sir_range"]
+            lo, hi = mode.sir_range
             sir = float(torch.empty(1).uniform_(float(lo), float(hi)).item())
             noisy_speech, interfered_speech = add_bg_noise(
                 wav=fg_wav, noise=[interfered_speech], snr_list=[sir],
@@ -335,7 +350,7 @@ class VoiceIsolationDataset(NoiseSuppressionDataset):
             realized_speech_sir = sir
         return noisy_speech, background_speech_reference, mix_mode_name, realized_speech_sir
 
-    def _sample_mix_mode(self, mm_cfg: Dict) -> Dict:
+    def _sample_mix_mode(self, mm_cfg: MixModeConfig) -> MixModeEntry:
         """Pick one foreground/interferer mixing mode by its prob weight.
 
         Modes come from ``augmentation_speech.mix_mode.modes``: a ``physical``
@@ -344,23 +359,23 @@ class VoiceIsolationDataset(NoiseSuppressionDataset):
         yields a near-0 dB ratio -- see _mix_foreground_with_interferers); the
         others carry an explicit ``sir_range``. Probs need not sum to 1.
         """
-        modes = mm_cfg.get("modes") or []
+        modes = mm_cfg.modes
         if not modes:
-            return {"name": "physical", "physical": True}
-        probs = [max(0.0, float(m.get("prob", 0.0))) for m in modes]
+            return MixModeEntry(name="physical", physical=True)
+        probs = [max(0.0, m.prob) for m in modes]
         total = sum(probs)
         if total <= 0.0:
-            return dict(modes[0])
+            return modes[0]
         r = float(torch.empty(1).uniform_(0.0, total).item())
         acc = 0.0
         for m, pr in zip(modes, probs):
             acc += pr
             if r <= acc:
-                return dict(m)
-        return dict(modes[-1])
+                return m
+        return modes[-1]
 
     def _distance_level_sir(
-        self, mode: Dict, fg_metadata, interferer_metadata
+        self, mode: MixModeEntry, fg_metadata, interferer_metadata
     ) -> Optional[float]:
         """SIR implied by the scene's geometry: 20*log10(d_itf / d_fg) + jitter.
 
@@ -385,7 +400,7 @@ class VoiceIsolationDataset(NoiseSuppressionDataset):
             return None
         d_itf = min(itf)
         sir = 20.0 * float(np.log10(d_itf / max(d_fg, 1e-3)))
-        lo, hi = mode.get("jitter_db", [-3.0, 3.0])
+        lo, hi = mode.jitter_db
         sir += float(torch.empty(1).uniform_(float(lo), float(hi)).item())
         return sir
 

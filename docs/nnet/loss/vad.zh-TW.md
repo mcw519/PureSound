@@ -172,10 +172,8 @@ job 死掉的案例);對應的 regression 測試見
 （`puresound/nnet/dpcrn.py`)有接 `vad_head` 跟 `dist_head`,但沒有
 `background_vad_head`——`backbone.last_background_vad_logits` 是
 `compute_loss` 用 `None` 當預設值去讀的一個 hook（`getattr(..., None)`),
-不是目前這個隨附的 backbone 會去填的東西。在這個 repo 裡,
-`BackgroundVADHeadBCELoss` 目前只被
-`egs/voice_isolate/config/exp/backup/` 底下、已經退役的 Conformer-backbone
-config 引用。
+不是目前這個隨附的 backbone 會去填的東西。目前沒有任何現役 recipe 選用
+`BackgroundVADHeadBCELoss`。
 
 ## Class: `F1_loss`
 

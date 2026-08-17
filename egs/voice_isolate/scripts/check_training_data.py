@@ -40,9 +40,9 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 import egs.voice_isolate.main as recipe_main  # noqa: E402
+from puresound.config import load_recipe, with_overrides
 from puresound.audio.io import AudioIO  # noqa: E402
 from puresound.audio.vad import BatchedSileroVADLabeler  # noqa: E402
-from puresound.recipes import load_siso_recipe_config  # noqa: E402
 
 
 def text_histogram(values: list[float], bins: int = 12, width: int = 40) -> str:
@@ -95,9 +95,9 @@ def read_manifest(f_path: Path) -> list[tuple[str, str]]:
     return rows
 
 
-def check_manifests(corpus_dict: dict, config_path: str, n_path_checks: int) -> dict:
-    train_path = resolve_metafile(corpus_dict["train_metafile"], config_path)
-    valid_path = resolve_metafile(corpus_dict["valid_metafile"], config_path)
+def check_manifests(corpus, config_path: str, n_path_checks: int) -> dict:
+    train_path = resolve_metafile(corpus.train_metafile, config_path)
+    valid_path = resolve_metafile(corpus.valid_metafile, config_path)
     train_rows = read_manifest(train_path)
     valid_rows = read_manifest(valid_path)
     train_spk = {s for s, _ in train_rows}
@@ -306,23 +306,21 @@ def main() -> None:
 
     # *_rest absorbs recipe-tuple growth; the trailing blocks are forwarded so real
     # recording rows appear here too when the recipe enables them.
-    (corpus, trainer, _optim, _sched, _loss, _model, a_sp, a_no, a_rv, a_spd,
-     a_ir, a_src, a_hpf, a_vol, a_cod, a_pl, a_ta, a_vad, *rest) = load_siso_recipe_config(config_path)
-    a_realfar = rest[0] if len(rest) > 0 else None
-    a_realnear = rest[1] if len(rest) > 1 else None
+    recipe = load_recipe(
+        config_path, expected_task="voice_isolation", expected_purpose="train"
+    )
 
     report = {"config": args.config_path}
-    report["manifests"] = check_manifests(corpus, config_path, args.check_paths)
+    report["manifests"] = check_manifests(
+        recipe.dataset, config_path, args.check_paths
+    )
 
-    trainer["num_workers"] = args.num_workers
-    _train_dl, valid_dl = recipe_main.init_dataloader(
-        corpus, trainer, a_sp, a_no, a_rv, a_spd, a_ir, a_src, a_hpf,
-        a_vol, a_cod, a_pl, a_ta, a_vad, a_realfar, a_realnear)
-
+    recipe = with_overrides(recipe, trainer={"num_workers": args.num_workers})
+    _train_dl, valid_dl = recipe_main.init_dataloader(recipe)
     rows, batches = collect(valid_dl, args.n)
     report["separability"] = report_separability(rows)
     if args.dump > 0 and batches:
-        report["dump"] = dump_samples(batches[0], a_vad, args.dump, out_dir / "wavs")
+        report["dump"] = dump_samples(batches[0], recipe.vad_label, args.dump, out_dir / "wavs")
 
     out_dir.mkdir(parents=True, exist_ok=True)
     report_path = out_dir / "report.json"

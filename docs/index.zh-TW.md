@@ -22,6 +22,7 @@ PureSound 是一套模組化的音訊處理與深度學習框架，用於語音�
 | [puresound.metrics](metrics.md) | 音訊品質評估 metrics |
 | [puresound.utils](utils.md) | 通用工具函式 |
 | `puresound.logging_setup` | 函式庫執行期輸出的去向，以及如何接手控制 |
+| [`puresound.config`](configuration.md) | Pydantic task recipes、capability models、migration 與驗證 |
 | [puresound.recipes](recipes.md) | 高階的模型初始化 recipes |
 
 ## Architecture Overview
@@ -38,6 +39,7 @@ puresound/
 ├── task/           # Task-specific datasets (NS, near-field voice isolation, SV, TSE)
 ├── third_party/    # Vendored research code (e.g. pytARD for low-frequency RIR simulation)
 ├── logging_setup.py # 函式庫 logging 契約（純 stdlib；由 __init__ 匯入）
+├── config/         # Typed recipe/capability models 與共用 loader
 ├── metrics.py      # Evaluation metrics
 ├── utils.py        # Utilities
 └── recipes.py      # Model construction recipes
@@ -51,6 +53,25 @@ puresound/
 - **Multi-Task Support**：noise suppression（NS）、speaker verification（SV）、target speaker extraction（TSE）共用同一組 base classes——另外還有 `puresound.task.voice_isolation`，是目前開發最活躍的 recipe。Voice isolation 是建構在共用的 NS synthesis skeleton 之上、自成一格的任務（真實錄音列、`mix_mode`、turn-taking、distance/DRR 輔助標籤），不只是通用 NS 的一個變體——詳見 [task/index.md](task/index.md)。
 - **Flexible Masking**：支援 complex、real、polar、deep-filter、Wiener、MVDR 等多種 mask。
 - **Composable Augmentation**：透過 `AudioEffectAugmentor` 做可插拔式的音訊增強。
+
+## Config 驗證
+
+每一份 recipe 都會在任何 dataset / model / trainer 存在之前，先被解析成 typed
+Pydantic model——見 [configuration.md](configuration.md)。`puresound.config.load_recipe`
+是唯一入口，沒有繞過它的 dict 路徑。
+
+未知的 key 是錯誤，不是預設值。促成這件事的是兩種失效：打錯字（`porb: 0.5`）以前會讓
+該區塊以機率 0 執行而不吭聲；以及刪掉機制不會刪掉它的旋鈕——`augmentation_query_distance`
+那 10 個旋鈕在程式碼消失後還活在 33 份 config 裡。
+
+task 這個辨別子決定用哪個 model，所以一個區塊只存在於真的會用它的 task：
+`augmentation_realfar` 只是 `voice_isolation` 的欄位；`augmentation_speed` 對增強類
+任務是 `speed_range`，對 speaker embedding 是 `speed_change`。整包交給建構子的區塊
+（RIR bank loader、room simulator、VAD labeler）只會轉發 recipe 真的寫過的 key，讓那些
+元件自己的預設值仍然生效。
+
+這些 model 上的欄位預設值是**行為預設值**：dataset 現在以屬性存取讀它們，所以這裡的
+預設值就是 pipeline 實際使用的值。
 
 ## 函式庫輸出
 

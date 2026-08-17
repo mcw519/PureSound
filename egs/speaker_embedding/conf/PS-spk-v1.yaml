@@ -1,3 +1,9 @@
+# Recipe schema v2: `task` selects the model that validates this file
+# (puresound/config/recipe.py); `purpose` picks training vs model-only.
+schema_version: 2
+purpose: train
+task: speaker_embedding
+
 dataset:
   train_metafile: ./data/vox12_train
   valid_metafile: ./data/vox12_train

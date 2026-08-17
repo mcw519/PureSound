@@ -181,9 +181,8 @@ One more thing worth knowing if you go looking for it: the current `DPCRN`
 backbone (`puresound/nnet/dpcrn.py`) wires up `vad_head` and `dist_head` but
 has no `background_vad_head` — `backbone.last_background_vad_logits` is a
 hook `compute_loss` reads with a `None` default (`getattr(..., None)`), not
-something the shipped backbone currently populates. In this repo,
-`BackgroundVADHeadBCELoss` is only referenced by the retired Conformer-backbone
-configs under `egs/voice_isolate/config/exp/backup/`.
+something the shipped backbone currently populates. No active recipe currently
+selects `BackgroundVADHeadBCELoss`.
 
 ## Class: `F1_loss`
 

@@ -28,7 +28,7 @@ TargetSpeakerExtractDataset(
     min_utts_in_each_speaker: int = 5,
     target_sr: Optional[int] = None,
     training_sample_length_in_seconds: float = 6.0,
-    enroll_speech_args: Optional[Dict] = None,
+    enroll_speech_args: EnrollmentConfig | Mapping | None = None,
     audio_gain_normalized_to: Optional[int] = None,
     augmentation_speech_args=None,   # interferers: used/prob/add_n_cases(int)/snr_range/is_target
     augmentation_noise_args=None,
@@ -40,6 +40,7 @@ TargetSpeakerExtractDataset(
     augmentation_volume_args=None,
     vad_label_args=None,
     dataset_role: str = "train",
+    pipeline_role: Optional[str] = None,
 )
 ```
 
@@ -50,14 +51,11 @@ TargetSpeakerExtractDataset(
 RIR。這裡的 `add_n_cases` 同樣必須是純量 `int`（不是
 `task.ns`/`task.voice_isolation` 還額外支援的 `[low, high]` range）。
 
-### 儘管型別標成 `Optional`，`enroll_speech_args` 實際上是必填的
+### `enroll_speech_args` 是必填的
 
-Constructor 會無條件呼叫 `self.init_enroll_augmentor()`，而它會立刻求值
-`self.enroll_speech_args["add_noise"]["used"]`——如果照字面預設值傳入
-`None`，在任何一個 item 被讀取之前就會直接 raise
-`TypeError: 'NoneType' object is not subscriptable`。實務上
-`enroll_speech_args` 一定得是一個 dict，而且下面每一個最上層的 key 都要
-存在（想關掉某項功能，至少要給 `{"used": False}`）：
+dataset 接受 `EnrollmentConfig` 或 mapping，並透過與 recipe 相同的 Pydantic
+model 驗證。若傳入 `None`，會在初始化前直接丟出
+`ValueError("enroll_speech_args is required")`。
 
 | Key | 用途 |
 |---|---|

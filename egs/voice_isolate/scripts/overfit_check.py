@@ -44,7 +44,8 @@ if str(REPO) not in sys.path:
 import egs.voice_isolate.main as recipe_main  # noqa: E402
 from puresound.nnet.loss import VADHeadBCELoss  # noqa: E402
 from puresound.recipes import (  # noqa: E402
-    init_loss_func, init_siso_model, load_siso_recipe_config)
+    init_loss_func, init_siso_model)
+from puresound.config import load_recipe, with_overrides
 
 
 def si_sdr(est: torch.Tensor, ref: torch.Tensor, eps: float = 1e-8) -> float:
@@ -68,36 +69,29 @@ def batch_sisdr(enh: torch.Tensor, ref: torch.Tensor) -> tuple[float, int]:
 
 
 def build_valid_loader(config_path: str, num_workers: int, overrides: dict | None = None):
-    """Recipe config -> valid dataloader, i.e. exactly the training synthesis path.
-
-    ``*_rest`` absorbs recipe-tuple growth; the trailing blocks are forwarded so real
-    recording rows are present here too when the recipe enables them.
-    """
-    cfg = load_siso_recipe_config(config_path)
-    (corpus, trainer, _optim, _sched, loss_cfg, model_dict, a_sp, a_no, a_rv, a_spd,
-     a_ir, a_src, a_hpf, a_vol, a_cod, a_pl, a_ta, a_vad, *rest) = cfg
-    a_realfar = rest[0] if len(rest) > 0 else None
-    a_realnear = rest[1] if len(rest) > 1 else None
-
-    trainer["num_workers"] = num_workers
-    if overrides:
-        corpus.update(overrides.get("corpus", {}))
-        trainer.update(overrides.get("trainer", {}))
-
-    _train_dl, valid_dl = recipe_main.init_dataloader(
-        corpus, trainer, a_sp, a_no, a_rv, a_spd, a_ir, a_src, a_hpf,
-        a_vol, a_cod, a_pl, a_ta, a_vad, a_realfar, a_realnear)
-    return valid_dl, model_dict, loss_cfg, a_vad
+    """Recipe config -> valid dataloader, i.e. exactly the training synthesis path."""
+    recipe = with_overrides(
+        load_recipe(
+            config_path,
+            expected_task="voice_isolation",
+            expected_purpose="train",
+        ),
+        trainer={"num_workers": num_workers, **(overrides or {}).get("trainer", {})},
+        dataset=(overrides or {}).get("corpus", {}),
+    )
+    _train_dl, valid_dl = recipe_main.init_dataloader(recipe)
+    return valid_dl, recipe
 
 
-def run_separator(args, valid_dl, model_dict, loss_cfg, a_vad) -> None:
-    model = init_siso_model(model_dict)
+def run_separator(args, valid_dl, recipe) -> None:
+    model = init_siso_model(recipe.model)
     # attach the real training losses (init_siso_model does not) -- same as main.py
-    loss_list, loss_w = init_loss_func(hparam_conf=loss_cfg)
+    loss_list, loss_w = init_loss_func(recipe.loss_func)
     model.register_loss_func(loss_list, loss_w)
-    if a_vad and a_vad.get("used") and a_vad.get("backend", "energy").lower() == "silero":
+    vad_label = recipe.vad_label
+    if vad_label is not None and vad_label.used and vad_label.backend == "silero":
         from puresound.audio.vad import BatchedSileroVADLabeler
-        model.register_gpu_vad_labeler(BatchedSileroVADLabeler(**a_vad.get("args", {})))
+        model.register_gpu_vad_labeler(BatchedSileroVADLabeler(**vad_label.args))
     if args.ckpt:
         state = torch.load(str(Path(args.ckpt).resolve()), map_location="cpu")["state_dict"]
         model.load_state_dict(state, strict=False)
@@ -263,15 +257,15 @@ def main() -> None:
     if args.gate:
         overrides["trainer"].setdefault("valid_iter_per_epoch", 8)
 
-    valid_dl, model_dict, loss_cfg, a_vad = build_valid_loader(
+    valid_dl, recipe = build_valid_loader(
         config_path, args.num_workers, overrides)
 
     if args.gate:
         if args.lr == 1e-3:
             args.lr = 1e-2      # head-only fit wants a larger step
-        run_gate(args, valid_dl, model_dict)
+        run_gate(args, valid_dl, recipe.model)
     else:
-        run_separator(args, valid_dl, model_dict, loss_cfg, a_vad)
+        run_separator(args, valid_dl, recipe)
 
 
 if __name__ == "__main__":

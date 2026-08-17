@@ -1,5 +1,4 @@
 import argparse
-from typing import Dict
 
 import lightning as L
 import numpy as np
@@ -8,97 +7,26 @@ import torch
 from lightning.pytorch.callbacks import LearningRateMonitor, ModelCheckpoint
 
 from puresound.audio.io import AudioIO
+from puresound.config import load_recipe
 from puresound.dataset.kaldi_base import KaldiFormBaseDataset
-from puresound.recipes import (
-    init_loss_func,
-    init_siso_model,
-    load_siso_recipe_config,
-)
+from puresound.recipes import init_loss_func, init_siso_model
+from puresound.system import runner
 from puresound.system.optim import create_optimizer_and_scheduler
-from puresound.task.sampler import SpeakerSampler
 from puresound.task.sv import SpeakerEmbeddingCollateFunc, SpeakerEmbeddingDataset
 from puresound.utils import create_folder, str2bool
 
 
-def init_dataloader(
-    corpus_dict: Dict,
-    trainer_dict: Dict,
-    aug_speech_dict: Dict,
-    aug_noise_dict: Dict,
-    aug_reverb_dict: Dict,
-    aug_speed_dict: Dict,
-    aug_ir_dict: Dict,
-    aug_src_dict: Dict,
-    aug_hpf_dict: Dict,
-    aug_volume_dict: Dict,
-):
-    train_dataset = SpeakerEmbeddingDataset(
-        metafile_path=corpus_dict["train_metafile"],
-        min_utt_length_in_seconds=corpus_dict["filter_min_utterance_length"],
-        min_utts_in_each_speaker=corpus_dict["filter_min_utterance_per_speaker"],
-        target_sr=corpus_dict["target_sample_rate"],
-        training_sample_length_in_seconds=corpus_dict["training_length_seconds"],
-        audio_gain_normalized_to=corpus_dict["gain_normalized_to"],
-        augmentation_speech_args=aug_speech_dict,
-        augmentation_noise_args=aug_noise_dict,
-        augmentation_reverb_args=aug_reverb_dict,
-        augmentation_speed_args=aug_speed_dict,
-        augmentation_ir_response_args=aug_ir_dict,
-        augmentation_src_args=aug_src_dict,
-        augmentation_hpf_args=aug_hpf_dict,
-        augmentation_volume_args=aug_volume_dict,
-    )
+def init_dataloader(recipe):
+    """Train / valid dataloaders for this recipe.
 
-    train_sampler = SpeakerSampler(
-        data=train_dataset.meta,
-        total_batch=trainer_dict["train_iter_per_epoch"],
-        n_spks=trainer_dict["n_spk_per_batch"],
-        n_per=trainer_dict["n_utt_per_speaker"],
-        select_by_sr_first=False,
-    )
-
-    train_dataloader = torch.utils.data.DataLoader(
-        dataset=train_dataset,
-        batch_sampler=train_sampler,
-        pin_memory=True,
-        num_workers=trainer_dict["num_workers"],
+    Delegates to ``runner.build_dataloaders``; this file used to carry its own
+    copy of it, which is what let the two drift.
+    """
+    return runner.build_dataloaders(
+        dataset_cls=SpeakerEmbeddingDataset,
         collate_fn=SpeakerEmbeddingCollateFunc(),
+        recipe=recipe,
     )
-
-    valid_dataset = SpeakerEmbeddingDataset(
-        metafile_path=corpus_dict["valid_metafile"],
-        min_utt_length_in_seconds=corpus_dict["filter_min_utterance_length"],
-        min_utts_in_each_speaker=corpus_dict["filter_min_utterance_per_speaker"],
-        target_sr=corpus_dict["target_sample_rate"],
-        training_sample_length_in_seconds=corpus_dict["training_length_seconds"],
-        audio_gain_normalized_to=corpus_dict["gain_normalized_to"],
-        augmentation_speech_args=aug_speech_dict,
-        augmentation_noise_args=aug_noise_dict,
-        augmentation_reverb_args=aug_reverb_dict,
-        augmentation_speed_args=aug_speed_dict,
-        augmentation_ir_response_args=aug_ir_dict,
-        augmentation_src_args=aug_src_dict,
-        augmentation_hpf_args=aug_hpf_dict,
-        augmentation_volume_args=aug_volume_dict,
-    )
-
-    valid_sampler = SpeakerSampler(
-        data=valid_dataset.meta,
-        total_batch=trainer_dict["valid_iter_per_epoch"],
-        n_spks=trainer_dict["n_spk_per_batch"],
-        n_per=trainer_dict["n_utt_per_speaker"],
-        select_by_sr_first=False,
-    )
-
-    valid_dataloader = torch.utils.data.DataLoader(
-        dataset=valid_dataset,
-        batch_sampler=valid_sampler,
-        pin_memory=True,
-        num_workers=trainer_dict["num_workers"],
-        collate_fn=SpeakerEmbeddingCollateFunc(),
-    )
-
-    return train_dataloader, valid_dataloader
 
 
 if __name__ == "__main__":
@@ -156,37 +84,14 @@ if __name__ == "__main__":
         print(f"Adjust random seed to {args.set_seed}")
         L.seed_everything(seed=args.set_seed)
 
-    (
-        corpus_dict,
-        trainer_dict,
-        optim_dict,
-        scheduler_dict,
-        loss_dict,
-        model_dict,
-        aug_speech_dict,
-        aug_noise_dict,
-        aug_reverb_dict,
-        aug_speed_dict,
-        aug_ir_dict,
-        aug_src_dict,
-        aug_hpf_dict,
-        aug_volume_dict,
-        *_rest,
-    ) = load_siso_recipe_config(args.config_path)
+    recipe = load_recipe(
+        args.config_path,
+        expected_task="speaker_embedding",
+        expected_purpose="train",
+    )
 
     if args.training or args.dump_training_samples:
-        train_dataloader, valid_dataloader = init_dataloader(
-            corpus_dict,
-            trainer_dict,
-            aug_speech_dict,
-            aug_noise_dict,
-            aug_reverb_dict,
-            aug_speed_dict,
-            aug_ir_dict,
-            aug_src_dict,
-            aug_hpf_dict,
-            aug_volume_dict,
-        )
+        train_dataloader, valid_dataloader = init_dataloader(recipe)
 
     # Stage of dump the training samples
     if args.dump_training_samples:
@@ -208,20 +113,20 @@ if __name__ == "__main__":
     # Stage of training a new model
     if args.training:
         # Initialize loss function
-        loss_func_list, loss_func_list_w = init_loss_func(hparam_conf=loss_dict)
+        loss_func_list, loss_func_list_w = init_loss_func(recipe.loss_func)
 
         # PL-Model
-        lightning_model = init_siso_model(model_dict)
+        lightning_model = init_siso_model(recipe.model)
         lightning_model.register_loss_func(loss_func_list, loss_func_list_w)
         param_groups = lightning_model.get_total_param_groups()
         optimizer, scheduler = create_optimizer_and_scheduler(
             overall_params_and_lr_factor=param_groups,
-            optimizer_args=optim_dict,
-            scheduler_args=scheduler_dict,
+            optimizer_args=recipe.optimizer,
+            scheduler_args=recipe.scheduler,
         )
         lightning_model.register_optimizer(optimizer)
         lightning_model.register_scheduler(scheduler)
-        lightning_model.register_warmup_step(scheduler_dict["warmup_step"])
+        lightning_model.register_warmup_step(recipe.scheduler.warmup_step)
 
         # Loading exists state_dicts
         if args.pretrained_ckpt_path:
@@ -240,13 +145,13 @@ if __name__ == "__main__":
         )
 
         trainer = L.Trainer(
-            **trainer_dict["lightning_trainer_args"],
-            accelerator="gpu" if trainer_dict["num_gpus"] > 0 else "cpu",
-            devices=trainer_dict["num_gpus"],
-            limit_train_batches=trainer_dict["train_iter_per_epoch"],
-            limit_val_batches=trainer_dict["valid_iter_per_epoch"],
+            **recipe.trainer.lightning_trainer_args,
+            accelerator="gpu" if recipe.trainer.num_gpus > 0 else "cpu",
+            devices=recipe.trainer.num_gpus,
+            limit_train_batches=recipe.trainer.train_iter_per_epoch,
+            limit_val_batches=recipe.trainer.valid_iter_per_epoch,
             use_distributed_sampler=False,
-            default_root_dir=trainer_dict["work_folder"],
+            default_root_dir=recipe.trainer.work_folder,
             callbacks=[lr_monitor, ckpt_monitor],
             profiler="simple",
             sync_batchnorm=True,
@@ -269,7 +174,7 @@ if __name__ == "__main__":
     # Stage of caculating the metric scores
     if args.scoring:
         test_dataset = KaldiFormBaseDataset(
-            folder=corpus_dict["test_folder"],
+            folder=recipe.dataset.test_folder,
             mode="dev",
             resample_to=args.inference_sr,
         )
@@ -281,14 +186,14 @@ if __name__ == "__main__":
             shuffle=False,
         )
         trainer = L.Trainer(inference_mode=True)
-        lightning_model = init_siso_model(model_dict)
+        lightning_model = init_siso_model(recipe.model)
         # TODO
         raise NotImplementedError
 
     # Stage of inferencing audio only
     if args.inference:
         test_dataset = KaldiFormBaseDataset(
-            folder=corpus_dict["test_folder"],
+            folder=recipe.dataset.test_folder,
             mode="eval",
             resample_to=args.inference_sr,
             split_to_chunks_with_size=args.split_to_chunks_with_size,
@@ -301,13 +206,13 @@ if __name__ == "__main__":
             shuffle=False,
         )
         trainer = L.Trainer(
-            inference_mode=True, default_root_dir=corpus_dict["proc_output_folder"]
+            inference_mode=True, default_root_dir=recipe.dataset.proc_output_folder
         )
         state_dict = torch.load(args.ckpt_path, map_location="cpu")["state_dict"]
-        lightning_model = init_siso_model(model_dict)
+        lightning_model = init_siso_model(recipe.model)
         lightning_model.reload_checkpoint(state_dict)
-        create_folder(corpus_dict["proc_output_folder"])
-        lightning_model.register_proc_output_folder(corpus_dict["proc_output_folder"])
+        create_folder(recipe.dataset.proc_output_folder)
+        lightning_model.register_proc_output_folder(recipe.dataset.proc_output_folder)
         trainer.predict(lightning_model, dataloaders=test_dataloader)
 
     # Stage of export model to ONNX
@@ -319,7 +224,7 @@ if __name__ == "__main__":
 
         save_path = f"{args.pretrained_ckpt_path}.onnx"
 
-        lightning_model = init_siso_model(model_dict)
+        lightning_model = init_siso_model(recipe.model)
         print("Loading the pretrained params only.")
         state_dict = torch.load(args.pretrained_ckpt_path, map_location="cpu")[
             "state_dict"

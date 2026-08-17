@@ -1,44 +1,19 @@
-from typing import Dict, List, Tuple
+"""Building the objects a recipe names.
+
+Config *loading* lives in ``puresound.config``; this module only turns an
+already-validated recipe's ``model`` / ``loss_func`` sections into objects.
+The twenty-tuple ``load_siso_recipe_config`` that used to live here is gone --
+callers take a typed ``Recipe`` from ``puresound.config.load_recipe`` and read
+it by name.
+"""
+
+from typing import Dict, List
 
 import torch
 
 from puresound import nnet, system
+from puresound.config.recipe import LossConfig
 from puresound.nnet import loss as ploss
-from puresound.utils import load_hparam
-
-
-def _enabled_config(config: Dict, key: str):
-    item = config.get(key)
-    if item and item.get("used"):
-        return item
-    return None
-
-
-def load_siso_recipe_config(f_path: str) -> Tuple:
-    config = load_hparam(file_path=f_path)
-
-    return (
-        config["dataset"],
-        config["trainer"],
-        config["optimizer"],
-        config["scheduler"],
-        config["loss_func"],
-        config["model"],
-        _enabled_config(config, "augmentation_speech"),
-        _enabled_config(config, "augmentation_noise"),
-        _enabled_config(config, "augmentation_reverb"),
-        _enabled_config(config, "augmentation_speed"),
-        _enabled_config(config, "augmentation_ir_response"),
-        _enabled_config(config, "augmentation_src"),
-        config.get("augmentation_hpf"),
-        config.get("augmentation_volume"),
-        _enabled_config(config, "augmentation_codec"),
-        _enabled_config(config, "augmentation_packet_loss"),
-        _enabled_config(config, "augmentation_target_absent"),
-        config.get("vad_label"),
-        _enabled_config(config, "augmentation_realfar"),
-        _enabled_config(config, "augmentation_realnear"),
-    )
 
 
 def init_siso_model(model_dict: Dict):
@@ -47,13 +22,14 @@ def init_siso_model(model_dict: Dict):
         **model_dict["encoder"]["encoder_args"]
     )
 
+    feature_args = dict(model_dict["features"])
     if "freq_eq" in model_dict:
         peq_module = getattr(nnet, model_dict["freq_eq"]["type"])(
             **model_dict["freq_eq"]["eq_args"]
         )
-        model_dict["features"]["peq_module"] = peq_module
+        feature_args["peq_module"] = peq_module
 
-    feature_encoder = nnet.FeatureEncoder(**model_dict["features"])
+    feature_encoder = nnet.FeatureEncoder(**feature_args)
     backbone = getattr(nnet, model_dict["backbone"]["type"])(
         **model_dict["backbone"]["backbone_args"]
     )
@@ -65,12 +41,12 @@ def init_siso_model(model_dict: Dict):
     )
 
 
-def init_loss_func(hparam_conf: List):
+def init_loss_func(loss_configs: List[LossConfig]):
     loss_list = torch.nn.ModuleList([])
     loss_list_w = []
-    for item in hparam_conf:
-        loss_func = getattr(ploss, item["type"])(**item["args"])
+    for item in loss_configs:
+        loss_func = getattr(ploss, item.type)(**item.args)
         loss_list.append(loss_func)
-        loss_list_w.append(item["weighted"])
+        loss_list_w.append(item.weighted)
 
     return loss_list, loss_list_w

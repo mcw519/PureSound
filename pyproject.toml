@@ -24,6 +24,7 @@ dependencies = [
   "tqdm",
   "tensorboard",
   "packaging",
+  "pydantic>=2.11,<3",
   "PyYAML",
   "pesq",
   "pystoi",

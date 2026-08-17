@@ -169,20 +169,13 @@ def refresh_checkpoints(config_path: str | Path, backend: str = "PyTorch offline
 def load_model_from_checkpoint(
     config_path: str | Path, checkpoint_path: str | Path, device: torch.device
 ) -> torch.nn.Module:
-    from puresound.recipes import init_siso_model, load_siso_recipe_config
+    from puresound.config import load_recipe
+    from puresound.recipes import init_siso_model
 
     LOGGER.info("Loading model config from %s", config_path)
-    (
-        _corpus_dict,
-        _trainer_dict,
-        _optim_dict,
-        _scheduler_dict,
-        _loss_dict,
-        model_dict,
-        *_rest,
-    ) = load_siso_recipe_config(str(config_path))
-
-    model = init_siso_model(model_dict)
+    model = init_siso_model(
+        load_recipe(config_path, expected_task="voice_isolation").model
+    )
     LOGGER.info("Loading checkpoint from %s on %s", checkpoint_path, device)
     checkpoint = torch.load(str(checkpoint_path), map_location=device)
     state_dict = checkpoint["state_dict"] if isinstance(checkpoint, dict) and "state_dict" in checkpoint else checkpoint

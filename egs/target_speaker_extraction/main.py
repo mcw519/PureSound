@@ -1,5 +1,4 @@
 import argparse
-from typing import Dict, List
 
 import lightning as L
 import torch
@@ -7,200 +6,63 @@ from lightning.pytorch.callbacks import LearningRateMonitor, ModelCheckpoint
 
 from puresound import nnet, system
 from puresound.audio.io import AudioIO
+from puresound.config import load_recipe
 from puresound.dataset.kaldi_base import KaldiFormBaseDataset
 from puresound.metrics import Metrics
-from puresound.nnet import loss as ploss
+from puresound.recipes import init_loss_func
+from puresound.system import runner
 from puresound.system.optim import create_optimizer_and_scheduler
-from puresound.task.sampler import SpeakerSampler
 from puresound.task.tse import TargetSpeakerExtractCollateFunc, TargetSpeakerExtractDataset
-from puresound.utils import create_folder, load_hparam, str2bool
+from puresound.utils import create_folder, str2bool
 
 
-def load_config(f_path: str):
-    config = load_hparam(file_path=f_path)
-    corpus_dict = config["dataset"]
-    trainer_dict = config["trainer"]
-    optim_dict = config["optimizer"]
-    scheduler_dict = config["scheduler"]
-    signal_loss_dict = config["signal_loss_func"]
-    class_loss_dict = config["class_loss_func"] if "class_loss_func" in config else None
-    model_dict = config["model"]
-    enroll_dict = config["enroll_speech"]
+def init_dataloader(recipe):
+    """Train / valid dataloaders for this recipe.
 
-    aug_speech_dict = None
-    aug_noise_dict = None
-    aug_reverb_dict = None
-    aug_speed_dict = None
-    aug_ir_dict = None
-    aug_src_dict = None
-    aug_hpf_dict = None
-    aug_volume_dict = None
-    vad_label_dict = None
-
-    if "augmentation_speech" in config:
-        if config["augmentation_speech"]["used"]:
-            aug_speech_dict = config["augmentation_speech"]
-    if "augmentation_noise" in config:
-        if config["augmentation_noise"]["used"]:
-            aug_noise_dict = config["augmentation_noise"]
-    if "augmentation_reverb" in config:
-        if config["augmentation_reverb"]["used"]:
-            aug_reverb_dict = config["augmentation_reverb"]
-    if "augmentation_speed" in config:
-        if config["augmentation_speed"]["used"]:
-            aug_speed_dict = config["augmentation_speed"]
-    if "augmentation_ir_response" in config:
-        if config["augmentation_ir_response"]["used"]:
-            aug_ir_dict = config["augmentation_ir_response"]
-    if "augmentation_src" in config:
-        if config["augmentation_src"]["used"]:
-            aug_src_dict = config["augmentation_src"]
-    if "augmentation_hpf" in config:
-        aug_hpf_dict = config["augmentation_hpf"]
-    if "augmentation_volume" in config:
-        aug_volume_dict = config["augmentation_volume"]
-    if "vad_label" in config and config["vad_label"]["used"]:
-        vad_label_dict = config["vad_label"]
-
-    return (
-        corpus_dict,
-        trainer_dict,
-        optim_dict,
-        scheduler_dict,
-        signal_loss_dict,
-        class_loss_dict,
-        model_dict,
-        enroll_dict,
-        aug_speech_dict,
-        aug_noise_dict,
-        aug_reverb_dict,
-        aug_speed_dict,
-        aug_ir_dict,
-        aug_src_dict,
-        aug_hpf_dict,
-        aug_volume_dict,
-        vad_label_dict,
-    )
-
-
-def init_dataloader(
-    corpus_dict: Dict,
-    trainer_dict: Dict,
-    enroll_dict: Dict,
-    aug_speech_dict: Dict,
-    aug_noise_dict: Dict,
-    aug_reverb_dict: Dict,
-    aug_speed_dict: Dict,
-    aug_ir_dict: Dict,
-    aug_src_dict: Dict,
-    aug_hpf_dict: Dict,
-    aug_volume_dict: Dict,
-    vad_label_dict: Dict,
-):
-    train_dataset = TargetSpeakerExtractDataset(
-        metafile_path=corpus_dict["train_metafile"],
-        min_utt_length_in_seconds=corpus_dict["filter_min_utterance_length"],
-        min_utts_in_each_speaker=corpus_dict["filter_min_utterance_per_speaker"],
-        target_sr=corpus_dict["target_sample_rate"],
-        training_sample_length_in_seconds=corpus_dict["training_length_seconds"],
-        enroll_speech_args=enroll_dict,
-        audio_gain_normalized_to=corpus_dict["gain_normalized_to"],
-        augmentation_speech_args=aug_speech_dict,
-        augmentation_noise_args=aug_noise_dict,
-        augmentation_reverb_args=aug_reverb_dict,
-        augmentation_speed_args=aug_speed_dict,
-        augmentation_ir_response_args=aug_ir_dict,
-        augmentation_src_args=aug_src_dict,
-        augmentation_hpf_args=aug_hpf_dict,
-        augmentation_volume_args=aug_volume_dict,
-        vad_label_args=vad_label_dict,
-    )
-
-    train_sampler = SpeakerSampler(
-        data=train_dataset.meta,
-        total_batch=trainer_dict["train_iter_per_epoch"],
-        n_spks=trainer_dict["n_spk_per_batch"],
-        n_per=trainer_dict["n_utt_per_speaker"],
-        select_by_sr_first=False if corpus_dict["target_sample_rate"] else True,
-    )
-
-    train_dataloader = torch.utils.data.DataLoader(
-        dataset=train_dataset,
-        batch_sampler=train_sampler,
-        pin_memory=True,
-        num_workers=trainer_dict["num_workers"],
+    Delegates to ``runner.build_dataloaders``; this file used to carry its own
+    copy. ``enroll_speech`` is the one argument the shared builder does not know
+    about, so it rides in through ``task_kwargs``.
+    """
+    return runner.build_dataloaders(
+        dataset_cls=TargetSpeakerExtractDataset,
         collate_fn=TargetSpeakerExtractCollateFunc(),
+        recipe=recipe,
+        task_kwargs={"enroll_speech_args": recipe.enroll_speech},
     )
 
-    valid_dataset = TargetSpeakerExtractDataset(
-        metafile_path=corpus_dict["valid_metafile"],
-        min_utt_length_in_seconds=corpus_dict["filter_min_utterance_length"],
-        min_utts_in_each_speaker=corpus_dict["filter_min_utterance_per_speaker"],
-        target_sr=corpus_dict["target_sample_rate"],
-        training_sample_length_in_seconds=corpus_dict["training_length_seconds"],
-        enroll_speech_args=enroll_dict,
-        audio_gain_normalized_to=corpus_dict["gain_normalized_to"],
-        augmentation_speech_args=aug_speech_dict,
-        augmentation_noise_args=aug_noise_dict,
-        augmentation_reverb_args=aug_reverb_dict,
-        augmentation_speed_args=aug_speed_dict,
-        augmentation_ir_response_args=aug_ir_dict,
-        augmentation_src_args=aug_src_dict,
-        augmentation_hpf_args=aug_hpf_dict,
-        augmentation_volume_args=aug_volume_dict,
-        vad_label_args=vad_label_dict,
+
+def init_model(model_conf):
+    lightning_module = getattr(system, model_conf["lightning_module"]["type"])
+
+    encoder = getattr(nnet, model_conf["encoder"]["type"])(
+        **model_conf["encoder"]["encoder_args"]
     )
-
-    valid_sampler = SpeakerSampler(
-        data=valid_dataset.meta,
-        total_batch=trainer_dict["valid_iter_per_epoch"],
-        n_spks=trainer_dict["n_spk_per_batch"],
-        n_per=trainer_dict["n_utt_per_speaker"],
-        select_by_sr_first=False if corpus_dict["target_sample_rate"] else True,
-    )
-
-    valid_dataloader = torch.utils.data.DataLoader(
-        dataset=valid_dataset,
-        batch_sampler=valid_sampler,
-        pin_memory=True,
-        num_workers=trainer_dict["num_workers"],
-        collate_fn=TargetSpeakerExtractCollateFunc(),
-    )
-
-    return train_dataloader, valid_dataloader
-
-
-def init_model(model_dict):
-    lightning_module = getattr(system, model_dict["lightning_module"]["type"])
-
-    encoder = getattr(nnet, model_dict["encoder"]["type"])(
-        **model_dict["encoder"]["encoder_args"]
-    )
-    if not model_dict["lightning_module"]["module_args"]["siamese_encoder"]:
-        c_encoder = getattr(nnet, model_dict["c_encoder"]["type"])(
-            **model_dict["c_encoder"]["encoder_args"]
+    if not model_conf["lightning_module"]["module_args"]["siamese_encoder"]:
+        c_encoder = getattr(nnet, model_conf["c_encoder"]["type"])(
+            **model_conf["c_encoder"]["encoder_args"]
         )
     else:
         c_encoder = None
 
-    if "freq_eq" in model_dict.keys():
-        peq_module = getattr(nnet, model_dict["freq_eq"]["type"])(
-            **model_dict["freq_eq"]["eq_args"]
+    feature_args = dict(model_conf["features"])
+    if "freq_eq" in model_conf:
+        peq_module = getattr(nnet, model_conf["freq_eq"]["type"])(
+            **model_conf["freq_eq"]["eq_args"]
         )
         # register peq inside the feature module
-        model_dict["features"]["peq_module"] = peq_module
+        feature_args["peq_module"] = peq_module
 
-    feature_encoder = nnet.FeatureEncoder(**model_dict["features"])
-    if not model_dict["lightning_module"]["module_args"]["siamese_encoder"]:
-        c_feature_encoder = nnet.FeatureEncoder(**model_dict["c_features"])
+    feature_encoder = nnet.FeatureEncoder(**feature_args)
+    if not model_conf["lightning_module"]["module_args"]["siamese_encoder"]:
+        c_feature_encoder = nnet.FeatureEncoder(**model_conf["c_features"])
     else:
         c_feature_encoder = None
 
-    backbone = getattr(nnet, model_dict["backbone"]["type"])(
-        **model_dict["backbone"]["backbone_args"]
+    backbone = getattr(nnet, model_conf["backbone"]["type"])(
+        **model_conf["backbone"]["backbone_args"]
     )
-    c_backbone = getattr(nnet, model_dict["c_backbone"]["type"])(
-        **model_dict["c_backbone"]["backbone_args"]
+    c_backbone = getattr(nnet, model_conf["c_backbone"]["type"])(
+        **model_conf["c_backbone"]["backbone_args"]
     )
 
     model = lightning_module(
@@ -210,25 +72,9 @@ def init_model(model_dict):
         c_backbone,
         c_encoder=c_encoder,
         c_feats=c_feature_encoder,
-        **model_dict["lightning_module"]["module_args"],
+        **model_conf["lightning_module"]["module_args"],
     )
     return model
-
-
-def init_loss_func(hparam_conf: List):
-    """
-    Returns:
-        loss_list contain ModuleList([loss_1, loss_2, ...])
-        loss_list_w contain [w1, w2, ...]
-    """
-    loss_list = torch.nn.ModuleList([])
-    loss_list_w = []
-    for item in hparam_conf:
-        loss_func = getattr(ploss, item["type"])(**item["args"])
-        loss_list.append(loss_func)
-        loss_list_w.append(item["weighted"])
-
-    return loss_list, loss_list_w
 
 
 if __name__ == "__main__":
@@ -277,41 +123,14 @@ if __name__ == "__main__":
         print(f"Adjust random seed to {args.set_seed}")
         L.seed_everything(seed=args.set_seed)
 
-    (
-        corpus_dict,
-        trainer_dict,
-        optim_dict,
-        scheduler_dict,
-        signal_loss_dict,
-        class_loss_dict,
-        model_dict,
-        enroll_dict,
-        aug_speech_dict,
-        aug_noise_dict,
-        aug_reverb_dict,
-        aug_speed_dict,
-        aug_ir_dict,
-        aug_src_dict,
-        aug_hpf_dict,
-        aug_volume_dict,
-        vad_label_dict,
-    ) = load_config(args.config_path)
+    recipe = load_recipe(
+        args.config_path,
+        expected_task="target_speaker_extraction",
+        expected_purpose="train",
+    )
 
     if args.training or args.dump_training_samples:
-        train_dataloader, valid_dataloader = init_dataloader(
-            corpus_dict,
-            trainer_dict,
-            enroll_dict,
-            aug_speech_dict,
-            aug_noise_dict,
-            aug_reverb_dict,
-            aug_speed_dict,
-            aug_ir_dict,
-            aug_src_dict,
-            aug_hpf_dict,
-            aug_volume_dict,
-            vad_label_dict,
-        )
+        train_dataloader, valid_dataloader = init_dataloader(recipe)
 
     # Stage of dump the training samples
     if args.dump_training_samples:
@@ -342,17 +161,17 @@ if __name__ == "__main__":
     if args.training:
         # Initialize loss function
         signal_loss_func_list, signal_loss_func_list_w = init_loss_func(
-            hparam_conf=signal_loss_dict
+            recipe.signal_loss_func
         )
-        if class_loss_dict is not None:
+        if recipe.class_loss_func is not None:
             class_loss_func_list, class_loss_func_list_w = init_loss_func(
-                hparam_conf=class_loss_dict
+                recipe.class_loss_func
             )
         else:
             class_loss_func_list, class_loss_func_list_w = None, None
 
         # PL-Model
-        lightning_model = init_model(model_dict)
+        lightning_model = init_model(recipe.model)
         lightning_model.register_loss_func(
             signal_loss_func_list,
             signal_loss_func_list_w,
@@ -361,21 +180,21 @@ if __name__ == "__main__":
         )
 
         # Load pretrained speaker model which trained by puresound framwork
-        if model_dict["c_backbone"]["pretrained_ckpt"] is not None:
+        if recipe.model["c_backbone"]["pretrained_ckpt"] is not None:
             self_state = lightning_model.state_dict()
             loaded_spknet_state = torch.load(
-                model_dict["c_backbone"]["pretrained_ckpt"], map_location="cpu"
+                recipe.model["c_backbone"]["pretrained_ckpt"], map_location="cpu"
             )["state_dict"]
 
             for name, param in loaded_spknet_state.items():
                 if (
-                    not model_dict["lightning_module"]["module_args"]["siamese_encoder"]
+                    not recipe.model["lightning_module"]["module_args"]["siamese_encoder"]
                     and "encoder.encoder" in name
                 ):
                     name = name.replace("encoder.encoder", "c_encoder.encoder")
 
                 if (
-                    not model_dict["lightning_module"]["module_args"]["siamese_feats"]
+                    not recipe.model["lightning_module"]["module_args"]["siamese_feats"]
                     and "feats" in name
                 ):
                     name = name.replace("feats.", "c_feats.")
@@ -391,12 +210,12 @@ if __name__ == "__main__":
         param_groups = lightning_model.get_total_param_groups()
         optimizer, scheduler = create_optimizer_and_scheduler(
             overall_params_and_lr_factor=param_groups,
-            optimizer_args=optim_dict,
-            scheduler_args=scheduler_dict,
+            optimizer_args=recipe.optimizer,
+            scheduler_args=recipe.scheduler,
         )
         lightning_model.register_optimizer(optimizer)
         lightning_model.register_scheduler(scheduler)
-        lightning_model.register_warmup_step(scheduler_dict["warmup_step"])
+        lightning_model.register_warmup_step(recipe.scheduler.warmup_step)
 
         # Loading exists state_dicts
         if args.pretrained_ckpt_path:
@@ -413,13 +232,13 @@ if __name__ == "__main__":
         )
 
         trainer = L.Trainer(
-            **trainer_dict["lightning_trainer_args"],
-            accelerator="gpu" if trainer_dict["num_gpus"] > 0 else "cpu",
-            devices=trainer_dict["num_gpus"],
-            limit_train_batches=trainer_dict["train_iter_per_epoch"],
-            limit_val_batches=trainer_dict["valid_iter_per_epoch"],
+            **recipe.trainer.lightning_trainer_args,
+            accelerator="gpu" if recipe.trainer.num_gpus > 0 else "cpu",
+            devices=recipe.trainer.num_gpus,
+            limit_train_batches=recipe.trainer.train_iter_per_epoch,
+            limit_val_batches=recipe.trainer.valid_iter_per_epoch,
             use_distributed_sampler=False,
-            default_root_dir=trainer_dict["work_folder"],
+            default_root_dir=recipe.trainer.work_folder,
             callbacks=[lr_monitor, ckpt_monitor],
             profiler="simple",
             sync_batchnorm=True,
@@ -442,7 +261,7 @@ if __name__ == "__main__":
     # Stage of caculating the metric scores
     if args.scoring:
         test_dataset = KaldiFormBaseDataset(
-            folder=corpus_dict["test_folder"],
+            folder=recipe.dataset.test_folder,
             mode="dev",
             resample_to=args.inference_sr,
         )
@@ -456,7 +275,7 @@ if __name__ == "__main__":
         )
         trainer = L.Trainer(inference_mode=True)
         state_dict = torch.load(args.ckpt_path, map_location="cpu")["state_dict"]
-        lightning_model = init_model(model_dict)
+        lightning_model = init_model(recipe.model)
         lightning_model.reload_checkpoint(state_dict)
         lightning_model.register_metrics_func(
             {
@@ -474,7 +293,7 @@ if __name__ == "__main__":
     # Stage of inferencing audio only
     if args.inference:
         test_dataset = KaldiFormBaseDataset(
-            folder=corpus_dict["test_folder"],
+            folder=recipe.dataset.test_folder,
             mode="eval",
             resample_to=args.inference_sr,
         )
@@ -487,11 +306,11 @@ if __name__ == "__main__":
             shuffle=False,
         )
         trainer = L.Trainer(
-            inference_mode=True, default_root_dir=corpus_dict["proc_output_folder"]
+            inference_mode=True, default_root_dir=recipe.dataset.proc_output_folder
         )
         state_dict = torch.load(args.ckpt_path, map_location="cpu")["state_dict"]
-        lightning_model = init_model(model_dict)
+        lightning_model = init_model(recipe.model)
         lightning_model.reload_checkpoint(state_dict)
-        create_folder(corpus_dict["proc_output_folder"])
-        lightning_model.register_proc_output_folder(corpus_dict["proc_output_folder"])
+        create_folder(recipe.dataset.proc_output_folder)
+        lightning_model.register_proc_output_folder(recipe.dataset.proc_output_folder)
         trainer.predict(lightning_model, dataloaders=test_dataloader)

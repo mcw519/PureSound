@@ -10,6 +10,7 @@ import pytest
 import torch
 
 from puresound.task.ns import NoiseSuppressionDataset
+from puresound.config.augmentation import MixModeEntry
 from puresound.task.voice_isolation import VoiceIsolationDataset
 
 
@@ -130,7 +131,7 @@ def _bare_vi() -> VoiceIsolationDataset:
 
 def test_distance_level_sir_follows_inverse_distance_law():
     vi = _bare_vi()
-    mode = {"name": "distance_level", "distance_level": True, "jitter_db": [0.0, 0.0]}
+    mode = MixModeEntry(name="distance_level", distance_level=True, jitter_db=[0.0, 0.0])
     sir = vi._distance_level_sir(
         mode,
         fg_metadata={"source_receiver_distance": 0.5},
@@ -144,7 +145,7 @@ def test_distance_level_sir_follows_inverse_distance_law():
 
 def test_distance_level_sir_falls_back_when_geometry_is_unknown():
     vi = _bare_vi()
-    mode = {"name": "distance_level", "distance_level": True}
+    mode = MixModeEntry(name="distance_level", distance_level=True)
     assert vi._distance_level_sir(mode, None, [{"source_receiver_distance": 2.0}]) is None
     assert vi._distance_level_sir(mode, {"source_receiver_distance": 0.5}, []) is None
     assert (

@@ -6,6 +6,7 @@ from puresound.nnet.loss import (
     VADActivityLoss,
     VADHeadBCELoss,
 )
+from puresound.config.recipe import LossConfig
 from puresound.recipes import init_loss_func
 from puresound.audio.vad import EnergyVADLabeler
 
@@ -32,15 +33,15 @@ def test_vad_activity_loss_penalizes_false_activity():
 def test_vad_activity_loss_can_be_loaded_from_recipe():
     loss_list, loss_weights = init_loss_func(
         [
-            {
-                "type": "VADActivityLoss",
-                "weighted": 0.1,
-                "args": {
+            LossConfig(
+                type="VADActivityLoss",
+                weighted=0.1,
+                args={
                     "frame_length": 160,
                     "hop_length": 80,
                     "activity_threshold_db": -35,
                 },
-            }
+            )
         ]
     )
 

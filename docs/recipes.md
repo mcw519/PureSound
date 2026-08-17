@@ -12,39 +12,28 @@ See `egs/voice_isolate/config/train_dpcrn.yaml` for a complete, real recipe
 built on these functions — it's the config behind the released voice-isolate
 checkpoints.
 
-## `load_siso_recipe_config(f_path) -> Tuple`
+## Loading a recipe
 
-Parses a recipe YAML into a positional 20-tuple. Consumers should unpack the
-fields they need and absorb growth with a star target — the tuple grows by
-appending:
-
-| index | field | yaml section |
-|---|---|---|
-| 0 | corpus | `dataset` |
-| 1 | trainer | `trainer` (incl. `lightning_trainer_args`) |
-| 2 | optimizer | `optimizer` |
-| 3 | scheduler | `scheduler` |
-| 4 | loss | `loss_func` (list) |
-| 5 | model | `model` (incl. `lightning_module`) |
-| 6–13 | augmentation blocks | `augmentation_speech`, `_noise`, `_reverb`, `_speed`, `_ir_response`, `_src`, `_hpf`, `_volume` |
-| 14–16 | more blocks | `augmentation_codec`, `_packet_loss`, `_target_absent` |
-| 17 | vad label | `vad_label` |
-| 18–19 | real-recording blocks | `augmentation_realfar`, `augmentation_realnear` (voice-isolation only) |
-
-Blocks gated by `used: False` (or absent) come back as `None` — **for most
-of the table**. Precisely: indices 6–11, 14–16, and 18–19 go through an
-internal `_enabled_config()` helper that checks `item.get("used")` and
-returns `None` if it's falsy. Indices **12, 13, and 17**
-(`augmentation_hpf`, `augmentation_volume`, `vad_label`) are read with a
-plain `config.get(key)` instead — they come back as `None` only if the
-*key itself* is absent from the YAML; if the block is present but
-internally marked `used: False`, these three fields still return that block
-as-is (unlike the other seventeen). Check `used` yourself if you consume one
-of these three directly.
+Config loading lives in [`puresound.config`](configuration.md), not here. This
+module only builds the objects a validated recipe names.
 
 ```python
-(corpus, trainer, _opt, _sch, _loss, model_dict, *rest) = load_siso_recipe_config(path)
+from puresound.config import load_recipe
+
+recipe = load_recipe(
+    path, expected_task="voice_isolation", expected_purpose="train"
+)
+model = init_siso_model(recipe.model)
+loss_list, loss_weights = init_loss_func(recipe.loss_func)
 ```
+
+`load_siso_recipe_config` and its positional twenty-tuple are gone. The tuple
+existed so callers could unpack "the config"; a typed recipe carries its own
+names, so `recipe.dataset.train_metafile` replaces index 0 and
+`recipe.augmentation_kwargs()` replaces indices 6-19 in one call. Which blocks
+arrive as `None` when disabled is now decided in one place --
+`BaseRecipe.augmentation_kwargs` -- instead of by whether a given index went
+through `_enabled_config` or a plain `config.get`.
 
 ## `init_siso_model(model_dict) -> LightningModule`
 

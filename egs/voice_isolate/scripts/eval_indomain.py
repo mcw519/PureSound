@@ -37,8 +37,9 @@ if str(REPO) not in sys.path:
     sys.path.insert(0, str(REPO))
 
 import numpy as np  # noqa: E402
+from puresound.config import load_recipe, with_overrides
 from puresound.audio.io import AudioIO  # noqa: E402
-from puresound.recipes import init_siso_model, load_siso_recipe_config  # noqa: E402
+from puresound.recipes import init_siso_model  # noqa: E402
 import egs.voice_isolate.main as M  # noqa: E402
 
 
@@ -169,18 +170,14 @@ def main():
     os.chdir(RECIPE_DIR)
     torch.manual_seed(0)
 
-    cfg = load_siso_recipe_config(config_path)
-    # *_rest: the recipe tuple grows as new augmentation blocks are appended;
-    # eval only needs the first 18 fields.
-    (corpus, trainer, _opt, _sch, _loss, model_dict, a_sp, a_no, a_rv, a_spd,
-     a_ir, a_src, a_hpf, a_vol, a_cod, a_pl, a_ta, a_vad, *_rest) = cfg
-    trainer["num_workers"] = args.num_workers
+    recipe = load_recipe(
+        config_path, expected_task="voice_isolation", expected_purpose="train"
+    )
+    recipe = with_overrides(recipe, trainer={"num_workers": args.num_workers})
 
-    _train_dl, valid_dl = M.init_dataloader(
-        corpus, trainer, a_sp, a_no, a_rv, a_spd, a_ir, a_src, a_hpf,
-        a_vol, a_cod, a_pl, a_ta, a_vad)
+    _train_dl, valid_dl = M.init_dataloader(recipe)
 
-    model = init_siso_model(model_dict)
+    model = init_siso_model(recipe.model)
     state = torch.load(ckpt_path, map_location="cpu")["state_dict"]
     missing, unexpected = model.load_state_dict(state, strict=False)
     if missing or unexpected:
@@ -189,7 +186,7 @@ def main():
     model.eval().to(args.device)
     print(f"ckpt: {ckpt_path}", flush=True)
 
-    sr = int(corpus.get("target_sample_rate", 16000))
+    sr = int(recipe.dataset.target_sample_rate or 16000)
     out_dir = Path(args.audio_out)
     if args.save_audio:
         out_dir.mkdir(parents=True, exist_ok=True)
