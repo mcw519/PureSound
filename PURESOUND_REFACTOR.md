@@ -755,6 +755,33 @@ codec / packet-loss 與收尾的 overload guard。
 **P2-6 讓這件事變簡單**：`added_noise` 的 4 組跨百行重播先被刪掉，這條鏈只剩 noisy /
 target 兩條訊號要保持一致，工作量比原估少一半。
 
+### 2026-08-17 — 裝置鏈 per-row provenance
+
+`DeviceChain` 現在回報它對每一列實際做了什麼（`ChainResult.applied`，14 個數值
+scalar），`ns.py` emit、`NoiseSuppressionCollateFunc` collate（voice_isolation 走
+`super()` 免費繼承），`eval_indomain.py --by-bucket` 依它分組。
+
+驗收：`--suite standard` **714 passed**；指紋 **既有 840 個 hash 完全不變**，只新增
+24×14 = 336 個新 key。
+
+**為什麼做**：`eval_indomain --by-bucket` 已經在依 `realized_speech_sir` / `noise_snr` /
+`overlap_fraction` / `drr_gap` 分組看 SI-SDRi——「依這一列實際經歷了什麼切開看」是這個
+repo 已經在用的方法。而裝置鏈是整條 pipeline 唯一完全不 emit 的一段，所以
+「過度抑制是不是集中在被 SRC 降頻或 HPF 削過的列」這類問題**問不出來**。現役 recipe 的
+src(0.5) / ir(0.3) / hpf(0.25) / volume(0.5) 都開著且只打部分列，今天就分得出組。
+
+**為什麼同時接消費端**：`rir_provenance` 那 9 個 key 是反面教材——為 traceability 而加，
+`rir_release_sha256` 與 `rir_renderer_profile_id` 的消費端至今是 **0**。加上剛刪掉的
+`added_noise`，這會是第三次。所以規則是：**emit 與讀它的分析放在同一次改動裡**。
+
+**設計約束**：只放數值 scalar，且**每一列都帶齊每一個 key**（`*_applied` 用 0.0/1.0，
+未觸發的參數用 NaN）。這樣才能搭現有的 scalar collate（每個 key 一次 `torch.cat`）；
+字串要走 `RIR_PROVENANCE_KEYS` 那條路徑，也就是沒人用的那條。
+
+**一支刻意刪掉的測試**：「記錄本身不得多抽亂數」在這棵樹上寫不出誠實的測試——任何寫法
+兩邊都會跑到記錄程式碼，必定通過。那是 before/after 性質，屬於
+`tools/rng_fingerprint.py`。不可能失敗的測試比沒有更糟，它宣告了一個它不提供的保證。
+
 ### 下一步
 
 1. **P2-6（清死旋鈕與死 payload）**——schema 已經把 33 份 config 的問題全部列出來了；

@@ -5,6 +5,7 @@ pin *why* it is allowed to change: which signals a stage may touch, and what a
 disabled stage costs.
 """
 
+import math
 import random
 
 import pytest
@@ -19,7 +20,7 @@ from puresound.config.augmentation import (
     SourceRateAugmentation,
     VolumeAugmentation,
 )
-from puresound.task.device_chain import DeviceChain
+from puresound.task.device_chain import DEVICE_CHAIN_SCALARS, DeviceChain
 
 SR = 16000
 
@@ -131,3 +132,87 @@ def test_an_untouched_pair_passes_through_unchanged():
     result = chain.apply(noisy.clone(), target.clone(), sample_rate=SR)
     assert torch.equal(result.noisy, noisy)
     assert torch.equal(result.target, target)
+
+
+# --------------------------------------------------------------------------- #
+# What the chain records about itself
+# --------------------------------------------------------------------------- #
+
+
+def test_every_row_reports_every_key():
+    """Not "the keys that fired" -- every key, every row.
+
+    The batch collate is one `torch.cat` per key, so a row that omitted a key
+    would silently shorten that tensor and misalign it against the others.
+    """
+    chain = DeviceChain(AudioEffectAugmentor())
+    untouched = chain.apply(*_pair(), sample_rate=SR).applied
+    everything = DeviceChain(AudioEffectAugmentor(), **ENABLED).apply(
+        *_pair(), sample_rate=SR
+    ).applied
+    assert set(untouched) == set(DEVICE_CHAIN_SCALARS)
+    assert set(everything) == set(DEVICE_CHAIN_SCALARS)
+
+
+def test_a_stage_that_did_not_fire_reports_zero_and_nan():
+    """0.0/NaN, matching the task scalars already emitted: a flag is a number so
+    it buckets, and an absent parameter is NaN so it is skipped rather than
+    counted as zero."""
+    applied = DeviceChain(AudioEffectAugmentor()).apply(*_pair(), sample_rate=SR).applied
+    assert applied["src_applied"] == 0.0
+    assert applied["overload_rescaled"] == 0.0
+    assert math.isnan(applied["src_target_sr"])
+    assert math.isnan(applied["hpf_cutoff"])
+
+
+def test_the_record_carries_the_value_the_stage_actually_drew():
+    """A flag alone cannot answer "worse at which cutoff"; the realized
+    parameter is the point."""
+    chain = DeviceChain(
+        AudioEffectAugmentor(),
+        hpf=HighPassAugmentation(**ALWAYS, cutoff=[137.0], prob_each=[1.0]),
+        src=SourceRateAugmentation(**ALWAYS, src_range=[8000], prob_each=[1.0]),
+    )
+    applied = chain.apply(*_pair(), sample_rate=SR).applied
+    assert applied["hpf_applied"] == 1.0
+    assert applied["hpf_cutoff"] == pytest.approx(137.0)
+    assert applied["src_target_sr"] == pytest.approx(8000.0)
+
+
+def test_volume_distinguishes_the_clipping_branch_from_the_gain_branch():
+    """They are different damage, and grouping them together would hide it."""
+    clipping = VolumeAugmentation(
+        **ALWAYS,
+        perturbed_range=[0.5, 1.5],
+        clipping_prob=1.0,
+        clipping_range={"min": [0.01, 0.05], "max": [0.95, 0.99]},
+    )
+    applied = DeviceChain(AudioEffectAugmentor(), volume=clipping).apply(
+        *_pair(), sample_rate=SR
+    ).applied
+    assert applied["volume_applied"] == 1.0
+    assert applied["volume_clipped"] == 1.0
+    assert math.isnan(applied["volume_gain"])
+
+    applied = DeviceChain(AudioEffectAugmentor(), volume=ENABLED["volume"]).apply(
+        *_pair(), sample_rate=SR
+    ).applied
+    assert applied["volume_clipped"] == 0.0
+    assert not math.isnan(applied["volume_gain"])
+
+
+def test_the_overload_guard_reports_when_it_fired():
+    chain = DeviceChain(AudioEffectAugmentor())
+    quiet = chain.apply(*_pair(), sample_rate=SR).applied
+    assert quiet["overload_rescaled"] == 0.0
+    loud = chain.apply(
+        torch.full((1, 16), 4.0), torch.full((1, 16), 2.0), sample_rate=SR
+    ).applied
+    assert loud["overload_rescaled"] == 1.0
+
+
+# "Recording must not itself draw randomness" has no honest test here: any
+# check written against this tree runs the recording code on both sides and
+# passes whatever it does. It is a before/after property, so it belongs to
+# tools/rng_fingerprint.py -- which is how the record was added, with the 840
+# pre-existing hashes unchanged and only the new keys appearing.

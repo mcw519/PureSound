@@ -39,7 +39,8 @@ if str(REPO) not in sys.path:
 import numpy as np  # noqa: E402
 from puresound.config import load_recipe, with_overrides
 from puresound.audio.io import AudioIO  # noqa: E402
-from puresound.recipes import init_siso_model  # noqa: E402
+from puresound.recipes import init_siso_model
+from puresound.task.device_chain import DEVICE_CHAIN_SCALARS  # noqa: E402
 import egs.voice_isolate.main as M  # noqa: E402
 
 
@@ -91,7 +92,7 @@ _META_KEYS = ("drr_gap", "foreground_distance", "rt60", "n_interferers",
               "near_count", "far_count", "overlap_fraction", "mix_mode",
               "realized_speech_sir", "noise_snr",
               "nearest_interferer_distance", "strongest_interferer_drr",
-              "turn_taking")
+              "turn_taking") + DEVICE_CHAIN_SCALARS
 
 
 def _pull(batch, key, r):
@@ -120,6 +121,11 @@ def _binned(v, edges, names):
             break
         i += 1
     return names[i]
+
+
+def _as_int_label(value):
+    """A discrete numeric knob (a sample rate, a cutoff) as its own bucket."""
+    return None if value is None else str(int(round(value)))
 
 
 def _report_buckets(title, rows, key_of, val_key="sisdri"):
@@ -352,6 +358,23 @@ def main():
         _report_buckets("realized_sir (dB)", rows, lambda r: _binned(
             r.get("realized_speech_sir"), [-3, 3, 9],
             ["<-3", "-3..3", "3..9", ">9"]))
+        # The capture chain each row went through. Asked here because the axis
+        # is otherwise invisible: "is the over-suppression concentrated on rows
+        # the resampler or the high-pass already thinned?" has no other answer.
+        for stage in ("src", "iir", "hpf", "volume", "codec", "packet_loss"):
+            _report_buckets(f"{stage} applied", rows, lambda r, s=stage: (
+                None if r.get(f"{s}_applied") is None
+                else ("yes" if r[f"{s}_applied"] > 0.5 else "no")))
+        _report_buckets("src target rate (Hz)", rows,
+                        lambda r: _as_int_label(r.get("src_target_sr")))
+        _report_buckets("hpf cutoff (Hz)", rows,
+                        lambda r: _as_int_label(r.get("hpf_cutoff")))
+        _report_buckets("volume clipped", rows, lambda r: (
+            None if r.get("volume_applied") is None or r["volume_applied"] < 0.5
+            else ("clipped" if r.get("volume_clipped", 0.0) > 0.5 else "gain")))
+        _report_buckets("overload rescaled", rows, lambda r: (
+            None if r.get("overload_rescaled") is None
+            else ("yes" if r["overload_rescaled"] > 0.5 else "no")))
         # E0b: interferer-solo leakage -- frames where the interferer talks and
         # the target is silent (the turn-taking / no-simultaneous-cue regime).
         # ~0 dB = far speech passes through untouched (the clip-3 failure);

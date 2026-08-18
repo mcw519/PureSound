@@ -39,12 +39,60 @@ import torch
 from puresound.audio.dsp import wav_resampling
 
 
+#: Every stage records what it actually did, as plain floats, so eval can group
+#: results by the channel a row went through -- the same thing
+#: ``eval_indomain.py --by-bucket`` already does with SIR / overlap / DRR.
+#:
+#: Numbers only, and one entry per key on EVERY row: that is what lets them ride
+#: the existing scalar collate (a `torch.cat` of 0-dim tensors) for free. The
+#: string-valued `RIR_PROVENANCE_KEYS` take the other collate path, and they are
+#: the cautionary example -- added for traceability, never read by anything.
+#:
+#: Convention matches the task scalars already emitted: `*_applied` is 0.0/1.0,
+#: and a parameter is NaN on rows where its stage did not fire.
+DEVICE_CHAIN_SCALARS = (
+    "src_applied",
+    "src_target_sr",
+    "iir_applied",
+    "hpf_applied",
+    "hpf_cutoff",
+    "volume_applied",
+    "volume_clipped",
+    "volume_gain",
+    "codec_applied",
+    "codec_kind",
+    "codec_bitrate",
+    "packet_loss_applied",
+    "packet_loss_rate",
+    "overload_rescaled",
+)
+
+#: Emitted as a float so it collates with the rest; mirrors MIX_MODE_CODES.
+CODEC_CODES = {"libopus": 1.0, "g722": 2.0}
+
+_NAN = float("nan")
+
+
+def _blank_record() -> dict[str, float]:
+    """A row where nothing fired still reports every key, or the batch cannot
+    be collated into one tensor per key."""
+    return {
+        key: (0.0 if key.endswith(("_applied", "_clipped", "_rescaled")) else _NAN)
+        for key in DEVICE_CHAIN_SCALARS
+    }
+
+
 class ChainResult(NamedTuple):
-    """The pair after the chain. Both are needed: several stages move them
-    together, and reading only one back is how they drift apart."""
+    """The pair after the chain, plus what the chain did to it.
+
+    Both signals are needed: several stages move them together, and reading only
+    one back is how they drift apart. ``applied`` is the per-row provenance --
+    see DEVICE_CHAIN_SCALARS.
+    """
 
     noisy: torch.Tensor
     target: torch.Tensor
+    applied: dict
 
 
 class DeviceChain:
@@ -88,24 +136,30 @@ class DeviceChain:
     def apply(
         self, noisy: torch.Tensor, target: torch.Tensor, *, sample_rate: int
     ) -> ChainResult:
-        noisy, target = self._sample_rate_conversion(noisy, target, sample_rate)
-        noisy, target = self._second_order_iir(noisy, target)
-        noisy, target = self._high_pass(noisy, target, sample_rate)
-        noisy, target = self._volume(noisy, target, sample_rate)
-        noisy = self._codec(noisy, sample_rate)
-        noisy = self._packet_loss(noisy, sample_rate)
-        return ChainResult(*self._overload_guard(noisy, target))
+        # A plain accumulator scoped to this one call -- each stage writes what
+        # it drew. Not cross-call state: the record leaves with the result.
+        record = _blank_record()
+        noisy, target = self._sample_rate_conversion(noisy, target, sample_rate, record)
+        noisy, target = self._second_order_iir(noisy, target, record)
+        noisy, target = self._high_pass(noisy, target, sample_rate, record)
+        noisy, target = self._volume(noisy, target, sample_rate, record)
+        noisy = self._codec(noisy, sample_rate, record)
+        noisy = self._packet_loss(noisy, sample_rate, record)
+        noisy, target = self._overload_guard(noisy, target, record)
+        return ChainResult(noisy, target, record)
 
     # ------------------------------------------------------------------ #
     # Linear channel: the target follows the mixture through each of these
     # ------------------------------------------------------------------ #
 
-    def _sample_rate_conversion(self, noisy, target, sample_rate):
+    def _sample_rate_conversion(self, noisy, target, sample_rate, record):
         if not self._fires(self.src):
             return noisy, target
         src_target = random.choices(
             self.src.src_range, weights=self.src.prob_each
         )[0]
+        record["src_applied"] = 1.0
+        record["src_target_sr"] = float(src_target)
         # Two resamplers with audibly different filters; picking between them
         # widens the artifact distribution rather than baking in one vendor's.
         src_backend = "sox" if torch.rand(1) < 0.5 else "torchaudio"
@@ -139,19 +193,22 @@ class DeviceChain:
             )
         return noisy, target
 
-    def _second_order_iir(self, noisy, target):
+    def _second_order_iir(self, noisy, target, record):
         if not self._fires(self.ir_response):
             return noisy, target
+        record["iir_applied"] = 1.0
         noisy, (a_coeffs, b_coeffs) = self.augmentor.apply_2nd_iir_response(wav=noisy)
         target, _ = self.augmentor.apply_2nd_iir_response(
             wav=target, a_coeffs=a_coeffs, b_coeffs=b_coeffs
         )
         return noisy, target
 
-    def _high_pass(self, noisy, target, sample_rate):
+    def _high_pass(self, noisy, target, sample_rate, record):
         if not self._fires(self.hpf):
             return noisy, target
         cutoff = random.choices(self.hpf.cutoff, weights=self.hpf.prob_each)[0]
+        record["hpf_applied"] = 1.0
+        record["hpf_cutoff"] = float(cutoff)
         q_factor = torch.FloatTensor(1).normal_(mean=0.707, std=0.1).clip(0.3, 1.3)
         noisy, _ = self.augmentor.apply_hpf(
             wav=noisy, sr=sample_rate, cutoff_freq=cutoff, q_factor=q_factor
@@ -161,9 +218,10 @@ class DeviceChain:
         )
         return noisy, target
 
-    def _volume(self, noisy, target, sample_rate):
+    def _volume(self, noisy, target, sample_rate, record):
         if not self._fires(self.volume):
             return noisy, target
+        record["volume_applied"] = 1.0
         if torch.rand(1) < self.volume.clipping_prob:
             min_q = torch.FloatTensor(1).uniform_(
                 self.volume.clipping_range.min[0], self.volume.clipping_range.min[1]
@@ -181,6 +239,7 @@ class DeviceChain:
             target, _ = self.augmentor.apply_clipping_distortion(
                 wav=target, min_quantile=min_quantile, max_quantile=max_quantile
             )
+            record["volume_clipped"] = 1.0
         else:
             gain = (
                 torch.FloatTensor(1)
@@ -195,13 +254,14 @@ class DeviceChain:
             target, _ = self.augmentor.sox_volume_perturbed(
                 wav=target, vol_ratio=vol_ratio, sr=sample_rate
             )
+            record["volume_gain"] = float(gain)
         return noisy, target
 
     # ------------------------------------------------------------------ #
     # Transmission damage: mixture only, the target stays the clean reference
     # ------------------------------------------------------------------ #
 
-    def _codec(self, noisy, sample_rate):
+    def _codec(self, noisy, sample_rate, record):
         if not self._fires(self.codec):
             return noisy
         codecs = self.codec.codecs
@@ -219,9 +279,12 @@ class DeviceChain:
         noisy, _ = self.augmentor.apply_codec(
             wav=noisy, sr=sample_rate, codec_name=codec_name, bit_rate=bit_rate
         )
+        record["codec_applied"] = 1.0
+        record["codec_kind"] = CODEC_CODES.get(codec_name, _NAN)
+        record["codec_bitrate"] = _NAN if bit_rate is None else float(bit_rate)
         return noisy
 
-    def _packet_loss(self, noisy, sample_rate):
+    def _packet_loss(self, noisy, sample_rate, record):
         if not self._fires(self.packet_loss):
             return noisy
         packet_ms = random.choice(self.packet_loss.packet_ms_choices)
@@ -233,12 +296,14 @@ class DeviceChain:
             packet_ms=int(packet_ms),
             loss_rate=loss_rate,
         )
+        record["packet_loss_applied"] = 1.0
+        record["packet_loss_rate"] = float(loss_rate)
         return noisy
 
     # ------------------------------------------------------------------ #
 
     @staticmethod
-    def _overload_guard(noisy, target):
+    def _overload_guard(noisy, target, record):
         """Rescale the pair together if the chain pushed it past full scale.
 
         The dataset clips once before the noise / volume / IIR stages, any of
@@ -251,6 +316,7 @@ class DeviceChain:
         if peak > 1.0:
             noisy = noisy / peak
             target = target / peak
+            record["overload_rescaled"] = 1.0
         return noisy, target
 
 

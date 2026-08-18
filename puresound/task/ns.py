@@ -19,7 +19,10 @@ from puresound.dataset.dynamic_base import (
     DynamicBaseDataset,
     as_block,
 )
-from puresound.task.device_chain import device_chain_from_blocks
+from puresound.task.device_chain import (
+    DEVICE_CHAIN_SCALARS,
+    device_chain_from_blocks,
+)
 
 
 RIR_PROVENANCE_KEYS = (
@@ -659,9 +662,10 @@ class NoiseSuppressionDataset(DynamicBaseDataset):
         # Capture and transmission chain: SRC, IIR, HPF, volume, codec,
         # packet loss, and the closing overload guard. Order and RNG discipline
         # are the chain's contract -- see puresound/task/device_chain.py.
-        noisy_speech, target_speech = self.device_chain.apply(
+        chain = self.device_chain.apply(
             noisy_speech, target_speech, sample_rate=self.audio_sr
         )
+        noisy_speech, target_speech = chain.noisy, chain.target
 
         # Snipts to training target sample length
         noisy_speech = noisy_speech[..., : self.sample_length]
@@ -715,6 +719,12 @@ class NoiseSuppressionDataset(DynamicBaseDataset):
             sample["background_vad_target"] = background_vad_target
         elif self.defer_vad_to_gpu and background_speech_reference is not None:
             sample["background_vad_reference"] = background_speech_reference
+        sample.update(
+            {
+                key: torch.tensor(value, dtype=torch.float32)
+                for key, value in chain.applied.items()
+            }
+        )
         self._emit_task_metadata(
             sample,
             foreground_metadata=fg_rir_metadata,
@@ -1023,6 +1033,12 @@ class NoiseSuppressionCollateFunc:
             out["vad_target"] = pad_sequence(col_vad, batch_first=True)
         if col_vad_ref:
             out["vad_reference"] = pad_sequence(col_vad_ref, batch_first=True)
+        # Which channel each row went through -- see DEVICE_CHAIN_SCALARS. Every
+        # row carries every key, so one `cat` per key is well defined.
+        for key in DEVICE_CHAIN_SCALARS:
+            values = [b[key].view(-1) for b in batch if key in b]
+            if values:
+                out[key] = torch.cat(values, dim=0)
         for key in RIR_PROVENANCE_KEYS:
             if any(key in item for item in batch):
                 out[key] = [item.get(key, "") for item in batch]
