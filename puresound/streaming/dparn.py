@@ -194,15 +194,6 @@ class StreamingDparnFrameModel(StreamingFrameModelBase):
         x = rnn_out.permute(0, 2, 1).reshape(n_batch, freq, channels, n_frames).permute(0, 2, 1, 3)
         return x_inter_skip + x, next_h, next_c
 
-    def _up_step(self, layer: nn.Sequential, x: torch.Tensor, pending: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        raw = layer[0](x)
-        completed = raw[..., :1] + pending
-        next_pending = raw[..., 1:2]
-        if len(layer) > 1:
-            completed = layer[1](completed)
-            completed = layer[2](completed)
-        return completed, next_pending
-
     def _forward_feature_frame(
         self,
         features: torch.Tensor,

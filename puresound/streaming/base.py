@@ -12,14 +12,17 @@ like. Comparing them unit by unit with the backbone names normalised away: the
 export path and the loader are byte-identical, `_down_step` is byte-identical,
 the port-name properties differ only by DPCRN's lookahead ports, and `forward`
 differs only in whether it flattens the state through a helper. Everything else
--- `_up_step`, the block step, the config validators, the state dataclasses --
-is genuinely different, and pulling those up would mean inventing a shared
-abstraction over things that are not the same. They stay where they are.
+-- the block step, the config validators, the state dataclasses -- is genuinely
+different, and pulling those up would mean inventing a shared abstraction over
+things that are not the same. They stay where they are.
 
-`_up_step` is the one worth naming: DPCRN subtracts a bias copy from the
-overlap-add sum because the transpose conv adds it to both time taps, and DPARN
-does not. Whether that is a DPARN bug is a separate question; it is not
-something a base class should quietly decide.
+`_up_step` is here because the difference between the two copies turned out to
+be a bug rather than a design. Both overlap-add a transpose conv whose kernel
+spans two time taps, and the conv adds its bias to both of them, so the sum
+counts it twice where PyTorch's offline `conv_transpose` counts it once. DPCRN
+subtracted the extra copy; DPARN did not, and streamed 1.15e-01 relative away
+from its own offline forward until it did. Once corrected the two were the same
+code, so it lives here.
 """
 
 from __future__ import annotations
@@ -117,6 +120,24 @@ class StreamingFrameModelBase(nn.Module):
         y = layer[4](y)
         next_cache = x[..., -cache.shape[-1] :] if cache.shape[-1] else cache
         return y, next_cache
+
+    def _up_step(
+        self, layer: nn.Sequential, x: torch.Tensor, pending: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        conv = layer[0]
+        raw = conv(x)
+        # The transpose conv adds its bias to BOTH time taps of each frame's
+        # splat, so overlap-adding tap[0] with the previous frame's tap[1] would
+        # count the bias twice. PyTorch's offline conv_transpose adds bias once
+        # per output position -> subtract one bias copy from the overlap sum.
+        completed = raw[..., :1] + pending
+        if conv.bias is not None:
+            completed = completed - conv.bias.view(1, -1, 1, 1)
+        next_pending = raw[..., 1:2]
+        if len(layer) > 1:
+            completed = layer[1](completed)
+            completed = layer[2](completed)
+        return completed, next_pending
 
 
 @dataclass(frozen=True)

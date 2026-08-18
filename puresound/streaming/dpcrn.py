@@ -306,22 +306,6 @@ class StreamingDpcrnFrameModel(StreamingFrameModelBase):
         x = rnn_out.permute(0, 2, 1).reshape(n_batch, freq, channels, n_frames).permute(0, 2, 1, 3)
         return x_inter_skip + x, next_h, next_c
 
-    def _up_step(self, layer: nn.Sequential, x: torch.Tensor, pending: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        conv = layer[0]
-        raw = conv(x)
-        # The transpose conv adds its bias to BOTH time taps of each frame's splat,
-        # so overlap-adding tap[0] with the previous frame's tap[1] would count the
-        # bias twice. PyTorch's offline conv_transpose adds bias once per output
-        # position -> subtract one bias copy from the overlap sum.
-        completed = raw[..., :1] + pending
-        if conv.bias is not None:
-            completed = completed - conv.bias.view(1, -1, 1, 1)
-        next_pending = raw[..., 1:2]
-        if len(layer) > 1:
-            completed = layer[1](completed)
-            completed = layer[2](completed)
-        return completed, next_pending
-
     @staticmethod
     def _shift(cache: torch.Tensor, new: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         """FIFO delay line of length cache.shape[-1]: emit the oldest frame, push

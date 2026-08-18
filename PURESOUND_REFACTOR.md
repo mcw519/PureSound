@@ -999,6 +999,33 @@ vad_head: {enabled: true, kernel_t: 0} -> 接受
 checkpoint key 沒動：`self.vad_head = ...` 的屬性名就是 `backbone.vad_head.*`。
 
 
+### 2026-08-18 — DPARN streaming 的 transpose-conv bias 重複計算（P2-3 的後續）
+
+驗收：`ruff` 全綠；`--suite standard` **745 passed**、`--suite full` **816 passed**（+1）；
+3 個反向驗證全被抓到。
+
+P2-3 拒絕統一 `_up_step` 時記下「DPARN 少了 DPCRN 的 bias 修正，是不是 bug 另議」。
+量完是 bug：transpose conv 的 kernel 跨兩個 time tap、bias 兩邊都加，overlap-add 就把
+它算了兩次，而 PyTorch 離線的 `conv_transpose` 每個輸出位置只加一次。
+
+| | offline vs streaming 相對誤差 |
+|---|---:|
+| 修正前 | **1.153e-01** |
+| 修正後 | **6.139e-07**（delay=0） |
+
+**修法是把對的那份搬上去而不是複製**：兩邊套上修正之後逐字相同，所以 `_up_step` 直接
+進 `StreamingFrameModelBase`，跟 `_down_step` 並排；`base.py` 裡「`_up_step` 刻意不共用」
+那段 docstring 同步改掉——它已經是過時的說明。
+
+**沒有交付物受影響**：repo 裡的 `.onnx` 全是 DPCRN 匯出（`dpcrn_v6`–`v10`），沒有任何
+`dparn_streaming_frame` manifest。`demo.py` 用的 `StreamingDparnOrt` 只是共用 runtime
+的歷史名稱（`StreamingOrt` 的別名），載什麼圖由使用者指定。
+
+**補上缺的那道網**：`test_dparn_streaming.py` 現在有 offline-vs-streaming 對齊測試
+（`slow`），跟 DPCRN 的兩個同構。它本來沒有，這就是這個 bug 活這麼久的原因——
+`_up_step` 的差異在程式碼裡看得見，但沒有任何測試會因此變紅。
+
+
 ### 下一步
 
 1. **P2-6（清死旋鈕與死 payload）**——schema 已經把 33 份 config 的問題全部列出來了；

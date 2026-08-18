@@ -3,6 +3,7 @@ import sys
 from types import SimpleNamespace
 
 import numpy as np
+import pytest
 import torch
 import yaml
 
@@ -162,3 +163,82 @@ def _write_fake_ort_files(tmp_path):
     }
     manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
     return onnx_path, manifest_path
+
+
+# --------------------------------------------------------------------------- #
+# Offline vs streaming
+# --------------------------------------------------------------------------- #
+
+
+def _pack_frame(bf_frame: torch.Tensor) -> torch.Tensor:
+    enhanced = bf_frame.squeeze(-1).permute(0, 2, 1).contiguous()
+    real, imag = torch.chunk(enhanced, chunks=2, dim=-1)
+    return torch.cat([real, imag], dim=-1).reshape(1, -1, 2)
+
+
+def _offline_vs_streaming_rel(config_path, seconds: float = 2.0):
+    """Return (best_delay, relative_error) between the full-utterance offline
+    forward and the per-frame streaming forward.
+
+    Parity is a mathematical property of the port, so random weights suffice --
+    same construction as `test_dpcrn_streaming._offline_vs_streaming_rel`.
+    """
+    from puresound.nnet.masker import Masker
+
+    torch.manual_seed(0)
+    frame_model = load_streaming_dparn_model(str(config_path)).eval()
+    system_model = frame_model.system_model.eval()
+
+    length = int(seconds * 16000)
+    t = torch.arange(length, dtype=torch.float32) / 16000.0
+    wav = (
+        0.3 * torch.sin(2 * np.pi * 220 * t)
+        + 0.2 * torch.sin(2 * np.pi * 700 * t)
+        + 0.1 * torch.randn(length)
+    ).unsqueeze(0)
+
+    with torch.no_grad():
+        tf = system_model.encoder(wav)
+        feats_out, feats_enh = system_model.feats(tf)
+        enh = Masker.apply_complex_mask_on_reim(feats_enh, system_model.backbone(feats_out))
+        enh_bf = system_model.feats.back_forward(enh)
+        n_frames = enh_bf.shape[-1]
+        offline = torch.cat(
+            [_pack_frame(enh_bf[..., i : i + 1]) for i in range(n_frames)], dim=0
+        ).numpy()
+
+        state = frame_model.initial_state(batch_size=1)
+        streamed = []
+        for i in range(tf.shape[2]):
+            out, state = frame_model.forward_frame(tf[:, :, i, :], state)
+            streamed.append(out)
+        streaming = torch.cat(streamed, dim=0).numpy()
+
+    warmup, tail = 60, 5
+    best = None
+    for delay in range(0, 5):
+        n = n_frames - delay
+        a = streaming[delay : delay + n][warmup : n - tail]
+        b = offline[:n][warmup : n - tail]
+        rel = float(np.max(np.abs(a - b))) / (float(np.max(np.abs(b))) + 1e-9)
+        if best is None or rel < best[1]:
+            best = (delay, rel)
+    return best
+
+
+@pytest.mark.slow  # full offline-vs-streaming comparison
+def test_dparn_streaming_matches_offline(tmp_path):
+    """DPARN has no look-ahead, so per-frame streaming must equal offline with
+    zero net delay.
+
+    DPCRN has had this check since it was ported; DPARN never did, and that is
+    why its `_up_step` double-counted the transpose-conv bias for as long as it
+    did. Measured then: 1.153e-01 relative. The correction now lives in
+    `StreamingFrameModelBase._up_step`, shared by both.
+    """
+    config = tmp_path / "dparn.yaml"
+    config.write_text(yaml.safe_dump(MINIMAL_DPARN_CONFIG, sort_keys=False))
+
+    delay, rel = _offline_vs_streaming_rel(config)
+    assert delay == 0, f"DPARN should stream with zero delay, got {delay}"
+    assert rel < 1e-3, f"DPARN streaming != offline (rel={rel:.3e})"
