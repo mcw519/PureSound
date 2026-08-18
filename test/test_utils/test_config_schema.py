@@ -15,6 +15,7 @@ import pathlib
 
 import pytest
 import yaml
+from pydantic import ValidationError
 
 from puresound.config import (
     InferenceRecipe,
@@ -459,3 +460,113 @@ def test_pipeline_role_can_explicitly_reuse_the_training_distribution():
         / "egs/voice_isolate/config/exp/train_dpcrn_m6bank_scratch.yaml"
     )
     assert recipe.dataset.validation_pipeline_role == "train"
+
+
+# --------------------------------------------------------------------------- #
+# The recipe's blocks and the dataset's registry are two halves of one list
+# --------------------------------------------------------------------------- #
+
+DATASET_FOR_TASK = {
+    "noise_suppression": ("puresound.task.ns", "NoiseSuppressionDataset"),
+    "voice_isolation": ("puresound.task.voice_isolation", "VoiceIsolationDataset"),
+    "target_speaker_extraction": ("puresound.task.tse", "TargetSpeakerExtractDataset"),
+    "speaker_embedding": ("puresound.task.sv", "SpeakerEmbeddingDataset"),
+}
+
+
+def _dataset_class(task):
+    import importlib
+
+    module, class_name = DATASET_FOR_TASK[task]
+    return getattr(importlib.import_module(module), class_name)
+
+
+@pytest.mark.parametrize("task", sorted(DATASET_FOR_TASK))
+def test_every_block_a_recipe_emits_is_one_its_dataset_accepts(task):
+    """`runner.build_dataloaders` forwards `recipe.augmentation_kwargs()` whole.
+
+    A block the recipe emits and the dataset does not accept is a `TypeError` at
+    dataloader construction -- not at import, not in any unit test, but on the
+    first real run. Not hypothetical: `vad_label` lives on `BaseRecipe`, so every
+    task emitted `vad_label_args`, and `SpeakerEmbeddingDataset` spelled its
+    eight blocks out by hand without it. Every speaker-embedding recipe in the
+    tree raised.
+
+    The other direction is the mirror image: a block the dataset accepts and no
+    recipe emits is a knob only reachable by constructing the dataset directly,
+    which means no recipe can turn it on.
+    """
+    dataset_cls = _dataset_class(task)
+    recipe_cls = TASK_SCHEMAS[task]
+    emitted = {
+        f"{name}_args"
+        for name in recipe_cls.model_fields
+        if name.startswith("augmentation_") or name == "vad_label"
+    }
+    accepted = set(dataset_cls.AUGMENTATION_BLOCKS)
+    assert emitted - accepted == set(), (
+        f"{dataset_cls.__name__} rejects {sorted(emitted - accepted)}, which "
+        f"{recipe_cls.__name__} emits -- build_dataloaders would raise"
+    )
+    assert accepted - emitted == set(), (
+        f"{dataset_cls.__name__} accepts {sorted(accepted - emitted)}, which no "
+        f"{recipe_cls.__name__} can set"
+    )
+
+
+def test_a_block_the_caller_omitted_is_None_rather_than_absent(
+    tmp_path, write_puresound_metafile
+):
+    """Read sites say `if self.augmentation_noise_args:`, so every registered
+    block needs an attribute even on a dataset built with no augmentation at
+    all -- otherwise the first read is an AttributeError."""
+    from puresound.task.voice_isolation import VoiceIsolationDataset
+
+    metafile = write_puresound_metafile(tmp_path / "meta.csv")
+    dataset = VoiceIsolationDataset(
+        metafile_path=str(metafile),
+        min_utt_length_in_seconds=0.05,
+        min_utts_in_each_speaker=1,
+        target_sr=16000,
+        training_sample_length_in_seconds=0.2,
+    )
+    for name in VoiceIsolationDataset.AUGMENTATION_BLOCKS:
+        assert getattr(dataset, name) is None, name
+
+
+def test_an_unknown_block_names_the_ones_that_exist():
+    """The registry replaced a parameter list, so it has to reject a misspelling
+    the way a parameter list did -- and say what the options were."""
+    dataset_cls = _dataset_class("speaker_embedding")
+    with pytest.raises(TypeError, match="augmentation_reverbb_args"):
+        dataset_cls(metafile_path="unused", augmentation_reverbb_args={})
+
+
+def test_each_task_validates_its_own_speed_dialect():
+    """`augmentation_speed` means two different things by task.
+
+    Speaker embedding perturbs a speaker's rate in discrete steps and may treat
+    a large enough step as a *new speaker identity*; the separation tasks draw a
+    continuous range and never do. Same block name, disjoint keys -- so the
+    registry entry is what decides which model a recipe is checked against, and
+    getting it wrong lets a speaker-embedding recipe through with the wrong
+    fields or rejects a valid one.
+
+    Nothing covered this before: the dialect used to be bound by a
+    `speed_augmentation_model` class attribute, and removing that attribute
+    passed the entire suite.
+    """
+    discrete = {"used": True, "prob": 0.5, "speed_change": [0.9, 1.1],
+                "treat_as_new_speaker": False}
+    continuous = {"used": True, "prob": 0.5, "speed_range": [0.9, 1.1]}
+    key = "augmentation_speed_args"
+
+    sv_model = _dataset_class("speaker_embedding").AUGMENTATION_BLOCKS[key]
+    ns_model = _dataset_class("noise_suppression").AUGMENTATION_BLOCKS[key]
+
+    assert as_block(discrete, sv_model).speed_change == [0.9, 1.1]
+    assert as_block(continuous, ns_model).speed_range == (0.9, 1.1)
+    with pytest.raises(ValidationError):
+        as_block(continuous, sv_model)  # speed_range is not a discrete key
+    with pytest.raises(ValidationError):
+        as_block(discrete, ns_model)  # nor speed_change a continuous one

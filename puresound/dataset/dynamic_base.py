@@ -68,7 +68,31 @@ class ReverbedSource(NamedTuple):
 
 
 class DynamicBaseDataset(torch.utils.data.Dataset):
-    speed_augmentation_model = ContinuousSpeedAugmentation
+    #: Which augmentation blocks this dataset accepts, and the model that
+    #: validates each: ``keyword name -> config model``.
+    #:
+    #: A registry rather than a parameter list because the recipe side already
+    #: derives its half from the schema's own fields, and a hand-written list
+    #: facing a derived one drifts. It did: `vad_label` is on `BaseRecipe`, so
+    #: `augmentation_kwargs()` emitted `vad_label_args` for every task, and
+    #: `SpeakerEmbeddingDataset` -- which spelled its eight blocks out and did
+    #: not list that one -- raised `TypeError` on every speaker-embedding recipe
+    #: in the tree. Both halves are derived now.
+    #:
+    #: Subclasses extend it, and may replace an entry to bind a different
+    #: dialect of the same block (speaker embedding takes discrete speeds where
+    #: the separation tasks take a continuous range).
+    AUGMENTATION_BLOCKS: Mapping[str, type] = {
+        "augmentation_speech_args": SpeechAugmentation,
+        "augmentation_noise_args": NoiseAugmentation,
+        "augmentation_reverb_args": ReverbAugmentation,
+        "augmentation_speed_args": ContinuousSpeedAugmentation,
+        "augmentation_ir_response_args": SimpleProbAugmentation,
+        "augmentation_src_args": SourceRateAugmentation,
+        "augmentation_hpf_args": HighPassAugmentation,
+        "augmentation_volume_args": VolumeAugmentation,
+        "vad_label_args": VadLabelConfig,
+    }
 
     def __init__(
         self,
@@ -78,17 +102,9 @@ class DynamicBaseDataset(torch.utils.data.Dataset):
         target_sr: Optional[int] = None,
         training_sample_length_in_seconds: float = 6.0,
         audio_gain_normalized_to: Optional[int] = None,
-        augmentation_speech_args: AugmentationArg = None,
-        augmentation_noise_args: AugmentationArg = None,
-        augmentation_reverb_args: AugmentationArg = None,
-        augmentation_speed_args: AugmentationArg = None,
-        augmentation_ir_response_args: AugmentationArg = None,
-        augmentation_src_args: AugmentationArg = None,
-        augmentation_hpf_args: AugmentationArg = None,
-        augmentation_volume_args: AugmentationArg = None,
-        vad_label_args: AugmentationArg = None,
         dataset_role: str = "train",
         pipeline_role: str | None = None,
+        **augmentation: AugmentationArg,
     ):
         super().__init__()
         # Matafile related
@@ -107,33 +123,19 @@ class DynamicBaseDataset(torch.utils.data.Dataset):
         else:
             self.training_sample_length = None
 
-        # Augmentation related
-        self.augmentation_speech_args = as_block(
-            augmentation_speech_args, SpeechAugmentation
-        )
-        self.augmentation_noise_args = as_block(
-            augmentation_noise_args, NoiseAugmentation
-        )
-        self.augmentation_reverb_args = as_block(
-            augmentation_reverb_args, ReverbAugmentation
-        )
-        # Tasks bind their speed dialect through ``speed_augmentation_model``.
-        self.augmentation_speed_args = as_block(
-            augmentation_speed_args, self.speed_augmentation_model
-        )
-        self.augmentation_ir_response_args = as_block(
-            augmentation_ir_response_args, SimpleProbAugmentation
-        )
-        self.augmentation_src_args = as_block(
-            augmentation_src_args, SourceRateAugmentation
-        )
-        self.augmentation_hpf_args = as_block(
-            augmentation_hpf_args, HighPassAugmentation
-        )
-        self.augmentation_volume_args = as_block(
-            augmentation_volume_args, VolumeAugmentation
-        )
-        self.vad_label_args = as_block(vad_label_args, VadLabelConfig)
+        # Augmentation related. Every block in the registry gets an attribute
+        # whether the caller supplied it or not -- read sites say
+        # `if self.augmentation_noise_args:` and a missing attribute would be an
+        # AttributeError where None is the answer.
+        blocks = type(self).AUGMENTATION_BLOCKS
+        unexpected = sorted(set(augmentation) - set(blocks))
+        if unexpected:
+            raise TypeError(
+                f"{type(self).__name__}() got unexpected keyword argument(s) "
+                f"{unexpected}; it accepts {sorted(blocks)}"
+            )
+        for name, model in blocks.items():
+            setattr(self, name, as_block(augmentation.get(name), model))
         self.dataset_role = str(dataset_role)
         if self.dataset_role not in {"train", "validation", "test"}:
             raise ValueError(

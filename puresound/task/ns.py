@@ -14,9 +14,7 @@ from puresound.config.augmentation import (
     TargetAbsentAugmentation,
 )
 from puresound.dataset.dynamic_base import (
-    AugmentationArg,
     DynamicBaseDataset,
-    as_block,
 )
 from puresound.task.device_chain import (
     DEVICE_CHAIN_SCALARS,
@@ -60,57 +58,17 @@ class RowPlan:
 
 
 class NoiseSuppressionDataset(DynamicBaseDataset):
-    def __init__(
-        self,
-        metafile_path: str,
-        min_utt_length_in_seconds: float = 3.0,
-        min_utts_in_each_speaker: int = 5,
-        target_sr: Optional[int] = None,
-        training_sample_length_in_seconds: float = 6.0,
-        audio_gain_normalized_to: Optional[int] = None,
-        augmentation_speech_args: AugmentationArg = None,
-        augmentation_noise_args: AugmentationArg = None,
-        augmentation_reverb_args: AugmentationArg = None,
-        augmentation_speed_args: AugmentationArg = None,
-        augmentation_ir_response_args: AugmentationArg = None,
-        augmentation_src_args: AugmentationArg = None,
-        augmentation_hpf_args: AugmentationArg = None,
-        augmentation_volume_args: AugmentationArg = None,
-        augmentation_codec_args: AugmentationArg = None,
-        augmentation_packet_loss_args: AugmentationArg = None,
-        augmentation_target_absent_args: AugmentationArg = None,
-        vad_label_args: AugmentationArg = None,
-        dataset_role: str = "train",
-        pipeline_role: str | None = None,
-    ):
-        super().__init__(
-            metafile_path=metafile_path,
-            min_utt_length_in_seconds=min_utt_length_in_seconds,
-            min_utts_in_each_speaker=min_utts_in_each_speaker,
-            target_sr=target_sr,
-            training_sample_length_in_seconds=training_sample_length_in_seconds,
-            audio_gain_normalized_to=audio_gain_normalized_to,
-            augmentation_speech_args=augmentation_speech_args,
-            augmentation_noise_args=augmentation_noise_args,
-            augmentation_reverb_args=augmentation_reverb_args,
-            augmentation_speed_args=augmentation_speed_args,
-            augmentation_ir_response_args=augmentation_ir_response_args,
-            augmentation_src_args=augmentation_src_args,
-            augmentation_hpf_args=augmentation_hpf_args,
-            augmentation_volume_args=augmentation_volume_args,
-            vad_label_args=vad_label_args,
-            dataset_role=dataset_role,
-            pipeline_role=pipeline_role,
-        )
-        self.augmentation_codec_args = as_block(
-            augmentation_codec_args, CodecAugmentation
-        )
-        self.augmentation_packet_loss_args = as_block(
-            augmentation_packet_loss_args, PacketLossAugmentation
-        )
-        self.augmentation_target_absent_args = as_block(
-            augmentation_target_absent_args, TargetAbsentAugmentation
-        )
+    #: Transmission damage and the target-absent row type on top of the shared
+    #: capture blocks.
+    AUGMENTATION_BLOCKS = {
+        **DynamicBaseDataset.AUGMENTATION_BLOCKS,
+        "augmentation_codec_args": CodecAugmentation,
+        "augmentation_packet_loss_args": PacketLossAugmentation,
+        "augmentation_target_absent_args": TargetAbsentAugmentation,
+    }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
         # Fail fast instead of silently ignoring a task-specific block: mix_mode
         # describes near/far level relationships, which only the voice-isolation
         # dataset implements.

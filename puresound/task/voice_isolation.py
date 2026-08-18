@@ -15,7 +15,6 @@ from puresound.config.augmentation import (
     RealFarAugmentation,
     RealNearAugmentation,
 )
-from puresound.dataset.dynamic_base import AugmentationArg, as_block
 from puresound.task.ns import (
     NoiseSuppressionCollateFunc,
     NoiseSuppressionDataset,
@@ -102,21 +101,18 @@ class VoiceIsolationDataset(NoiseSuppressionDataset):
     stream, so plain noise-suppression recipes regenerate bit-identically.
     """
 
-    def __init__(
-        self,
-        *args,
-        augmentation_realfar_args: AugmentationArg = None,
-        augmentation_realnear_args: AugmentationArg = None,
-        **kwargs,
-    ):
+    #: The two real-recording row types, on top of the noise-suppression set.
+    AUGMENTATION_BLOCKS = {
+        **NoiseSuppressionDataset.AUGMENTATION_BLOCKS,
+        "augmentation_realfar_args": RealFarAugmentation,
+        "augmentation_realnear_args": RealNearAugmentation,
+    }
+
+    def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.augmentation_realfar_args = as_block(
-            augmentation_realfar_args, RealFarAugmentation
-        )
+        # The blocks themselves are set by the base from the registry; what is
+        # task-specific is loading the manifests they name.
         self._realfar_pool = self._load_real_pool(self.augmentation_realfar_args)
-        self.augmentation_realnear_args = as_block(
-            augmentation_realnear_args, RealNearAugmentation
-        )
         self._realnear_pool = self._load_real_pool(self.augmentation_realnear_args)
 
     # ------------------------------------------------------------------ #

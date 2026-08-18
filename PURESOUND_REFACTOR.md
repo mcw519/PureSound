@@ -412,7 +412,7 @@ config 的死旋鈕全部被報出來；刪掉 `added_noise` 後 RNG 指紋逐�
 
 | # | 事項 | 觸發條件 |
 |---|---|---|
-| 3-1 | **Config 物件化**：20-tuple → 巢狀 dataclass（`AugmentationConfig` 聚合全部 `augmentation_*`），一路傳到 dataset 只剩 3–4 個參數 | 2-5 的 schema 落地之後——schema 本身就是 dataclass 的形狀，屆時物件化幾乎是把 schema 換個寫法 |
+| 3-1 | **Config 物件化**（已完成，改做註冊制而非聚合物件）| 見執行紀錄 |
 | ~~3-2~~ | **Config schema 驗證** → 因 A6 提前為 **2-5** | — |
 | 3-3 | **Loss 分派改註冊制**：`loss.required_inputs = ("vad_logits",)` + `{name: provider}` 表取代 if/elif 鏈 | 下次要新增第 7 種 loss 簽章時 |
 | 3-4 | `runner.py` 泛化到 MISO/SV，收掉 tse/sv main 的 866 行重複 | TSE/SV 解凍時。**目前凍結中，不要碰** |
@@ -1024,6 +1024,54 @@ P2-3 拒絕統一 `_up_step` 時記下「DPARN 少了 DPCRN 的 bias 修正，�
 **補上缺的那道網**：`test_dparn_streaming.py` 現在有 offline-vs-streaming 對齊測試
 （`slow`），跟 DPCRN 的兩個同構。它本來沒有，這就是這個 bug 活這麼久的原因——
 `_up_step` 的差異在程式碼裡看得見，但沒有任何測試會因此變紅。
+
+
+### 2026-08-18 — P3-1 augmentation 區塊改註冊制（並修掉它預言的那個 bug）
+
+驗收：`ruff` 全綠；`--suite standard` **752 passed**（+7）、`--suite full` **823 passed**；
+現役 `train_dpcrn.yaml` 指紋 **1954 個 hash 全同**；5 個反向驗證全被抓到。
+`puresound/` 淨 **−105 行**（+78 / −183）。
+
+**先講量出來的 bug**：`SpeakerEmbeddingDataset` 在**這次改動之前是壞的**——樹裡每一份
+speaker-embedding recipe 都會在建 dataloader 時 `TypeError`：
+
+```
+SpeakerEmbeddingDataset.__init__() got an unexpected keyword argument 'vad_label_args'
+```
+
+成因正是 P3-1 的前提：`recipe.augmentation_kwargs()` 從 schema 自己的欄位**推導**要轉發
+哪些區塊（2-5 之後如此），而四個 dataset 各自**手寫**一份平行清單。`vad_label` 掛在
+`BaseRecipe` 上，所以每個 task 都會 emit `vad_label_args`；sv 把八個區塊一個一個列出來、
+沒列那一個。推導的一半對著手寫的一半，就是會漂。
+
+**改法**：`DynamicBaseDataset.AUGMENTATION_BLOCKS`（`keyword 名 -> 驗證模型`）取代參數
+清單，base 做 `as_block` + `setattr` 迴圈並檢查未知鍵；子類別只**增加**自己的區塊。
+
+| dataset | `__init__` 裡的 `*_args` 參數（前 → 後） | 註冊表大小 |
+|---|---:|---:|
+| `DynamicBaseDataset` | 9 → **0** | 9 |
+| `NoiseSuppressionDataset` | 12 → **0** | 12 |
+| `VoiceIsolationDataset` | 2 → **0** | 14 |
+| `TargetSpeakerExtractDataset` | 9 → **0** | 9 |
+| `SpeakerEmbeddingDataset` | 8 → **0** | 9 |
+
+`ns` 原本重新宣告 20 個參數、其中 17 個原封不動轉發給 base——這類 telescoping 全部消失。
+呼叫端**一處都沒改**（26 個建構點）：區塊仍以 `augmentation_X_args=` 關鍵字傳入，只是落進
+`**augmentation` 後由註冊表驗證，錯字照樣報錯而且會**列出接受哪些**。
+
+`speed_augmentation_model` 這個 hook 一併撤掉：sv 直接在註冊表裡把
+`augmentation_speed_args` 換成 `DiscreteSpeedAugmentation`——註冊表本身就是那個 hook。
+
+**144 個讀取點沒動**：`self.augmentation_speech_args` 這些屬性名保持不變。它們是真正的
+讀取而不是管線，改名買不到東西。
+
+**新增的守門測試**：`test_config_schema.py` 現在對四個 task 各檢查一次 recipe emit 的區塊
+與 dataset 註冊表**雙向相等**——emit 但不接受會在第一次真跑時 `TypeError`（就是上面那個
+bug），接受但沒有 recipe 能設就是只能靠直接建構才碰得到的旋鈕。
+
+**順帶補一個本來完全沒被覆蓋的性質**：`augmentation_speed` 對 sv 與分離任務是**兩種不同
+方言**（`speed_change` + `treat_as_new_speaker` vs `speed_range`）。把 sv 的方言綁定拿掉，
+**822 個測試全過**——舊的 `speed_augmentation_model` 屬性同樣沒有任何測試。現在有了。
 
 
 ### 下一步

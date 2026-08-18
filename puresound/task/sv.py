@@ -1,6 +1,6 @@
 import random
 from copy import deepcopy
-from typing import Dict, Optional
+from typing import Dict
 
 import torch
 from torch.nn.utils.rnn import pad_sequence
@@ -8,7 +8,6 @@ from torch.nn.utils.rnn import pad_sequence
 from puresound.audio.noise import add_bg_noise
 from puresound.config.augmentation import DiscreteSpeedAugmentation
 from puresound.dataset.dynamic_base import (
-    AugmentationArg,
     DynamicBaseDataset,
 )
 
@@ -21,45 +20,16 @@ def if_none_else(a, b):
 
 
 class SpeakerEmbeddingDataset(DynamicBaseDataset):
-    speed_augmentation_model = DiscreteSpeedAugmentation
+    #: Speaker embedding takes a *discrete* speed ladder where the separation
+    #: tasks take a continuous range: perturbing a speaker's rate far enough is
+    #: treated as a new speaker identity, which only makes sense at fixed steps.
+    AUGMENTATION_BLOCKS = {
+        **DynamicBaseDataset.AUGMENTATION_BLOCKS,
+        "augmentation_speed_args": DiscreteSpeedAugmentation,
+    }
 
-    def __init__(
-        self,
-        metafile_path: str,
-        min_utt_length_in_seconds: float = 3.0,
-        min_utts_in_each_speaker: int = 5,
-        target_sr: Optional[int] = None,
-        training_sample_length_in_seconds: float = 6.0,
-        audio_gain_normalized_to: Optional[int] = None,
-        augmentation_speech_args: AugmentationArg = None,
-        augmentation_noise_args: AugmentationArg = None,
-        augmentation_reverb_args: AugmentationArg = None,
-        augmentation_speed_args: AugmentationArg = None,
-        augmentation_ir_response_args: AugmentationArg = None,
-        augmentation_src_args: AugmentationArg = None,
-        augmentation_hpf_args: AugmentationArg = None,
-        augmentation_volume_args: AugmentationArg = None,
-        dataset_role: str = "train",
-        pipeline_role: str | None = None,
-    ):
-        super().__init__(
-            metafile_path=metafile_path,
-            min_utt_length_in_seconds=min_utt_length_in_seconds,
-            min_utts_in_each_speaker=min_utts_in_each_speaker,
-            target_sr=target_sr,
-            training_sample_length_in_seconds=training_sample_length_in_seconds,
-            audio_gain_normalized_to=audio_gain_normalized_to,
-            augmentation_speech_args=augmentation_speech_args,
-            augmentation_noise_args=augmentation_noise_args,
-            augmentation_reverb_args=augmentation_reverb_args,
-            augmentation_speed_args=augmentation_speed_args,
-            augmentation_ir_response_args=augmentation_ir_response_args,
-            augmentation_src_args=augmentation_src_args,
-            augmentation_hpf_args=augmentation_hpf_args,
-            augmentation_volume_args=augmentation_volume_args,
-            dataset_role=dataset_role,
-            pipeline_role=pipeline_role,
-        )
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
 
     @property
     def total_speakers(self):

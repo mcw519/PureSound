@@ -1,7 +1,7 @@
 import logging
 import random
 from copy import deepcopy
-from typing import Dict, Mapping, Optional, Tuple
+from typing import Dict, Mapping, Tuple
 
 import torch
 from torch.nn.utils.rnn import pad_sequence
@@ -11,7 +11,7 @@ from puresound.audio.noise import add_bg_noise
 from puresound.audio.volume import rescale_waveform
 from puresound.config import delegated_kwargs
 from puresound.config.recipe import EnrollmentConfig
-from puresound.dataset.dynamic_base import AugmentationArg, DynamicBaseDataset, as_block
+from puresound.dataset.dynamic_base import DynamicBaseDataset, as_block
 from puresound.task.device_chain import (
     DEVICE_CHAIN_SCALARS,
     device_chain_from_blocks,
@@ -31,47 +31,16 @@ def if_none_else(a, b):
 class TargetSpeakerExtractDataset(DynamicBaseDataset):
     def __init__(
         self,
-        metafile_path: str,
-        min_utt_length_in_seconds: float = 3.0,
-        min_utts_in_each_speaker: int = 5,
-        target_sr: Optional[int] = None,
-        training_sample_length_in_seconds: float = 6.0,
+        *args,
         enroll_speech_args: EnrollmentConfig | Mapping | None = None,
-        audio_gain_normalized_to: Optional[int] = None,
-        augmentation_speech_args: AugmentationArg = None,
-        augmentation_noise_args: AugmentationArg = None,
-        augmentation_reverb_args: AugmentationArg = None,
-        augmentation_speed_args: AugmentationArg = None,
-        augmentation_ir_response_args: AugmentationArg = None,
-        augmentation_src_args: AugmentationArg = None,
-        augmentation_hpf_args: AugmentationArg = None,
-        augmentation_volume_args: AugmentationArg = None,
-        vad_label_args: AugmentationArg = None,
-        dataset_role: str = "train",
-        pipeline_role: str | None = None,
+        **kwargs,
     ):
+        # Not an augmentation block: the enrollment utterance is what makes this
+        # task target-*speaker* extraction, so it is required rather than gated.
         enroll_config = as_block(enroll_speech_args, EnrollmentConfig)
         if enroll_config is None:
             raise ValueError("enroll_speech_args is required")
-        super().__init__(
-            metafile_path=metafile_path,
-            min_utt_length_in_seconds=min_utt_length_in_seconds,
-            min_utts_in_each_speaker=min_utts_in_each_speaker,
-            target_sr=target_sr,
-            training_sample_length_in_seconds=training_sample_length_in_seconds,
-            audio_gain_normalized_to=audio_gain_normalized_to,
-            augmentation_speech_args=augmentation_speech_args,
-            augmentation_noise_args=augmentation_noise_args,
-            augmentation_reverb_args=augmentation_reverb_args,
-            augmentation_speed_args=augmentation_speed_args,
-            augmentation_ir_response_args=augmentation_ir_response_args,
-            augmentation_src_args=augmentation_src_args,
-            augmentation_hpf_args=augmentation_hpf_args,
-            augmentation_volume_args=augmentation_volume_args,
-            vad_label_args=vad_label_args,
-            dataset_role=dataset_role,
-            pipeline_role=pipeline_role,
-        )
+        super().__init__(*args, **kwargs)
         self.enroll_speech_args = enroll_config
         self.init_enroll_augmentor()
         self.device_chain = device_chain_from_blocks(self.augmentor, self)
