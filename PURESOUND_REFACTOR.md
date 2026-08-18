@@ -416,7 +416,7 @@ config 的死旋鈕全部被報出來；刪掉 `added_noise` 後 RNG 指紋逐�
 | ~~3-2~~ | **Config schema 驗證** → 因 A6 提前為 **2-5** | — |
 | 3-3 | **Loss 分派改註冊制**（已完成）| 見執行紀錄 |
 | 3-4 | `runner.py` 泛化到 MISO/SV（已完成）| 見執行紀錄 |
-| 3-5 | `dry_blend`/`spec_floor` 抽成獨立 `Postprocessor` | 要做 SDK 部署對齊時 |
+| 3-5 | `dry_blend`/`spec_floor` 抽成獨立 `Postprocessor`（已完成）| 見執行紀錄 |
 
 ---
 
@@ -1147,13 +1147,57 @@ NS / VI 一樣是 `store_true`（`--training`）。四份 README 的呼叫範例
 集合都有測試。
 
 
+### 2026-08-18 — P3-5 `Postprocessor`
+
+驗收：`ruff` 全綠；`--suite full` **870 passed**（+26）；抽出前後**逐數值相同**
+（spec_floor 三個值 × dry_blend 三個值 × 三種形狀，max|new−old| 全為 0）；
+11 個反向驗證被抓到、1 個沒抓到 → 補測試後也抓到。
+
+`dry_blend` / `spec_floor` 是兩個只在推論用的旋鈕，原本是 `forward()` 的參數，作用點
+相隔一百行（一個在 iSTFT 之前的頻譜域、一個在波形域）。抽成
+`puresound/system/postprocess.py::Postprocessor`。
+
+**量出來的三件事，抽出來才寫得下：**
+
+**一、`dry_blend` 給抑制上限，而且是純算術。** 輸出永遠保留 `1 − dry_blend` 的輸入，
+所以最深衰減是 `20·log10(1 − dry_blend)`：
+
+| dry_blend | 抑制上限 |
+|---|---:|
+| 0.90 | **−20.00 dB** |
+| 0.95 | −26.02 dB |
+| 1.00 | 無上限 |
+
+現役部署候選是 `dry_blend 0.9`，所以 `field_test_vector/RESULTS.md` 裡逼近 −20 dB 的
+遠場殘留，量到的是 blend 而不是模型。`suppression_ceiling_db` 把它變成一個可讀的數字。
+
+**二、`spec_floor` 在五種 mask_type 中有四種是靜默 no-op。** 它只寫在 `complex` 分支裡；
+`deepfilter` / `wiener` / `mvdr` / `mapping` 四個分支完全沒提到它。配方要了一個拿不到的
+緩解，看起來會像「緩解沒效」。改成 `reject_spec_floor()` 明確報錯。出貨 config 全部是
+`complex`（32/32），所以對現役沒有行為變更。
+
+**三、被完全歸零的 bin 抬不起來。** floor 是把 enhanced 值放大到目標幅度，而放大 0+0j
+到不了任何地方——沒有相位可以保留。所以這個旋鈕能緩解**部分**過度抑制、不能緩解**完全**
+過度抑制，而後者才是難的那一半。這是既有行為（抽出前後逐數值相同已確認），寫進 docstring
+並補測試釘住，因為它跟名字給人的印象相反。
+
+**反向驗證漏一條**：把 siso 裡的 `reject_spec_floor` 呼叫拿掉，全套測試不紅——因為原本
+只測了 `Postprocessor` 自己會拒絕，沒測**模組真的有問**。那四種 mask_type 沒有任何出貨
+配方，所以補的測試用 stub 走 `forward`；四個分支各自拿掉都會紅了。
+
+**留下一個部署缺口（未修，已開 task）**：`sdk/python/puresound_streaming/runtime.py`
+只跑匯出的 ONNX 圖，而**兩個旋鈕都不在圖裡**。也就是說出貨的 streaming runtime 不是
+benchmark 量的那個系統——benchmark 有 −20 dB 上限、SDK 沒有。要往哪邊對齊是產品決定，
+不是清理；`as_manifest()` 已經準備好讓匯出把設定寫進 manifest。
+
+
 ### 下一步
 
 1. **P2-6（清死旋鈕與死 payload）**——schema 已經把 33 份 config 的問題全部列出來了；
    `added_noise` 那塊（4 組 flag 重播、約 90 行、無人消費）也可以一起處理。
    此項已完成，包含現役設定與無法執行的 backup 設定。
-2. P2-2 / P2-3 / P2-4 已完成（P2-4 改做設定驗證，mixin 經量測後判定不值得，見執行紀錄）。
-   P2 全數結案。
+2. P2 與 P3 全數結案（P2-4 改做設定驗證、P3-1 改做註冊制、P3-4 的模型 factory 改成
+   由 task 推導——三項都是量測之後偏離原計畫的寫法，理由見各自的執行紀錄）。
 3. `__getitem__` 仍是複雜度 25 的長函式——剩下的是「這一列是什麼」的決策
    （row plan、interferer、mix、target-absent、echo、noise、VAD 標記、metadata）。
    要再降就是把 noise 那段也抽出去，但它與 room_scene 耦合，切線不像裝置鏈那麼乾淨。

@@ -25,6 +25,7 @@ from puresound.audio.io import AudioIO
 from puresound.nnet.masker import Masker
 
 from .base import BaseLightningModule, invoke_loss
+from .postprocess import Postprocessor, resolve as resolve_postprocess
 
 
 class EncDecMaskBase(BaseLightningModule):
@@ -128,6 +129,7 @@ class EncDecMaskBase(BaseLightningModule):
         wav: torch.Tensor,
         dry_blend: float = 1.0,
         spec_floor: float = 0.0,
+        postprocess: Optional[Postprocessor] = None,
     ):
         """Run enhancement.
 
@@ -135,20 +137,18 @@ class EncDecMaskBase(BaseLightningModule):
             wav: noisy waveform, shape ``[N, T]`` (a leading singleton channel
                 is squeezed away).
             dry_blend: inference-only over-suppression relief in ``(0, 1]``.
-                Output becomes ``dry_blend * enh + (1 - dry_blend) * input``;
-                ``1.0`` (default) is a no-op. Values < 1 mix the original mix
-                back to recover deleted target speech, trading a little
-                interferer leakage for fewer deletions. Training callers leave
-                the default, so the training path is unchanged.
-            spec_floor: inference-only spectral over-suppression floor in
-                ``[0, 1)``. Clamps each enhanced magnitude bin to at least
-                ``spec_floor * |mix bin|`` (keeping the enhanced phase) so the
-                mask can never attenuate a bin below that fraction of the
-                input. ``0.0`` (default) is a no-op. Complex-mask models only.
+                ``1.0`` (default) is a no-op. Note it puts a hard ceiling under
+                suppression -- see `Postprocessor.suppression_ceiling_db`.
+            spec_floor: inference-only spectral floor in ``[0, 1)``. ``0.0``
+                (default) is a no-op. Complex-mask models only, and now an error
+                rather than silence on the others.
+            postprocess: a built `Postprocessor`, as an alternative to the two
+                keywords above. Not both.
 
         Returns:
             Enhanced waveform clamped to ``[-1, 1]``.
         """
+        post = resolve_postprocess(postprocess, dry_blend, spec_floor)
         if wav.dim() != 2 and wav.shape[0] == 1:
             wav = wav.squeeze(0)
 
@@ -167,9 +167,9 @@ class EncDecMaskBase(BaseLightningModule):
             enh = Masker.apply_complex_mask_on_reim(
                 tf_rep=features_for_enhanced, est_masks=mask
             )
-            if spec_floor > 0.0:
-                enh = self._apply_spec_floor(enh, features_for_enhanced, spec_floor)
+            enh = post.floor_spectrum(enh, features_for_enhanced)
         elif self.mask_type == "deepfilter":
+            post.reject_spec_floor("deepfilter")
             n_filter = mask.shape[2]
             n_order = int(mask.shape[1] / 2)
             enh = Masker.apply_df_on_reim(
@@ -179,6 +179,7 @@ class EncDecMaskBase(BaseLightningModule):
                 order=n_order,
             )
         elif self.mask_type == "wiener":
+            post.reject_spec_floor("wiener")
             n_order = int(ifc.shape[-1] / 2)
             enh = Masker.apply_complex_mask_on_reim(
                 tf_rep=features_for_enhanced, est_masks=mask
@@ -188,6 +189,7 @@ class EncDecMaskBase(BaseLightningModule):
             )
             enh[:, :, :n_bins, :] = enh_filter[:, :, :n_bins, :]
         elif self.mask_type == "mvdr":
+            post.reject_spec_floor("mvdr")
             n_order = int(ifc.shape[-1] / 2)
             enh = Masker.apply_complex_mask_on_reim(
                 tf_rep=features_for_enhanced, est_masks=mask
@@ -197,6 +199,7 @@ class EncDecMaskBase(BaseLightningModule):
             )
             enh[:, :, :n_bins, :] = enh_filter[:, :, :n_bins, :]
         elif self.mask_type == "mapping":
+            post.reject_spec_floor("mapping")
             enh = mask
         else:
             raise ValueError(
@@ -205,17 +208,7 @@ class EncDecMaskBase(BaseLightningModule):
             )
 
         enh = self._spec_to_wav(enh)
-
-        if dry_blend < 1.0:
-            ref = wav
-            if ref.dim() == enh.dim() + 1 and ref.shape[0] == 1:
-                ref = ref.squeeze(0)
-            n = min(enh.shape[-1], ref.shape[-1])
-            blended = dry_blend * enh[..., :n] + (1.0 - dry_blend) * ref[..., :n]
-            enh = enh.clone()
-            enh[..., :n] = torch.clamp(blended, min=-1.0, max=1.0)
-
-        return enh
+        return post.blend_waveform(enh, wav)
 
     def _spec_to_wav(self, enh: torch.Tensor) -> torch.Tensor:
         """iSTFT an enhanced [N,2,F,T] spectrum back to a clamped waveform.
@@ -227,23 +220,6 @@ class EncDecMaskBase(BaseLightningModule):
             enh = enh.squeeze(1)
         enh = self.encoder.inverse(enh)
         return torch.clamp_(enh, min=-1, max=1)
-
-    @staticmethod
-    def _apply_spec_floor(
-        enh: torch.Tensor, mix_tf: torch.Tensor, floor: float
-    ) -> torch.Tensor:
-        """Floor the enhanced magnitude to ``>= floor * |mix|`` per bin while
-        keeping the enhanced phase. ``enh`` and ``mix_tf`` are real/imag stacked
-        on dim=1 with shape ``[N, 2, C, T]``. No-op where the mask did not
-        over-suppress (enh already above the floor)."""
-        eps = 1e-8
-        er, ei = torch.chunk(enh, chunks=2, dim=1)
-        mr, mi = torch.chunk(mix_tf, chunks=2, dim=1)
-        enh_mag = torch.sqrt(er * er + ei * ei + eps)
-        mix_mag = torch.sqrt(mr * mr + mi * mi + eps)
-        target_mag = torch.maximum(enh_mag, floor * mix_mag)
-        scale = target_mag / enh_mag
-        return torch.cat([er * scale, ei * scale], dim=1)
 
     def _random_channel_perturb(self, wav: torch.Tensor) -> torch.Tensor:
         """A random plausible recording chain applied to the whole mixture.
