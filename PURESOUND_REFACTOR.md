@@ -920,6 +920,51 @@ Bernoulli 路徑的消耗剛好是 regime roll + fill rate + 每 frame 一個值
 primitive 重放一次比對串流位置。
 
 
+### 2026-08-18 — P2-3 `streaming` 抽共用基底
+
+驗收：`ruff` 全綠；`--suite standard` **740 passed**、`--suite full` **810 passed**；
+6 個反向驗證全數被抓到。
+
+**先修計畫裡的數字**：P2-3 原本寫「308 行重複」。逐單元比對（把 backbone 名稱正規化
+之後）實際是 **117 行逐字相同 + 21 行 >80% 相似**：
+
+| 單元 | 行數 | 相似度 |
+|---|---:|---|
+| `export_streaming_X_onnx` | 83 | **逐字相同** |
+| `load_streaming_X_model` | 14 | **逐字相同** |
+| `_down_step` | 11 | **逐字相同** |
+| `_require` / `_as_list` / `_tensor_shape` / `create_streaming_X_model` | 9 | **逐字相同** |
+| `state_input_names` / `state_output_names` | 16 | 92%（只差 DPCRN 的 lookahead 埠） |
+| `forward` | 5 | 81%（只差有沒有用 helper 攤平 state） |
+
+其餘（`_up_step`、block step、config validator、state dataclass）是**真的不一樣**，
+把它們拉上去等於為不同的東西發明一個共同抽象。留在原地。
+
+新 `puresound/streaming/base.py`（344 行）承載：`require` / `as_list` /
+`tensor_shape`、`StreamingFrameModelBase`（埠命名 + `_down_step` + `forward` +
+`initial_state_tensors`，以 `_extra_state_names` hook 容納 DPCRN 的 lookahead 埠）、
+`StreamingVariant`（三個值：manifest 名稱、validator、frame model 類別）、
+`load_streaming_model`、`export_streaming_onnx`、`StreamingOrt`。
+
+**行數是打平的**（1100 → 1100）：省下的 111 行重複剛好被 base 的文件與 scaffolding
+抵銷。真正的收穫是三件：83 行的 ONNX 匯出路徑不再有兩份（改一份會漏掉另一份）、
+`dpcrn.py` 不再 `from puresound.streaming.dparn import ...`（依賴方向倒置修好了）、
+以及加第三個 backbone 只要一個 variant 與它真正不同的部分。
+
+**補了匯出路徑的第一個測試**：`test_streaming_export.py`（`slow`，每例約 7 秒）。
+既有的 streaming 測試涵蓋 config 驗證、frame/state 形狀、offline-vs-streaming 對齊，
+但**沒有任何一個跑過 `export_streaming_*_onnx`**——那是複製了兩份、又完全沒測的 83 行。
+測 manifest 是否描述真的被寫出去的圖（runtime 靠 manifest 的埠名餵 session），以及
+匯出的圖能不能被共用 runtime 載入並推進 state。
+
+**發現一個 DPARN 的真 bug（未修，已開 task）**：`_up_step` 是唯一我拒絕統一的方法——
+DPCRN 會從 overlap-add 的和裡扣掉一份 bias（transpose conv 對兩個 time tap 都加了
+bias），DPARN 沒有。實測 DPARN 的 streaming 與 offline **相對誤差 1.153e-01**，套上
+DPCRN 的修正後降到 5.831e-07。之所以沒被發現：`test_dparn_streaming.py` 沒有
+offline-vs-streaming 對齊測試（DPCRN 有兩個）。這是行為變更不是去重，所以獨立處理；
+修好之後 `_up_step` 就可以跟 `_down_step` 一起搬進 base。
+
+
 ### 下一步
 
 1. **P2-6（清死旋鈕與死 payload）**——schema 已經把 33 份 config 的問題全部列出來了；

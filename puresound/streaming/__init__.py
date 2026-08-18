@@ -1,3 +1,4 @@
+from .base import StreamingOrt
 from .dparn import (
     DparnStreamingState,
     StreamingDparnFrameModel,
@@ -18,6 +19,7 @@ from .dpcrn import (
 )
 
 __all__ = [
+    "StreamingOrt",
     "DparnStreamingState",
     "StreamingDparnFrameModel",
     "StreamingDparnOrt",

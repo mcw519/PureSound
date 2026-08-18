@@ -15,25 +15,28 @@ full-utterance parity test); the runtime supplies the future frames via its ring
 buffer, so the streamed output is the offline result delayed by that many frames.
 """
 
-import json
-import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Sequence
 
-import numpy as np
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 
 from puresound.nnet.dpcrn import DPCRN
 from puresound.nnet.masker import Masker
-from puresound.utils import load_hparam
 
 # The ORT runtime is fully manifest-driven (dispatched by processor
 # "stft_frame_ort", state read from JSON), so the DPARN runtime handles a DPCRN
 # manifest unchanged. Re-exported under a DPCRN name for callers/CLIs.
-from puresound.streaming.dparn import StreamingDparnOrt as StreamingDpcrnOrt  # noqa: F401
+from puresound.streaming.base import (
+    StreamingFrameModelBase,
+    StreamingOrt,
+    StreamingVariant,
+    as_list,
+    export_streaming_onnx,
+    load_streaming_model,
+    require,
+)
 
 
 @dataclass
@@ -53,15 +56,6 @@ class DpcrnStreamingState:
     counter: torch.Tensor | None = None
 
 
-def _require(condition: bool, message: str) -> None:
-    if not condition:
-        raise ValueError(message)
-
-
-def _as_list(value: Any) -> list[Any]:
-    return list(value) if isinstance(value, (list, tuple)) else [value]
-
-
 def validate_streaming_dpcrn_config(config: dict[str, Any]) -> dict[str, Any]:
     dataset = config.get("dataset", {})
     model = config.get("model", {})
@@ -71,32 +65,32 @@ def validate_streaming_dpcrn_config(config: dict[str, Any]) -> dict[str, Any]:
     encoder_args = encoder.get("encoder_args", {})
     backbone_args = backbone.get("backbone_args", {})
 
-    _require(dataset.get("target_sample_rate") == 16000, "streaming DPCRN requires dataset.target_sample_rate=16000")
-    _require(encoder.get("type") == "ConvEncDec", "streaming DPCRN requires ConvEncDec encoder")
-    _require(str(encoder_args.get("win_type", "")).lower() == "hann", "streaming DPCRN requires a Hann window")
-    _require(encoder_args.get("sr") == 16000, "streaming DPCRN requires encoder sr=16000")
-    _require(encoder_args.get("fmax") == 8000, "streaming DPCRN requires encoder fmax=8000")
-    _require(encoder_args.get("trainable") is False, "streaming DPCRN requires a fixed Hann frontend: encoder.trainable=False")
+    require(dataset.get("target_sample_rate") == 16000, "streaming DPCRN requires dataset.target_sample_rate=16000")
+    require(encoder.get("type") == "ConvEncDec", "streaming DPCRN requires ConvEncDec encoder")
+    require(str(encoder_args.get("win_type", "")).lower() == "hann", "streaming DPCRN requires a Hann window")
+    require(encoder_args.get("sr") == 16000, "streaming DPCRN requires encoder sr=16000")
+    require(encoder_args.get("fmax") == 8000, "streaming DPCRN requires encoder fmax=8000")
+    require(encoder_args.get("trainable") is False, "streaming DPCRN requires a fixed Hann frontend: encoder.trainable=False")
 
     fft_length = int(encoder_args.get("fft_length", 512))
     win_length = int(encoder_args.get("win_length", fft_length))
     hop_length = int(encoder_args.get("hop_length", win_length // 4))
-    _require(win_length <= fft_length, "win_length must be <= fft_length")
-    _require(hop_length > 0, "hop_length must be positive")
+    require(win_length <= fft_length, "win_length must be <= fft_length")
+    require(hop_length > 0, "hop_length must be positive")
 
-    _require(features.get("feats_type") == "complex", "streaming DPCRN requires complex features")
-    _require(features.get("drop_stft_first_bin") is True, "streaming DPCRN requires drop_stft_first_bin=True")
-    _require(features.get("trainable") is False, "streaming DPCRN requires features.trainable=False")
-    _require(not features.get("include_specaug", False), "streaming DPCRN does not support specaug")
+    require(features.get("feats_type") == "complex", "streaming DPCRN requires complex features")
+    require(features.get("drop_stft_first_bin") is True, "streaming DPCRN requires drop_stft_first_bin=True")
+    require(features.get("trainable") is False, "streaming DPCRN requires features.trainable=False")
+    require(not features.get("include_specaug", False), "streaming DPCRN does not support specaug")
 
-    _require(backbone.get("type") == "DPCRN", "streaming DPCRN requires a DPCRN backbone")
-    _require(backbone_args.get("input_dim") == 256, "streaming DPCRN requires input_dim=256")
+    require(backbone.get("type") == "DPCRN", "streaming DPCRN requires a DPCRN backbone")
+    require(backbone_args.get("input_dim") == 256, "streaming DPCRN requires input_dim=256")
     # bN2d (BatchNorm2d) is allowed: in eval() it applies fixed running stats
     # per (freq,time) location, so it is frame-independent (no cross-time state).
-    _require(backbone_args.get("norm_type") in {"cLN", "iLN", "bN2d"}, "streaming DPCRN requires cLN/iLN/bN2d normalization")
-    _require(not backbone_args.get("skip_conv", False), "streaming DPCRN currently expects skip_conv=False")
-    _require(all(v == 1 for v in _as_list(backbone_args.get("stride_t", []))), "streaming DPCRN requires stride_t=1 for every down layer")
-    _require(all(v == 1 for v in _as_list(backbone_args.get("dilation_t", []))), "streaming DPCRN requires dilation_t=1 for every down layer")
+    require(backbone_args.get("norm_type") in {"cLN", "iLN", "bN2d"}, "streaming DPCRN requires cLN/iLN/bN2d normalization")
+    require(not backbone_args.get("skip_conv", False), "streaming DPCRN currently expects skip_conv=False")
+    require(all(v == 1 for v in as_list(backbone_args.get("stride_t", []))), "streaming DPCRN requires stride_t=1 for every down layer")
+    require(all(v == 1 for v in as_list(backbone_args.get("dilation_t", []))), "streaming DPCRN requires dilation_t=1 for every down layer")
 
     # Causality note (non-blocking). delay=[0,0,0] streams bit-exact with ZERO
     # latency. A look-ahead down-path (delay>0) is also supported and bit-exact,
@@ -107,7 +101,7 @@ def validate_streaming_dpcrn_config(config: dict[str, Any]) -> dict[str, Any]:
     # makes the decoder anti-causal (uses future frames) and breaks streaming parity.
     import warnings
 
-    delay = _as_list(backbone_args.get("delay", []))
+    delay = as_list(backbone_args.get("delay", []))
     if not all(v == 0 for v in delay):
         warnings.warn(
             f"delay={backbone_args.get('delay')} (look-ahead): streams bit-exactly but with a fixed "
@@ -133,15 +127,15 @@ def validate_streaming_dpcrn_config(config: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-class StreamingDpcrnFrameModel(nn.Module):
+class StreamingDpcrnFrameModel(StreamingFrameModelBase):
     """One-frame DPCRN feature model with explicit streaming state."""
 
     def __init__(self, system_model: nn.Module):
         super().__init__()
-        _require(hasattr(system_model, "backbone"), "system model must expose a DPCRN backbone")
-        _require(hasattr(system_model, "feats"), "system model must expose a feature encoder")
-        _require(system_model.mask_type == "complex", "streaming DPCRN supports complex masking only")
-        _require(isinstance(system_model.backbone, DPCRN), "streaming frame model requires a DPCRN backbone")
+        require(hasattr(system_model, "backbone"), "system model must expose a DPCRN backbone")
+        require(hasattr(system_model, "feats"), "system model must expose a feature encoder")
+        require(system_model.mask_type == "complex", "streaming DPCRN supports complex masking only")
+        require(isinstance(system_model.backbone, DPCRN), "streaming frame model requires a DPCRN backbone")
         self.system_model = system_model
         self.backbone: DPCRN = system_model.backbone
         self.feats = system_model.feats
@@ -158,7 +152,7 @@ class StreamingDpcrnFrameModel(nn.Module):
         # A U-Net skip from down layer k must be delayed by (D - cum[k]) to line up
         # with the main path at the up layer that consumes it. delay=[0,0,0] => all
         # zero => the causal fast path (no extra state, no warmup gate).
-        delay_cfg = [int(v) for v in _as_list(getattr(self.backbone, "delay", [0] * self.n_down))]
+        delay_cfg = [int(v) for v in as_list(getattr(self.backbone, "delay", [0] * self.n_down))]
         cum, run = [], 0
         for d in delay_cfg[: self.n_down]:
             run += d
@@ -173,33 +167,15 @@ class StreamingDpcrnFrameModel(nn.Module):
         self.streaming_delay = self.bottleneck_delay
         self.eval()
 
-    def _lookahead_state_suffix(self, prefix: str = "") -> list[str]:
+    def _extra_state_names(self, prefix: str = "") -> list[str]:
+        """The lookahead variant's extra ports: one skip cache per delayed
+        layer, the delayed noisy frame, and the warm-up counter."""
         if not self.is_lookahead:
             return []
         names = [f"{prefix}skip_cache_{i}" for i in self.skip_delay_layers]
         names.append(f"{prefix}noisy_cache")
         names.append(f"{prefix}counter")
         return names
-
-    @property
-    def state_input_names(self) -> list[str]:
-        return (
-            [f"down_cache_{i}" for i in range(self.n_down)]
-            + [f"up_cache_{i}" for i in range(self.n_up)]
-            + [f"h_{i}" for i in range(self.n_blocks)]
-            + [f"c_{i}" for i in range(self.n_blocks)]
-            + self._lookahead_state_suffix("")
-        )
-
-    @property
-    def state_output_names(self) -> list[str]:
-        return (
-            [f"next_down_cache_{i}" for i in range(self.n_down)]
-            + [f"next_up_cache_{i}" for i in range(self.n_up)]
-            + [f"next_h_{i}" for i in range(self.n_blocks)]
-            + [f"next_c_{i}" for i in range(self.n_blocks)]
-            + self._lookahead_state_suffix("next_")
-        )
 
     def initial_state(self, batch_size: int = 1, device: torch.device | str = "cpu") -> DpcrnStreamingState:
         device = torch.device(device)
@@ -278,9 +254,6 @@ class StreamingDpcrnFrameModel(nn.Module):
             tensors.append(state.counter)
         return tuple(tensors)
 
-    def initial_state_tensors(self, batch_size: int = 1, device: torch.device | str = "cpu") -> tuple[torch.Tensor, ...]:
-        return self._state_to_tuple(self.initial_state(batch_size=batch_size, device=device))
-
     def state_from_tensors(self, tensors: Sequence[torch.Tensor]) -> DpcrnStreamingState:
         n_down = self.n_down
         n_up = self.n_up
@@ -304,18 +277,6 @@ class StreamingDpcrnFrameModel(nn.Module):
             noisy_cache=noisy_cache,
             counter=counter,
         )
-
-    def _down_step(self, layer: nn.Sequential, x: torch.Tensor, cache: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        pad = layer[0].padding
-        conv = layer[1]
-        x_ctx = torch.cat([cache, x], dim=-1) if cache.shape[-1] else x
-        x_ctx = F.pad(x_ctx, (0, 0, pad[2], pad[3]))
-        y = conv(x_ctx)
-        y = layer[2](y)
-        y = layer[3](y)
-        y = layer[4](y)
-        next_cache = x[..., -cache.shape[-1] :] if cache.shape[-1] else cache
-        return y, next_cache
 
     def _dprnn_block_step(
         self,
@@ -444,35 +405,23 @@ class StreamingDpcrnFrameModel(nn.Module):
         real, imag = torch.chunk(enhanced, chunks=2, dim=-1)
         return torch.cat([real, imag], dim=-1).reshape(noisy_frame.shape), next_state
 
-    def forward(self, *inputs: torch.Tensor) -> tuple[torch.Tensor, ...]:
-        noisy_frame = inputs[0]
-        state = self.state_from_tensors(inputs[1:])
-        enhanced, next_state = self.forward_frame(noisy_frame, state)
-        return tuple([enhanced] + list(self._state_to_tuple(next_state)))
-
-
 def create_streaming_dpcrn_model(system_model: nn.Module) -> StreamingDpcrnFrameModel:
     return StreamingDpcrnFrameModel(system_model.eval())
 
 
-def load_streaming_dpcrn_model(config_path: str | Path, checkpoint_path: str | Path | None = None) -> StreamingDpcrnFrameModel:
-    from puresound.config import load_recipe
-    from puresound.recipes import init_siso_model
+_VARIANT = StreamingVariant(
+    "dpcrn", validate_streaming_dpcrn_config, StreamingDpcrnFrameModel
+)
 
-    config_path = Path(config_path)
-    config = load_hparam(str(config_path))
-    validate_streaming_dpcrn_config(config)
-    model_dict = load_recipe(config_path).model
-    system_model = init_siso_model(model_dict)
-    if checkpoint_path:
-        checkpoint = torch.load(str(checkpoint_path), map_location="cpu")
-        state_dict = checkpoint["state_dict"] if isinstance(checkpoint, dict) and "state_dict" in checkpoint else checkpoint
-        system_model.reload_checkpoint(state_dict, load_loss_func=False)
-    return create_streaming_dpcrn_model(system_model)
+#: One runtime serves both backbones -- it drives the session by the port names
+#: in the manifest and never looks at what produced them.
+StreamingDpcrnOrt = StreamingOrt
 
 
-def _tensor_shape(tensor: torch.Tensor) -> list[int]:
-    return [int(dim) for dim in tensor.shape]
+def load_streaming_dpcrn_model(
+    config_path: str | Path, checkpoint_path: str | Path | None = None
+) -> StreamingDpcrnFrameModel:
+    return load_streaming_model(_VARIANT, config_path, checkpoint_path)
 
 
 def export_streaming_dpcrn_onnx(
@@ -482,79 +431,6 @@ def export_streaming_dpcrn_onnx(
     manifest_path: str | Path | None = None,
     opset_version: int = 17,
 ) -> dict[str, Any]:
-    import onnxruntime
-
-    frame_model = load_streaming_dpcrn_model(config_path, checkpoint_path)
-    frame_model.eval()
-    onnx_path = Path(onnx_path)
-    manifest_path = Path(manifest_path) if manifest_path is not None else onnx_path.with_suffix(".json")
-    onnx_path.parent.mkdir(parents=True, exist_ok=True)
-    manifest_path.parent.mkdir(parents=True, exist_ok=True)
-
-    geometry = validate_streaming_dpcrn_config(load_hparam(str(config_path)))
-
-    noisy_frame = torch.randn(1, int(geometry["freq_bins"]), 2)
-    state = frame_model.initial_state_tensors(batch_size=1)
-
-    input_names = ["noisy_frame"] + frame_model.state_input_names
-    output_names = ["enhanced_frame"] + frame_model.state_output_names
-    dynamic_axes = {
-        "noisy_frame": {0: "batch_size"},
-        "enhanced_frame": {0: "batch_size"},
-    }
-    for name in frame_model.state_input_names + frame_model.state_output_names:
-        if name.startswith(("h_", "c_", "next_h_", "next_c_")):
-            dynamic_axes[name] = {1: "batch_freq"}
-        else:
-            dynamic_axes[name] = {0: "batch_size"}
-
-    torch.onnx.export(
-        frame_model,
-        (noisy_frame, *state),
-        str(onnx_path),
-        export_params=True,
-        opset_version=opset_version,
-        do_constant_folding=True,
-        input_names=input_names,
-        output_names=output_names,
-        dynamic_axes=dynamic_axes,
-        verbose=False,
+    return export_streaming_onnx(
+        _VARIANT, config_path, checkpoint_path, onnx_path, manifest_path, opset_version
     )
-
-    providers = ["CUDAExecutionProvider", "CPUExecutionProvider"]
-    available = onnxruntime.get_available_providers()
-    providers = [provider for provider in providers if provider in available]
-    session = onnxruntime.InferenceSession(str(onnx_path), providers=providers or ["CPUExecutionProvider"])
-    ort_inputs = {"noisy_frame": noisy_frame.numpy()}
-    for name, tensor in zip(frame_model.state_input_names, state):
-        ort_inputs[name] = tensor.numpy()
-    ort_out = session.run(None, ort_inputs)
-    with torch.no_grad():
-        torch_out = frame_model(noisy_frame, *state)
-    if not np.allclose(torch_out[0].numpy(), ort_out[0], rtol=1e-4, atol=1e-4):
-        raise AssertionError("exported ONNX frame output does not match PyTorch output")
-
-    manifest = {
-        "model_type": "dpcrn_streaming_frame",
-        "processor": "stft_frame_ort",
-        "created_at": int(time.time()),
-        "onnx_path": str(onnx_path),
-        "sample_rate": int(geometry["sample_rate"]),
-        "fft_length": int(geometry["fft_length"]),
-        "win_length": int(geometry["win_length"]),
-        "hop_length": int(geometry["hop_length"]),
-        "freq_bins": int(geometry["freq_bins"]),
-        "feature_bins": int(geometry["feature_bins"]),
-        "streaming_delay_frames": frame_model.streaming_delay,
-        "input_names": input_names,
-        "output_names": output_names,
-        "state_input_names": frame_model.state_input_names,
-        "state_output_names": frame_model.state_output_names,
-        "state_shapes": {
-            name: _tensor_shape(tensor)
-            for name, tensor in zip(frame_model.state_input_names, state)
-        },
-        "providers": providers or ["CPUExecutionProvider"],
-    }
-    manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
-    return manifest
