@@ -782,6 +782,34 @@ src(0.5) / ir(0.3) / hpf(0.25) / volume(0.5) 都開著且只打部分列，今�
 兩邊都會跑到記錄程式碼，必定通過。那是 before/after 性質，屬於
 `tools/rng_fingerprint.py`。不可能失敗的測試比沒有更糟，它宣告了一個它不提供的保證。
 
+### 2026-08-17 — TSE 併入 DeviceChain（B1 重複再減 139 行）
+
+驗收：`ruff` 全綠；`--suite standard` **714 passed**；指紋 TSE 既有 128 個 hash 不變
+（只多 16×14 個 provenance key），NS 路徑 1176 個完全不變。
+
+`tse.py` **−139 行**：inline 裝置鏈換成 `DeviceChain`。三個 task 的 stage 順序本來就
+完全相同（src → ir → hpf → volume），TSE 沒有 codec / packet_loss 而缺席的 stage
+不耗 RNG，所以是天然相容。TSE 的 collate 不繼承 NS 的，provenance 的 `torch.cat`
+要自己加一份。
+
+**SV 沒有併進來**，這是刻意的：`SpeakerEmbeddingDataset.__getitem__` 只回傳
+`noisy_speech` + `speaker_id`，**沒有 target**。`DeviceChain` 整個「線性通道要同步作用
+在一對訊號上」的契約對它沒有意義，硬套就得餵假 target、白跑一遍所有濾波器。要收斂
+應該是給 `DeviceChain` 一個單訊號入口，而不是為了消重複扭曲抽象。
+
+**overload guard 從無到有（行為變更）**：`overload_guard` 成為建構參數，TSE 打開。
+理由與 ns 相同——`EncDecCondMaskBase` 一樣把輸出 clamp 到 [−1, 1]，超過滿刻度的 target
+是模型構不到的，那一列的 loss 有個永遠跨不過的底。實測 8/8 觸發、且**保持 target/
+mixture 的位準比**。出貨的 TSE recipe 整條鏈都停用，所以對它是 no-op。
+
+**量測途中發現的既有問題（未修，非本次引入）**：
+`apply_2nd_iir_response` 會**靜默硬夾 ±1**——`torchaudio.functional.lfilter` 的
+`clamp=True` 是預設值。實測 pair 以峰值 3.64 進鏈時，IIR 把 mixture 夾到 1.000 而
+target（0.477）不受影響，**mixture 與 target 的位準關係就此被破壞**。這影響
+`ns.py` 與 `tse.py` 兩邊（同一個 augmentor 函式）。overload guard 位在 IIR **之後**，
+所以擋不到這條；要擋得把 guard 移到 IIR 之前，那是會改變現役訓練分佈的變更，
+需要獨立決定。
+
 ### 下一步
 
 1. **P2-6（清死旋鈕與死 payload）**——schema 已經把 33 份 config 的問題全部列出來了；

@@ -113,8 +113,13 @@ class DeviceChain:
         volume=None,
         codec=None,
         packet_loss=None,
+        overload_guard: bool = True,
     ):
         self.augmentor = augmentor
+        # Off for TSE, which has never had this stage. Adding it there is a
+        # behaviour change to what that task trains on, so it is a knob rather
+        # than something a shared component quietly imposes.
+        self.overload_guard = overload_guard
         self.src = src
         self.ir_response = ir_response
         self.hpf = hpf
@@ -145,7 +150,8 @@ class DeviceChain:
         noisy, target = self._volume(noisy, target, sample_rate, record)
         noisy = self._codec(noisy, sample_rate, record)
         noisy = self._packet_loss(noisy, sample_rate, record)
-        noisy, target = self._overload_guard(noisy, target, record)
+        if self.overload_guard:
+            noisy, target = self._apply_overload_guard(noisy, target, record)
         return ChainResult(noisy, target, record)
 
     # ------------------------------------------------------------------ #
@@ -303,7 +309,7 @@ class DeviceChain:
     # ------------------------------------------------------------------ #
 
     @staticmethod
-    def _overload_guard(noisy, target, record):
+    def _apply_overload_guard(noisy, target, record):
         """Rescale the pair together if the chain pushed it past full scale.
 
         The dataset clips once before the noise / volume / IIR stages, any of
@@ -320,10 +326,18 @@ class DeviceChain:
         return noisy, target
 
 
-def device_chain_from_blocks(augmentor, dataset) -> Optional[DeviceChain]:
-    """Build the chain from a dataset's already-validated augmentation blocks."""
+def device_chain_from_blocks(
+    augmentor, dataset, *, overload_guard: bool = True
+) -> Optional[DeviceChain]:
+    """Build the chain from a dataset's already-validated augmentation blocks.
+
+    Stages the dataset has no block for are simply absent, and an absent stage
+    costs nothing -- which is how a task with no codec knob shares this chain
+    with one that has it.
+    """
     return DeviceChain(
         augmentor,
+        overload_guard=overload_guard,
         src=dataset.augmentation_src_args,
         ir_response=dataset.augmentation_ir_response_args,
         hpf=dataset.augmentation_hpf_args,
