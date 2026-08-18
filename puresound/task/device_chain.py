@@ -19,14 +19,26 @@ probability draw is *inside* the short circuit on purpose, so turning a stage
 off leaves every later stage drawing exactly what it drew before. That is what
 lets an old recipe regenerate bit-identically after a new knob is added.
 
-Which signals a stage touches is the other half of the contract:
+Which signals a stage touches is the other half of the contract, and it follows
+from where the stage sits relative to the converter:
 
-* SRC, IIR and HPF are *linear channel* effects -- they hit the mixture and the
-  clean target with the same parameters, because the target is what the model is
-  asked to recover *through* that channel.
-* volume likewise, so the pair keeps its level relationship.
-* codec and packet loss hit the mixture only. They are transmission damage; the
+* SRC, IIR, HPF and volume are the *analogue* path -- a transducer response, a
+  rumble filter, a preamp gain. All linear, so all of them hit the mixture and
+  the clean target with the same parameters: the target is what the model is
+  asked to recover *through* that channel, and superposition is what makes the
+  mixture still equal the sum of its parts at the SIR the recipe asked for.
+* ``_analogue_to_digital`` is the boundary, and the only point in the chain
+  where full scale means anything at all.
+* codec and packet loss are *digital transmission* damage, mixture only; the
   target stays the undamaged reference the model is scored against.
+
+Linear means linear. The DSP backends underneath every stage in the first group
+saturate at full scale by default, which turns them into waveshapers on a hot
+mixture while the quieter target sails through -- see
+`puresound.audio.dsp.apply_linear`, which is what keeps them honest. The one
+nonlinearity the analogue path is allowed is the overload the recipe asks for by
+probability in ``_volume``, and that one clips the pair at the *same* absolute
+thresholds.
 """
 
 from __future__ import annotations
@@ -148,10 +160,10 @@ class DeviceChain:
         noisy, target = self._second_order_iir(noisy, target, record)
         noisy, target = self._high_pass(noisy, target, sample_rate, record)
         noisy, target = self._volume(noisy, target, sample_rate, record)
+        if self.overload_guard:
+            noisy, target = self._analogue_to_digital(noisy, target, record)
         noisy = self._codec(noisy, sample_rate, record)
         noisy = self._packet_loss(noisy, sample_rate, record)
-        if self.overload_guard:
-            noisy, target = self._apply_overload_guard(noisy, target, record)
         return ChainResult(noisy, target, record)
 
     # ------------------------------------------------------------------ #
@@ -309,13 +321,29 @@ class DeviceChain:
     # ------------------------------------------------------------------ #
 
     @staticmethod
-    def _apply_overload_guard(noisy, target, record):
-        """Rescale the pair together if the chain pushed it past full scale.
+    def _analogue_to_digital(noisy, target, record):
+        """The converter: where the signal stops being a pressure and becomes
+        samples, and the only place in this chain where full scale exists.
 
-        The dataset clips once before the noise / volume / IIR stages, any of
-        which can push it back over, and the model's own output is clamped to
-        [-1, 1] -- so a target above full scale is one the model cannot reach.
-        Both are divided by the same peak so the level relationship survives.
+        Upstream is the acoustic and analogue path. Level there is sound
+        pressure through a transducer and a preamp, and pressure has no full
+        scale -- a peak above 1.0 is not an error, it is a loud room. Nothing
+        upstream may treat 1.0 as a ceiling, which is the whole point of
+        `apply_linear`. Downstream is digital: a codec cannot encode past full
+        scale, and the model's own output is clamped to [-1, 1], so a target
+        above it is one the model cannot reach however well it separates.
+
+        Crossing that boundary is *gain staging*, not clipping -- the engineer
+        setting the preamp so the converter is not driven into its rails, which
+        is what anyone recording a loud room actually does. Divide the pair by
+        the same peak: linear, so superposition survives and the mixture is
+        still its sources at the SIR the recipe asked for.
+
+        Deliberate overload is a different thing and lives elsewhere on purpose:
+        `_volume` clips at the mixture's realized quantiles, on request, with
+        the same thresholds on both signals. Doing it here as well would clip
+        the recipe's rows twice and label neither.
+
         Consumes no randomness.
         """
         peak = float(torch.maximum(noisy.abs().amax(), target.abs().amax()))

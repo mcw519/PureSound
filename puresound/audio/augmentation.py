@@ -7,7 +7,7 @@ from typing import List, NamedTuple, Optional, Tuple
 import torch
 import torchaudio
 
-from puresound.audio.dsp import wav_resampling
+from puresound.audio.dsp import apply_linear, wav_resampling
 from puresound.audio.impulse_response import (
     compute_drr_db,
     rand_add_2nd_filter_response,
@@ -365,7 +365,12 @@ class AudioEffectAugmentor:
         """
         if hasattr(torchaudio, "sox_effects"):
             effects = [["vol", str(vol_ratio)]]
-            wav, _ = torchaudio.sox_effects.apply_effects_tensor(wav, sr, effects)
+            wav = apply_linear(
+                lambda w: torchaudio.sox_effects.apply_effects_tensor(w, sr, effects)[
+                    0
+                ],
+                wav,
+            )
         else:
             wav = wav * vol_ratio
 
@@ -385,7 +390,12 @@ class AudioEffectAugmentor:
         """
         if hasattr(torchaudio, "sox_effects"):
             effects = [["speed", str(speed)], ["rate", str(sr)]]
-            wav, _ = torchaudio.sox_effects.apply_effects_tensor(wav, sr, effects)
+            wav = apply_linear(
+                lambda w: torchaudio.sox_effects.apply_effects_tensor(w, sr, effects)[
+                    0
+                ],
+                wav,
+            )
         else:
             wav = torchaudio.functional.resample(
                 wav,
@@ -409,7 +419,12 @@ class AudioEffectAugmentor:
         """
         if hasattr(torchaudio, "sox_effects"):
             effects = [["pitch", str(shift_ratio)]]
-            wav, _ = torchaudio.sox_effects.apply_effects_tensor(wav, sr, effects)
+            wav = apply_linear(
+                lambda w: torchaudio.sox_effects.apply_effects_tensor(w, sr, effects)[
+                    0
+                ],
+                wav,
+            )
 
         return wav, (shift_ratio)
 
@@ -644,8 +659,15 @@ class AudioEffectAugmentor:
         return src_wav, src_info
 
     def apply_hpf(self, wav: torch.Tensor, sr: int, cutoff_freq: int, q_factor: float):
-        hpf_wav = torchaudio.functional.highpass_biquad(
-            waveform=wav, sample_rate=sr, cutoff_freq=cutoff_freq, Q=q_factor
+        # A rumble filter is a transfer function, not a limiter: `biquad` is
+        # built on `lfilter`, which clamps to [-1, 1] and exposes no way to say
+        # otherwise. See `apply_linear` for why that has to be kept off a
+        # mixture/target pair.
+        hpf_wav = apply_linear(
+            lambda w: torchaudio.functional.highpass_biquad(
+                waveform=w, sample_rate=sr, cutoff_freq=cutoff_freq, Q=q_factor
+            ),
+            wav,
         )
         return hpf_wav, (cutoff_freq, q_factor)
 
@@ -670,11 +692,21 @@ class AudioEffectAugmentor:
                 signal, 1.0 or None = no compression.
         """
         rms_in = wav.pow(2).mean().sqrt().clamp_min(1e-8)
-        colored = torchaudio.functional.highpass_biquad(
-            waveform=wav, sample_rate=sr, cutoff_freq=hp_cutoff, Q=0.707
+        # Band-limiting is linear; the compressor below is the only nonlinearity
+        # this stage is allowed to have. Without `apply_linear` the biquads clip
+        # at full scale and the RMS restore at the end scales the damage back up
+        # to the input level, hiding it -- a waveshaper wearing a filter's name.
+        colored = apply_linear(
+            lambda w: torchaudio.functional.highpass_biquad(
+                waveform=w, sample_rate=sr, cutoff_freq=hp_cutoff, Q=0.707
+            ),
+            wav,
         )
-        colored = torchaudio.functional.lowpass_biquad(
-            waveform=colored, sample_rate=sr, cutoff_freq=lp_cutoff, Q=0.707
+        colored = apply_linear(
+            lambda w: torchaudio.functional.lowpass_biquad(
+                waveform=w, sample_rate=sr, cutoff_freq=lp_cutoff, Q=0.707
+            ),
+            colored,
         )
         if compress_power is not None and compress_power < 1.0:
             peak = colored.abs().amax().clamp_min(1e-8)

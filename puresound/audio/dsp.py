@@ -1,11 +1,100 @@
+import math
 import random
-from typing import Dict, Optional, Tuple
+from typing import Callable, Dict, Optional, Tuple
 
 import matplotlib.pyplot as plt
 import numpy as np
 import scipy
 import torch
 import torchaudio
+
+
+#: Digital full scale. The one level in this package that means something
+#: physical: the point where an analogue signal becomes samples.
+FULL_SCALE = 1.0
+
+#: How close to full scale counts as "the backend saturated". A backend that
+#: clipped leaves samples pinned at exactly ±1; real audio lands there only by
+#: coincidence, and a false positive costs one extra escalation, nothing more.
+_SATURATION_EPS = 1e-6
+
+#: The level a linear backend is handed by :func:`apply_linear`. 0.5 leaves 6 dB
+#: for the operator's own gain, which covers every filter in this package -- the
+#: random 2nd-order response peaks at +3.5 dB median -- and the escalation loop
+#: covers the tail (that response reaches +16 dB at worst).
+_LINEAR_BACKEND_HEADROOM = 0.5
+
+
+def apply_linear(
+    fn: Callable[[torch.Tensor], torch.Tensor],
+    wav: torch.Tensor,
+    *,
+    headroom: float = _LINEAR_BACKEND_HEADROOM,
+    max_escalations: int = 8,
+) -> torch.Tensor:
+    """Run a linear DSP backend at a level its implicit clipper cannot reach.
+
+    Every backend this package filters and gains with saturates at digital full
+    scale: ``torchaudio.functional.lfilter`` clamps to [-1, 1] unless told not
+    to, every ``biquad`` is built on it, and every sox effect round-trips
+    through a fixed-point sample format. So a stage that models a *linear*
+    operator -- a microphone's frequency response, a rumble filter, a preamp
+    gain, a resampler -- silently stops being one the moment the signal handed
+    to it is hot. That is not the microphone doing something; it is a library
+    default, and it fires on real recipes: measured over the shipped
+    voice-isolation recipe it hit 28% of transducer-response calls and 19% of
+    gain calls.
+
+    It matters more than the distortion itself. These stages are applied to a
+    mixture *and* to the clean target it is scored against, with the same
+    parameters, precisely so the pair keeps its level relationship. A ceiling at
+    a fixed absolute level breaks that: the mixture is the louder of the two, so
+    it is the one that gets squashed while the target passes through untouched,
+    and the mixture stops being the sum of its parts at the SIR the recipe
+    asked for.
+
+    The fix is the definition of linearity. For a linear operator ``H`` and any
+    scalar ``a > 0``, ``H(x) == H(a * x) / a``. So scale into the backend's
+    legal range, apply, and scale back: the result is the operator's true
+    output, and the saturation never fires. If the backend saturated anyway --
+    an operator with more gain than the headroom allowed for -- back off and
+    retry rather than return a number that is quietly wrong.
+
+    Use this wherever the backend gives no way to turn its ceiling off. Where it
+    does, say so directly instead: ``lfilter(..., clamp=False)`` is exact and
+    costs nothing.
+
+    ``fn`` must not consume randomness. An escalation calls it again, which
+    would shift the RNG stream and break the seeded-item contract the datasets
+    rely on. Every current caller is a pure filter or gain.
+
+    Args:
+        fn: the backend, as a one-argument tensor -> tensor call.
+        wav: waveform, ``[..., L]``, at whatever level the chain has it.
+        headroom: peak level handed to the backend on the first attempt.
+        max_escalations: attempts before giving up; each divides by 8.
+
+    Returns:
+        ``fn(wav)`` as the linear operator it models, at the input's own level.
+    """
+    peak = float(wav.abs().amax()) if wav.numel() else 0.0
+    if not math.isfinite(peak) or peak <= 0.0:
+        # Digital silence, or already broken. Scaling is undefined and there is
+        # no headroom question to answer -- hand it straight to the backend.
+        return fn(wav)
+
+    scale = headroom / peak
+    for _ in range(max_escalations):
+        out = fn(wav * scale)
+        if not bool((out.abs() >= FULL_SCALE - _SATURATION_EPS).any()):
+            return out / scale
+        scale /= 8.0
+
+    raise RuntimeError(
+        f"{getattr(fn, '__name__', fn)} still saturates after {max_escalations} "
+        f"escalations from headroom {headroom}: its gain is beyond anything a "
+        "linear stage in this chain should have. Check the operator, not this."
+    )
 
 
 def wav_resampling(
@@ -79,7 +168,12 @@ def wav_resampling(
         effects1 = [
             ["rate", str(target_sr)],
         ]
-        wav, _ = torchaudio.sox_effects.apply_effects_tensor(wav, origin_sr, effects1)
+        wav = apply_linear(
+            lambda w: torchaudio.sox_effects.apply_effects_tensor(
+                w, origin_sr, effects1
+            )[0],
+            wav,
+        )
 
         return wav, target_sr
 

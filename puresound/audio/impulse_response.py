@@ -118,8 +118,14 @@ def rand_add_2nd_filter_response(
         a = torch.Tensor([1, r[0], r[1]])
         b = torch.Tensor([1, r[2], r[3]])
 
+    # clamp=False: this models a transducer's frequency response, and a
+    # frequency response is linear. `lfilter` hard-clips to [-1, 1] by default,
+    # which on a hot mixture is a waveshaper the recipe never asked for -- and
+    # one that hits the mixture without touching the quieter target it is scored
+    # against. `puresound.audio.dsp.apply_linear` is the same guarantee for the
+    # backends that expose no such flag.
     wav = torchaudio.functional.lfilter(
-        wav, a_coeffs=a.to(wav.device), b_coeffs=b.to(wav.device)
+        wav, a_coeffs=a.to(wav.device), b_coeffs=b.to(wav.device), clamp=False
     )
 
     return wav, a, b

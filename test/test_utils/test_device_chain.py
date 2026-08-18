@@ -1,8 +1,9 @@
-"""The three contracts `DeviceChain` claims, each pinned separately.
+"""The contracts `DeviceChain` claims, each pinned separately.
 
 The end-to-end fingerprint proves the chain as a whole did not change. These
-pin *why* it is allowed to change: which signals a stage may touch, and what a
-disabled stage costs.
+pin *why* it is allowed to change: which signals a stage may touch, what a
+disabled stage costs, and -- the one with real physics behind it -- that
+everything upstream of the converter is linear.
 """
 
 import math
@@ -115,15 +116,91 @@ def test_a_linear_channel_stage_moves_both_signals(stage):
     assert not torch.equal(result.target, target), f"{stage} skipped the target"
 
 
-def test_the_overload_guard_rescales_the_pair_together():
-    """A target above full scale is one the model's clamped output cannot reach;
-    dividing both by the same peak keeps the level relationship."""
+def test_the_converter_gain_stages_rather_than_clips():
+    """Crossing into the digital domain is the engineer setting the preamp, not
+    the rails being hit: one scalar on both, so the pair's level relationship
+    comes out exactly as it went in.
+
+    Clipping here instead would squash the mixture -- the louder of the two --
+    while the target sailed through, and the mixture would stop being the sum of
+    its sources at the SIR the recipe asked for.
+    """
     chain = DeviceChain(AudioEffectAugmentor())
     noisy = torch.full((1, 16), 4.0)
     target = torch.full((1, 16), 2.0)
     result = chain.apply(noisy, target, sample_rate=SR)
     assert float(result.noisy.max()) == pytest.approx(1.0)
     assert float(result.target.max()) == pytest.approx(0.5)
+    assert float(result.target.max() / result.noisy.max()) == pytest.approx(0.5)
+
+
+@pytest.mark.parametrize("stage", ["src", "ir_response", "hpf", "volume"])
+def test_the_analogue_path_is_linear(stage):
+    """H(a*x) == a*H(x), for every stage upstream of the converter.
+
+    Not a style preference -- the reason these stages exist is that the target
+    is what the model must recover *through* the channel, and that only holds
+    while superposition does. Every DSP backend underneath them saturates at
+    full scale by default (torchaudio's `lfilter` clamps, sox round-trips
+    through fixed point), and upstream of the converter the pair is routinely
+    hot: on the shipped voice-isolation recipe that default fired on 28% of
+    transducer-response calls and 19% of gain calls. When it fires it hits the
+    mixture, which is the louder signal, and leaves the quieter target alone --
+    so the pair's level relationship is broken by an operator that is not
+    supposed to exist. `puresound.audio.dsp.apply_linear` is what holds this.
+
+    Level is a sound pressure up here, not a sample value, so 3.0 is not an
+    error to be clamped away: it is a loud room, and it stays loud until the
+    converter says otherwise.
+    """
+    chain = DeviceChain(
+        AudioEffectAugmentor(), overload_guard=False, **{stage: ENABLED[stage]}
+    )
+    noisy, target = _pair()
+    noisy, target = noisy * 10.0, target * 10.0  # peak 3.0: over full scale
+    quiet_by = 100.0
+
+    def run(seed, scale):
+        torch.manual_seed(seed)
+        random.seed(seed)
+        return chain.apply(noisy * scale, target * scale, sample_rate=SR)
+
+    # Several seeds, not one: a stage can pick between backends -- SRC tosses a
+    # coin between sox and torchaudio, and only the sox leg was ever the
+    # problem -- so a single seed tests whichever branch it happened to land on.
+    for seed in range(4):
+        loud, quiet = run(seed, 1.0), run(seed, 1.0 / quiet_by)
+        for name, hot, cold in (
+            ("mixture", loud.noisy, quiet.noisy),
+            ("target", loud.target, quiet.target),
+        ):
+            error = float((hot - cold * quiet_by).abs().amax() / hot.abs().amax())
+            assert error < 1e-3, (
+                f"{stage} is not linear on the {name} at seed {seed}: {error:.2e}"
+            )
+
+
+def test_the_converter_runs_before_the_codec():
+    """A codec is a digital sink; it cannot encode past full scale.
+
+    Ordering, not decoration: with the converter at the *end* of the chain the
+    codec is handed an out-of-range signal and clips it internally, which is a
+    nonlinearity applied to the mixture alone and recorded nowhere.
+    """
+    seen = []
+    augmentor = AudioEffectAugmentor()
+    real_codec = augmentor.apply_codec
+
+    def spy(wav, **kwargs):
+        seen.append(float(wav.abs().amax()))
+        return real_codec(wav=wav, **kwargs)
+
+    augmentor.apply_codec = spy
+    noisy, target = _pair()
+    DeviceChain(augmentor, codec=ENABLED["codec"]).apply(
+        noisy * 12.0, target * 12.0, sample_rate=SR
+    )
+    assert seen and seen[0] <= 1.0 + 1e-6, f"codec was handed peak {seen}"
 
 
 def test_an_untouched_pair_passes_through_unchanged():
@@ -201,7 +278,7 @@ def test_volume_distinguishes_the_clipping_branch_from_the_gain_branch():
     assert not math.isnan(applied["volume_gain"])
 
 
-def test_the_overload_guard_reports_when_it_fired():
+def test_the_converter_reports_when_it_had_to_rescale():
     chain = DeviceChain(AudioEffectAugmentor())
     quiet = chain.apply(*_pair(), sample_rate=SR).applied
     assert quiet["overload_rescaled"] == 0.0

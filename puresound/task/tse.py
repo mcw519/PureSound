@@ -497,12 +497,12 @@ class TargetSpeakerExtractDataset(DynamicBaseDataset):
             noisy_speech = noisy_speech[0]
 
         # Capture and transmission chain -- see puresound/task/device_chain.py.
-        # The closing overload guard is new to this task: `EncDecCondMaskBase`
-        # clamps its output to [-1, 1] exactly as the SISO modules do, so a
-        # target above full scale is one the model cannot reach and the loss on
-        # that row has a floor it can never cross. A no-op on the shipped
-        # recipe, which enables no amplifying stage; it matters the moment
-        # someone turns volume or noise back on.
+        # The converter stage is new to this task: `EncDecCondMaskBase` clamps
+        # its output to [-1, 1] exactly as the SISO modules do, so a target
+        # above full scale is one the model cannot reach and the loss on that
+        # row has a floor it can never cross. A no-op on the shipped recipe,
+        # which enables no amplifying stage; it matters the moment someone turns
+        # volume or noise back on.
         chain = self.device_chain.apply(
             noisy_speech,
             target_speech,

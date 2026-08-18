@@ -659,9 +659,10 @@ class NoiseSuppressionDataset(DynamicBaseDataset):
         # the early-reverb clean signal (post speed-perturb so timing matches).
         vad_reference = target_speech.clone()
 
-        # Capture and transmission chain: SRC, IIR, HPF, volume, codec,
-        # packet loss, and the closing overload guard. Order and RNG discipline
-        # are the chain's contract -- see puresound/task/device_chain.py.
+        # Capture and transmission chain: the analogue path (SRC, IIR, HPF,
+        # volume), the converter, then digital transmission (codec, packet
+        # loss). Order, linearity and RNG discipline are the chain's contract --
+        # see puresound/task/device_chain.py.
         chain = self.device_chain.apply(
             noisy_speech, target_speech, sample_rate=self.audio_sr
         )
