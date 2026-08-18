@@ -7,6 +7,13 @@
 The DistHead is training-only -- inference never reads it -- which is what makes it a clean
 probe: it was never tuned to make the field set look good.
 
+**Read both halves.** The first answers the question the probe was written for. The second
+came out of the control groups, was not what the probe was aiming at, and matters more.
+
+---
+
+# Part 1 -- the distance cue survives our capture chain
+
 ## The question it was written to settle
 
 * **A.** the cue survives to the bottleneck but the mask ignores it -> couple mask depth to
@@ -16,7 +23,8 @@ probe: it was never tuned to make the field set look good.
 
 ## Answer: A, and not marginally
 
-The near/far estimates do not overlap on any version:
+Near and far estimates do not overlap on any version (near clips read from the foreground
+slot, far clips from the interferer slot):
 
 | | near est. max | far est. min | gap | ratio |
 |---|---|---|---|---|
@@ -25,7 +33,7 @@ The near/far estimates do not overlap on any version:
 | v10 | 0.74 m | 1.50 m | +0.76 m | 2.03x |
 
 23 clips, zero overlap. The bottleneck separates a 30-50 cm user from a 2-3 m bystander on
-the chain where suppression fails.
+exactly the chain where suppression fails.
 
 ## The model's own estimate predicts its behaviour better than the truth does
 
@@ -59,30 +67,102 @@ est 2.25 m  ->   -0.16 dB   90d_far5  (labelled 300 cm)
 est 2.27 m  ->   -0.51 dB   90d_far4  (labelled 300 cm)
 ```
 
-Perfectly separating, no exceptions. Note the two clips *labelled* 300 cm that the model
-places under 1.8 m are both suppressed -- the estimate explains the behaviour where the
-label does not.
+Perfectly separating, no exceptions. The two clips *labelled* 300 cm that the model places
+under 1.8 m are both suppressed -- its estimate explains its behaviour where the label does
+not.
 
-## The estimate is compressed, and it is not for lack of far labels
+## Coverage is not the reason the estimate is compressed
 
 True 0.30-0.50 m reads 0.53-0.76 (over); true 2.00-3.00 m reads 1.45-2.27 (under). The head
-never predicts past ~2.3 m even for a 3 m talker.
-
-Coverage was the obvious suspect and it is not the answer. The real 22.4% of the training
-bank (`real_rir_16k_train_view`, 54,615 far channels) reaches well past 3 m:
+never predicts past ~2.3 m even for a 3 m talker. The obvious suspect is too few far
+examples, and it is ruled out -- the real 22.4% of the training bank
+(`real_rir_16k_train_view`, 54,615 far channels) reaches well past 3 m:
 
 ```
 far channels  p50 2.52 m   p90 5.19 m   p99 11.82 m   max 15.51 m
               68.0% beyond 2 m    38.4% beyond 3 m    21.4% beyond 4 m
 ```
 
-So the head has ample supervision out there. Compression toward the training far median
-(2.52 m) with a tail to 15.5 m under a SmoothL1 on log-distance is the more likely
-mechanism, but this probe does not establish it: the head and the mask both read the same
-bottleneck, so which of them saturates first is not separated here.
+Compression toward the training far median with a tail to 15.5 m under a SmoothL1 on
+log-distance is the likelier mechanism, but this probe does not establish it: the head and
+the mask read the same bottleneck, so which of them saturates first is not separated here.
+
+---
+
+# Part 2 -- distance is not what cold start needs
+
+## Both slots report a number even when that source is not there
+
+The head is a regression with no "absent" output, so it always answers. Reading the
+controls (v10):
+
+| what is actually in the clip | foreground slot | interferer slot |
+|---|---|---|
+| user only, **no bystander** | 0.60-0.74 m (correct) | **1.95-2.51 m** -- nobody is there |
+| bystander only, **no user** | **0.80-0.91 m** -- nobody is there | 1.50-2.27 m (correct) |
+| both talking | 0.67-0.74 m (correct) | 1.77-1.89 m (correct) |
+
+**This is the cold-start failure.** On a lone-bystander clip the foreground slot reports a
+user at 0.8-0.9 m. The model believes someone is there, so of course it does not suppress.
+The decision cold start actually needs is not *how far* but *is anyone there*.
+
+## The presence signal exists, is directionally consistent, and is 20-100x weaker
+
+It is not absent. All three independently-trained checkpoints separate present from absent,
+in the same direction -- with no near user, the foreground estimate drifts *outward*:
+
+| | user present (near + dt, n=15) | user absent (lone far, n=10) | margin |
+|---|---|---|---|
+| v8 | 0.53-0.74 m | 0.80-1.10 m | **+0.06 m** |
+| v9 | 0.64-0.87 m | 0.88-1.24 m | **+0.01 m** |
+| v10 | 0.60-0.74 m | 0.80-0.91 m | **+0.06 m** |
+
+Against the same head's margin on *distance*, both sources present, v10: 0.74 m vs 1.77 m,
+**+1.03 m / 2.4x**.
+
+So: distance carries a metre of headroom, presence carries one to six centimetres. Three
+trainings agreeing on the sign says the signal is real rather than noise; a 1 cm margin on
+25 clips says it cannot be gated on as it stands. Something to amplify, not to wire up.
+
+The interferer slot carries no presence signal at all -- lone-user clips report a bystander
+at 1.95-2.51 m, lone-bystander clips at 1.50-2.27 m, completely overlapping.
+
+## This explains two earlier results
+
+* **Near-anchor dependence** (isolated far -1.2 dB vs anchored -19.4 dB): with an anchor the
+  model never has to judge presence, the user is audibly talking. Without one it must, it
+  cannot, and it defaults to "someone is there".
+* **The gate-only experiment failing on real recordings** (2026-07-10, near and far both read
+  ~0.9): a gate *is* a presence detector, and presence is the weak axis.
+
+Two independent attempts, one finding: the distance information is there, the presence
+information is not.
+
+## Double-talk is the constraint, not the risk
+
+The model places both sources correctly at once (v10): foreground 0.67-0.74 m against a true
+0.30-0.50, interferer 1.77-1.89 m against a true 2.00-3.00, 2.49-2.79x apart on all four
+clips. And the field scorecard has every double-talk near voice surviving in all four
+versions, worst keep -2.35 dB. So it is the healthy case.
+
+What it does constrain is the shape of any fix. **This head is utterance-level** --
+`DistHead.forward` is `self.net(x.mean(dim=(2, 3)))`, pooling over frequency *and time* to
+one number per clip. In double-talk both sources are live, so a single global "the
+interferer is at 1.8 m" used to set mask depth would attenuate the user along with the
+bystander. Anything conditioned on distance has to be per-frame; the current head cannot be
+wired up as it is.
 
 ## What follows
 
-The wall is not "the cue does not survive our capture chain". It is that the mask stops
-acting on a cue it still has, past roughly 2 m of what it believes. That is branch A --
-couple mask depth to the estimate, rather than collecting more far-field data.
+Not "couple mask depth to the distance estimate", which was the reading from Part 1 alone.
+Distance would improve double-talk, where nothing is currently wrong, and leave cold start
+untouched, because cold start is bounded by presence.
+
+The target is **making "is there a near user" a decision with headroom**. What is known:
+the signal exists, its sign is consistent across three trainings, and it currently has
+1-6 cm of margin against 103 cm for distance. Whether to amplify it by supervision (an
+explicit near-presence output, using the target-absent labels the dataset already emits) or
+by representation (per-frame rather than utterance-pooled) is the open question.
+
+Double-talk is the guardrail on that work: it is the only case that can show the user is
+not being suppressed along with the bystander, and all four versions currently hold it.
