@@ -141,9 +141,17 @@ class Postprocessor:
                 "for broadband relief on this model."
             )
 
+    #: Manifest key. `recommended_inference` predates this class -- four of the
+    #: five shipped DPCRN exports already carry `dry_blend: 0.9` under it, with a
+    #: note spelling out the latency alignment and the -20 dB bound. It was a
+    #: dangling contract: written for a consumer that did not exist. Reusing the
+    #: name rather than inventing a second one means those artefacts start being
+    #: honoured instead of needing migration.
+    MANIFEST_KEY = "recommended_inference"
+
     def as_manifest(self) -> dict:
-        """What an export should record, so a deployment can reproduce the
-        configuration a benchmark measured instead of guessing at it."""
+        """What an export records, so a deployment reproduces the configuration a
+        benchmark measured instead of guessing at it."""
         return {
             "dry_blend": float(self.dry_blend),
             "spec_floor": float(self.spec_floor),

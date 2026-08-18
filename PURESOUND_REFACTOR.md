@@ -1231,13 +1231,24 @@ out[n] = dry_blend * enh[n] + (1 − dry_blend) * x[n − 480]
 都從那個鍵讀。`streaming_onnx.py export` 加 `--dry-blend`，**預設 0.9**（釋出設定）。
 `spec_floor` 兩邊都明確拒絕——出貨全是 0.0，拒絕勝過靜默 no-op。
 
-#### 既有五份 artefact 沒有硬塞
+#### 意圖本來就寫在 artefact 裡，是我看錯地方
 
-`pretrained_ckpt/streaming/*.json`（v6–v10）全部早於這個欄位。README 只對 v7 / v8 明寫
-`dry_blend 0.9`，v6 / v9 / v10 沒寫——**替它們決定 0.9 就是我在編造意圖**。所以改成：
-runtime 遇到沒有 `postprocess` 鍵的 manifest 會 `RuntimeWarning`，說明它跟「刻意不要
-relief」長得一樣、釋出預設是 0.9、以及怎麼重新匯出。明寫 `dry_blend: 1.0` 不會警告——
-那是決定而不是缺欄位。README 也記了重新匯出的指令與 −20 dB 的代價。
+**我第一版說「README 只對 v7 / v8 明寫 0.9，替其他版本決定就是編造意圖」——那是錯的。**
+我查了 README 沒查 artefact。實際上 `pretrained_ckpt/streaming/*.json` 裡
+**v7 / v8 / v9 / v10 四份早就記著 `dry_blend: 0.9`**，放在 `recommended_inference` 鍵下，
+而且那個 note 已經寫明**跟我獨立推導出來的同一件事**：
+
+> out = 0.9*enhanced + 0.1*input, with the input **latency-aligned** to the enhanced
+> stream (algorithmic latency 3 frames / 30 ms). Bounds attenuation at any point to
+> **−20 dB** ...
+
+也就是說 latency 對齊與 −20 dB 上限本來就是設計意圖，只是**沒有任何消費者去讀它**——
+又一個懸空契約，跟這輪清掉的其他幾個同一個樣式。
+
+所以不新增 `postprocess` 這個第二個名字，直接沿用既有的 `recommended_inference`：
+四份出貨 artefact **原封不動就開始生效**，不需要遷移。缺這一節代表不做 relief（v6 是唯一
+一份），這也正是 `Postprocessor()` 的預設，所以警告不需要，改成把慣例寫進文件與測試。
+`Postprocessor.MANIFEST_KEY` 與 SDK 那份字串（SDK 不得 import puresound）由測試綁住。
 
 **兩條漏掉的反向驗證**：`spec_floor` 與 `dry_blend` 的 manifest 驗證原本只測了 SDK 那份，
 in-repo 那份拿掉一樣綠；已改成兩份都測。

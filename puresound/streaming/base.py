@@ -29,7 +29,6 @@ from __future__ import annotations
 
 import json
 import time
-import warnings
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Sequence
@@ -176,6 +175,28 @@ def load_streaming_model(
     return variant.frame_model(system_model.eval())
 
 
+def _postprocess_note(postprocess: Postprocessor, delay_frames: int, geometry) -> str:
+    """Prose for the manifest, matching what the shipped artefacts already say.
+
+    Latency is part of the contract: the runtime has to take the dry copy from
+    `delay_frames` back, because that is the input the graph's output carries.
+    """
+    if not postprocess.enabled:
+        return "no post-graph relief; the runtime applies the graph output as-is."
+    hop = int(geometry["hop_length"])
+    sample_rate = int(geometry["sample_rate"])
+    latency_ms = 1000.0 * delay_frames * hop / sample_rate
+    dry = postprocess.dry_blend
+    return (
+        f"out = {dry:g}*enhanced + {1 - dry:.3g}*input, with the input "
+        f"latency-aligned to the enhanced stream (algorithmic latency "
+        f"{delay_frames} frames / {latency_ms:g} ms). Bounds attenuation at any "
+        f"point to {postprocess.suppression_ceiling_db:.0f} dB, which trades a "
+        "little residual interferer for far fewer deletions on capture chains "
+        "the model was not trained on."
+    )
+
+
 def export_streaming_onnx(
     variant: StreamingVariant,
     config_path: str | Path,
@@ -270,7 +291,10 @@ def export_streaming_onnx(
         # `suppression_ceiling_db` too, because `dry_blend` bounds how deep the
         # deployed system can attenuate and that is worth reading off the
         # artefact rather than deriving it again.
-        "postprocess": postprocess.as_manifest(),
+        Postprocessor.MANIFEST_KEY: {
+            **postprocess.as_manifest(),
+            "note": _postprocess_note(postprocess, frame_model.streaming_delay, geometry),
+        },
     }
     manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
     return manifest
@@ -302,20 +326,10 @@ class StreamingOrt:
         # executes the graph is not the system the benchmarks measured. The SDK's
         # portable copy of this loop reads the same key -- see
         # `test_sdk_postprocess.py`, which pins the two against each other.
-        postprocess = self.manifest.get("postprocess") or {}
-        if "postprocess" not in self.manifest:
-            label = f"manifest {self.manifest_path}"
-            warnings.warn(
-                f"{label} has no `postprocess` section, so this runtime will "
-                "apply no over-suppression relief. Exports predating that field "
-                "look identical to one that deliberately asked for none -- and "
-                "the released default is dry_blend 0.9 (see "
-                "egs/voice_isolate/README.md), which caps suppression at -20 dB. "
-                "Re-export with `--dry-blend` to make the artefact say which it "
-                "is.",
-                RuntimeWarning,
-                stacklevel=3,
-            )
+        # An absent section means no relief -- the documented convention, and the
+        # same thing `Postprocessor()` defaults to. `dpcrn_v6` is the one shipped
+        # export without it.
+        postprocess = self.manifest.get(Postprocessor.MANIFEST_KEY) or {}
         spec_floor = float(postprocess.get("spec_floor", 0.0))
         if spec_floor > 0.0:
             raise ValueError(

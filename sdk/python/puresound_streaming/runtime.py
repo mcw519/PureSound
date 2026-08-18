@@ -1,7 +1,6 @@
 import json
 from dataclasses import dataclass
 from pathlib import Path
-import warnings
 from typing import Protocol, Sequence
 
 import numpy as np
@@ -54,20 +53,12 @@ class StreamingRuntimeConfig:
 
     @classmethod
     def from_manifest(cls, manifest: dict) -> "StreamingRuntimeConfig":
-        postprocess = manifest.get("postprocess") or {}
-        if "postprocess" not in manifest:
-            label = "this manifest"
-            warnings.warn(
-                f"{label} has no `postprocess` section, so this runtime will "
-                "apply no over-suppression relief. Exports predating that field "
-                "look identical to one that deliberately asked for none -- and "
-                "the released default is dry_blend 0.9 (see "
-                "egs/voice_isolate/README.md), which caps suppression at -20 dB. "
-                "Re-export with `--dry-blend` to make the artefact say which it "
-                "is.",
-                RuntimeWarning,
-                stacklevel=3,
-            )
+        # `recommended_inference` is the key the exports have always carried;
+        # absent means no relief, which is also what `Postprocessor()` defaults
+        # to. Spelled here rather than imported: the SDK must not import
+        # puresound, so the name is duplicated on purpose and
+        # `test_sdk_postprocess.py` pins the two copies together.
+        postprocess = manifest.get("recommended_inference") or {}
         spec_floor = float(postprocess.get("spec_floor", 0.0))
         if spec_floor > 0.0:
             # It needs the mixture spectrum at the same frame and a magnitude to

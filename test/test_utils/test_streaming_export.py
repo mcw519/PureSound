@@ -136,11 +136,13 @@ def test_the_export_records_the_postprocessing_the_runtime_must_apply(tmp_path):
     manifest = export_streaming_dpcrn_onnx(
         str(config), checkpoint, onnx_path, postprocess=Postprocessor(dry_blend=0.9)
     )
-    assert manifest["postprocess"] == {
-        "dry_blend": 0.9,
-        "spec_floor": 0.0,
-        "suppression_ceiling_db": pytest.approx(-20.0),
-    }
+    recorded = manifest[Postprocessor.MANIFEST_KEY]
+    assert recorded["dry_blend"] == pytest.approx(0.9)
+    assert recorded["spec_floor"] == 0.0
+    assert recorded["suppression_ceiling_db"] == pytest.approx(-20.0)
+    # The note carries the latency the runtime has to compensate for, which is
+    # what the shipped artefacts' own notes have always said.
+    assert "latency-aligned" in recorded["note"]
 
     runtime = StreamingOrt(onnx_path)
     assert runtime.dry_blend == pytest.approx(0.9)

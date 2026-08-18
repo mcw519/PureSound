@@ -40,7 +40,7 @@ def _manifest(*, dry_blend=1.0, spec_floor=0.0, delay_frames=0):
         "state_output_names": ["next_state"],
         "output_names": ["enhanced_frame", "next_state"],
         "state_shapes": {"state": [1, 1]},
-        "postprocess": {"dry_blend": dry_blend, "spec_floor": spec_floor},
+        "recommended_inference": {"dry_blend": dry_blend, "spec_floor": spec_floor},
     }
     return manifest
 
@@ -258,7 +258,7 @@ def test_an_export_records_what_the_runtime_will_apply():
 
     recorded = Postprocessor(dry_blend=0.9).as_manifest()
     manifest = _manifest()
-    manifest["postprocess"] = recorded
+    manifest[Postprocessor.MANIFEST_KEY] = recorded
     config = StreamingRuntimeConfig.from_manifest(manifest)
     assert config.dry_blend == pytest.approx(0.9)
     assert recorded["suppression_ceiling_db"] == pytest.approx(-20.0)
@@ -311,40 +311,44 @@ def test_both_runtimes_produce_the_same_output(
 
 
 @pytest.mark.parametrize("runtime_kind", ["sdk", "in_repo"])
-def test_a_manifest_predating_the_field_says_so_out_loud(
+def test_an_absent_section_means_no_relief(
     identity_runtime, tmp_path, monkeypatch, runtime_kind
 ):
-    """An export from before `postprocess` existed looks exactly like one that
-    deliberately asked for no relief, and the five checked-in DPCRN manifests are
-    all of the first kind.
+    """The documented convention, and what `Postprocessor()` defaults to.
 
-    The runtime cannot tell them apart, and guessing 0.9 would be inventing an
-    intent the repo only records for two of the five versions. So it warns, at
-    the point where it matters, and says how to make the artefact self-describing.
+    `dpcrn_v6` is the one shipped export without the section; the other four
+    already carried `dry_blend: 0.9` under it long before any runtime read it.
     """
     from puresound.streaming.base import StreamingOrt
 
     manifest = _manifest()
-    del manifest["postprocess"]
-    onnx_path = tmp_path / "old.onnx"
+    del manifest["recommended_inference"]
+    onnx_path = tmp_path / "bare.onnx"
     onnx_path.write_bytes(b"fake")
-    manifest_path = tmp_path / "old.json"
+    manifest_path = tmp_path / "bare.json"
     manifest_path.write_text(json.dumps(manifest))
 
-    with pytest.warns(RuntimeWarning, match="postprocess"):
-        if runtime_kind == "in_repo":
-            built = StreamingOrt(onnx_path, manifest_path, provider="cpu")
-            assert built.dry_blend == 1.0
-        else:
-            from puresound_streaming.runtime import StreamingRuntimeConfig
+    if runtime_kind == "in_repo":
+        assert StreamingOrt(onnx_path, manifest_path, provider="cpu").dry_blend == 1.0
+    else:
+        from puresound_streaming.runtime import StreamingRuntimeConfig
 
-            assert StreamingRuntimeConfig.from_manifest(manifest).dry_blend == 1.0
+        assert StreamingRuntimeConfig.from_manifest(manifest).dry_blend == 1.0
 
 
-def test_an_export_that_wants_no_relief_is_not_a_warning(identity_runtime):
-    """`dry_blend: 1.0` written explicitly is a decision, not a missing field."""
-    import warnings as _warnings
+def test_both_runtimes_read_the_same_manifest_key():
+    """The key name is duplicated -- the SDK cannot import puresound -- so a
+    rename on one side has to fail here rather than silently leaving that runtime
+    at 1.0."""
+    sys.path.insert(0, SDK_PATH)
+    import inspect
 
-    with _warnings.catch_warnings():
-        _warnings.simplefilter("error", RuntimeWarning)
-        identity_runtime(dry_blend=1.0)
+    from puresound_streaming.runtime import StreamingRuntimeConfig
+
+    from puresound.system.postprocess import Postprocessor
+
+    assert Postprocessor.MANIFEST_KEY == "recommended_inference"
+    assert (
+        f'manifest.get("{Postprocessor.MANIFEST_KEY}")'
+        in inspect.getsource(StreamingRuntimeConfig.from_manifest)
+    )
