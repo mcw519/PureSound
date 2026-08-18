@@ -12,7 +12,7 @@ class VADActivityLoss(nn.Module):
     Otherwise the target activity falls back to clean foreground energy.
     """
 
-    uses_vad_target = True
+    required_inputs = ("enhanced", "target", "vad_target")
 
     def __init__(
         self,
@@ -126,17 +126,17 @@ class VADHeadBCELoss(nn.Module):
     Unlike VADActivityLoss (which derives activity from the enhanced waveform
     energy), this supervises an explicit per-frame logit head exposed by the
     backbone. EncDecMaskBase routes ``backbone.last_vad_logits`` here via the
-    ``uses_vad_logits`` dispatch flag. ``false_positive_weight`` upweights
+    ``required_inputs`` declaration. ``false_positive_weight`` upweights
     silence frames so background speech is less likely to trigger the head.
     ``balance_per_batch`` makes positive and negative frames contribute equal
     total BCE mass, preventing an imbalanced batch from rewarding an all-speech
     or all-silence constant. Calibrate the deployment threshold separately.
     """
 
-    uses_vad_logits = True
+    required_inputs = ("vad_logits", "vad_target")
 
     #: Which backbone side output and which config knob this loss depends on.
-    #: Subclasses re-point the dispatch flags at a different head, so the
+    #: A subclass re-points `required_inputs` at a different head, so the
     #: "you forgot to enable the head" errors must name that head, not this one.
     _logits_attr = "last_vad_logits"
     _head_config_key = "vad_head"
@@ -220,8 +220,10 @@ class BackgroundVADHeadBCELoss(VADHeadBCELoss):
     actually wants.
     """
 
-    uses_vad_logits = False
-    uses_background_vad_logits = True
+    # Replaces the parent's declaration rather than negating it: the chain
+    # this used to feed was ordered, so reaching the background branch meant
+    # carrying `uses_vad_logits = False` to fall past the foreground one.
+    required_inputs = ("background_vad_logits", "background_vad_target")
     _logits_attr = "last_background_vad_logits"
     _head_config_key = "background_vad_head"
     _target_key = "background_vad_target"

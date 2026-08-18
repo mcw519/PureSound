@@ -161,7 +161,7 @@ class MultiResolutionSTFTLoss(torch.nn.Module):
     # a loss ~1000x the active-row level and its gradient drowns the batch.
     # Opt into the trainer's inactive-row mask and score active rows only;
     # silent rows are already supervised by inactive-SDR and VAD losses.
-    uses_inactive_labels = True
+    required_inputs = ("enhanced", "target", "inactive_labels")
 
     def forward(self, x, y, inactive_labels: torch.Tensor = None):
         """Calculate forward propagation.

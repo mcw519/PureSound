@@ -42,12 +42,12 @@ class SDRLoss(nn.Module):
         self.eps = eps
         self.reduction = reduction
         self.threshold = threshold
-        # Tell EncDecMaskBase.compute_loss to derive a per-row "inactive"
-        # mask from the reference and pass it here. Active rows go through
-        # normal SDR; rows where the reference is silent (target-absent
-        # training samples) go through inactive_sdr_loss, which penalises
-        # output energy directly instead of computing 10*log10(0 / X).
-        self.uses_inactive_labels = True
+        # Ask the trainer for a per-row "inactive" mask derived from the
+        # reference. Active rows go through normal SDR; rows where the reference
+        # is silent (target-absent training samples) go through
+        # inactive_sdr_loss, which penalises output energy directly instead of
+        # computing 10*log10(0 / X).
+        self.required_inputs = ("enhanced", "target", "inactive_labels")
 
     @classmethod
     def init_mode(

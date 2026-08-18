@@ -10,6 +10,48 @@ from .logger import Logging
 logger = logging.getLogger(__name__)
 
 
+#: What a loss is called with when it declares nothing. Every loss in this
+#: package takes the enhanced/reference pair as its first two positionals.
+DEFAULT_LOSS_INPUTS = ("enhanced", "target")
+
+
+def invoke_loss(loss_func: nn.Module, providers: dict) -> Any:
+    """Call one loss with exactly the inputs it asked for, in its own order.
+
+    A loss declares ``required_inputs`` -- a tuple of provider names matching
+    its ``forward`` signature -- and a module declares what it can provide.
+    Nothing else decides the call, which is the point.
+
+    What this replaces was a chain of ``if getattr(loss, "uses_X", False)``
+    branches, and in a chain the *order* decides. A loss that wanted a later
+    input had to switch every earlier flag off by hand:
+    ``BackgroundVADHeadBCELoss`` inherits ``uses_vad_logits = True`` from
+    ``VADHeadBCELoss``, so it carried ``uses_vad_logits = False`` purely to fall
+    past the first branch. Forget that line and it trains against the foreground
+    head's logits and the foreground target, silently, forever. A declaration
+    replaces rather than negates, so a subclass cannot be wrong that way.
+
+    An unknown name is an error rather than a fallback. The chain ended in
+    ``return loss_func(enhanced, target)``, so a module that could not satisfy a
+    loss called it with the waveform pair instead -- measured on MISO, asking it
+    for ``VADHeadBCELoss`` produced 0.8132 from the enhanced waveform read as
+    logits, against 0.7727 from the real ones. A number, not a crash.
+
+    Providers are callables so a side output nothing asked for is never read,
+    and the ones that synthesize a missing target do not run on every batch.
+    """
+    names = getattr(loss_func, "required_inputs", DEFAULT_LOSS_INPUTS)
+    missing = [name for name in names if name not in providers]
+    if missing:
+        raise TypeError(
+            f"{type(loss_func).__name__} requires {list(names)}, and "
+            f"{missing} is not available here. This module provides "
+            f"{sorted(providers)}; a loss that needs a backbone side output "
+            "belongs on a module that produces one."
+        )
+    return loss_func(*(providers[name]() for name in names))
+
+
 class BaseLightningModule(LightningModule):
     def __init__(self, verbose: bool = False):
         super().__init__()
@@ -50,9 +92,9 @@ class BaseLightningModule(LightningModule):
         """Weighted sum of the registered losses, plus each one's scalar value.
 
         ``invoke(loss_func)`` returns that loss's unweighted tensor. That call is
-        the only part that differs between modules -- SISO routes backbone side
-        outputs by dispatch flag, MISO does not, and the classifier heads take
-        ``(pred, target)`` -- so it is the only part left to the caller.
+        the only part that differs between modules -- what each can provide, and
+        so which losses it can host -- so it is the only part left to the caller.
+        See `invoke_loss`, which is what every module's `invoke` delegates to.
 
         ``loss_funcs`` / ``weights`` default to the registered pair; pass them
         explicitly for a secondary set (e.g. MISO's conditional-branch losses).

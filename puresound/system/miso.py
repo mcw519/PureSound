@@ -28,7 +28,7 @@ from puresound.audio.dsp import wav_resampling
 from puresound.audio.io import AudioIO
 from puresound.nnet.masker import Masker
 
-from .base import BaseLightningModule
+from .base import BaseLightningModule, invoke_loss
 
 
 class EncDecCondMaskBase(BaseLightningModule):
@@ -202,15 +202,27 @@ class EncDecCondMaskBase(BaseLightningModule):
         else:
             enhanced = enhanced[..., : target.shape[-1]]
 
-        # A narrower dispatch than siso.EncDecMaskBase.compute_loss on purpose:
-        # the side-output flags (uses_vad_logits / uses_dist_preds / ...) are
-        # SISO-only additions and no MISO recipe registers a loss that sets one.
-        def _invoke(loss_func):
-            if getattr(loss_func, "uses_vad_target", False):
-                return loss_func(enhanced, target, vad_target=vad_target)
-            return loss_func(enhanced, target)
+        # A narrower provider table than siso.EncDecMaskBase's on purpose: the
+        # backbone side outputs (vad_logits / dist_preds / ...) are SISO-only
+        # and no MISO recipe registers a loss that wants one.
+        #
+        # Narrower now means *refused*, not silently mis-called. The chain this
+        # replaces ended in `loss_func(enhanced, target)`, so asking MISO for
+        # VADHeadBCELoss handed it the enhanced waveform as logits and the clean
+        # waveform as the target -- 0.8132 against the 0.7727 the real logits
+        # give. It trained. `invoke_loss` raises and names what is missing.
+        providers = self._loss_providers(
+            enhanced=enhanced, target=target, vad_target=vad_target
+        )
+        return self.reduce_losses(lambda loss: invoke_loss(loss, providers))
 
-        return self.reduce_losses(_invoke)
+    def _loss_providers(self, *, enhanced, target, vad_target) -> dict:
+        """The waveform pair and the VAD target -- nothing from a backbone."""
+        return {
+            "enhanced": lambda: enhanced,
+            "target": lambda: target,
+            "vad_target": lambda: vad_target,
+        }
 
     def compute_loss2(self, pred: torch.Tensor, target: torch.Tensor):
         assert self.c_loss_func_list is not None

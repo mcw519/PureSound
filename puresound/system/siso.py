@@ -24,7 +24,7 @@ from puresound.audio.dsp import wav_resampling
 from puresound.audio.io import AudioIO
 from puresound.nnet.masker import Masker
 
-from .base import BaseLightningModule
+from .base import BaseLightningModule, invoke_loss
 
 
 class EncDecMaskBase(BaseLightningModule):
@@ -288,59 +288,67 @@ class EncDecMaskBase(BaseLightningModule):
 
         # Per-row "target absent" mask. Rows whose reference is fully silent
         # come from the target-absent training path; routing them through
-        # iSDR (in losses that opt in via uses_inactive_labels) avoids the
+        # iSDR (in losses that declare `inactive_labels`) avoids the
         # degenerate 10*log10(0/X) explosion of vanilla SDR on zero refs.
         inactive_labels = target.abs().amax(dim=-1) == 0
 
-        # VAD-head logits are produced as a side output of the backbone during
-        # the forward() that precedes this call; route them to any loss that
-        # opts in via uses_vad_logits (e.g. VADHeadBCELoss).
-        vad_logits = getattr(self.backbone, "last_vad_logits", None)
-        # No shipped backbone populates this one -- the head that did left with
-        # the conformer axis (380da2e) while the gate infrastructure was kept for
-        # reuse. The branch stays wired so a backbone can grow the head back
-        # without touching this loop; until then BackgroundVADHeadBCELoss raises
-        # a message naming the head it wants.
-        background_vad_logits = getattr(
-            self.backbone,
-            "last_background_vad_logits",
-            None,
+        providers = self._loss_providers(
+            enhanced=enhanced,
+            target=target,
+            vad_target=vad_target,
+            batch=batch,
+            inactive_labels=inactive_labels,
         )
-        # Utterance-level distance/DRR predictions (DistHead side output);
-        # routed to losses that opt in via uses_dist_preds.
-        dist_preds = getattr(self.backbone, "last_dist_preds", None)
+        return self.reduce_losses(lambda loss: invoke_loss(loss, providers))
 
-        # Dispatch by opt-in flag. NOTE the order is load-bearing: a loss that
-        # wants a later input must switch the earlier flags off explicitly (see
-        # BackgroundVADHeadBCELoss setting `uses_vad_logits = False`).
-        def _invoke(loss_func):
-            if getattr(loss_func, "uses_vad_logits", False):
-                return loss_func(vad_logits, vad_target)
-            if getattr(loss_func, "uses_background_vad_logits", False):
-                bg_target = (
-                    None if batch is None else batch.get("background_vad_target")
-                )
-                # When no sample in the batch carries background speech, the
-                # dataset emits no `background_vad_reference` and the collate
-                # produces no `background_vad_target` at all (it only zero-fills
-                # missing rows when *some* row has background speech). An
-                # all-silent batch is a valid signal -- the background-activity
-                # target is simply all-zeros -- so synthesize it rather than
-                # crashing BackgroundVADHeadBCELoss on a None target.
-                if bg_target is None and background_vad_logits is not None:
-                    bg_target = torch.zeros_like(background_vad_logits)
-                return loss_func(background_vad_logits, bg_target)
-            if getattr(loss_func, "uses_dist_preds", False):
-                return loss_func(dist_preds, batch or {})
-            if getattr(loss_func, "uses_batch", False):
-                return loss_func(enhanced, target, batch or {})
-            if getattr(loss_func, "uses_vad_target", False):
-                return loss_func(enhanced, target, vad_target=vad_target)
-            if getattr(loss_func, "uses_inactive_labels", False):
-                return loss_func(enhanced, target, inactive_labels=inactive_labels)
-            return loss_func(enhanced, target)
+    def _loss_providers(
+        self, *, enhanced, target, vad_target, batch, inactive_labels
+    ) -> dict:
+        """Everything this module can hand a loss, by name.
 
-        return self.reduce_losses(_invoke)
+        A loss declares which of these it wants (`required_inputs`) and
+        `invoke_loss` calls it with exactly those, in that order. One table, so
+        "what a loss may ask for" has a single definition -- the test that checks
+        every shipped loss against it reads this method rather than a second
+        list that could drift from it.
+
+        Callables, not values: a side output nothing asked for is never read off
+        the backbone, and the background target is only synthesized when the loss
+        that needs it is registered.
+        """
+
+        def side(name):
+            # Produced during the forward() that precedes this call. Nothing
+            # populates `last_background_vad_logits` today -- the head that did
+            # left with the conformer axis (380da2e) while the gate
+            # infrastructure was kept for reuse -- so the provider stays wired
+            # and BackgroundVADHeadBCELoss raises naming the head it wants.
+            return getattr(self.backbone, name, None)
+
+        def background_vad_target():
+            explicit = None if batch is None else batch.get("background_vad_target")
+            # When no sample in the batch carries background speech the dataset
+            # emits no `background_vad_reference` and the collate produces no
+            # `background_vad_target` at all (it only zero-fills missing rows
+            # when *some* row has it). An all-silent batch is a valid signal --
+            # the background-activity target is simply all-zeros -- so
+            # synthesize it rather than crashing the loss on a None target.
+            logits = side("last_background_vad_logits")
+            if explicit is None and logits is not None:
+                return torch.zeros_like(logits)
+            return explicit
+
+        return {
+            "enhanced": lambda: enhanced,
+            "target": lambda: target,
+            "batch": lambda: batch or {},
+            "inactive_labels": lambda: inactive_labels,
+            "vad_target": lambda: vad_target,
+            "vad_logits": lambda: side("last_vad_logits"),
+            "background_vad_logits": lambda: side("last_background_vad_logits"),
+            "background_vad_target": background_vad_target,
+            "dist_preds": lambda: side("last_dist_preds"),
+        }
 
     def training_step(self, batch, batch_idx):
         batch = self.ensure_vad_targets(batch)

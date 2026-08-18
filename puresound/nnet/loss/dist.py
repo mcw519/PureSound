@@ -23,7 +23,7 @@ class DistHeadRegressionLoss(nn.Module):
     zero loss that still carries a graph edge so DDP never sees an unused head.
     """
 
-    uses_dist_preds = True
+    required_inputs = ("dist_preds", "batch")
 
     def __init__(
         self,

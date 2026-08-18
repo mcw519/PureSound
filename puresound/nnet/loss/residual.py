@@ -17,7 +17,7 @@ class ResidualReferenceLoss(nn.Module):
         residual_ref = batch[reference_key]
     """
 
-    uses_batch = True
+    required_inputs = ("enhanced", "target", "batch")
 
     def __init__(
         self,

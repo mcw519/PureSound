@@ -414,7 +414,7 @@ config 的死旋鈕全部被報出來；刪掉 `added_noise` 後 RNG 指紋逐�
 |---|---|---|
 | 3-1 | **Config 物件化**（已完成，改做註冊制而非聚合物件）| 見執行紀錄 |
 | ~~3-2~~ | **Config schema 驗證** → 因 A6 提前為 **2-5** | — |
-| 3-3 | **Loss 分派改註冊制**：`loss.required_inputs = ("vad_logits",)` + `{name: provider}` 表取代 if/elif 鏈 | 下次要新增第 7 種 loss 簽章時 |
+| 3-3 | **Loss 分派改註冊制**（已完成）| 見執行紀錄 |
 | 3-4 | `runner.py` 泛化到 MISO/SV，收掉 tse/sv main 的 866 行重複 | TSE/SV 解凍時。**目前凍結中，不要碰** |
 | 3-5 | `dry_blend`/`spec_floor` 抽成獨立 `Postprocessor` | 要做 SDK 部署對齊時 |
 
@@ -1072,6 +1072,42 @@ bug），接受但沒有 recipe 能設就是只能靠直接建構才碰得到的
 **順帶補一個本來完全沒被覆蓋的性質**：`augmentation_speed` 對 sv 與分離任務是**兩種不同
 方言**（`speed_change` + `treat_as_new_speaker` vs `speed_range`）。把 sv 的方言綁定拿掉，
 **822 個測試全過**——舊的 `speed_augmentation_model` 屬性同樣沒有任何測試。現在有了。
+
+
+### 2026-08-18 — P3-3 loss 分派改註冊制
+
+驗收：`ruff` 全綠；`--suite standard` **760 passed**（+8）、`--suite full` **831 passed**；
+13 個 dispatch family 逐一比對，**12 個數值完全相同**，第 13 個是刻意的修正（見下）；
+7 個反向驗證全被抓到。
+
+原本是一條 `if getattr(loss, "uses_X", False)` 的鏈，六個旗標 + 一個 fallback。
+鏈裡**順序決定一切**，而那導出兩個問題：
+
+**一、子類別得靠「把上一個旗標關掉」才走得到自己的分支。**
+`BackgroundVADHeadBCELoss` 繼承 `VADHeadBCELoss`（後者 `uses_vad_logits = True`），
+所以它必須帶一行 `uses_vad_logits = False` 純粹為了掉過前一個分支。少寫那行，它就會
+**靜默地拿前景 head 的 logits 與前景 target 去訓練**，永遠不會報錯。改成宣告制之後，
+子類別的宣告是**取代**而不是否定，這個錯法在結構上就不存在了。
+
+**二、fallback 讓「這個模組給不出來」變成一個數字而不是錯誤。**
+鏈的結尾是 `return loss_func(enhanced, target)`。實測：對 MISO 註冊 `VADHeadBCELoss`
+會得到 **0.8132**——那是把 enhanced **波形**當成 logits、clean 波形當成 target 算出來的；
+真正的 logits 給的是 0.7727。它會訓練。
+
+改法：`loss.required_inputs = ("vad_logits", "vad_target")` 這樣的宣告，配上每個模組的
+`_loss_providers()` 表；`invoke_loss` 用宣告的名字、宣告的順序去呼叫，未知名字直接
+`TypeError` 並說出缺什麼。七個簽章族全部收斂成一種呼叫形式。
+
+一個實作細節值得記：檢查過六個 loss 的 `forward`，**沒有任何一個把額外輸入標成
+keyword-only**，全都是帶預設值的普通位置參數——所以「一個名字的 tuple、全部位置傳入」
+就足夠涵蓋七族，不需要位置/關鍵字兩份清單。
+
+provider 是 callable 而非值：沒人要的 side output 不會每個 batch 去 `getattr` 一次，
+all-silent batch 的 background target 也只在真的有 loss 要它時才合成。
+
+**兩份清單改成一份**：provider 表抽成 `_loss_providers()` 方法，測試直接讀模組自己的表
+去檢查每個出貨 loss 的 `required_inputs` 是不是模組給得出來的。宣告一個打錯字的名字
+本來要到第一個真實 batch 才炸，現在在測試就紅。
 
 
 ### 下一步
