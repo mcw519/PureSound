@@ -7,7 +7,6 @@ import numpy as np
 import torch
 from torch.nn.utils.rnn import pad_sequence
 
-from puresound.audio.dsp import wav_resampling
 from puresound.audio.noise import add_bg_noise
 from puresound.config.augmentation import (
     CodecAugmentation,
@@ -20,6 +19,7 @@ from puresound.dataset.dynamic_base import (
     DynamicBaseDataset,
     as_block,
 )
+from puresound.task.device_chain import device_chain_from_blocks
 
 
 RIR_PROVENANCE_KEYS = (
@@ -120,6 +120,7 @@ class NoiseSuppressionDataset(DynamicBaseDataset):
             raise ValueError(
                 "augmentation_speech.mix_mode needs dataset.task: voice_isolation"
             )
+        self.device_chain = device_chain_from_blocks(self.augmentor, self)
 
     def _build_synthetic_interferers(
         self,
@@ -655,200 +656,12 @@ class NoiseSuppressionDataset(DynamicBaseDataset):
         # the early-reverb clean signal (post speed-perturb so timing matches).
         vad_reference = target_speech.clone()
 
-        # SRC
-        if (
-            self.augmentation_src_args
-            and self.augmentation_src_args.used
-            and torch.rand(1) < self.augmentation_src_args.prob
-        ):
-            src_target = random.choices(
-                self.augmentation_src_args.src_range,
-                weights=self.augmentation_src_args.prob_each,
-            )[0]
-
-            if torch.rand(1) < 0.5:
-                src_backend = "sox"
-            else:
-                src_backend = "torchaudio"
-
-            noisy_speech, src_info = self.augmentor.apply_src_effect(
-                wav=noisy_speech,
-                sr=self.audio_sr,
-                src_sr=src_target,
-                src_backend=src_backend,
-            )
-
-            # Wrap target speech to same SRC effect
-            if src_backend == "sox":
-                target_speech, _ = wav_resampling(
-                    wav=target_speech,
-                    origin_sr=self.audio_sr,
-                    target_sr=src_target,
-                    backend="sox",
-                )
-                target_speech, _ = wav_resampling(
-                    wav=target_speech,
-                    origin_sr=src_target,
-                    target_sr=self.audio_sr,
-                    backend="sox",
-                )
-            else:
-                target_speech, *src_info = wav_resampling(
-                    wav=target_speech,
-                    origin_sr=self.audio_sr,
-                    target_sr=src_target,
-                    backend="torchaudio",
-                    torch_backend_params=src_info[-1],
-                )
-                target_speech, *src_info = wav_resampling(
-                    wav=target_speech,
-                    origin_sr=src_target,
-                    target_sr=self.audio_sr,
-                    backend="torchaudio",
-                    torch_backend_params=src_info[-1],
-                )
-
-        # 2nd-IIR response
-        if (
-            self.augmentation_ir_response_args
-            and self.augmentation_ir_response_args.used
-            and torch.rand(1) < self.augmentation_ir_response_args.prob
-        ):
-            noisy_speech, (a_coeffs, b_coeffs) = self.augmentor.apply_2nd_iir_response(
-                wav=noisy_speech
-            )
-            target_speech, _ = self.augmentor.apply_2nd_iir_response(
-                wav=target_speech, a_coeffs=a_coeffs, b_coeffs=b_coeffs
-            )
-
-        # HPF effects
-        if (
-            self.augmentation_hpf_args
-            and self.augmentation_hpf_args.used
-            and torch.rand(1) < self.augmentation_hpf_args.prob
-        ):
-            hpf_cutoff = random.choices(
-                self.augmentation_hpf_args.cutoff,
-                weights=self.augmentation_hpf_args.prob_each,
-            )[0]
-            q_factor = torch.FloatTensor(1).normal_(mean=0.707, std=0.1).clip(0.3, 1.3)
-            noisy_speech, _ = self.augmentor.apply_hpf(
-                wav=noisy_speech,
-                sr=self.audio_sr,
-                cutoff_freq=hpf_cutoff,
-                q_factor=q_factor,
-            )
-            target_speech, _ = self.augmentor.apply_hpf(
-                wav=target_speech,
-                sr=self.audio_sr,
-                cutoff_freq=hpf_cutoff,
-                q_factor=q_factor,
-            )
-
-        # Volume perturbed
-        if (
-            self.augmentation_volume_args
-            and self.augmentation_volume_args.used
-            and torch.rand(1) < self.augmentation_volume_args.prob
-        ):
-            vol_ratio = None
-            min_quantile = None
-            max_quantile = None
-            if torch.rand(1) < self.augmentation_volume_args.clipping_prob:
-                min_q = torch.FloatTensor(1).uniform_(
-                    self.augmentation_volume_args.clipping_range.min[0],
-                    self.augmentation_volume_args.clipping_range.min[1],
-                )
-                max_q = torch.FloatTensor(1).uniform_(
-                    self.augmentation_volume_args.clipping_range.max[0],
-                    self.augmentation_volume_args.clipping_range.max[1],
-                )
-                noisy_speech, (min_quantile, max_quantile) = (
-                    self.augmentor.apply_clipping_distortion(
-                        wav=noisy_speech, min_quantile=min_q, max_quantile=max_q
-                    )
-                )
-                target_speech, (_, _) = self.augmentor.apply_clipping_distortion(
-                    wav=target_speech,
-                    min_quantile=min_quantile,
-                    max_quantile=max_quantile,
-                )
-
-            else:
-                gain = (
-                    torch.FloatTensor(1)
-                    .uniform_(
-                        self.augmentation_volume_args.perturbed_range[0],
-                        self.augmentation_volume_args.perturbed_range[1],
-                    )
-                    .item()
-                )
-                noisy_speech, (vol_ratio) = self.augmentor.sox_volume_perturbed(
-                    wav=noisy_speech,
-                    vol_ratio=gain,
-                    sr=self.audio_sr,
-                )
-                target_speech, (vol_ratio) = self.augmentor.sox_volume_perturbed(
-                    wav=target_speech,
-                    vol_ratio=vol_ratio,
-                    sr=self.audio_sr,
-                )
-
-        # Codec round-trip (channel-side artifact: VoIP/PSTN compression).
-        # Applied to noisy_speech only -- target_speech is the clean reference.
-        if (
-            self.augmentation_codec_args
-            and self.augmentation_codec_args.used
-            and torch.rand(1) < self.augmentation_codec_args.prob
-        ):
-            codecs = self.augmentation_codec_args.codecs
-            prob_each = self.augmentation_codec_args.prob_each
-            if prob_each:
-                codec_name = random.choices(codecs, weights=prob_each, k=1)[0]
-            else:
-                codec_name = random.choice(codecs)
-            bitrate_range = self.augmentation_codec_args.bitrate_range.get(codec_name)
-            bit_rate = (
-                random.randint(int(bitrate_range[0]), int(bitrate_range[1]))
-                if bitrate_range
-                else None
-            )
-            noisy_speech, _ = self.augmentor.apply_codec(
-                wav=noisy_speech,
-                sr=self.audio_sr,
-                codec_name=codec_name,
-                bit_rate=bit_rate,
-            )
-
-        # Packet loss (VoIP transmission artifact).
-        if (
-            self.augmentation_packet_loss_args
-            and self.augmentation_packet_loss_args.used
-            and torch.rand(1) < self.augmentation_packet_loss_args.prob
-        ):
-            packet_ms = random.choice(
-                self.augmentation_packet_loss_args.packet_ms_choices
-            )
-            lo, hi = self.augmentation_packet_loss_args.loss_rate_range
-            loss_rate = random.uniform(float(lo), float(hi))
-            noisy_speech, _ = self.augmentor.apply_packet_loss(
-                wav=noisy_speech,
-                sr=self.audio_sr,
-                packet_ms=int(packet_ms),
-                loss_rate=loss_rate,
-            )
-
-        # Final overload guard. The earlier avoid_audio_clipping runs before
-        # noise / volume / IIR, any of which can push the mixture past +-1
-        # while the model's output is clamped to [-1, 1] -- rescale noisy and
-        # target together (and the noise bookkeeping) so the pair stays
-        # consistent and inside the representable range.
-        peak = float(
-            torch.maximum(noisy_speech.abs().amax(), target_speech.abs().amax())
+        # Capture and transmission chain: SRC, IIR, HPF, volume, codec,
+        # packet loss, and the closing overload guard. Order and RNG discipline
+        # are the chain's contract -- see puresound/task/device_chain.py.
+        noisy_speech, target_speech = self.device_chain.apply(
+            noisy_speech, target_speech, sample_rate=self.audio_sr
         )
-        if peak > 1.0:
-            noisy_speech = noisy_speech / peak
-            target_speech = target_speech / peak
 
         # Snipts to training target sample length
         noisy_speech = noisy_speech[..., : self.sample_length]

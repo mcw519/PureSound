@@ -727,13 +727,42 @@ speaker_embedding 與 TSE（兩者的 `__getitem__` 只吃 2-tuple、沒有 per-
 範圍——TSE recipe 寫成範圍會 crash。schema 允許兩種形態，所以這是 TSE 側的缺口。
 TSE 為凍結 legacy，記錄不修。
 
+### 2026-08-17 — P2-1 完成（抽出裝置鏈）
+
+驗收：`ruff` 全綠；`--suite standard` **709 passed**（+9 新契約測試）；
+`tools/rng_fingerprint.py` 對照抽取前：**840 個 hash 逐位元相同**（TSE 路徑未動，
+128 個 hash 亦相同）。
+
+`ns.__getitem__` **588 → 400 行**，圈複雜度 **44 → 25**（P0 時量到的 44 是起點）。
+新模組 `puresound/task/device_chain.py`（267 行）承載 SRC / IIR / HPF / volume /
+codec / packet-loss 與收尾的 overload guard。
+
+**為什麼是這條切線**：混音完成之後剩下的全部是「擷取與傳輸」——重取樣、麥克風傾斜、
+高通、增益、VoIP codec、掉封包。它們對「說話者」與「房間」一無所知，所以不該長在
+`__getitem__` 中段。切在這裡，`__getitem__` 剩下的就只有「這一列是什麼」的決策。
+
+**模組明寫的三條契約**（各有測試，且都反向驗證過會 fail）
+
+1. **stage 順序是契約不是細節**——每個 stage 都從共用 RNG stream 抽值，換兩個順序就會
+   改變 seeded recipe 的產物，即使每個 stage 本身沒變。
+2. **停用的 stage 不得碰 RNG stream**——機率抽取放在短路**內**。把它移到短路外，測試會
+   抓到。這正是「加新旋鈕後舊 recipe 仍能 bit-identical 重現」的來源。
+3. **哪些訊號能被碰**：SRC / IIR / HPF / volume 是線性通道，用同一組參數同時作用在混音
+   與乾淨目標上（目標是模型要「穿過該通道」還原的東西）；codec 與 packet loss 只打混音
+   ——它們是傳輸損傷，目標要維持未受損的評分基準。第 3 條在結構上也成立：
+   `_codec` / `_packet_loss` 的簽章只收發 `noisy`，碰不到 target。
+
+**P2-6 讓這件事變簡單**：`added_noise` 的 4 組跨百行重播先被刪掉，這條鏈只剩 noisy /
+target 兩條訊號要保持一致，工作量比原估少一半。
+
 ### 下一步
 
 1. **P2-6（清死旋鈕與死 payload）**——schema 已經把 33 份 config 的問題全部列出來了；
    `added_noise` 那塊（4 組 flag 重播、約 90 行、無人消費）也可以一起處理。
    此項已完成，包含現役設定與無法執行的 backup 設定。
-2. **P2-1（拆裝置鏈）**——前置全部備齊，而且 2-6 已經把 `added_noise` 重播拿掉，
-   要重寫的那段現在只剩 noisy/target 兩條訊號，工作量比原估少一半。
-3. P2-2（拆 `_apply_overlap_gating`）、P2-3（streaming 抽共用基底，308 行重複）、
-   P2-4（輔助 head 掛載樣板化）。
-4. P1、P2-5、P2-6 已完成。
+2. P2-2（拆 `_apply_overlap_gating`，複雜度 14）、P2-3（streaming 抽共用基底，
+   308 行重複）、P2-4（輔助 head 掛載樣板化）。
+3. `__getitem__` 仍是複雜度 25 的長函式——剩下的是「這一列是什麼」的決策
+   （row plan、interferer、mix、target-absent、echo、noise、VAD 標記、metadata）。
+   要再降就是把 noise 那段也抽出去，但它與 room_scene 耦合，切線不像裝置鏈那麼乾淨。
+4. P1、P2-1、P2-5、P2-6 已完成。
