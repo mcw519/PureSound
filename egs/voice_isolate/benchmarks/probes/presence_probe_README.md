@@ -97,3 +97,73 @@ Threshold self-calibration is also a cheap lever on its own. Item 5 in
 lists it as conditional on other axes producing signal. This is that signal: on v8
 the direction learned from synthetic already ranks the real clips well enough for
 0.883, and the only thing between that and 0.500 is where the boundary sits.
+
+---
+
+# Per-frame (2026-08-18, follow-up)
+
+The section above asks "is there a near user in this clip". A gate needs "is there
+one right now". Same frozen bottleneck, frequency pooling only, no time pooling:
+`presence_probe_frames.py` / `presence_probe_frames_fit.py`, v8.
+
+## Material
+
+The two STREAM recordings, which alternate near and far in labelled spans --
+21,754 labelled frames at 99.8 fps over **25 spans**. Frames in gaps between spans
+are dropped; the label there is genuinely unknown.
+
+Subsampled to every 10th frame (2,176) for the fit: at 100 fps consecutive frames
+are nearly identical, and 25 folds x 51 fits on 21k rows buys nothing.
+
+## The split has to be by span
+
+Frames inside one span are almost the same vector, so a random frame split puts
+most of a test frame's own span into training. Both ways, same data:
+
+| | balanced accuracy |
+|---|---|
+| split by frame (wrong) | 0.924 |
+| split by span (right) | 0.912 |
+
+Worth reporting that the gap is small. It was expected to be large, and the fact
+that it is not means this result is not leakage-driven.
+
+## Result
+
+| | balanced accuracy | AUC |
+|---|---|---|
+| leave-one-span-out | **0.902** | 0.963 |
+| shuffled span labels (50 draws) | mean 0.467, p95 0.599, **max 0.822** | |
+
+p = 0.020. Note the null reaches 0.822 -- with 25 spans, shuffling can get lucky,
+so this is solid rather than overwhelming, and weaker than the utterance-level
+p=0.005.
+
+So per-frame presence is readable from the frozen bottleneck on real recordings,
+at about 0.90.
+
+## Short spans are where it fails
+
+| span length | spans | mean correct | worst |
+|---|---|---|---|
+| < 2.5 s | 7 | 77.7% | 44.4% |
+| 2.5-8 s | 3 | 83.2% | 65.5% |
+| > 8 s | 15 | 90.8% | 74.1% |
+
+Length against accuracy is rho +0.39, **p=0.055** -- directional and consistent
+with the mechanism (a reverberation-based cue needs time to observe), but not
+established at 25 spans. Treat it as the hypothesis to design the calibration
+window against, not as a measured settling time.
+
+## The limitation that matters most here
+
+These are STREAM recordings: the near user talks somewhere in the session, so
+context carries across the far stretches. That is the *anchored* condition, and
+`near-anchor-dependence` measured anchored far suppression at -19.4 dB against
+-1.2 dB isolated. **So 0.90 per-frame here does not transfer to cold start.** The
+cold-start question is the one the utterance-level section answers, on separate
+clips each played from t=0.
+
+Read the two halves as: during a call, presence tracks frame by frame (0.90). At
+the start of a call, presence is decodable but the boundary is in the wrong place
+(0.500 as calibrated, 0.883 with the boundary moved).
