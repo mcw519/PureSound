@@ -570,3 +570,50 @@ def test_each_task_validates_its_own_speed_dialect():
         as_block(continuous, sv_model)  # speed_range is not a discrete key
     with pytest.raises(ValidationError):
         as_block(discrete, ns_model)  # nor speed_change a continuous one
+
+
+def test_every_task_has_a_model_factory_that_builds_its_shipped_config():
+    """A task's `model` block only fits one of the two module shapes.
+
+    The conditioned one reads `c_encoder` / `c_backbone`, which the
+    single-branch block does not have, so picking the wrong factory raises a
+    `KeyError` deep inside -- and used to do so only once the caller had the
+    corpus to reach the model at all. `run_stages` resolves the factory from
+    `recipe.task` instead of taking it from each entry point, and this is the
+    table that makes that safe.
+    """
+    from puresound.recipes import MODEL_FACTORY_FOR_TASK, init_model_for_task
+
+    assert set(MODEL_FACTORY_FOR_TASK) == set(TASK_SCHEMAS), (
+        "every task the loader accepts needs a model factory"
+    )
+    with pytest.raises(KeyError, match="no model factory"):
+        init_model_for_task("not_a_task")
+
+
+@pytest.mark.parametrize(
+    "config_path",
+    [
+        "egs/noise_suppression/config/dpcrn.yaml",
+        "egs/voice_isolate/config/train_dpcrn.yaml",
+        "egs/target_speaker_extraction/config/default_config.yaml",
+        "egs/speaker_embedding/conf/PS-spk-v1.yaml",
+    ],
+)
+def test_the_resolved_factory_builds_the_shipped_model(config_path):
+    """And it is the *right* shape: the other factory must not also work, or the
+    table would be pinning nothing."""
+    from puresound.recipes import MODEL_FACTORY_FOR_TASK, init_model_for_task
+
+    path = REPO_ROOT / config_path
+    if not path.exists():
+        pytest.skip(f"{config_path} is not in this checkout")
+    recipe = load_recipe(str(path))
+    assert init_model_for_task(recipe.task)(recipe.model) is not None
+
+    others = {f for f in MODEL_FACTORY_FOR_TASK.values()} - {
+        init_model_for_task(recipe.task)
+    }
+    for factory in others:
+        with pytest.raises((KeyError, TypeError)):
+            factory(recipe.model)

@@ -17,10 +17,10 @@ DRR（direct-to-reverberant ratio，直混比）對比來判斷。
 python prepare_metafile.py --help
 
 # 訓練
-python main.py --training=True config/default_config.yaml
+python main.py --training config/default_config.yaml
 
 # 推論
-python main.py --inference=True --ckpt_path=ckpt_path config/default_config.yaml
+python main.py --inference --ckpt_path ckpt_path config/default_config.yaml
 ```
 
 `--training` 搭配 `--ckpt_path` 是續訓（恢復 optimizer／scheduler／epoch）；只想用某個

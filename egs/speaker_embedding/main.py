@@ -1,27 +1,43 @@
-import argparse
+"""speaker_embedding -- speaker verification / d-vector training entry point.
+
+Produces a fixed-length embedding per utterance, trained with a margin-based
+classification loss. Its dataset is ``SpeakerEmbeddingDataset``; every stage
+downstream lives in ``puresound.system.runner``, the same one the separation
+recipes use.
+
+Run from this directory -- the config's metafile and work-folder paths are
+relative to it::
+
+    cd egs/speaker_embedding
+    uv run python main.py conf/PS-spk-v1.yaml --training
+    uv run python main.py conf/PS-spk-v1.yaml --export_onnx \
+        --pretrained_ckpt_path path/to.ckpt
+"""
+
+from pathlib import Path
+import sys
 
 import lightning as L
-import numpy as np
-import onnxruntime
-import torch
-from lightning.pytorch.callbacks import LearningRateMonitor, ModelCheckpoint
 
-from puresound.audio.io import AudioIO
-from puresound.config import load_recipe
-from puresound.dataset.kaldi_base import KaldiFormBaseDataset
-from puresound.recipes import init_loss_func, init_siso_model
-from puresound.system import runner
-from puresound.system.optim import create_optimizer_and_scheduler
-from puresound.task.sv import SpeakerEmbeddingCollateFunc, SpeakerEmbeddingDataset
-from puresound.utils import create_folder, str2bool
+REPO_ROOT = Path(__file__).resolve().parents[2]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from puresound.audio.io import AudioIO  # noqa: E402
+from puresound.config import load_recipe  # noqa: E402
+from puresound.system import runner  # noqa: E402
+from puresound.task.sv import (  # noqa: E402
+    SpeakerEmbeddingCollateFunc,
+    SpeakerEmbeddingDataset,
+)
+
+TASK_NAME = "speaker_embedding"
+
+runner.configure_torch_backends()
 
 
 def init_dataloader(recipe):
-    """Train / valid dataloaders for this recipe.
-
-    Delegates to ``runner.build_dataloaders``; this file used to carry its own
-    copy of it, which is what let the two drift.
-    """
+    """Train / valid dataloaders for this recipe."""
     return runner.build_dataloaders(
         dataset_cls=SpeakerEmbeddingDataset,
         collate_fn=SpeakerEmbeddingCollateFunc(),
@@ -29,46 +45,74 @@ def init_dataloader(recipe):
     )
 
 
-if __name__ == "__main__":
-    torch.set_float32_matmul_precision("high")
+def write_batch(batch, file_name):
+    """This task's batch is one waveform per row plus a speaker id.
 
-    parser = argparse.ArgumentParser()
-    parser.add_argument("config_path", type=str)
-    parser.add_argument("--set_seed", type=int, default=None, help="set random seed.")
-    parser.add_argument(
-        "--training", type=str2bool, default=False, help="start training new model."
+    No clean/noise pair to interleave, so the id goes in the filename -- that is
+    the only thing worth eyeballing about a speaker-embedding sample.
+    """
+    noisy_speech = batch["noisy_speech"]
+    target = batch["target"]
+    for i in range(noisy_speech.shape[0]):
+        spkid = str(target[i]).zfill(5)
+        AudioIO.save(
+            wav=noisy_speech[i : i + 1],
+            f_path=f"{file_name}-{str(i).zfill(2)}-{spkid}.wav",
+            sr=batch["sr"][i],
+        )
+
+
+def export_onnx(args, recipe):
+    """Export the embedding extractor: one waveform in, one vector out."""
+    import numpy as np
+    import onnxruntime
+    import torch
+
+    from puresound.recipes import init_siso_model
+
+    sample_rate = args.inference_sr or 16000
+    sample_input = torch.rand(1, sample_rate * 5)
+    save_path = f"{args.pretrained_ckpt_path}.onnx"
+
+    lightning_model = init_siso_model(recipe.model)
+    state_dict = torch.load(args.pretrained_ckpt_path, map_location="cpu")["state_dict"]
+    lightning_model.reload_checkpoint(loaded_state=state_dict, load_loss_func=False)
+    lightning_model.eval()
+
+    torch.onnx.export(
+        lightning_model,
+        (sample_input,),
+        save_path,
+        export_params=True,
+        opset_version=17,
+        do_constant_folding=True,
+        input_names=["Audio"],
+        output_names=["Embedding"],
+        dynamic_axes={
+            "Audio": {0: "batch_size", 1: "sequence_length"},
+            "Embedding": {0: "batch_size"},
+        },
+        verbose=False,
     )
-    parser.add_argument(
-        "--scoring", type=str2bool, default=False, help="compute metrics."
-    )
-    parser.add_argument(
-        "--inference", type=str2bool, default=False, help="inference audios."
-    )
-    parser.add_argument(
-        "--ckpt_path",
-        type=str,
-        default=None,
-        help="choose a exist checkpoint, including params, optimizer, learning rate scheduler and loss functions.",
-    )
-    parser.add_argument(
-        "--pretrained_ckpt_path",
-        type=str,
-        default=None,
-        help="choose a exist checkpoint with its model params only for training, \
-            and continuous training with new optimizer, learning rate scheduler and loss etc.",
-    )
-    parser.add_argument(
-        "--dump_training_samples",
-        type=str2bool,
-        default=False,
-        help="generate some training samples.",
-    )
-    parser.add_argument(
-        "--inference_sr",
-        type=int,
-        default=None,
-        help="If given, all processs would work on this sr.",
-    )
+
+    with torch.no_grad():
+        torch_out = lightning_model(sample_input).numpy()
+    session = onnxruntime.InferenceSession(save_path)
+    ort_out = session.run(
+        None, {session.get_inputs()[0].name: sample_input.numpy()}
+    )[0]
+
+    # Report the tightest tolerance the export actually holds rather than
+    # asserting one: what matters is knowing which it is.
+    atol = 1e-4
+    while np.allclose(torch_out, ort_out, rtol=1e-5, atol=atol):
+        print(f">>> ONNX model accuracy pass {atol} spec.")
+        atol /= 10
+    print(f">>> Export done; accuracy does not reach {atol} spec.")
+
+
+if __name__ == "__main__":
+    parser = runner.build_arg_parser(__doc__.splitlines()[0])
     parser.add_argument(
         "--split_to_chunks_with_size",
         type=float,
@@ -76,7 +120,10 @@ if __name__ == "__main__":
         help="If given, chunking the input audio (seconds).",
     )
     parser.add_argument(
-        "--export_onnx", type=str2bool, default=False, help="export model to onnx form"
+        "--export_onnx",
+        action="store_true",
+        default=False,
+        help="export the embedding extractor to ONNX (needs --pretrained_ckpt_path).",
     )
     args = parser.parse_args()
 
@@ -85,190 +132,26 @@ if __name__ == "__main__":
         L.seed_everything(seed=args.set_seed)
 
     recipe = load_recipe(
-        args.config_path,
-        expected_task="speaker_embedding",
-        expected_purpose="train",
+        args.config_path, expected_task=TASK_NAME, expected_purpose="train"
     )
 
+    train_dataloader = valid_dataloader = None
     if args.training or args.dump_training_samples:
         train_dataloader, valid_dataloader = init_dataloader(recipe)
 
-    # Stage of dump the training samples
-    if args.dump_training_samples:
-        create_folder(folder_name="./dummy_samples")
-        dataiter = iter(train_dataloader)
-        for iteration in range(3):
-            file_name = f"./dummy_samples/batch_{str(iteration).zfill(2)}"
-            batch = next(dataiter)
-            noisy_speech = batch["noisy_speech"]
-            target = batch["target"]
-            for i in range(noisy_speech.shape[0]):
-                spkid = str(target[i])
-                AudioIO.save(
-                    wav=noisy_speech,
-                    f_path=f"{file_name}-{str(i).zfill(2)}-{spkid.zfill(5)}.wav",
-                    sr=batch["sr"][i],
-                )
+    # metrics=None: verification is scored by EER over trial pairs, not by the
+    # waveform metrics the separation tasks use, and that stage was never
+    # written. `--scoring` raises saying so rather than half-running.
+    runner.run_stages(
+        args,
+        recipe,
+        train_dataloader,
+        valid_dataloader,
+        write_batch=write_batch,
+        metrics=None,
+    )
 
-    # Stage of training a new model
-    if args.training:
-        # Initialize loss function
-        loss_func_list, loss_func_list_w = init_loss_func(recipe.loss_func)
-
-        # PL-Model
-        lightning_model = init_siso_model(recipe.model)
-        lightning_model.register_loss_func(loss_func_list, loss_func_list_w)
-        param_groups = lightning_model.get_total_param_groups()
-        optimizer, scheduler = create_optimizer_and_scheduler(
-            overall_params_and_lr_factor=param_groups,
-            optimizer_args=recipe.optimizer,
-            scheduler_args=recipe.scheduler,
-        )
-        lightning_model.register_optimizer(optimizer)
-        lightning_model.register_scheduler(scheduler)
-        lightning_model.register_warmup_step(recipe.scheduler.warmup_step)
-
-        # Loading exists state_dicts
-        if args.pretrained_ckpt_path:
-            print("Loading the pretrained params only.")
-            state_dict = torch.load(args.pretrained_ckpt_path, map_location="cpu")[
-                "state_dict"
-            ]
-            lightning_model.reload_checkpoint(
-                loaded_state=state_dict, load_loss_func=False
-            )
-
-        # Callbacks
-        lr_monitor = LearningRateMonitor(logging_interval="epoch")
-        ckpt_monitor = ModelCheckpoint(
-            save_on_train_epoch_end=True, every_n_epochs=1, save_top_k=-1
-        )
-
-        trainer = L.Trainer(
-            **recipe.trainer.lightning_trainer_args,
-            accelerator="gpu" if recipe.trainer.num_gpus > 0 else "cpu",
-            devices=recipe.trainer.num_gpus,
-            limit_train_batches=recipe.trainer.train_iter_per_epoch,
-            limit_val_batches=recipe.trainer.valid_iter_per_epoch,
-            use_distributed_sampler=False,
-            default_root_dir=recipe.trainer.work_folder,
-            callbacks=[lr_monitor, ckpt_monitor],
-            profiler="simple",
-            sync_batchnorm=True,
-        )
-
-        if args.ckpt_path is not None:
-            trainer.fit(
-                lightning_model,
-                train_dataloaders=train_dataloader,
-                val_dataloaders=valid_dataloader,
-                ckpt_path=args.ckpt_path,
-            )
-        else:
-            trainer.fit(
-                lightning_model,
-                train_dataloaders=train_dataloader,
-                val_dataloaders=valid_dataloader,
-            )
-
-    # Stage of caculating the metric scores
-    if args.scoring:
-        test_dataset = KaldiFormBaseDataset(
-            folder=recipe.dataset.test_folder,
-            mode="dev",
-            resample_to=args.inference_sr,
-        )
-        test_dataloader = torch.utils.data.DataLoader(
-            dataset=test_dataset,
-            pin_memory=True,
-            num_workers=4,
-            batch_size=1,
-            shuffle=False,
-        )
-        trainer = L.Trainer(inference_mode=True)
-        lightning_model = init_siso_model(recipe.model)
-        # TODO
-        raise NotImplementedError
-
-    # Stage of inferencing audio only
-    if args.inference:
-        test_dataset = KaldiFormBaseDataset(
-            folder=recipe.dataset.test_folder,
-            mode="eval",
-            resample_to=args.inference_sr,
-            split_to_chunks_with_size=args.split_to_chunks_with_size,
-        )
-        test_dataloader = torch.utils.data.DataLoader(
-            dataset=test_dataset,
-            pin_memory=True,
-            num_workers=4,
-            batch_size=1,
-            shuffle=False,
-        )
-        trainer = L.Trainer(
-            inference_mode=True, default_root_dir=recipe.dataset.proc_output_folder
-        )
-        state_dict = torch.load(args.ckpt_path, map_location="cpu")["state_dict"]
-        lightning_model = init_siso_model(recipe.model)
-        lightning_model.reload_checkpoint(state_dict)
-        create_folder(recipe.dataset.proc_output_folder)
-        lightning_model.register_proc_output_folder(recipe.dataset.proc_output_folder)
-        trainer.predict(lightning_model, dataloaders=test_dataloader)
-
-    # Stage of export model to ONNX
-    if args.export_onnx and args.pretrained_ckpt_path:
-        if args.inference_sr:
-            sample_input = torch.rand(1, args.inference_sr * 5)
-        else:
-            sample_input = torch.rand(1, 16000 * 5)
-
-        save_path = f"{args.pretrained_ckpt_path}.onnx"
-
-        lightning_model = init_siso_model(recipe.model)
-        print("Loading the pretrained params only.")
-        state_dict = torch.load(args.pretrained_ckpt_path, map_location="cpu")[
-            "state_dict"
-        ]
-        lightning_model.reload_checkpoint(loaded_state=state_dict, load_loss_func=False)
-        lightning_model.eval()
-
-        torch.onnx.export(
-            lightning_model,
-            (sample_input,),
-            save_path,
-            export_params=True,
-            opset_version=17,
-            do_constant_folding=True,
-            input_names=[
-                "Audio",
-            ],
-            output_names=[
-                "Embedding",
-            ],
-            dynamic_axes={
-                "Audio": {0: "batch_size", 1: "sequence_length"},
-                "Embedding": {0: "batch_size"},
-            },
-            verbose=False,
-        )
-
-        # Test onnx model
-        with torch.no_grad():
-            torch_out = lightning_model(sample_input)
-            torch_out = torch_out.numpy()
-
-        ort_session = onnxruntime.InferenceSession(save_path)
-        input_name = ort_session.get_inputs()[0].name
-        ort_inputs = {input_name: sample_input.numpy()}
-        ort_outs = ort_session.run(None, ort_inputs)
-
-        atol = 1e-4
-        while True:
-            try:
-                assert np.allclose(torch_out, ort_outs[0], rtol=1e-5, atol=atol)
-                print(f">>> ONNX model accuracy pass {atol} spec.")
-                atol /= 10
-            except AssertionError:
-                print(">>> Export done")
-                print(f">>> ONNX model accuracy can't pass {atol} spec.")
-                break
+    if args.export_onnx:
+        if not args.pretrained_ckpt_path:
+            parser.error("--export_onnx needs --pretrained_ckpt_path")
+        export_onnx(args, recipe)

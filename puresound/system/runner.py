@@ -32,7 +32,7 @@ from __future__ import annotations
 import logging
 
 import argparse
-from typing import Dict, Optional, Tuple
+from typing import Callable, Dict, Optional, Tuple
 
 import lightning as L
 import torch
@@ -40,10 +40,10 @@ from lightning.pytorch.callbacks import LearningRateMonitor, ModelCheckpoint
 from lightning.pytorch.strategies import DDPStrategy
 
 from puresound.audio.io import AudioIO
-from puresound.config import BaseRecipe, SisoRecipe
+from puresound.config import BaseRecipe
 from puresound.dataset.kaldi_base import KaldiFormBaseDataset
 from puresound.metrics import Metrics
-from puresound.recipes import init_loss_func, init_siso_model
+from puresound.recipes import init_loss_func, init_model_for_task
 from puresound.system.optim import create_optimizer_and_scheduler
 from puresound.task.sampler import SpeakerSampler
 from puresound.utils import create_folder
@@ -183,28 +183,52 @@ def build_arg_parser(description: str) -> argparse.ArgumentParser:
     return parser
 
 
-def dump_training_samples(train_dataloader, out_folder: str = "./dummy_samples", n_batches: int = 3) -> None:
-    """Write a few synthesised batches to disk -- the fastest way to hear a recipe."""
+def write_separation_batch(batch, file_name: str) -> None:
+    """The default dump writer: noisy / clean / noise as three channels.
+
+    One file per row so the three are aligned in an editor. Tasks whose batch
+    carries something else pass their own writer to `run_stages`.
+    """
+    noisy_speech = batch["noisy_speech"]
+    for i in range(noisy_speech.shape[0]):
+        AudioIO.save(
+            wav=torch.stack(
+                [noisy_speech[i], batch["clean_speech"][i], batch["consistency_noise"][i]],
+                dim=0,
+            ),
+            f_path=f"{file_name}-{str(i).zfill(2)}.wav",
+            sr=batch["sr"][i],
+        )
+
+
+def dump_training_samples(
+    train_dataloader,
+    out_folder: str = "./dummy_samples",
+    n_batches: int = 3,
+    write_batch: Callable = write_separation_batch,
+) -> None:
+    """Write a few synthesised batches to disk -- the fastest way to hear a recipe.
+
+    Iterating the loader is the shared part; which tensors a batch carries is not,
+    so `write_batch` is the task's.
+    """
     create_folder(folder_name=out_folder)
     dataiter = iter(train_dataloader)
     for iteration in range(n_batches):
-        file_name = f"{out_folder}/batch_{str(iteration).zfill(2)}"
-        batch = next(dataiter)
-        noisy_speech = batch["noisy_speech"]
-        clean_speech = batch["clean_speech"]
-        noise = batch["consistency_noise"]
-        for i in range(noisy_speech.shape[0]):
-            AudioIO.save(
-                wav=torch.stack([noisy_speech[i], clean_speech[i], noise[i]], dim=0),
-                f_path=f"{file_name}-{str(i).zfill(2)}.wav",
-                sr=batch["sr"][i],
-            )
+        write_batch(next(dataiter), f"{out_folder}/batch_{str(iteration).zfill(2)}")
 
 
-def run_training(args, recipe: SisoRecipe, train_dataloader, valid_dataloader) -> None:
+def run_training(
+    args,
+    recipe: BaseRecipe,
+    train_dataloader,
+    valid_dataloader,
+    init_model: Optional[Callable] = None,
+) -> None:
+    init_model = init_model or init_model_for_task(recipe.task)
     loss_func_list, loss_func_list_w = init_loss_func(recipe.loss_func)
 
-    lightning_model = init_siso_model(recipe.model)
+    lightning_model = init_model(recipe.model)
     lightning_model.register_loss_func(loss_func_list, loss_func_list_w)
 
     # Silero VAD labels are computed batched on GPU (lifted out of the DataLoader
@@ -297,55 +321,119 @@ def run_training(args, recipe: SisoRecipe, train_dataloader, valid_dataloader) -
     )
 
 
-def _test_dataloader(recipe: SisoRecipe, mode: str, resample_to: Optional[int]):
+def _test_dataloader(
+    recipe: BaseRecipe,
+    mode: str,
+    resample_to: Optional[int],
+    folder_content: Optional[Dict] = None,
+    split_to_chunks_with_size: Optional[float] = None,
+):
+    """The eval/dev loader. ``folder_content`` names extra manifests the task
+    needs alongside the audio -- target-speaker extraction reads a `wav2enroll`
+    list, the separation tasks read nothing extra."""
+    kwargs = {}
+    if split_to_chunks_with_size is not None:
+        kwargs["split_to_chunks_with_size"] = split_to_chunks_with_size
     dataset = KaldiFormBaseDataset(
-        folder=recipe.dataset.test_folder, mode=mode, resample_to=resample_to
+        folder=recipe.dataset.test_folder, mode=mode, resample_to=resample_to, **kwargs
     )
+    if folder_content is not None:
+        dataset.folder_content = folder_content
     return torch.utils.data.DataLoader(
         dataset=dataset, pin_memory=True, num_workers=4, batch_size=1, shuffle=False
     )
 
 
-def run_scoring(args, recipe: SisoRecipe) -> None:
-    test_dataloader = _test_dataloader(recipe, "dev", args.inference_sr)
+#: Waveform metrics for the enhancement/extraction tasks. A task whose output is
+#: not a waveform passes its own table, or None to say scoring is unimplemented.
+WAVEFORM_METRICS = {
+    "pesq_wb": {"func": Metrics.pesq_wb, "sr": 16000},
+    "pesq_nb": {"func": Metrics.pesq_nb, "sr": 8000},
+    "stoi": {"func": Metrics.stoi, "sr": None},
+    "estoi": {"func": Metrics.estoi, "sr": None},
+    "sisnr": {"func": Metrics.sisnr, "sr": None},
+    "bss_sdr": {"func": Metrics.bss_sdr, "sr": None},
+    "dnsmos_p835": {"func": Metrics.dnsmos_p835, "sr": 16000},
+}
+
+
+def run_scoring(
+    args,
+    recipe: BaseRecipe,
+    init_model: Optional[Callable] = None,
+    metrics: Optional[Dict] = None,
+    folder_content: Optional[Dict] = None,
+) -> None:
+    init_model = init_model or init_model_for_task(recipe.task)
+    if metrics is None:
+        raise NotImplementedError(
+            f"{recipe.task} has no scoring metrics registered; pass `metrics=` to "
+            "run_stages with a table appropriate to what this task outputs."
+        )
+    test_dataloader = _test_dataloader(
+        recipe, "dev", args.inference_sr, folder_content=folder_content
+    )
     trainer = L.Trainer(inference_mode=True)
     state_dict = torch.load(args.ckpt_path, map_location="cpu")["state_dict"]
-    lightning_model = init_siso_model(recipe.model)
+    lightning_model = init_model(recipe.model)
     lightning_model.reload_checkpoint(state_dict)
-    lightning_model.register_metrics_func(
-        {
-            "pesq_wb": {"func": Metrics.pesq_wb, "sr": 16000},
-            "pesq_nb": {"func": Metrics.pesq_nb, "sr": 8000},
-            "stoi": {"func": Metrics.stoi, "sr": None},
-            "estoi": {"func": Metrics.estoi, "sr": None},
-            "sisnr": {"func": Metrics.sisnr, "sr": None},
-            "bss_sdr": {"func": Metrics.bss_sdr, "sr": None},
-            "dnsmos_p835": {"func": Metrics.dnsmos_p835, "sr": 16000},
-        }
-    )
+    lightning_model.register_metrics_func(metrics)
     trainer.test(lightning_model, dataloaders=test_dataloader)
 
 
-def run_inference(args, recipe: SisoRecipe) -> None:
-    test_dataloader = _test_dataloader(recipe, "eval", args.inference_sr)
+def run_inference(
+    args,
+    recipe: BaseRecipe,
+    init_model: Optional[Callable] = None,
+    folder_content: Optional[Dict] = None,
+) -> None:
+    init_model = init_model or init_model_for_task(recipe.task)
+    test_dataloader = _test_dataloader(
+        recipe,
+        "eval",
+        args.inference_sr,
+        folder_content=folder_content,
+        split_to_chunks_with_size=getattr(args, "split_to_chunks_with_size", None),
+    )
     trainer = L.Trainer(
         inference_mode=True, default_root_dir=recipe.dataset.proc_output_folder
     )
     state_dict = torch.load(args.ckpt_path, map_location="cpu")["state_dict"]
-    lightning_model = init_siso_model(recipe.model)
+    lightning_model = init_model(recipe.model)
     lightning_model.reload_checkpoint(state_dict)
     create_folder(recipe.dataset.proc_output_folder)
     lightning_model.register_proc_output_folder(recipe.dataset.proc_output_folder)
     trainer.predict(lightning_model, dataloaders=test_dataloader)
 
 
-def run_stages(args, recipe: SisoRecipe, train_dataloader=None, valid_dataloader=None) -> None:
-    """Run whichever stages the CLI asked for, in the order they depend on each other."""
+def run_stages(
+    args,
+    recipe: BaseRecipe,
+    train_dataloader=None,
+    valid_dataloader=None,
+    *,
+    init_model: Optional[Callable] = None,
+    write_batch: Callable = write_separation_batch,
+    metrics: Optional[Dict] = WAVEFORM_METRICS,
+    folder_content: Optional[Dict] = None,
+) -> None:
+    """Run whichever stages the CLI asked for, in the order they depend on each other.
+
+    The four keyword arguments are everything that was ever task-specific about
+    these stages, and their defaults are the separation tasks':
+
+    * ``init_model`` -- None resolves it from ``recipe.task``, which is what
+      every entry point wants; pass one only to build something else.
+    * ``write_batch`` -- what a dumped batch looks like on disk.
+    * ``metrics`` -- the scoring table; None means the task has none yet, and
+      ``--scoring`` says so instead of half-running.
+    * ``folder_content`` -- extra manifests the eval corpus carries.
+    """
     if args.dump_training_samples:
-        dump_training_samples(train_dataloader)
+        dump_training_samples(train_dataloader, write_batch=write_batch)
     if args.training:
-        run_training(args, recipe, train_dataloader, valid_dataloader)
+        run_training(args, recipe, train_dataloader, valid_dataloader, init_model)
     if args.scoring:
-        run_scoring(args, recipe)
+        run_scoring(args, recipe, init_model, metrics, folder_content)
     if args.inference:
-        run_inference(args, recipe)
+        run_inference(args, recipe, init_model, folder_content)

@@ -7,16 +7,16 @@ English version: [`README.md`](README.md)
     # 產生 manifest
     python prepare_metafile.py --utt2gender_path=utt2gender.txt --insert_root_path=/corpus/path manifest wav2scp utt2spk
     # 訓練
-    python main.py --training=True work.yaml
+    python main.py --training work.yaml
 
 ## 萃取語者 embedding
 
-    python main.py --inference=True --ckpt_path=ckpt_path work.yaml
+    python main.py --inference --ckpt_path ckpt_path work.yaml
 
 ## 計算 EER 分數
 
     # 為每個 utterance 萃取 embedding
-    python main.py --inference=True --ckpt_path=ckpt_path work.yaml
+    python main.py --inference --ckpt_path ckpt_path work.yaml
     # 計分
     python local/compute_eer.py eer_trail_file embeddings_folder score_file
 
@@ -36,7 +36,7 @@ English version: [`README.md`](README.md)
 ## 匯出模型為 ONNX 格式
 
     # 產生 ONNX 模型，輸出為 ckpt_path.onnx
-    python main.py --export_onnx=True --pretrained_ckpt_path=ckpt_path work.yaml
+    python main.py --export_onnx --pretrained_ckpt_path ckpt_path work.yaml
 
 ## 用 `Gradio` 執行你的 demo
 

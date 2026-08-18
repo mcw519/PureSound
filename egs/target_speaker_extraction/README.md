@@ -18,10 +18,10 @@ ratio) contrast.
 python prepare_metafile.py --help
 
 # Train
-python main.py --training=True config/default_config.yaml
+python main.py --training config/default_config.yaml
 
 # Inference
-python main.py --inference=True --ckpt_path=ckpt_path config/default_config.yaml
+python main.py --inference --ckpt_path ckpt_path config/default_config.yaml
 ```
 
 `--ckpt_path` on `--training` resumes a run (restores optimizer/scheduler/epoch); use

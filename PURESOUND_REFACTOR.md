@@ -415,7 +415,7 @@ config 的死旋鈕全部被報出來；刪掉 `added_noise` 後 RNG 指紋逐�
 | 3-1 | **Config 物件化**（已完成，改做註冊制而非聚合物件）| 見執行紀錄 |
 | ~~3-2~~ | **Config schema 驗證** → 因 A6 提前為 **2-5** | — |
 | 3-3 | **Loss 分派改註冊制**（已完成）| 見執行紀錄 |
-| 3-4 | `runner.py` 泛化到 MISO/SV，收掉 tse/sv main 的 866 行重複 | TSE/SV 解凍時。**目前凍結中，不要碰** |
+| 3-4 | `runner.py` 泛化到 MISO/SV（已完成）| 見執行紀錄 |
 | 3-5 | `dry_blend`/`spec_floor` 抽成獨立 `Postprocessor` | 要做 SDK 部署對齊時 |
 
 ---
@@ -1108,6 +1108,43 @@ all-silent batch 的 background target 也只在真的有 loss 要它時才合�
 **兩份清單改成一份**：provider 表抽成 `_loss_providers()` 方法，測試直接讀模組自己的表
 去檢查每個出貨 loss 的 `required_inputs` 是不是模組給得出來的。宣告一個打錯字的名字
 本來要到第一個真實 batch 才炸，現在在測試就紅。
+
+
+### 2026-08-18 — P3-4 `runner.py` 泛化到 TSE / SV
+
+驗收：`ruff` 全綠；`--suite standard` **773 passed**、`--suite full` **844 passed**（+13）；
+四個 main 的每個可達 stage 都 dry-run 過（都走到「缺語料」而不是「接線錯」）；
+6 個反向驗證被抓到、1 個沒抓到 → 改成把那個參數移除（見下）。
+
+**先修計畫的數字**：P3-4 原本寫「收掉 tse/sv main 的 866 行重複」。實際量到的是
+TSE 316 + SV 274 = 590 行 main，對照已經瘦身過的 NS 68 + VI 72。而且**函式層級的重複
+幾乎是零**——TSE/SV 的 main 大部分是 `if args.training:` 這種頂層腳本碼，不是函式，所以
+逐單元比對看不到它。真正重複的是**那些腳本碼在做 runner 已經有的事**。
+
+| | 前 | 後 |
+|---|---:|---:|
+| `egs/target_speaker_extraction/main.py` | 316 | **97** |
+| `egs/speaker_embedding/main.py` | 274 | **157**（其中 45 行是 SV 專屬的 ONNX 匯出） |
+| `puresound/system/runner.py` | 351 | 436 |
+
+runner 原本 SISO-only 的四個點各自變成一個 hook：`write_batch`（batch 帶哪些張量是
+task 的事）、`metrics`（None 代表這個 task 還沒有計分，`--scoring` 直接說出來而不是
+半跑）、`folder_content`（TSE 的 eval 語料多一份 `wav2enroll` 清單）、`init_model`。
+TSE 的 `init_model`（44 行）搬進 `puresound/recipes.py` 成為 `init_miso_model`。
+
+**反向驗證漏掉一條，於是把可以出錯的參數拿掉**：把 TSE 的 `init_model=init_miso_model`
+刪掉，**全套測試都沒紅**——因為 dry-run 會先在「缺語料」失敗，根本走不到建模型那步。
+所以改成 `MODEL_FACTORY_FOR_TASK` 表 + `init_model_for_task(recipe.task)`：entry point
+不再傳這個參數，也就沒有傳錯的可能。守門測試檢查表覆蓋每個 loader 接受的 task，且每份
+出貨 config 用**對的** factory 建得起來、用**另一個** factory 一定失敗。
+
+**CLI 有 breaking change**：SV / TSE 原本用 `str2bool`（`--training True`），現在跟
+NS / VI 一樣是 `store_true`（`--training`）。四份 README 的呼叫範例同步改掉，並加了
+測試盯住兩邊不再各走各的。
+
+**順手補上 main 的第一個測試**：四個 main 誰都不 import，所以 import 壞掉或 runner
+的 hook 改名，**除了使用者自己跑之外沒有任何地方會發現**。現在 `--help` 與共用旗標
+集合都有測試。
 
 
 ### 下一步
