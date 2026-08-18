@@ -965,13 +965,47 @@ offline-vs-streaming 對齊測試（DPCRN 有兩個）。這是行為變更不�
 修好之後 `_up_step` 就可以跟 `_down_step` 一起搬進 base。
 
 
+### 2026-08-18 — P2-4 沒做 mixin，做了它底下真正的洞
+
+驗收：`ruff` 全綠；`--suite standard` **745 passed**（+5）；4 個反向驗證全被抓到。
+
+**計畫寫的 `AuxHeadMixin` 不做，理由是量出來的**：全 repo 只有 `nnet/dpcrn.py` 一個
+backbone 掛輔助 head（`dparn` / `dprnn` / `tfgridnet` 都沒有）。為一個使用者發明共用
+抽象，正是 P2-3 我拒絕對 `_up_step` 做的事。
+
+`collect_side_outputs()` 那半也不做：`last_vad_logits` / `last_dist_preds` /
+`last_background_vad_logits` 這三個屬性名被 **11 處讀取**——`system/siso.py`、三個
+loss 的 `_logits_attr`、五支 eval 腳本、測試。它不是內部細節，是已發布的介面；換掉是
+churn 不是清理。
+
+**真正的洞在 head 的設定解析**：兩個 head 都用裸 dict + `.get(key, default)` 建構，
+而 `.get` 對拼錯的鍵回答預設值。實測：
+
+```
+vad_head: {enabled: true, hiden: 64}   -> head 蓋成 bottleneck 寬度，整個 run 靜默訓練錯的容量
+vad_head: {enabld: true}               -> head 根本沒掛上
+vad_head: {enabled: true, kernel_t: 0} -> 接受
+```
+
+這正是 2-5 的 Pydantic 遷移為 augmentation 消滅的那一類 bug，只是 head 區塊當時沒被
+涵蓋。改法：`VADHeadConfig` / `DistHeadConfig`（`StrictConfig`，`extra="forbid"`）與
+`VADHead.from_config` / `DistHead.from_config` 都放在 `nnet/lobe/heads.py`——head、
+它的設定、它的預設值、還有 enabled 閘門，四件事收在一起。`nnet` 匯入
+`puresound.config.base` 不成環（config 套件不匯入 torch 也不匯入任何 task）。
+
+`hidden` 的預設是**唯一留在 backbone 的**：預設值是 bottleneck 寬度，只有 backbone
+知道，所以設定模型寫 None、由 backbone 決定，而不是在兩邊各寫一次。
+
+checkpoint key 沒動：`self.vad_head = ...` 的屬性名就是 `backbone.vad_head.*`。
+
+
 ### 下一步
 
 1. **P2-6（清死旋鈕與死 payload）**——schema 已經把 33 份 config 的問題全部列出來了；
    `added_noise` 那塊（4 組 flag 重播、約 90 行、無人消費）也可以一起處理。
    此項已完成，包含現役設定與無法執行的 backup 設定。
-2. P2-2（拆 `_apply_overlap_gating`，複雜度 14）、P2-3（streaming 抽共用基底，
-   308 行重複）、P2-4（輔助 head 掛載樣板化）。
+2. P2-2 / P2-3 / P2-4 已完成（P2-4 改做設定驗證，mixin 經量測後判定不值得，見執行紀錄）。
+   P2 全數結案。
 3. `__getitem__` 仍是複雜度 25 的長函式——剩下的是「這一列是什麼」的決策
    （row plan、interferer、mix、target-absent、echo、noise、VAD 標記、metadata）。
    要再降就是把 noise 那段也抽出去，但它與 room_scene 耦合，切線不像裝置鏈那麼乾淨。

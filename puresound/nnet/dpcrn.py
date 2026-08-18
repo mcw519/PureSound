@@ -183,23 +183,13 @@ class DPCRN(Unet):
             fused_type="FiLM",
         )
 
-        if vad_head is not None and vad_head.get("enabled", False):
-            self.vad_head = VADHead(
-                enc_channels=channels[-1],
-                hidden=vad_head.get("hidden", channels[-1]),
-                kernel_t=vad_head.get("kernel_t", 5),
-            )
-        else:
-            self.vad_head = None
+        # Attribute names are the checkpoint keys (`backbone.vad_head.*`), so
+        # they are load-bearing; what each head is built from lives with the
+        # head, in `nnet/lobe/heads.py`.
+        self.vad_head = VADHead.from_config(vad_head, enc_channels=channels[-1])
         self.last_vad_logits: Optional[torch.Tensor] = None
 
-        if dist_head is not None and dist_head.get("enabled", False):
-            self.dist_head = DistHead(
-                enc_channels=channels[-1],
-                hidden=dist_head.get("hidden", 128),
-            )
-        else:
-            self.dist_head = None
+        self.dist_head = DistHead.from_config(dist_head, enc_channels=channels[-1])
         self.last_dist_preds: Optional[torch.Tensor] = None
 
     def forward(

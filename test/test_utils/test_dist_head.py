@@ -4,6 +4,7 @@ import math
 
 import pytest
 import torch
+from pydantic import ValidationError
 
 from puresound.nnet.dpcrn import DPCRN
 from puresound.nnet.loss import DistHeadRegressionLoss
@@ -74,3 +75,43 @@ def test_dist_loss_missing_keys_and_targets():
 def test_dist_loss_requires_head():
     with pytest.raises(ValueError):
         DistHeadRegressionLoss()(None, {})
+
+
+# --------------------------------------------------------------------------- #
+# Head blocks are validated, not `.get`-ed
+# --------------------------------------------------------------------------- #
+
+BOTTLENECK = 16  # `_tiny_dpcrn`'s channels[-1]
+
+
+@pytest.mark.parametrize(
+    "block,expected",
+    [
+        ({"enabled": True, "hiden": 64}, "hiden"),  # misspelt size
+        ({"enabld": True}, "enabld"),  # misspelt gate -- head silently absent
+        ({"enabled": True, "kernel_t": 0}, "kernel_t"),  # nonsensical value
+    ],
+)
+def test_a_misspelt_head_key_is_an_error_not_a_default(block, expected):
+    """`.get(key, default)` answers a typo with the default.
+
+    Not hypothetical: `vad_head: {enabled: true, hiden: 64}` used to build a
+    head at the bottleneck width instead of 64 and train a whole run that way,
+    silently. The gate was worse -- a typo on `enabled` left the head off
+    entirely. Same reason the augmentation blocks are `extra="forbid"`.
+    """
+    with pytest.raises(ValidationError, match=expected):
+        _tiny_dpcrn(vad_head=block)
+
+
+def test_the_head_width_still_defaults_to_the_bottleneck():
+    """The one default the config model cannot hold: only the backbone knows
+    how wide its own bottleneck is, so the model says None and it decides."""
+    assert _tiny_dpcrn(vad_head={"enabled": True}).vad_head.proj.out_features == BOTTLENECK
+    assert _tiny_dpcrn(vad_head={"enabled": True, "hidden": 64}).vad_head.proj.out_features == 64
+
+
+def test_a_disabled_or_absent_block_attaches_no_head():
+    assert _tiny_dpcrn(vad_head={"enabled": False}).vad_head is None
+    assert _tiny_dpcrn().vad_head is None
+    assert _tiny_dpcrn().dist_head is None
