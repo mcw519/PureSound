@@ -889,6 +889,37 @@ converter 之後整列會被重新配置增益，所以那個「絕對」是相�
 不精確的只是文件用語。真要模型化轉換器自身的電子雜訊，那一份要加在 converter
 之後、且不隨增益走。
 
+### 2026-08-18 — P2-2 抽出 `OverlapGating`
+
+驗收：`ruff` 全綠；`--suite standard` **740 passed**（+13）；現役 `train_dpcrn.yaml`
+指紋 **1954 個 hash 全同**（40 個 item，逐位元）；8 個反向驗證全數被抓到。
+
+計畫寫的是「拆成 `_turn_taking_envelope` / `_bernoulli_envelope`」，實際做成整塊抽出
+`puresound/task/overlap_gating.py`——理由跟 `DeviceChain` 一樣：這段除了
+`gating_vad_labeler` 與 `overlap_control` 之外對 dataset 沒有任何依賴，是一個自足的
+演算法而不是 `__getitem__` 的一段。`ns.py` **1056 → 881 行**，`_apply_overlap_gating`
+的複雜度 14 消失（新模組每個方法都在 10 以下）。
+
+**順手殺掉一組 flag + 延後重播**：`_last_overlap_fraction` / `_last_turn_taking` 這兩個
+實例狀態在 `__getitem__` 開頭初始化、在 gating 裡寫入、在同一次呼叫的尾端讀出——正是
+review 的 B1 指出、`ChainResult` 已經處理過的樣式。改成 `GatingResult` 帶回來，實例
+狀態歸零。
+
+**`_turn_taking_override` 留在 dataset**：它讀 `RowPlan` 決定這一列要不要提高
+turn-taking 率，`voice_isolation.py` 有自己的覆寫。那是呼叫端的政策，抽出去的元件只
+收一個已經決定好的機率——切線乾淨。
+
+**測試裡修掉一個我自己寫錯的理由**：`_draw_overlap_rate` 原本被我註解成「no-overlap
+不能消耗第二個值，否則會位移後面的抽樣」。那是錯的——三個 regime 本來就消耗不同數量的
+值。真正的性質是門檻順序不可調換，已改寫。
+
+**反向驗證漏掉一條、補起來**：把 turn-taking 的機率抽樣提到 short-circuit 之前，八條
+裡唯一沒被抓到的。原因是三個 pass-through 案例根本沒走到那個分支，而「關掉」與「沒觸發」
+彼此都不抽值、互相比不出來。補的測試改用**絕對抽樣數**：`no_overlap_prob=1.0` 時
+Bernoulli 路徑的消耗剛好是 regime roll + fill rate + 每 frame 一個值，拿實作用的同一組
+primitive 重放一次比對串流位置。
+
+
 ### 下一步
 
 1. **P2-6（清死旋鈕與死 payload）**——schema 已經把 33 份 config 的問題全部列出來了；
