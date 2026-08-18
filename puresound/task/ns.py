@@ -20,6 +20,7 @@ from puresound.task.device_chain import (
     DEVICE_CHAIN_SCALARS,
     device_chain_from_blocks,
 )
+from puresound.task.noise_stage import NoiseStage
 from puresound.task.overlap_gating import OverlapGating
 
 
@@ -82,6 +83,7 @@ class NoiseSuppressionDataset(DynamicBaseDataset):
                 "augmentation_speech.mix_mode needs dataset.task: voice_isolation"
             )
         self.device_chain = device_chain_from_blocks(self.augmentor, self)
+        self.noise_stage = NoiseStage(self.augmentor, self.augmentation_noise_args)
         self.overlap_gating = OverlapGating(
             self.augmentation_speech_args.overlap_control
             if self.augmentation_speech_args
@@ -523,113 +525,13 @@ class NoiseSuppressionDataset(DynamicBaseDataset):
                 noisy_speech = noisy_speech[0].view(1, -1)
                 target_speech = target_speech[0].view(1, -1)
 
-        # Noise
-        if (
-            self.augmentation_noise_args
-            and self.augmentation_noise_args.used
-            and torch.rand(1) < self.augmentation_noise_args.prob
-        ):
-            dynamic_type = False
-            snr = (
-                torch.FloatTensor(1)
-                .uniform_(
-                    self.augmentation_noise_args.snr_range[0],
-                    self.augmentation_noise_args.snr_range[1],
-                )
-                .item()
-            )
-            # Record before the white-noise branch below re-draws ``snr``.
-            noise_snr = snr
-
-            # 1 / 4 cases add dynamic noise type
-            if torch.rand(1) < self.augmentation_noise_args.prob / 4:
-                dynamic_type = True
-
-            # Room coloring: give the noise a channel of the SAME room the
-            # speech was rendered in, so the noise floor is spatially coherent
-            # with the mixture instead of arriving dry from nowhere. Guarded:
-            # an absent/disabled block never touches the RNG stream.
-            noise_transform = None
-            room_cfg = self.augmentation_noise_args.room_coloring
-            if (
-                room_cfg
-                and room_cfg.used
-                and room_scene is not None
-                and torch.rand(1).item() < room_cfg.prob
-            ):
-                mix_sr = self.audio_sr
-
-                def noise_transform(n, _sr=mix_sr, _scene=room_scene):
-                    reverbed, _ = self.augmentor.apply_rir(
-                        wav=n,
-                        rir_mode="full",
-                        sr=_sr,
-                        room_scene=_scene,
-                        source_role="interferer",
-                    )
-                    return reverbed
-
-            noisy_speech, _ = self.augmentor.add_bg_noise(
-                wav=noisy_speech,
-                snr_list=[snr],
-                dynamic_type=dynamic_type,
-                sr=self.audio_sr,
-                noise_transform=noise_transform,
-            )
-            # unwrap list
-            noisy_speech = noisy_speech[0]
-
-            # if dynamic is False, 1 / 4 add white noise
-            if (
-                not dynamic_type
-                and torch.rand(1) < self.augmentation_noise_args.prob_white_noise
-            ):
-                snr = (
-                    torch.FloatTensor(1)
-                    .uniform_(
-                        self.augmentation_noise_args.white_noise_snr_range[0],
-                        self.augmentation_noise_args.white_noise_snr_range[1],
-                    )
-                    .item()
-                )
-                noisy_speech, _ = self.augmentor.add_bg_white_noise(
-                    wav=noisy_speech, snr_list=[snr]
-                )
-
-        if isinstance(noisy_speech, list):
-            noisy_speech = noisy_speech[0]
-
-        # Capture noise floor: a level that does NOT scale with the speech.
-        # A deployed mic's self-noise and the room's own tone sit where they sit
-        # whoever is talking, and the SNR-relative noise above cannot express
-        # that. Mixture only, and before the device chain deliberately, so it
-        # picks up the device response the way capsule noise does.
-        #
-        # "dBFS" is the level as *drawn*, not as delivered. The converter at the
-        # end of the chain gain-stages the whole row, so a floor drawn at -45
-        # arrives lower by however much that row was turned down -- on the
-        # shipped recipe, the 29% of rows it touches move by a median of 1.0 dB
-        # and 6.3 dB at p5. That is correct for capsule and room noise: both sit
-        # upstream of the preamp and both follow it. A converter's *own*
-        # electronic noise would not, and would have to be added after
-        # `_analogue_to_digital` -- at roughly -90 dBFS it is 40 dB below
-        # anything this range draws, which is why there is no such stage.
-        #
-        # Guarded: absent/disabled block never touches the RNG stream.
-        floor_cfg = (
-            self.augmentation_noise_args.absolute_floor
-            if self.augmentation_noise_args
-            else None
+        # Noise: recorded at an SNR (optionally through this row's room), white
+        # noise, then the absolute capture floor. Order and RNG discipline are
+        # the stage's contract -- see puresound/task/noise_stage.py.
+        noise = self.noise_stage.apply(
+            noisy_speech, sample_rate=self.audio_sr, room_scene=room_scene
         )
-        if (
-            floor_cfg
-            and floor_cfg.used
-            and torch.rand(1).item() < floor_cfg.prob
-        ):
-            lo, hi = floor_cfg.level_dbfs_range
-            floor_dbfs = torch.empty(1).uniform_(float(lo), float(hi)).item()
-            floor = torch.randn_like(noisy_speech) * (10.0 ** (floor_dbfs / 20.0))
-            noisy_speech = noisy_speech + floor
+        noisy_speech, noise_snr = noise.noisy, noise.snr
 
         # Snapshot the clean target for VAD labeling before the downstream
         # distortion chain (SRC / IIR / HPF / volume / clipping). Silero VAD
