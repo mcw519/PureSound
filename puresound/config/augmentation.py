@@ -116,6 +116,17 @@ class RoomColoringConfig(StrictConfig):
 
 
 class AbsoluteFloorConfig(StrictConfig):
+    """A capture noise floor that does not scale with the speech.
+
+    `level_dbfs_range` is the level as drawn, upstream of the device chain --
+    not the level in the delivered row. The chain's converter gain-stages the
+    whole row when the analogue path runs hot, which carries the floor down with
+    it, and that is the point: capsule self-noise and room tone both sit before
+    the preamp and both follow it. Read the realized level off the row, not off
+    this knob. See `NoiseSuppressionDataset.__getitem__` for why a converter's
+    own electronic noise would need a different stage entirely.
+    """
+
     used: StrictBool = False
     prob: Probability = 0.0
     level_dbfs_range: FloatRange = (-55.0, -35.0)

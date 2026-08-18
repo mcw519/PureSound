@@ -631,13 +631,23 @@ class NoiseSuppressionDataset(DynamicBaseDataset):
         if isinstance(noisy_speech, list):
             noisy_speech = noisy_speech[0]
 
-        # Absolute capture floor: a noise floor anchored to digital full scale,
-        # NOT to the mixture level -- a deployed mic's self-noise + room tone
-        # sit at a fixed level whoever is speaking. The SNR-relative noise
-        # above cannot express this (it scales with the speech). Added to the
-        # mixture only, before the device chain, so it inherits the device
-        # response like real capsule noise. Guarded: absent/disabled block
-        # never touches the RNG stream.
+        # Capture noise floor: a level that does NOT scale with the speech.
+        # A deployed mic's self-noise and the room's own tone sit where they sit
+        # whoever is talking, and the SNR-relative noise above cannot express
+        # that. Mixture only, and before the device chain deliberately, so it
+        # picks up the device response the way capsule noise does.
+        #
+        # "dBFS" is the level as *drawn*, not as delivered. The converter at the
+        # end of the chain gain-stages the whole row, so a floor drawn at -45
+        # arrives lower by however much that row was turned down -- on the
+        # shipped recipe, the 29% of rows it touches move by a median of 1.0 dB
+        # and 6.3 dB at p5. That is correct for capsule and room noise: both sit
+        # upstream of the preamp and both follow it. A converter's *own*
+        # electronic noise would not, and would have to be added after
+        # `_analogue_to_digital` -- at roughly -90 dBFS it is 40 dB below
+        # anything this range draws, which is why there is no such stage.
+        #
+        # Guarded: absent/disabled block never touches the RNG stream.
         floor_cfg = (
             self.augmentation_noise_args.absolute_floor
             if self.augmentation_noise_args

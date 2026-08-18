@@ -26,6 +26,37 @@ private path.
 column and fails the deployment gate; reading either one alone gets the decision wrong.
 `full_gate/` exists so the whole picture stays together.
 
+## Which numbers survive a synthesis change
+
+Half of these stages read fixed audio off disk; half synthesise it at eval time
+through `puresound`'s device chain. Only the second half moves when that chain
+changes, and mixing the two across a chain boundary is how a data change gets
+read as a model change.
+
+| stage | audio comes from | chain-dependent |
+|---|---|---|
+| 1 real scorecard (QVF + field) | real recordings | no |
+| **2 in-domain SI-SDRi + buckets** | `eval_indomain.py`, synthesised per batch | **yes** |
+| **3-5 far-only probes** (expand / high / boundary) | same | **yes** |
+| 6 Dawn Chorus WER | real corpus | no |
+| 7a / 7b / 8 WER sets | pre-built by `build_wer_set.py`, own convolution | no |
+| 9 turn-taking scorecard | frozen set on disk | no — but `build_turntaking_set.py` **is** chain-dependent, so rebuilding the set moves it |
+
+**The boundary is `9c56e02` (2026-08-18)**, which made the device chain's
+analogue path actually linear. Six stages were silently saturating at full
+scale, and the fix changed 9.0% of mixtures and 2.8% of targets by more than 1%
+of peak. Output level barely moved (RMS median −20.5 → −20.8 dBFS) and the RNG
+stream did not move at all, so the same seed still draws the same utterances --
+but rows 2-5 are a different test set either side of it.
+
+`run_full_benchmark.sh` stamps `chain=<sha>` into the summary header. **Every
+record committed before this section existed predates the fix**; treat a record
+with no `chain=` in its header as pre-`9c56e02`, and do not rank its synthetic
+rows against a post-fix run. The real-recording stages -- which is where the
+deployment gate and the QVF cross-chain wall live -- are unaffected and remain
+comparable all the way back.
+
+
 ## The field benchmark
 
 `field_test_vector/` is the one that decides deployment questions: two hand-labelled real

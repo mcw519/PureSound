@@ -14,6 +14,15 @@ DEV="${3:-cuda}"
 BLEND="${4:-1.0}"
 SD="${BENCH_SD:-${TMPDIR:-/tmp}}"
 OUT="$SD/bench_$TAG"; mkdir -p "$OUT"
+
+# Synthesis-chain provenance, stamped into the summary so a record says which
+# chain produced it. Stages 2-5 synthesise their audio at eval time through
+# puresound's device chain, so their numbers only compare against records made
+# on the same chain -- 9c56e02 (2026-08-18) made the analogue path linear and
+# changed ~9% of rows. Stages 1, 6, 7 and 8 read fixed audio off disk and are
+# unaffected. See benchmarks/README.md.
+CHAIN="$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
+[ -z "$(git status --porcelain -- ../../puresound 2>/dev/null)" ] || CHAIN="$CHAIN+dirty"
 ASR=faster-whisper; ASR_MODEL=large-v3   # strong ASR reveals over-suppression whisper-small hides
 say(){ echo "[bench $(date +%H:%M:%S)] $*"; }
 
@@ -78,10 +87,11 @@ uv run python scripts/eval_turntaking.py config/infer_dpcrn.yaml \
   --ckpt "$CKPT" --set-dir "$TT_SET" --device "$DEV" \
   --dry-blend "$BLEND" > "$OUT/9_turntaking.log" 2>&1
 
-echo; echo "================ BENCHMARK SUMMARY [$TAG]  (dry_blend=$BLEND) ================"
+echo; echo "================ BENCHMARK SUMMARY [$TAG]  (dry_blend=$BLEND, chain=$CHAIN) ================"
 echo "--- real scorecard ---";        grep -E "scenario|# (ours|gate_|reference):" "$OUT/1_scorecard.log" 2>/dev/null
 echo "--- field scorecard ---";       grep -E "_session|# ours:" "$OUT/1_scorecard_field.log" 2>/dev/null
 echo "    cold-start far verdicts:";  awk -F'\t' '/_far/ && $3=="ours" {v=$11; c[v]++} END {for (k in c) printf "      %-40s %d\n", k, c[k]}' "$OUT/1_scorecard_field.log" 2>/dev/null
+echo "--- SYNTHESISED below (in-domain + 3 probes): produced by chain=$CHAIN, compare only against records on the same chain ---"
 echo "--- in-domain ---";             grep -E "SI-SDRi :|1N\+0F|F-only|median power|interferer-solo leakage|by turn_taking" -A1 "$OUT/2_indomain.log" 2>/dev/null | grep -vE "^--$"
 echo "--- probe expand/high/boundary (F-only median) ---"
 for f in 3_probe_expand 4_probe_high 5_probe_boundary; do echo -n "$f: "; grep "median power reduction" "$OUT/$f.log" 2>/dev/null | tail -1; done
