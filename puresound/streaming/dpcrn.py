@@ -29,6 +29,8 @@ from puresound.nnet.masker import Masker
 # "stft_frame_ort", state read from JSON), so the DPARN runtime handles a DPCRN
 # manifest unchanged. Re-exported under a DPCRN name for callers/CLIs.
 from puresound.streaming.base import (
+    IDENTITY,
+    Postprocessor,
     StreamingFrameModelBase,
     StreamingOrt,
     StreamingVariant,
@@ -414,7 +416,14 @@ def export_streaming_dpcrn_onnx(
     onnx_path: str | Path,
     manifest_path: str | Path | None = None,
     opset_version: int = 17,
+    postprocess: Postprocessor = IDENTITY,
 ) -> dict[str, Any]:
     return export_streaming_onnx(
-        _VARIANT, config_path, checkpoint_path, onnx_path, manifest_path, opset_version
+        _VARIANT,
+        config_path,
+        checkpoint_path,
+        onnx_path,
+        manifest_path,
+        opset_version,
+        postprocess,
     )

@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import json
 import time
+import warnings
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Sequence
@@ -38,6 +39,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from puresound.system.postprocess import IDENTITY, Postprocessor
 from puresound.utils import load_hparam
 
 
@@ -181,7 +183,16 @@ def export_streaming_onnx(
     onnx_path: str | Path,
     manifest_path: str | Path | None = None,
     opset_version: int = 17,
+    postprocess: Postprocessor = IDENTITY,
 ) -> dict[str, Any]:
+    """Trace the frame model to ONNX and write the manifest a runtime reads.
+
+    ``postprocess`` is recorded, not applied: the graph contains the model and
+    nothing after it, so a runtime that executes the graph alone is running a
+    different system than a benchmark at ``dry_blend 0.9``. Putting the setting
+    in the manifest is what lets the runtime reproduce the benchmarked
+    configuration instead of a shell flag having to be remembered twice.
+    """
     import onnxruntime
 
     frame_model = load_streaming_model(variant, config_path, checkpoint_path)
@@ -255,6 +266,11 @@ def export_streaming_onnx(
             for name, tensor in zip(frame_model.state_input_names, state)
         },
         "providers": providers or ["CPUExecutionProvider"],
+        # Applied by the runtime after the graph, not baked into it. Carries
+        # `suppression_ceiling_db` too, because `dry_blend` bounds how deep the
+        # deployed system can attenuate and that is worth reading off the
+        # artefact rather than deriving it again.
+        "postprocess": postprocess.as_manifest(),
     }
     manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
     return manifest
@@ -281,6 +297,43 @@ class StreamingOrt:
         self.hop_length = int(self.manifest["hop_length"])
         self.freq_bins = int(self.manifest["freq_bins"])
         self.window = np.hanning(self.win_length + 1)[:-1].astype(np.float32)
+        # Post-graph relief, from the manifest. `export_streaming_onnx` records
+        # it because the traced graph stops at the model, so a runtime that only
+        # executes the graph is not the system the benchmarks measured. The SDK's
+        # portable copy of this loop reads the same key -- see
+        # `test_sdk_postprocess.py`, which pins the two against each other.
+        postprocess = self.manifest.get("postprocess") or {}
+        if "postprocess" not in self.manifest:
+            label = f"manifest {self.manifest_path}"
+            warnings.warn(
+                f"{label} has no `postprocess` section, so this runtime will "
+                "apply no over-suppression relief. Exports predating that field "
+                "look identical to one that deliberately asked for none -- and "
+                "the released default is dry_blend 0.9 (see "
+                "egs/voice_isolate/README.md), which caps suppression at -20 dB. "
+                "Re-export with `--dry-blend` to make the artefact say which it "
+                "is.",
+                RuntimeWarning,
+                stacklevel=3,
+            )
+        spec_floor = float(postprocess.get("spec_floor", 0.0))
+        if spec_floor > 0.0:
+            raise ValueError(
+                f"manifest requests spec_floor={spec_floor}, which this runtime "
+                "does not implement. Re-export with spec_floor=0.0 or add it here."
+            )
+        self.dry_blend = float(postprocess.get("dry_blend", 1.0))
+        if not 0.0 < self.dry_blend <= 1.0:
+            raise ValueError(
+                f"manifest dry_blend must be in (0, 1], got {self.dry_blend}"
+            )
+        # The overlap-add is index-aligned, so this is purely the graph's own
+        # look-ahead latency: its output at a given index carries the input from
+        # this many samples earlier, and the blend has to match or it mixes in a
+        # slice of the mixture 30 ms away from the speech it is relieving.
+        self.dry_delay = (
+            int(self.manifest.get("streaming_delay_frames", 0)) * self.hop_length
+        )
         self.reset()
 
     @staticmethod
@@ -304,6 +357,44 @@ class StreamingOrt:
         self.input_buffer = np.zeros(0, dtype=np.float32)
         self.ola = np.zeros(0, dtype=np.float32)
         self.ola_norm = np.zeros(0, dtype=np.float32)
+        self.dry_history = np.zeros(0, dtype=np.float32)
+        self.dry_history_start = 0
+        self.emitted = 0
+
+    def _remember_dry(self, samples: np.ndarray) -> None:
+        if self.dry_blend >= 1.0:
+            return
+        self.dry_history = np.concatenate([self.dry_history, samples])
+
+    def _blend_dry(self, enhanced: np.ndarray) -> np.ndarray:
+        """Mix the untouched input back in, aligned to what the graph enhanced.
+
+        Output samples with no corresponding input yet -- the first
+        ``streaming_delay_frames`` worth, which is warm-up -- pass through
+        unblended, because there is nothing to blend them with.
+        """
+        if self.dry_blend >= 1.0 or enhanced.size == 0:
+            return enhanced
+        start = self.emitted - self.dry_delay
+        self.emitted += enhanced.size
+        out = enhanced.astype(np.float32, copy=True)
+        history_end = self.dry_history_start + self.dry_history.size
+        lo = max(start, self.dry_history_start)
+        hi = min(start + enhanced.size, history_end)
+        if hi > lo:
+            span = slice(lo - start, hi - start)
+            reference = self.dry_history[
+                lo - self.dry_history_start : hi - self.dry_history_start
+            ]
+            out[span] = (
+                self.dry_blend * enhanced[span] + (1.0 - self.dry_blend) * reference
+            )
+        np.clip(out, -1.0, 1.0, out=out)
+        keep_from = max(0, self.emitted - self.dry_delay - self.dry_history_start)
+        if keep_from > 0:
+            self.dry_history = self.dry_history[keep_from:]
+            self.dry_history_start += keep_from
+        return out
 
     def run_frame(self, noisy_frame: np.ndarray) -> np.ndarray:
         noisy_frame = np.asarray(noisy_frame, dtype=np.float32)
@@ -341,12 +432,13 @@ class StreamingOrt:
 
     def process_samples(self, samples: np.ndarray) -> np.ndarray:
         samples = np.asarray(samples, dtype=np.float32).reshape(-1)
+        self._remember_dry(samples)
         self.input_buffer = np.concatenate([self.input_buffer, samples])
         chunks = []
         while self.input_buffer.shape[0] >= self.win_length:
             frame = self.input_buffer[: self.win_length]
             self.input_buffer = self.input_buffer[self.hop_length :]
-            chunks.append(self._add_ola_frame(self._process_frame(frame)))
+            chunks.append(self._blend_dry(self._add_ola_frame(self._process_frame(frame))))
         return np.concatenate(chunks) if chunks else np.zeros(0, dtype=np.float32)
 
     def flush(self) -> np.ndarray:
@@ -356,10 +448,10 @@ class StreamingOrt:
             n = min(self.input_buffer.size, self.win_length)
             frame[:n] = self.input_buffer[:n]
             self.input_buffer = self.input_buffer[min(self.hop_length, self.input_buffer.size) :]
-            chunks.append(self._add_ola_frame(self._process_frame(frame)))
+            chunks.append(self._blend_dry(self._add_ola_frame(self._process_frame(frame))))
         if self.ola.size:
             tail = self.ola / np.maximum(self.ola_norm, 1e-8)
-            chunks.append(tail.astype(np.float32))
+            chunks.append(self._blend_dry(tail.astype(np.float32)))
             self.ola = np.zeros(0, dtype=np.float32)
             self.ola_norm = np.zeros(0, dtype=np.float32)
         return np.concatenate(chunks) if chunks else np.zeros(0, dtype=np.float32)

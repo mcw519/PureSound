@@ -1191,6 +1191,58 @@ benchmark 量的那個系統——benchmark 有 −20 dB 上限、SDK 沒有。�
 不是清理；`as_manifest()` 已經準備好讓匯出把設定寫進 manifest。
 
 
+### 2026-08-18 — SDK 對齊：把 benchmark 量的那個系統真的出貨（P3-5 的後續）
+
+驗收：`ruff` 全綠；`--suite full` **889 passed**（+19）；14 個反向驗證中 12 個一次抓到、
+2 個補測試後也抓到。
+
+P3-5 記下「出貨的 streaming runtime 不是 benchmark 量的那個系統」。**要往哪邊對齊不用問**
+——repo 自己寫了：`run_full_benchmark.sh` 說「pass 0.9 to benchmark a checkpoint **the way
+it is deployed**」，`egs/voice_isolate/README.md` 第一行是「**Current default:
+dpcrn_v8.ckpt + `dry_blend 0.9`**」。所以 0.9 是預期的部署設定，SDK 只是漏了它。
+
+#### 對齊點不是「加一個乘法」，是對齊
+
+**每一份出貨的匯出 `streaming_delay_frames = 3`**（lookahead recipe），也就是圖的輸出
+比輸入晚 3 frame = 480 sample。逐索引混合會把**錯的 30 ms** 混進去。
+
+先實測確認 OLA 本身是逐索引對齊的（identity graph 重建輸入，best lag = 0），所以唯一的
+偏移就是圖自己的 lookahead。blend 的參考訊號必須取 `n − delay*hop`：
+
+```
+out[n] = dry_blend * enh[n] + (1 − dry_blend) * x[n − 480]
+```
+
+沒有對應輸入的前 480 sample（暖機）**原樣通過**，而不是跟零混合——後者等於發明一個乾訊號。
+
+#### 兩個 runtime，不是一個
+
+`sdk/.../runtime.py::StftFrameOrtProcessor` 之外，`puresound/streaming/base.py::StreamingOrt`
+是**另一份實作**——`demo.py` 與 `streaming_onnx.py infer` 用的是它，兩者都沒有 blend。
+逐方法比對：`_add_ola_frame` **100% 相同**、`flush` 96%、`_process_frame` 93%、
+`process_samples` 89%。這份重複是刻意的（SDK 不得 import puresound/torch），但刻意不等於
+免費，所以：兩邊都加上 blend，並補一個**兩個 runtime 對同一個 graph + manifest 必須輸出
+完全相同**的測試。那是唯一綁住這份重複的東西，也本來就該有。
+
+#### 設定走 manifest 而不是 shell flag
+
+`export_streaming_onnx(..., postprocess=Postprocessor(dry_blend=...))` 把
+`Postprocessor.as_manifest()`（含 `suppression_ceiling_db`）寫進 manifest；兩個 runtime
+都從那個鍵讀。`streaming_onnx.py export` 加 `--dry-blend`，**預設 0.9**（釋出設定）。
+`spec_floor` 兩邊都明確拒絕——出貨全是 0.0，拒絕勝過靜默 no-op。
+
+#### 既有五份 artefact 沒有硬塞
+
+`pretrained_ckpt/streaming/*.json`（v6–v10）全部早於這個欄位。README 只對 v7 / v8 明寫
+`dry_blend 0.9`，v6 / v9 / v10 沒寫——**替它們決定 0.9 就是我在編造意圖**。所以改成：
+runtime 遇到沒有 `postprocess` 鍵的 manifest 會 `RuntimeWarning`，說明它跟「刻意不要
+relief」長得一樣、釋出預設是 0.9、以及怎麼重新匯出。明寫 `dry_blend: 1.0` 不會警告——
+那是決定而不是缺欄位。README 也記了重新匯出的指令與 −20 dB 的代價。
+
+**兩條漏掉的反向驗證**：`spec_floor` 與 `dry_blend` 的 manifest 驗證原本只測了 SDK 那份，
+in-repo 那份拿掉一樣綠；已改成兩份都測。
+
+
 ### 下一步
 
 1. **P2-6（清死旋鈕與死 payload）**——schema 已經把 33 份 config 的問題全部列出來了；

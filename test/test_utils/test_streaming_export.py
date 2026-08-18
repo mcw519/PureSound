@@ -21,6 +21,7 @@ import yaml
 
 from test.test_utils.test_dparn_streaming import MINIMAL_DPARN_CONFIG
 
+from puresound.system.postprocess import Postprocessor
 from puresound.streaming import (
     StreamingOrt,
     export_streaming_dparn_onnx,
@@ -115,3 +116,41 @@ def test_the_exported_graph_loads_in_the_shared_runtime(tmp_path):
     runtime = StreamingOrt(onnx_path)
     enhanced = runtime.process_samples(torch.zeros(16000).numpy())
     assert enhanced.shape[0] <= 16000
+
+
+@pytest.mark.slow
+def test_the_export_records_the_postprocessing_the_runtime_must_apply(tmp_path):
+    """The graph stops at the model, so `dry_blend` has to travel in the manifest.
+
+    Both ends of one key, checked against a real export rather than a hand-built
+    dict: drop it from the export and the runtime silently falls back to 1.0,
+    which ships a system the scorecards never measured.
+    """
+    config = _CFG / "train_dpcrn_wide_causal.yaml"
+    torch.manual_seed(0)
+    frame_model = load_streaming_dpcrn_model(str(config))
+    checkpoint = tmp_path / "weights.ckpt"
+    torch.save({"state_dict": frame_model.system_model.state_dict()}, checkpoint)
+    onnx_path = tmp_path / "model.onnx"
+
+    manifest = export_streaming_dpcrn_onnx(
+        str(config), checkpoint, onnx_path, postprocess=Postprocessor(dry_blend=0.9)
+    )
+    assert manifest["postprocess"] == {
+        "dry_blend": 0.9,
+        "spec_floor": 0.0,
+        "suppression_ceiling_db": pytest.approx(-20.0),
+    }
+
+    runtime = StreamingOrt(onnx_path)
+    assert runtime.dry_blend == pytest.approx(0.9)
+
+    # And it is actually applied, not merely parsed.
+    quiet = StreamingOrt(onnx_path)
+    quiet.dry_blend = 1.0
+    samples = torch.zeros(8000).numpy()
+    samples[::200] = 0.5
+    blended = runtime.process_samples(samples)
+    unblended = quiet.process_samples(samples)
+    assert blended.shape == unblended.shape
+    assert not (blended == unblended).all()

@@ -25,6 +25,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from puresound.streaming import StreamingDpcrnOrt, export_streaming_dpcrn_onnx  # noqa: E402
+from puresound.system.postprocess import Postprocessor  # noqa: E402
 
 
 def export(args) -> None:
@@ -34,6 +35,10 @@ def export(args) -> None:
         onnx_path=args.onnx_path,
         manifest_path=args.manifest_path,
         opset_version=args.opset,
+        # Recorded in the manifest, applied by the runtime. The released default
+        # is 0.9 -- see egs/voice_isolate/README.md -- so an export at 1.0 ships
+        # something the scorecards never measured.
+        postprocess=Postprocessor(dry_blend=args.dry_blend),
     )
     print(json.dumps(manifest, indent=2))
 
@@ -152,6 +157,15 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("onnx_path", type=Path)
     p.add_argument("--manifest_path", type=Path, default=None)
     p.add_argument("--opset", type=int, default=17)
+    p.add_argument(
+        "--dry-blend",
+        dest="dry_blend",
+        type=float,
+        default=0.9,
+        help="over-suppression relief the RUNTIME applies after the graph "
+        "(default 0.9, the released setting; 1.0 disables it). Caps suppression "
+        "at 20*log10(1 - dry_blend) -- 0.9 means -20 dB.",
+    )
     p.set_defaults(func=export)
 
     p = sub.add_parser("infer", help="run streaming ONNX inference on an audio file")

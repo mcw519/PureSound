@@ -7,6 +7,8 @@ import torch.nn as nn
 
 from puresound.nnet.dparn import DPARN
 from puresound.streaming.base import (
+    IDENTITY,
+    Postprocessor,
     StreamingFrameModelBase,
     StreamingOrt,
     StreamingVariant,
@@ -268,7 +270,14 @@ def export_streaming_dparn_onnx(
     onnx_path: str | Path,
     manifest_path: str | Path | None = None,
     opset_version: int = 17,
+    postprocess: Postprocessor = IDENTITY,
 ) -> dict[str, Any]:
     return export_streaming_onnx(
-        _VARIANT, config_path, checkpoint_path, onnx_path, manifest_path, opset_version
+        _VARIANT,
+        config_path,
+        checkpoint_path,
+        onnx_path,
+        manifest_path,
+        opset_version,
+        postprocess,
     )

@@ -12,6 +12,25 @@ hard near/far cases while DPCRN/DPARN could — see "Pre-DPCRN history" below.
 
 ## Current default: `pretrained_ckpt/dpcrn_v8.ckpt` + `dry_blend 0.9`
 
+> **`dry_blend` is applied by the runtime, not by the graph.** The ONNX export
+> records it in the manifest (`postprocess.dry_blend`) and
+> `StreamingOrt` / the portable SDK apply it after the graph. The five manifests
+> under `pretrained_ckpt/streaming/` predate that field, so a runtime loading one
+> warns and applies **no** relief -- which is not the configuration any scorecard
+> in `benchmarks/` measured. Re-export to fix an artefact:
+>
+> ```bash
+> uv run python egs/voice_isolate/scripts/streaming_onnx.py export \
+>     egs/voice_isolate/config/train_dpcrn.yaml \
+>     egs/voice_isolate/pretrained_ckpt/dpcrn_v8.ckpt \
+>     egs/voice_isolate/pretrained_ckpt/streaming/dpcrn_v8.onnx --dry-blend 0.9
+> ```
+>
+> Note what the blend costs: it keeps `1 - dry_blend` of the input whatever the
+> model did, so 0.9 caps attenuation at exactly **-20 dB**
+> (`Postprocessor.suppression_ceiling_db`). A far-field residual reported near
+> -20 dB is measuring the blend, not the model.
+
 Trained with `config/train_dpcrn.yaml` (stage 8 below) and released **with the runtime blend as part
 of the configuration** — `out = 0.9 * enhanced + 0.1 * input`, which bounds attenuation to −20 dB.
 Stage 7 was the first version to suppress far-field speech in *real recordings* while keeping near
