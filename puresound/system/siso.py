@@ -318,11 +318,7 @@ class EncDecMaskBase(BaseLightningModule):
         """
 
         def side(name):
-            # Produced during the forward() that precedes this call. Nothing
-            # populates `last_background_vad_logits` today -- the head that did
-            # left with the conformer axis (380da2e) while the gate
-            # infrastructure was kept for reuse -- so the provider stays wired
-            # and BackgroundVADHeadBCELoss raises naming the head it wants.
+            # Produced during the forward() that precedes this call.
             return getattr(self.backbone, name, None)
 
         def background_vad_target():

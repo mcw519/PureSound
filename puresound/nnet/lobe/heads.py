@@ -15,23 +15,54 @@ The models are `extra="forbid"`, which is the same reason the augmentation
 blocks are.
 """
 
-from typing import Any, Mapping, Optional
+from typing import Any, Mapping, Optional, Sequence
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from pydantic import Field
+import torchaudio
+from pydantic import Field, field_validator
 
 from puresound.config.base import StrictConfig
 
 
 class VADHeadConfig(StrictConfig):
-    """``backbone_args.vad_head``. ``hidden`` defaults to the bottleneck width,
-    which only the backbone knows, so it is None here rather than duplicated."""
+    """``backbone_args.vad_head`` (and ``background_vad_head``). ``hidden``
+    defaults to the bottleneck width, which only the backbone knows, so it is
+    None here rather than duplicated.
+
+    ``ema_taus_s`` widens the head's evidence window: the presence decision was
+    measured to need ~1 s of audible speech while the plain head sees
+    ``kernel_t`` frames (50 ms). A bank of fixed exponential averages lets the
+    head read several time scales at once -- and, more to the point, the RATIO
+    between a fast and a slow average is envelope modulation depth, the DRR-fill
+    cue that separates near from far where per-frame DRR cannot. Decay rates are
+    fixed, not learned: a learned rate can drift to 0 (single-frame again) or 1
+    (a constant), and a fixed one keeps the time scale an explicit, reportable
+    hyperparameter. None (the default) builds exactly the pre-EMA architecture,
+    so existing gate checkpoints load bit-identically.
+    """
 
     enabled: bool = False
     hidden: Optional[int] = Field(default=None, gt=0)
     kernel_t: int = Field(default=5, gt=0)
+    ema_taus_s: Optional[tuple[float, ...]] = None
+    #: Bottleneck frames per second: sample_rate / encoder hop (16000/160).
+    frame_rate: float = Field(default=100.0, gt=0.0)
+
+    @field_validator("ema_taus_s", mode="before")
+    @classmethod
+    def _taus_positive(cls, v):
+        # YAML hands over a list; strict mode will not coerce it to the tuple
+        # annotation on its own.
+        if isinstance(v, list):
+            v = tuple(v)
+        if v is not None:
+            if len(v) == 0:
+                raise ValueError("ema_taus_s: give at least one tau or omit the key")
+            if any(t <= 0.0 for t in v):
+                raise ValueError(f"ema_taus_s must all be > 0 seconds, got {v}")
+        return v
 
 
 class DistHeadConfig(StrictConfig):
@@ -57,19 +88,73 @@ class VADHead(nn.Module):
             enc_channels=enc_channels,
             hidden=enc_channels if parsed.hidden is None else parsed.hidden,
             kernel_t=parsed.kernel_t,
+            ema_taus_s=parsed.ema_taus_s,
+            frame_rate=parsed.frame_rate,
         )
 
-    def __init__(self, enc_channels: int, hidden: int, kernel_t: int):
+    def __init__(
+        self,
+        enc_channels: int,
+        hidden: int,
+        kernel_t: int,
+        ema_taus_s: Optional[Sequence[float]] = None,
+        frame_rate: float = 100.0,
+    ):
         super().__init__()
         self.kernel_t = kernel_t
-        self.proj = nn.Linear(enc_channels, hidden)
+        self.ema_taus_s = tuple(float(t) for t in ema_taus_s) if ema_taus_s else ()
+        self.frame_rate = float(frame_rate)
+        # One decay per tau; alpha converts "seconds" into a per-frame step the
+        # same way everywhere in this repo: a = 1 - exp(-1/(tau * fps)).
+        self._alphas = [
+            1.0 - float(torch.exp(torch.tensor(-1.0 / (t * self.frame_rate))))
+            for t in self.ema_taus_s
+        ]
+        in_features = enc_channels * (1 + len(self.ema_taus_s))
+        self.proj = nn.Linear(in_features, hidden)
         self.dwconv = nn.Conv1d(hidden, hidden, kernel_t, padding=0, groups=1)
         self.act = nn.SiLU()
         self.out = nn.Conv1d(hidden, 1, 1)
 
+    def _ema_bank(self, h: torch.Tensor) -> torch.Tensor:
+        """Debiased exponential averages of the pooled bottleneck, one per tau.
+
+        The recurrence runs in float32 whatever the autocast dtype: with a 4 s
+        tau at 100 fps the step is a = 0.0025, and accumulating x*0.0025 into a
+        bf16 state loses the increment entirely -- the slow averages would
+        silently freeze.
+
+        ``lfilter`` hard-clips to [-1, 1] BY DEFAULT and bottleneck features are
+        not bounded by 1; ``clamp=False`` is load-bearing here, the same silent
+        saturation this repo dug out of six device-chain stages (9c56e02).
+
+        Debiasing: with zero initial state the EMA underestimates until it has
+        seen ~tau of input. The normalizer is closed-form
+        ``1 - (1-a)^(t+1)``, so dividing by it makes every average an average
+        *of what has been seen so far* from the first frame -- no warm-up
+        transient for the head to learn around, and the same semantics a
+        streaming implementation gets by carrying (state, normalizer).
+        """
+        n, c, t = h.shape
+        x = h.float()
+        steps = torch.arange(1, t + 1, device=h.device, dtype=torch.float32)
+        out = []
+        for a in self._alphas:
+            y = torchaudio.functional.lfilter(
+                x,
+                a_coeffs=x.new_tensor([1.0, -(1.0 - a)]),
+                b_coeffs=x.new_tensor([a, 0.0]),
+                clamp=False,
+            )
+            norm = 1.0 - (1.0 - a) ** steps  # [T], debias for the zero init
+            out.append((y / norm).to(h.dtype))
+        return torch.cat([h] + out, dim=1)  # [N, (K+1)C, T]
+
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         # x: [N, C, F, T] -> pool over F -> [N, C, T]
         h = x.mean(dim=2)  # [N, C, T]
+        if self._alphas:
+            h = self._ema_bank(h)  # [N, (K+1)C, T]
         h = self.proj(h.transpose(1, 2)).transpose(1, 2)  # [N, hidden, T]
         h = F.pad(h, (self.kernel_t - 1, 0))  # causal
         h = self.act(self.dwconv(h))

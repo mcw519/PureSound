@@ -212,12 +212,11 @@ class BackgroundVADHeadBCELoss(VADHeadBCELoss):
     explicit representation for background talkers without making background
     speech part of the enhanced output.
 
-    NOTE: no shipped backbone populates ``last_background_vad_logits`` today --
-    the head that did left with the conformer axis (380da2e), and the gate
-    infrastructure was deliberately kept for reuse on the real-data axis. So
-    this loss is a live hook waiting for a head, not a wired-up path: configure
-    it against a backbone without one and it raises below, naming the head it
-    actually wants.
+    The DPCRN backbone populates ``last_background_vad_logits`` when its
+    ``background_vad_head`` block is enabled. The original head left with the
+    conformer axis (380da2e) and this loss waited as a live hook until the v11
+    presence work brought a head back; against a backbone without one it still
+    raises below, naming the head it wants.
     """
 
     # Replaces the parent's declaration rather than negating it: the chain

@@ -142,6 +142,7 @@ class DPCRN(Unet):
         rnn_hidden: int = 128,
         spectral_compress: bool = False,
         vad_head: Optional[Dict] = None,
+        background_vad_head: Optional[Dict] = None,
         dist_head: Optional[Dict] = None,
     ):
         super().__init__(
@@ -189,6 +190,15 @@ class DPCRN(Unet):
         self.vad_head = VADHead.from_config(vad_head, enc_channels=channels[-1])
         self.last_vad_logits: Optional[torch.Tensor] = None
 
+        # Companion head: "is NON-target speech present now". Same block shape,
+        # separate weights -- BackgroundVADHeadBCELoss and the dataset's
+        # background_vad_reference have been waiting for it since the conformer
+        # axis left (380da2e).
+        self.background_vad_head = VADHead.from_config(
+            background_vad_head, enc_channels=channels[-1]
+        )
+        self.last_background_vad_logits: Optional[torch.Tensor] = None
+
         self.dist_head = DistHead.from_config(dist_head, enc_channels=channels[-1])
         self.last_dist_preds: Optional[torch.Tensor] = None
 
@@ -235,6 +245,11 @@ class DPCRN(Unet):
             self.last_vad_logits = self.vad_head(x)
         else:
             self.last_vad_logits = None
+
+        if self.background_vad_head is not None:
+            self.last_background_vad_logits = self.background_vad_head(x)
+        else:
+            self.last_background_vad_logits = None
 
         if self.dist_head is not None:
             self.last_dist_preds = self.dist_head(x)
