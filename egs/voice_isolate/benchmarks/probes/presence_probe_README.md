@@ -150,10 +150,44 @@ at about 0.90.
 | 2.5-8 s | 3 | 83.2% | 65.5% |
 | > 8 s | 15 | 90.8% | 74.1% |
 
-Length against accuracy is rho +0.39, **p=0.055** -- directional and consistent
-with the mechanism (a reverberation-based cue needs time to observe), but not
-established at 25 spans. Treat it as the hypothesis to design the calibration
-window against, not as a measured settling time.
+Length against accuracy is rho +0.39, **p=0.055** over 25 spans -- directional but
+not established. Superseded by the time course below, which asks the same question
+with hundreds of frames per point instead of 25 spans.
+
+## How long the decision takes to settle
+
+Aligning every span to its own start rather than correlating whole-span accuracy
+with length (`presence_probe_timecourse.py`, stride 2 = 20 ms resolution,
+predictions still leave-one-span-out so a frame's own span is never in training):
+
+| time since the turn changed | all | near spans | far spans |
+|---|---|---|---|
+| 0-0.25 s | 51.7% | 64.6% | **32.3%** |
+| 0.25-0.5 s | 62.3% | 59.4% | 66.7% |
+| 0.5-1 s | 75.5% | 78.9% | 70.4% |
+| 1-2 s | 90.9% | 91.3% | 90.4% |
+| 2-3 s | 94.3% | 94.4% | 94.3% |
+| 3-5 s | 94.8% | 94.9% | 94.8% |
+| 5-8 s | 97.3% | 98.2% | 96.3% |
+| 8-12 s | 97.5% | 97.7% | 97.0% |
+| >12 s | 92.0% | 92.5% | 90.6% |
+
+**Chance for the first quarter second, then usable from about 2 s.** It crosses
+90% in the 1-2 s bin and plateaus at 95-97%.
+
+**The first 0.25 s of a far turn is worse than chance -- 32.3%.** When a bystander
+starts talking the reading still says "near", actively wrong, for about a quarter
+of a second. Near turns read 64.6% over the same window, so the asymmetry is
+consistent: **quicker to open than to close.** That is the safe direction for a
+gate -- it protects the user rather than cutting them off -- and it costs the
+first ~250 ms of every bystander utterance.
+
+The >12 s row is 1,403 frames but from only 8 of the 25 spans, so it reflects
+which spans happen to be long, not a decay. Do not read it as degradation.
+
+This is the number a session-start calibration window has to be sized against:
+under a second of audio is not enough to decide anything, and ~2 s is where the
+decision becomes worth acting on.
 
 ## The limitation that matters most here
 
