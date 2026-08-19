@@ -201,3 +201,71 @@ clips each played from t=0.
 Read the two halves as: during a call, presence tracks frame by frame (0.90). At
 the start of a call, presence is decodable but the boundary is in the wrong place
 (0.500 as calibrated, 0.883 with the boundary moved).
+
+## Where the early deficit comes from -- and it is not 250 ms
+
+`presence_probe_lag.py` / `presence_probe_lag_controls.py`. Three candidates, with
+different fixes: a label misalignment, a fixed algorithmic delay, or genuine
+evidence accumulation. The look-ahead is 3 frames / 30 ms, so it cannot account
+for 250 ms on its own.
+
+**Not misalignment, and not a fixed delay.** Shifting every labelled span later
+does raise accuracy, but monotonically, with no interior peak:
+
+| label shift | overall |
+|---|---|
+| +0 ms | 0.910 |
+| +250 ms | 0.922 |
+| +400 ms | 0.928 |
+| +600 ms | 0.930 |
+| +800 ms | 0.935 |
+| +1200 ms | 0.932 |
+
+A real misalignment peaks at the true offset and falls away as the window
+overshoots into the next turn. This is nearly flat from +400 to +1200 ms, which is
+the signature of *censoring* -- the shift is dropping the hard early frames, not
+finding an alignment.
+
+**Most of it is that there is nothing to hear yet.** The first 0.25 s of a turn is
+16.6 dB quieter than steady speech (median -67.1 against -50.5 dBFS), and part of
+it is literally the pause between speakers.
+
+Re-timing every span from **audible onset** (first frame above -60 dBFS) instead of
+from the labelled boundary:
+
+| since audible onset | correct | n |
+|---|---|---|
+| before onset | 37.5% | 80 |
+| 0-0.25 s | 61.6% | 125 |
+| 0.25-0.5 s | 64.8% | 125 |
+| 0.5-1 s | 77.2% | 250 |
+| 1-2 s | **93.3%** | 464 |
+| >2 s | 95.3% | 3318 |
+
+Re-timing lifts the first quarter second from 47.2% to 61.6% -- so roughly a third
+of the apparent lag was the silent gap -- **but the lag does not go away**. From
+the moment the new voice is audible it still takes about **one second** to reach
+93%.
+
+### So the number is ~1 s of audible speech, not 250 ms
+
+"250 ms" was an artifact of timing from the labelled boundary, which includes the
+pause. The honest quantity is: about a second of audible speech before the
+presence decision is reliable, and the cause is evidence accumulation, consistent
+with a cue that has to be read out of reverberation.
+
+The 37.5% during the pause is harmless -- there is nothing audible to keep or
+suppress there.
+
+### What this rules out for the design
+
+An earlier reading of the time course suggested making the gate close faster. That
+is not available: the decision cannot arrive before the evidence does. What is
+available is not acting at full strength before it lands -- 77% at 0.5-1 s and 93%
+at 1-2 s are confidence levels, not a decision -- and the existing bias (opens
+faster than it closes) is already the safe direction, protecting the user rather
+than cutting them off.
+
+It also agrees with the cold-start figure from the section above: a ~2 s
+calibration window is the right order, and under a second is not enough on either
+measurement.
