@@ -98,6 +98,19 @@ def test_ema_recurrence_survives_bf16_input():
     assert torch.allclose(got, ref, atol=0.02), float((got - ref).abs().max())
 
 
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="reproduces a CUDA-only kernel assertion")
+def test_ema_survives_bf16_autocast_on_cuda():
+    """bf16-mixed training wraps the forward in autocast, which re-casts
+    lfilter's internals to bf16 -- the CUDA kernel asserts fp32/fp64 and the
+    whole run dies on step one. The bank must disable autocast around itself;
+    a bare .float() is silently undone by the context."""
+    h = head(ema_taus_s=(0.05, 4.0)).cuda()
+    x = torch.randn(2, 8, 4, 60, device="cuda")
+    with torch.autocast("cuda", dtype=torch.bfloat16):
+        y = h(x)
+    assert torch.isfinite(y).all()
+
+
 def test_head_is_causal():
     """Changing the future must not change the past, EMA bank included."""
     h = head(ema_taus_s=(0.05, 1.0))

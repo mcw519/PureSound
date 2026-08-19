@@ -136,18 +136,23 @@ class VADHead(nn.Module):
         streaming implementation gets by carrying (state, normalizer).
         """
         n, c, t = h.shape
-        x = h.float()
-        steps = torch.arange(1, t + 1, device=h.device, dtype=torch.float32)
-        out = []
-        for a in self._alphas:
-            y = torchaudio.functional.lfilter(
-                x,
-                a_coeffs=x.new_tensor([1.0, -(1.0 - a)]),
-                b_coeffs=x.new_tensor([a, 0.0]),
-                clamp=False,
-            )
-            norm = 1.0 - (1.0 - a) ** steps  # [T], debias for the zero init
-            out.append((y / norm).to(h.dtype))
+        # autocast(enabled=False), not just .float(): under bf16-mixed training
+        # autocast re-casts lfilter's internals back to bf16, which both loses
+        # the small-step increments AND trips the CUDA kernel's fp32/fp64
+        # assertion. Disabling the context makes the .float() actually stick.
+        with torch.autocast(device_type=h.device.type, enabled=False):
+            x = h.float()
+            steps = torch.arange(1, t + 1, device=h.device, dtype=torch.float32)
+            out = []
+            for a in self._alphas:
+                y = torchaudio.functional.lfilter(
+                    x,
+                    a_coeffs=x.new_tensor([1.0, -(1.0 - a)]),
+                    b_coeffs=x.new_tensor([a, 0.0]),
+                    clamp=False,
+                )
+                norm = 1.0 - (1.0 - a) ** steps  # [T], debias for the zero init
+                out.append((y / norm).to(h.dtype))
         return torch.cat([h] + out, dim=1)  # [N, (K+1)C, T]
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
