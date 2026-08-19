@@ -44,6 +44,9 @@ from puresound.audio.io import AudioIO  # noqa: E402
 from puresound.config import load_recipe  # noqa: E402
 from puresound.recipes import init_siso_model  # noqa: E402
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _gate_flags import add_presence_gate_arg, build_presence_gate
+
 KEEP_VIOLATION_DB = -3.0   # keep-span preservation below this = user/foreground killed
 SUPPRESS_FAIL_DB = -6.0    # suppress-span reduction shallower than this = far leak
 
@@ -137,6 +140,7 @@ def main() -> None:
     ap.add_argument("--set-dir", required=True)
     ap.add_argument("--device", default="cpu")
     ap.add_argument("--limit", type=int, default=None)
+    add_presence_gate_arg(ap)
     ap.add_argument("--dry-blend", type=float, default=1.0,
                     help="inference over-suppression relief: enh*b + mix*(1-b)")
     ap.add_argument("--spec-floor", type=float, default=0.0,
@@ -156,6 +160,7 @@ def main() -> None:
         sys.exit(f"no *_mix.wav under {set_dir}")
 
     model = load_model(args.config_path, args.ckpt, device)
+    gate = build_presence_gate(args)
     systems = ["ours"] + (["gate_soft", "gate_hard"] if args.gate else [])
     keep: dict[str, list[float]] = {s: [] for s in systems}
     supp: dict[str, list[float]] = {s: [] for s in systems}
@@ -173,7 +178,7 @@ def main() -> None:
         tgt, _ = AudioIO.open(f_path=str(tp), target_lvl=None, resample_to=16000)
         mix, tgt = mix.view(1, -1), tgt.view(1, -1)
         with torch.no_grad():
-            enh = model(mix.to(device), dry_blend=args.dry_blend,
+            enh = model(mix.to(device), dry_blend=args.dry_blend, presence_gate=gate,
                         spec_floor=args.spec_floor).detach().cpu().view(1, -1).clamp(-1.0, 1.0)
             logits = getattr(model.backbone, "last_vad_logits", None)
 

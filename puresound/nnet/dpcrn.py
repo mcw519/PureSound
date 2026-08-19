@@ -192,6 +192,13 @@ class DPCRN(Unet):
         self.dist_head = DistHead.from_config(dist_head, enc_channels=channels[-1])
         self.last_dist_preds: Optional[torch.Tensor] = None
 
+        # The bottleneck itself, for readouts that are not modules -- the
+        # inference-only presence gate fits a linear probe on exactly this
+        # tensor. Off by default: a reference here would keep the graph alive
+        # for the whole step, and training has no use for it.
+        self.stash_bottleneck: bool = False
+        self.last_bottleneck: Optional[torch.Tensor] = None
+
     def forward(
         self, x: torch.Tensor, dvec: Optional[torch.Tensor] = None
     ) -> torch.Tensor:
@@ -233,6 +240,8 @@ class DPCRN(Unet):
             self.last_dist_preds = self.dist_head(x)
         else:
             self.last_dist_preds = None
+
+        self.last_bottleneck = x.detach() if self.stash_bottleneck else None
 
         # forward CNN-up layers
         for i, cnn_layer in enumerate(self.cnn_up):

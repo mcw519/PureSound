@@ -26,6 +26,7 @@ from puresound.nnet.masker import Masker
 
 from .base import BaseLightningModule, invoke_loss
 from .postprocess import Postprocessor, resolve as resolve_postprocess
+from .presence_gate import PresenceGate
 
 
 class EncDecMaskBase(BaseLightningModule):
@@ -130,6 +131,7 @@ class EncDecMaskBase(BaseLightningModule):
         dry_blend: float = 1.0,
         spec_floor: float = 0.0,
         postprocess: Optional[Postprocessor] = None,
+        presence_gate: Optional[PresenceGate] = None,
     ):
         """Run enhancement.
 
@@ -144,17 +146,31 @@ class EncDecMaskBase(BaseLightningModule):
                 rather than silence on the others.
             postprocess: a built `Postprocessor`, as an alternative to the two
                 keywords above. Not both.
+            presence_gate: a built `PresenceGate`, applied to the finished
+                waveform. Needs a backbone that stashes its bottleneck, which
+                this turns on for the duration of the call.
 
         Returns:
             Enhanced waveform clamped to ``[-1, 1]``.
         """
         post = resolve_postprocess(postprocess, dry_blend, spec_floor)
+        if presence_gate is not None and not hasattr(self.backbone, "last_bottleneck"):
+            raise ValueError(
+                f"presence_gate needs a backbone that exposes last_bottleneck; "
+                f"{type(self.backbone).__name__} does not"
+            )
         if wav.dim() != 2 and wav.shape[0] == 1:
             wav = wav.squeeze(0)
 
         features = self.encoder(wav)
         features, features_for_enhanced = self.feats(features)
-        mask = self.backbone(features)
+        if presence_gate is not None:
+            self.backbone.stash_bottleneck = True
+        try:
+            mask = self.backbone(features)
+        finally:
+            if presence_gate is not None:
+                self.backbone.stash_bottleneck = False
 
         if self.mask_type in ["wiener", "mvdr"]:
             mask, ifc, cov = mask
@@ -208,7 +224,15 @@ class EncDecMaskBase(BaseLightningModule):
             )
 
         enh = self._spec_to_wav(enh)
-        return post.blend_waveform(enh, wav)
+        enh = post.blend_waveform(enh, wav)
+        if presence_gate is None:
+            return enh
+        # After the blend, deliberately: the gate has to be able to attenuate
+        # past the ceiling the blend puts in, which is the whole reason it is a
+        # gain and not a deeper blend.
+        return presence_gate.apply(
+            enh, self.backbone.last_bottleneck, hop=self.encoder.hop_length
+        )
 
     def _spec_to_wav(self, enh: torch.Tensor) -> torch.Tensor:
         """iSTFT an enhanced [N,2,F,T] spectrum back to a clamped waveform.

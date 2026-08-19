@@ -1,0 +1,18 @@
+{
+  "readout": "linear on the frozen dpcrn bottleneck, pooled over frequency",
+  "checkpoint": "dpcrn_v8",
+  "fitted_on": "90d field recording only (270d held out)",
+  "n_train_frames": 3780,
+  "audible_dbfs": -60.0,
+  "held_out_balanced_acc": 0.9583,
+  "held_out_auc": 0.9951,
+  "dim": 128,
+  "status": "EXPERIMENTAL -- not a release artefact; see b_traj_README.md",
+  "fitted_by": "benchmarks/probes/b_traj_fit_readout.py",
+  "b_hi": 0.5,
+  "b_lo": 0.1,
+  "gain_floor_db": -26.0,
+  "tau_up_s": 0.05,
+  "tau_dn_s": 1.0,
+  "b_init": 1.0
+}

@@ -26,6 +26,9 @@ import numpy as np, torch, soundfile as sf  # noqa: E402
 from puresound.config import load_recipe  # noqa: E402
 from puresound.recipes import init_siso_model  # noqa: E402
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _gate_flags import add_presence_gate_arg, build_presence_gate
+
 def si_sdr(est, ref, eps=1e-8):
     est = est.reshape(-1)-est.reshape(-1).mean(); ref = ref.reshape(-1)-ref.reshape(-1).mean()
     a=(est@ref)/((ref@ref)+eps); s=a*ref; e=est-s
@@ -42,6 +45,7 @@ def main():
                          "azure needs SPEECH_KEY+SPEECH_REGION env. --asr-model is the whisper "
                          "size (e.g. small / large-v3); ignored by azure.")
     ap.add_argument("--limit", type=int, default=None)
+    add_presence_gate_arg(ap)
     ap.add_argument("--dry-blend", type=float, default=1.0,
                     help="over-suppression relief: out=a*enh+(1-a)*mix; 1.0=off (default)")
     ap.add_argument("--spec-floor", type=float, default=0.0,
@@ -55,6 +59,7 @@ def main():
     model=init_siso_model(
         load_recipe(cfg_path, expected_task="voice_isolation").model
     )
+    gate=build_presence_gate(args)
     state=torch.load(ckpt,map_location="cpu")["state_dict"]
     miss,unexp=model.load_state_dict(state,strict=False)
     print(f"[load] missing={len(miss)} unexpected={len(unexp)}; ckpt={ckpt}",flush=True)
@@ -92,7 +97,8 @@ def main():
         for i,it in enumerate(items):
             mix,_=sf.read(sd/f"{it['id']}_mix.wav"); ref,_=sf.read(sd/f"{it['id']}_ref.wav")
             mt=torch.tensor(mix,dtype=torch.float32,device=args.device).reshape(1,-1)
-            enh=model(mt,dry_blend=args.dry_blend,spec_floor=args.spec_floor).reshape(-1)
+            enh=model(mt,dry_blend=args.dry_blend,spec_floor=args.spec_floor,
+                      presence_gate=gate).reshape(-1)
             T=min(enh.shape[-1],mt.shape[-1],len(ref))
             rt=torch.tensor(ref,dtype=torch.float32)
             ssi=si_sdr(enh[...,:T].cpu(),rt[...,:T])-si_sdr(mt[...,:T].cpu(),rt[...,:T])

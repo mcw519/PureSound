@@ -1,9 +1,13 @@
 #!/usr/bin/env bash
 # Full Phase-1 benchmark for one checkpoint. Run from the recipe dir (metafiles
 # are relative to it). Training must be stopped first (this uses the GPU).
-#   bash run_full_benchmark.sh <ckpt> <tag> [device] [dry_blend]
+#   bash run_full_benchmark.sh <ckpt> <tag> [device] [dry_blend] [presence_readout]
 # dry_blend is the released inference knob (1.0 = off); pass 0.9 to benchmark a
 # checkpoint the way it is deployed.
+# presence_readout turns on the inference-only near-presence gain (EXPERIMENTAL,
+# see benchmarks/probes/b_traj_README.md). Omitted, every stage is unchanged. Its
+# operating point comes from the readout's sibling .json; GATE_EXTRA in the
+# environment appends per-run overrides (--gate-b-hi 0.75, ...).
 # Results (one log per stage) land in $OUT; a compact summary is printed at the end.
 set -u
 cd "$(cd "$(dirname "$0")" && pwd)"   # recipe dir
@@ -12,6 +16,12 @@ CKPT="${1:?usage: run_full_benchmark.sh <ckpt> <tag> [device]}"
 TAG="${2:?need a tag, e.g. boundary_ep39}"
 DEV="${3:-cuda}"
 BLEND="${4:-1.0}"
+READOUT="${5:-}"
+GATE_ARGS=""; GATE_TAG="off"
+if [ -n "$READOUT" ]; then
+  GATE_ARGS="--presence-gate $READOUT ${GATE_EXTRA:-}"
+  GATE_TAG="$(basename "$READOUT")${GATE_EXTRA:+ $GATE_EXTRA}"
+fi
 SD="${BENCH_SD:-${TMPDIR:-/tmp}}"
 OUT="$SD/bench_$TAG"; mkdir -p "$OUT"
 
@@ -29,34 +39,34 @@ say(){ echo "[bench $(date +%H:%M:%S)] $*"; }
 say "1/9 real-clip scorecard (voicebot gate): cross-chain reference + field benchmark"
 uv run python scripts/eval_realcase.py config/infer_dpcrn.yaml \
   --ckpt "$CKPT" --cases-dir data_report/qvf22_real_cases --device cpu \
-  --dry-blend "$BLEND" > "$OUT/1_scorecard.log" 2>&1
+  --dry-blend "$BLEND" $GATE_ARGS > "$OUT/1_scorecard.log" 2>&1
 # the field set is the one with STREAM vs COLD-START modes and absolute residual levels;
 # its 134.8 s session needs expandable_segments on a 24 GB card
 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True \
 uv run python scripts/eval_realcase.py config/infer_dpcrn.yaml \
   --ckpt "$CKPT" --cases-dir data_report/field_cases/test_vector_cases --device "$DEV" \
-  --dry-blend "$BLEND" > "$OUT/1_scorecard_field.log" 2>&1
+  --dry-blend "$BLEND" $GATE_ARGS > "$OUT/1_scorecard_field.log" 2>&1
 
 say "2/9 in-domain SI-SDRi + buckets + solo-leakage (phase1 bank)"
 uv run python scripts/eval_indomain.py config/exp/eval_indomain_phase1.yaml \
-  --ckpt "$CKPT" --device "$DEV" --n-batches 80 --by-bucket --dump-distribution > "$OUT/2_indomain.log" 2>&1
+  --ckpt "$CKPT" --device "$DEV" --n-batches 80 --by-bucket --dump-distribution $GATE_ARGS > "$OUT/2_indomain.log" 2>&1
 
 say "3/9 synthetic far-only probe (expand bank, seen distances)"
 uv run python scripts/eval_indomain.py config/exp/eval_targetabsent_probe.yaml \
-  --ckpt "$CKPT" --device "$DEV" --n-batches 60 --by-bucket > "$OUT/3_probe_expand.log" 2>&1
+  --ckpt "$CKPT" --device "$DEV" --n-batches 60 --by-bucket $GATE_ARGS > "$OUT/3_probe_expand.log" 2>&1
 
 say "4/9 synthetic far-only probe (high bank rt60 0.85-1.5, UNSEEN reverb)"
 uv run python scripts/eval_indomain.py config/exp/eval_targetabsent_probe_high.yaml \
-  --ckpt "$CKPT" --device "$DEV" --n-batches 60 --by-bucket > "$OUT/4_probe_high.log" 2>&1
+  --ckpt "$CKPT" --device "$DEV" --n-batches 60 --by-bucket $GATE_ARGS > "$OUT/4_probe_high.log" 2>&1
 
 say "5/9 synthetic far-only probe (boundary held-out, UNSEEN boundary distances)"
 uv run python scripts/eval_indomain.py config/exp/eval_targetabsent_probe_boundary.yaml \
-  --ckpt "$CKPT" --device "$DEV" --n-batches 60 --by-bucket > "$OUT/5_probe_boundary.log" 2>&1
+  --ckpt "$CKPT" --device "$DEV" --n-batches 60 --by-bucket $GATE_ARGS > "$OUT/5_probe_boundary.log" 2>&1
 
 say "6/9 Dawn Chorus real WER (over-suppression deletion guardrail; $ASR/$ASR_MODEL)"
 uv run python scripts/eval_dawn_chorus.py config/infer_dpcrn.yaml \
   --ckpt "$CKPT" --device "$DEV" --asr "$ASR" --asr-model "$ASR_MODEL" \
-  --dry-blend "$BLEND" > "$OUT/6_dawn_wer.log" 2>&1
+  --dry-blend "$BLEND" $GATE_ARGS > "$OUT/6_dawn_wer.log" 2>&1
 
 # PRIMARY WER gate: the deployment reverberation range, and the only WER set here whose
 # resolution matches the differences between our checkpoints -- models capture ~40% of its
@@ -66,17 +76,17 @@ uv run python scripts/eval_dawn_chorus.py config/infer_dpcrn.yaml \
 say "7a/9 moderate-reverb WER (PRIMARY deployment gate, RT60 0.20-0.65; $ASR/$ASR_MODEL)"
 uv run python scripts/eval_wer.py config/exp/eval_but_real.yaml \
   --ckpt "$CKPT" --set-dir data_report/wer_set_moderate_test --device "$DEV" \
-  --asr "$ASR" --asr-model "$ASR_MODEL" --dry-blend "$BLEND" > "$OUT/7a_moderate_wer.log" 2>&1
+  --asr "$ASR" --asr-model "$ASR_MODEL" --dry-blend "$BLEND" $GATE_ARGS > "$OUT/7a_moderate_wer.log" 2>&1
 
 say "7b/9 BUT-OFFICE real-RIR WER (measured-RIR MONITOR, RT30 0.56-0.69; $ASR/$ASR_MODEL)"
 uv run python scripts/eval_wer.py config/exp/eval_but_real.yaml \
   --ckpt "$CKPT" --set-dir data_report/but_wer_set_office --device "$DEV" \
-  --asr "$ASR" --asr-model "$ASR_MODEL" --dry-blend "$BLEND" > "$OUT/7_but_office_wer.log" 2>&1
+  --asr "$ASR" --asr-model "$ASR_MODEL" --dry-blend "$BLEND" $GATE_ARGS > "$OUT/7_but_office_wer.log" 2>&1
 
 say "8/9 BUT high/extreme-reverb WER (secondary extreme-OOD do-no-harm MONITOR, RT30 1.15-1.84; $ASR/$ASR_MODEL)"
 uv run python scripts/eval_wer.py config/exp/eval_but_real.yaml \
   --ckpt "$CKPT" --set-dir data_report/but_wer_set --device "$DEV" \
-  --asr "$ASR" --asr-model "$ASR_MODEL" --dry-blend "$BLEND" > "$OUT/8_but_reverb_wer.log" 2>&1
+  --asr "$ASR" --asr-model "$ASR_MODEL" --dry-blend "$BLEND" $GATE_ARGS > "$OUT/8_but_reverb_wer.log" 2>&1
 
 # real-RIR turn-taking keep/suppress scorecard (far-solo suppression specialty).
 # Frozen set dumped with the BUT office real-RIR bank; regenerate via:
@@ -85,9 +95,9 @@ TT_SET="${TT_SET:-/data/audio/eval_noisy_data/turntaking_set_realrir}"
 say "9/9 real-RIR turn-taking scorecard (KEEP near / SUPPRESS far-solo; $TT_SET)"
 uv run python scripts/eval_turntaking.py config/infer_dpcrn.yaml \
   --ckpt "$CKPT" --set-dir "$TT_SET" --device "$DEV" \
-  --dry-blend "$BLEND" > "$OUT/9_turntaking.log" 2>&1
+  --dry-blend "$BLEND" $GATE_ARGS > "$OUT/9_turntaking.log" 2>&1
 
-echo; echo "================ BENCHMARK SUMMARY [$TAG]  (dry_blend=$BLEND, chain=$CHAIN) ================"
+echo; echo "================ BENCHMARK SUMMARY [$TAG]  (dry_blend=$BLEND, presence_gate=$GATE_TAG, chain=$CHAIN) ================"
 echo "--- real scorecard ---";        grep -E "scenario|# (ours|gate_|reference):" "$OUT/1_scorecard.log" 2>/dev/null
 echo "--- field scorecard ---";       grep -E "_session|# ours:" "$OUT/1_scorecard_field.log" 2>/dev/null
 echo "    cold-start far verdicts:";  awk -F'\t' '/_far/ && $3=="ours" {v=$11; c[v]++} END {for (k in c) printf "      %-40s %d\n", k, c[k]}' "$OUT/1_scorecard_field.log" 2>/dev/null

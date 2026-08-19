@@ -41,6 +41,9 @@ from puresound.audio.dsp import wav_resampling
 from puresound.config import load_recipe
 from puresound.recipes import init_siso_model
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _gate_flags import add_presence_gate_arg, build_presence_gate
+
 DATASET_REPO = "ai-coustics/dawn_chorus_en"
 
 
@@ -88,9 +91,11 @@ def run_inference(
     device: str,
     dry_blend: float = 1.0,
     spec_floor: float = 0.0,
+    presence_gate=None,
 ) -> tuple[np.ndarray, np.ndarray | None]:
     x = torch.from_numpy(noisy.astype(np.float32)).view(1, -1).to(device)
-    y = model(x, dry_blend=dry_blend, spec_floor=spec_floor)
+    y = model(x, dry_blend=dry_blend, spec_floor=spec_floor,
+              presence_gate=presence_gate)
     if isinstance(y, (list, tuple)):
         y = y[0]
     # The VAD head writes its frame logits onto the backbone as a side output of
@@ -235,6 +240,7 @@ def main():
     p.add_argument("--asr", default="auto",
                    choices=["auto", "none", "faster-whisper", "openai-whisper", "azure"])
     p.add_argument("--asr-model", default="small")
+    add_presence_gate_arg(p)
     p.add_argument("--dry-blend", type=float, default=1.0,
                    help="inference over-suppression relief: enh*b + mix*(1-b)")
     p.add_argument("--spec-floor", type=float, default=0.0,
@@ -256,6 +262,7 @@ def main():
     print(f"Dawn Chorus: {n_total} samples, evaluating {n_eval}")
 
     model = load_model(args.config_path, args.ckpt, args.device)
+    gate = build_presence_gate(args)
     print(f"model loaded from {args.ckpt}")
 
     asr_name, transcribe = (None, None)
@@ -280,7 +287,8 @@ def main():
 
         enh, vad_prob = run_inference(model, mix, args.device,
                                       dry_blend=args.dry_blend,
-                                      spec_floor=args.spec_floor)
+                                      spec_floor=args.spec_floor,
+                                      presence_gate=gate)
         enh = enh[:length]
         if len(enh) < length:
             enh = np.pad(enh, (0, length - len(enh)))
