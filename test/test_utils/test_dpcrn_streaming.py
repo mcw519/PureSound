@@ -112,3 +112,90 @@ def test_dpcrn_streaming_matches_offline_for_lookahead_model():
     d, rel = _offline_vs_streaming_rel(LOOKAHEAD_CONFIG)
     assert d == model.bottleneck_delay, f"expected delay {model.bottleneck_delay}, got d={d}"
     assert rel < 1e-3, f"look-ahead streaming != offline (rel={rel:.3e})"
+
+
+# --------------------------------------------------------------------------- #
+# Presence heads as streaming side information
+# --------------------------------------------------------------------------- #
+
+
+def _heads_frame_model():
+    from puresound.streaming import load_streaming_dpcrn_model
+
+    return load_streaming_dpcrn_model(
+        _REPO_ROOT / "egs/voice_isolate/config/infer_dpcrn_heads.yaml",
+        _REPO_ROOT / "egs/voice_isolate/pretrained_ckpt/dpcrn_v11_ep19.ckpt",
+    ).eval()
+
+
+def _tone(seconds=6):
+    L = seconds * 16000
+    t = torch.arange(L, dtype=torch.float32) / 16000.0
+    torch.manual_seed(0)
+    return (0.3 * torch.sin(2 * np.pi * 220 * t) + 0.1 * torch.randn(L)).unsqueeze(0)
+
+
+@pytest.mark.skipif(
+    not (_REPO_ROOT / "egs/voice_isolate/pretrained_ckpt/dpcrn_v11_ep19.ckpt").is_file(),
+    reason="needs the v11 checkpoint",
+)
+def test_head_logits_stream_bit_exactly_at_the_algorithmic_delay():
+    """The streamed head must equal the offline head, at `streaming_delay` lead.
+
+    The heads read the bottleneck, which streaming computes `streaming_delay`
+    frames AHEAD of the audio it emits -- so a logit describes a frame the
+    output has not reached yet. Without the warm-up gate below this read 1.198
+    and was still growing at frame 400, because the 4 s EMA integrates the
+    causal down path's phantom startup frames forever.
+    """
+    fm = _heads_frame_model()
+    sm = fm.system_model.eval()
+    wav = _tone()
+    with torch.no_grad():
+        tf = sm.encoder(wav)
+        feats_out, _ = sm.feats(tf)
+        sm.backbone(feats_out)
+        off_v = sm.backbone.last_vad_logits[0].numpy()
+        off_b = sm.backbone.last_background_vad_logits[0].numpy()
+
+        state = fm.initial_state(batch_size=1)
+        sv, sb = [], []
+        for i in range(tf.shape[2]):
+            _, extras, state = fm.forward_frame(tf[:, :, i, :], state)
+            sv.append(float(extras[0].reshape(-1)[0]))
+            sb.append(float(extras[1].reshape(-1)[0]))
+    d = fm.streaming_delay
+    sv, sb = np.array(sv), np.array(sb)
+    n = min(len(off_v), len(sv) - d)
+    assert np.abs(off_v[:n] - sv[d : d + n]).max() < 1e-4
+    assert np.abs(off_b[:n] - sb[d : d + n]).max() < 1e-4
+
+
+@pytest.mark.skipif(
+    not (_REPO_ROOT / "egs/voice_isolate/pretrained_ckpt/dpcrn_v11_ep19.ckpt").is_file(),
+    reason="needs the v11 checkpoint",
+)
+def test_enabling_the_heads_does_not_touch_the_audio():
+    """Side information means side information: the enhanced frames must be
+    byte-identical to the heads-disabled graph, or the export has quietly
+    changed the system every benchmark measured."""
+    from puresound.streaming import load_streaming_dpcrn_model
+
+    ckpt = _REPO_ROOT / "egs/voice_isolate/pretrained_ckpt/dpcrn_v11_ep19.ckpt"
+    wav = _tone(3)
+    outs = []
+    for cfg in ("config/infer_dpcrn.yaml", "config/infer_dpcrn_heads.yaml"):
+        fm = load_streaming_dpcrn_model(
+            _REPO_ROOT / "egs/voice_isolate" / cfg, ckpt).eval()
+        sm = fm.system_model.eval()
+        with torch.no_grad():
+            tf = sm.encoder(wav)
+            state = fm.initial_state(batch_size=1)
+            frames = []
+            for i in range(tf.shape[2]):
+                r = fm.forward_frame(tf[:, :, i, :], state)
+                frames.append(r[0])
+                state = r[-1]
+        outs.append(torch.cat(frames, dim=0))
+    assert torch.equal(outs[0], outs[1]), \
+        float((outs[0] - outs[1]).abs().max())

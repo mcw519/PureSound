@@ -15,7 +15,10 @@ is the contract the runtime and the portable SDK read.
 
 from pathlib import Path
 
+import numpy as np
 import pytest
+
+from puresound.streaming.base import StreamingOrt
 import torch
 import yaml
 
@@ -156,3 +159,61 @@ def test_the_export_records_the_postprocessing_the_runtime_must_apply(tmp_path):
     unblended = quiet.process_samples(samples)
     assert blended.shape == unblended.shape
     assert not (blended == unblended).all()
+
+
+def test_state_outputs_are_located_from_the_manifest_not_assumed_at_index_one():
+    """A graph with auxiliary heads puts their logits before the state outputs.
+
+    Assuming the state starts at index 1 shifts every port by the number of
+    extras -- here it fed a rank-4 conv cache into a rank-3 EMA slot. ORT
+    rejected that one; a layout that happens to typecheck would corrupt state
+    silently, so the offset is read from `extra_output_names`.
+    """
+    import numpy as np
+
+    class FakeSession:
+        def run(self, names, feeds):
+            return [
+                np.zeros((1, 4, 2), dtype=np.float32),   # enhanced_frame
+                np.full((1, 1), 7.0, dtype=np.float32),  # aux_logit
+                np.full((1, 3), 1.0, dtype=np.float32),  # next_s0
+                np.full((1, 2), 2.0, dtype=np.float32),  # next_s1
+            ]
+
+    runtime = StreamingOrt.__new__(StreamingOrt)
+    runtime.session = FakeSession()
+    runtime.freq_bins = 4
+    runtime.manifest = {
+        "output_names": ["enhanced_frame", "aux_logit", "next_s0", "next_s1"],
+        "extra_output_names": ["aux_logit"],
+        "state_input_names": ["s0", "s1"],
+    }
+    runtime.state = {"s0": np.zeros((1, 3), np.float32), "s1": np.zeros((1, 2), np.float32)}
+    runtime.extras = {}
+    runtime.run_frame(np.zeros((1, 4, 2), dtype=np.float32))
+
+    assert runtime.state["s0"].shape == (1, 3)
+    assert float(runtime.state["s0"][0, 0]) == 1.0
+    assert float(runtime.state["s1"][0, 0]) == 2.0
+    assert float(runtime.extras["aux_logit"][0, 0]) == 7.0
+
+
+def test_a_state_layout_mismatch_is_an_error_not_a_silent_truncation():
+    import numpy as np
+
+    class ShortSession:
+        def run(self, names, feeds):
+            return [np.zeros((1, 4, 2), np.float32), np.zeros((1, 3), np.float32)]
+
+    runtime = StreamingOrt.__new__(StreamingOrt)
+    runtime.session = ShortSession()
+    runtime.freq_bins = 4
+    runtime.manifest = {
+        "output_names": ["enhanced_frame", "next_s0", "next_s1"],
+        "extra_output_names": [],
+        "state_input_names": ["s0", "s1"],
+    }
+    runtime.state = {}
+    runtime.extras = {}
+    with pytest.raises(RuntimeError, match="state tensors"):
+        runtime.run_frame(np.zeros((1, 4, 2), dtype=np.float32))

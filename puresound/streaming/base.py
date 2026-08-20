@@ -73,6 +73,19 @@ class StreamingFrameModelBase(nn.Module):
         return []
 
     @property
+    def extra_output_names(self) -> list[str]:
+        """Graph outputs beyond the enhanced frame.
+
+        A model with auxiliary heads emits their per-frame logits here. They are
+        SIDE INFORMATION: the graph never applies them to the audio, so a runtime
+        that ignores them produces byte-identical output to one that does not
+        emit them at all. Whatever consumes them decides what they mean -- the
+        same division of labour as `dry_blend`, which the runtime applies and the
+        manifest merely declares.
+        """
+        return []
+
+    @property
     def state_input_names(self) -> list[str]:
         return (
             [f"down_cache_{i}" for i in range(self.n_down)]
@@ -107,8 +120,22 @@ class StreamingFrameModelBase(nn.Module):
         """Flat tensors in, flat tensors out -- the shape ONNX can express."""
         noisy_frame, *state_tensors = inputs
         state = self.state_from_tensors(state_tensors)
-        enhanced, next_state = self.forward_frame(noisy_frame, state)
-        return tuple([enhanced] + list(self._state_to_tuple(next_state)))
+        result = self.forward_frame(noisy_frame, state)
+        # A subclass with auxiliary outputs returns them in the middle; one
+        # without keeps the two-tuple it always returned.
+        if len(result) == 3:
+            enhanced, extras, next_state = result
+        else:
+            enhanced, next_state = result
+            extras = ()
+        if len(extras) != len(self.extra_output_names):
+            raise RuntimeError(
+                f"{type(self).__name__} returned {len(extras)} extra outputs but "
+                f"announces {len(self.extra_output_names)}: "
+                f"{self.extra_output_names}. The manifest names the ports a "
+                "runtime feeds by name, so a mismatch mislabels them."
+            )
+        return tuple([enhanced, *extras] + list(self._state_to_tuple(next_state)))
 
     def _down_step(self, layer: nn.Sequential, x: torch.Tensor, cache: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         pad = layer[0].padding
@@ -229,7 +256,8 @@ def export_streaming_onnx(
     state = frame_model.initial_state_tensors(batch_size=1)
 
     input_names = ["noisy_frame"] + frame_model.state_input_names
-    output_names = ["enhanced_frame"] + frame_model.state_output_names
+    output_names = (["enhanced_frame"] + list(frame_model.extra_output_names)
+                    + frame_model.state_output_names)
     dynamic_axes = {
         "noisy_frame": {0: "batch_size"},
         "enhanced_frame": {0: "batch_size"},
@@ -263,8 +291,12 @@ def export_streaming_onnx(
     ort_out = session.run(None, ort_inputs)
     with torch.no_grad():
         torch_out = frame_model(noisy_frame, *state)
-    if not np.allclose(torch_out[0].numpy(), ort_out[0], rtol=1e-4, atol=1e-4):
-        raise AssertionError("exported ONNX frame output does not match PyTorch output")
+    n_checked = 1 + len(frame_model.extra_output_names)
+    for i, name in enumerate(output_names[:n_checked]):
+        if not np.allclose(torch_out[i].numpy(), ort_out[i], rtol=1e-4, atol=1e-4):
+            raise AssertionError(
+                f"exported ONNX output {name!r} does not match PyTorch"
+            )
 
     manifest = {
         "model_type": f"{variant.name}_streaming_frame",
@@ -282,6 +314,9 @@ def export_streaming_onnx(
         "output_names": output_names,
         "state_input_names": frame_model.state_input_names,
         "state_output_names": frame_model.state_output_names,
+        # Side-information ports. Empty for a model with no auxiliary heads; a
+        # runtime that ignores them gets byte-identical audio either way.
+        "extra_output_names": list(frame_model.extra_output_names),
         "state_shapes": {
             name: tensor_shape(tensor)
             for name, tensor in zip(frame_model.state_input_names, state)
@@ -368,6 +403,7 @@ class StreamingOrt:
             name: np.zeros(shape, dtype=np.float32)
             for name, shape in self.manifest["state_shapes"].items()
         }
+        self.extras = {}
         self.input_buffer = np.zeros(0, dtype=np.float32)
         self.ola = np.zeros(0, dtype=np.float32)
         self.ola_norm = np.zeros(0, dtype=np.float32)
@@ -411,6 +447,14 @@ class StreamingOrt:
         return out
 
     def run_frame(self, noisy_frame: np.ndarray) -> np.ndarray:
+        """One frame. Also stashes any side-information outputs on `self.extras`.
+
+        The state outputs do NOT start at index 1: a graph with auxiliary heads
+        puts their logits between the enhanced frame and the state, so the offset
+        has to come from the manifest. Assuming 1 fed the first state port a
+        rank-4 conv cache and ORT rejected it -- which is the good failure; the
+        bad one is a state layout that happens to typecheck.
+        """
         noisy_frame = np.asarray(noisy_frame, dtype=np.float32)
         if noisy_frame.shape != (1, self.freq_bins, 2):
             raise ValueError(f"noisy_frame must have shape (1, {self.freq_bins}, 2)")
@@ -418,7 +462,18 @@ class StreamingOrt:
         ort_inputs.update(self.state)
         outputs = self.session.run(self.manifest["output_names"], ort_inputs)
         enhanced = outputs[0]
-        for name, value in zip(self.manifest["state_input_names"], outputs[1:]):
+        extra_names = list(self.manifest.get("extra_output_names", []))
+        first_state = 1 + len(extra_names)
+        self.extras = dict(zip(extra_names, outputs[1:first_state]))
+        state_names = self.manifest["state_input_names"]
+        state_values = outputs[first_state:]
+        if len(state_values) != len(state_names):
+            raise RuntimeError(
+                f"graph returned {len(state_values)} state tensors for "
+                f"{len(state_names)} ports; the manifest's output layout and the "
+                "graph disagree"
+            )
+        for name, value in zip(state_names, state_values):
             self.state[name] = value
         return enhanced
 

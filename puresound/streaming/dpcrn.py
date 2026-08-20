@@ -56,6 +56,9 @@ class DpcrnStreamingState:
     skip_caches: list[torch.Tensor] = field(default_factory=list)
     noisy_cache: torch.Tensor | None = None
     counter: torch.Tensor | None = None
+    # Auxiliary presence heads, when the config enables them. Each contributes
+    # (ema, conv_cache, count); flattened in head order, near before background.
+    head_states: list[tuple] = field(default_factory=list)
 
 
 def validate_streaming_dpcrn_config(config: dict[str, Any]) -> dict[str, Any]:
@@ -167,17 +170,37 @@ class StreamingDpcrnFrameModel(StreamingFrameModelBase):
         self.warmup_frames = self.bottleneck_delay
         # Algorithmic output latency in frames (0 for a causal model).
         self.streaming_delay = self.bottleneck_delay
+        # Auxiliary heads reading the bottleneck. Training-only for the mask, but
+        # exportable as side information; dist_head is deliberately excluded --
+        # it is utterance-pooled and has no per-frame meaning.
+        self.heads = [
+            (name, getattr(self.backbone, name))
+            for name in ("vad_head", "background_vad_head")
+            if getattr(self.backbone, name, None) is not None
+        ]
         self.eval()
+
+    @property
+    def extra_output_names(self) -> list[str]:
+        return [f"{name.replace('_head', '')}_logit" for name, _ in self.heads]
+
+    def _head_state_names(self, prefix: str = "") -> list[str]:
+        out = []
+        for name, _ in self.heads:
+            stem = name.replace("_head", "")
+            out += [f"{prefix}{stem}_ema", f"{prefix}{stem}_conv_cache",
+                    f"{prefix}{stem}_count"]
+        return out
 
     def _extra_state_names(self, prefix: str = "") -> list[str]:
         """The lookahead variant's extra ports: one skip cache per delayed
         layer, the delayed noisy frame, and the warm-up counter."""
         if not self.is_lookahead:
-            return []
+            return self._head_state_names(prefix)
         names = [f"{prefix}skip_cache_{i}" for i in self.skip_delay_layers]
         names.append(f"{prefix}noisy_cache")
         names.append(f"{prefix}counter")
-        return names
+        return names + self._head_state_names(prefix)
 
     def initial_state(self, batch_size: int = 1, device: torch.device | str = "cpu") -> DpcrnStreamingState:
         device = torch.device(device)
@@ -220,7 +243,12 @@ class StreamingDpcrnFrameModel(StreamingFrameModelBase):
             nc, nf = noisy_shape
             noisy_cache = torch.zeros(batch_size, nc, nf, self.bottleneck_delay, dtype=dtype, device=device)
             counter = torch.zeros(1, dtype=dtype, device=device)
-        return DpcrnStreamingState(down_caches, up_caches, h_states, c_states, skip_caches, noisy_cache, counter)
+        head_states = [
+            head.initial_stream_state(batch_size=batch_size, device=device, dtype=dtype)
+            for _, head in self.heads
+        ]
+        return DpcrnStreamingState(down_caches, up_caches, h_states, c_states,
+                                   skip_caches, noisy_cache, counter, head_states)
 
     def _delay_line_shapes(self, batch_size, down_freqs):
         """(channels, freq) of each up-layer skip tensor and of the mask-application
@@ -254,6 +282,8 @@ class StreamingDpcrnFrameModel(StreamingFrameModelBase):
             tensors += list(state.skip_caches)
             tensors.append(state.noisy_cache)
             tensors.append(state.counter)
+        for triple in state.head_states:
+            tensors += list(triple)
         return tuple(tensors)
 
     def state_from_tensors(self, tensors: Sequence[torch.Tensor]) -> DpcrnStreamingState:
@@ -270,6 +300,10 @@ class StreamingDpcrnFrameModel(StreamingFrameModelBase):
             skip_caches = tensors[base : base + n_skip]
             noisy_cache = tensors[base + n_skip]
             counter = tensors[base + n_skip + 1]
+        # Head triples come last, in `_head_state_names` order.
+        n_head_ports = 3 * len(self.heads)
+        head_flat = tensors[len(tensors) - n_head_ports:] if n_head_ports else []
+        head_states = [tuple(head_flat[3 * i : 3 * i + 3]) for i in range(len(self.heads))]
         return DpcrnStreamingState(
             down_caches=tensors[:n_down],
             up_caches=tensors[n_down : n_down + n_up],
@@ -278,6 +312,7 @@ class StreamingDpcrnFrameModel(StreamingFrameModelBase):
             skip_caches=skip_caches,
             noisy_cache=noisy_cache,
             counter=counter,
+            head_states=head_states,
         )
 
     def _dprnn_block_step(
@@ -338,6 +373,24 @@ class StreamingDpcrnFrameModel(StreamingFrameModelBase):
             next_h.append(h)
             next_c.append(c)
 
+        # Heads read the bottleneck here -- the same tensor, at the same point,
+        # the offline backbone hands to them, and verified bit-exact at
+        # `warmup_frames` of lead (rel 1.7e-06).
+        #
+        # The warm-up frames must NOT enter a head's state. The causal down path
+        # emits `warmup_frames` phantom frames before its first real one, and a
+        # head carrying a 4 s EMA integrates those phantoms into an offset that
+        # survives hundreds of frames -- measured as a logit error still growing
+        # at frame 400. The inter-LSTM state is gated for exactly this reason a
+        # few lines below; this is the same gate for the same reason.
+        head_logits, next_head_states = [], []
+        warm = (state.counter is not None
+                and float(state.counter.reshape(-1)[0]) < float(self.warmup_frames))
+        for (_, head), hstate in zip(self.heads, state.head_states):
+            logit, new_hstate = head.step(x, hstate)
+            head_logits.append(logit)
+            next_head_states.append(hstate if warm else new_hstate)
+
         next_skip: list[torch.Tensor] = []
         next_counter = state.counter
         if self.is_lookahead:
@@ -361,20 +414,21 @@ class StreamingDpcrnFrameModel(StreamingFrameModelBase):
             x, pending = self._up_step(layer, x, state.up_caches[i])
             next_up.append(pending)
 
-        return x, DpcrnStreamingState(
-            next_down, next_up, next_h, next_c, next_skip, state.noisy_cache, next_counter
+        return x, head_logits, DpcrnStreamingState(
+            next_down, next_up, next_h, next_c, next_skip, state.noisy_cache,
+            next_counter, next_head_states
         )
 
     def forward_frame(
         self,
         noisy_frame: torch.Tensor,
         state: DpcrnStreamingState,
-    ) -> tuple[torch.Tensor, DpcrnStreamingState]:
+    ) -> tuple:
         if noisy_frame.dim() != 3 or noisy_frame.shape[-1] != 2:
             raise ValueError("noisy_frame must have shape [B, freq_bins, 2]")
         tf_frame = noisy_frame.unsqueeze(2)
         features, features_for_enhanced = self.feats(tf_frame)
-        mask, next_state = self._forward_feature_frame(features, state)
+        mask, head_logits, next_state = self._forward_feature_frame(features, state)
         # The mask leaves _forward_feature_frame already delayed by `bottleneck_delay`
         # frames (look-ahead compensation). Apply it to the equally-delayed noisy
         # spectrum so the mask and the spectrum are the same offline frame.
@@ -383,13 +437,21 @@ class StreamingDpcrnFrameModel(StreamingFrameModelBase):
             features_for_enhanced, noisy_cache = self._shift(state.noisy_cache, features_for_enhanced)
         next_state = DpcrnStreamingState(
             next_state.down_caches, next_state.up_caches, next_state.h_states,
-            next_state.c_states, next_state.skip_caches, noisy_cache, next_state.counter,
+            next_state.c_states, next_state.skip_caches, noisy_cache,
+            next_state.counter, next_state.head_states,
         )
         enhanced = Masker.apply_complex_mask_on_reim(features_for_enhanced, mask)
         enhanced = self.feats.back_forward(enhanced)
         enhanced = enhanced.squeeze(-1).permute(0, 2, 1).contiguous()
         real, imag = torch.chunk(enhanced, chunks=2, dim=-1)
-        return torch.cat([real, imag], dim=-1).reshape(noisy_frame.shape), next_state
+        wav_frame = torch.cat([real, imag], dim=-1).reshape(noisy_frame.shape)
+        if not self.heads:
+            return wav_frame, next_state
+        # NOTE the head logits are NOT delayed with the mask. They describe the
+        # bottleneck frame they were computed from, which leads the emitted audio
+        # by `streaming_delay_frames`; a consumer aligning them to the output has
+        # to account for that, the same way the runtime aligns the dry input.
+        return wav_frame, tuple(head_logits), next_state
 
 def create_streaming_dpcrn_model(system_model: nn.Module) -> StreamingDpcrnFrameModel:
     return StreamingDpcrnFrameModel(system_model.eval())
