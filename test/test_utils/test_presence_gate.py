@@ -265,3 +265,82 @@ def test_forward_without_a_gate_is_unchanged():
         a = model(wav.clone(), dry_blend=0.9)
         b = model(wav.clone(), dry_blend=0.9, presence_gate=None)
     assert torch.equal(a, b)
+
+
+# ------------------------------------------------- head-driven mode
+
+
+def test_head_driven_gate_needs_no_readout():
+    g = PresenceGate(b_hi=0.5, b_lo=0.1)
+    assert g.head_driven is True
+    assert g.as_manifest()["source"] == "head"
+    assert g.as_manifest()["readout_dim"] is None
+
+
+def test_head_driven_gate_refuses_a_bottleneck():
+    """Silently returning 0.5 for everything would look like a working gate."""
+    g = PresenceGate(b_hi=0.5, b_lo=0.1)
+    with pytest.raises(ValueError, match="head-driven"):
+        g.presence(torch.zeros(1, 8, 4, 10))
+
+
+def test_apply_demands_exactly_one_source():
+    g = gate()
+    wav, bn = torch.randn(1, 1600), torch.randn(1, 8, 4, 10)
+    with pytest.raises(ValueError, match="exactly one"):
+        g.apply(wav, bn, hop=160, logits=torch.zeros(1, 10))
+    with pytest.raises(ValueError, match="exactly one"):
+        g.apply(wav, hop=160)
+
+
+def test_head_logits_are_bit_identical_while_present():
+    """The dead zone must survive the head path too -- that is the whole
+    safety argument, and it cannot depend on which estimator feeds it.
+
+    In-range audio on purpose: `apply` clamps to [-1, 1] like the module's own
+    output does, so a fixture with samples past full scale would be changed by
+    the clamp and not by the gate. See the companion test below.
+    """
+    g = PresenceGate(b_hi=0.5, b_lo=0.1, tau_up_s=0.05, tau_dn_s=1.0)
+    wav = torch.randn(1, 100 * 160) * 0.1
+    out = g.apply(wav, hop=160, logits=torch.full((1, 100), 8.0))
+    assert torch.equal(out, wav)
+
+
+def test_the_dead_zone_still_clamps_out_of_range_input():
+    """Bit-identity is a claim about the GAIN, not about the clamp.
+
+    Pinned because it is the obvious way to misread a failing bit-identity
+    assertion: an over-full-scale fixture will differ, and that is the clamp
+    doing its documented job, not the gate attenuating.
+    """
+    g = PresenceGate(b_hi=0.5, b_lo=0.1, tau_dn_s=1.0)
+    hot = torch.full((1, 320), 3.0)
+    out = g.apply(hot, hop=160, logits=torch.full((1, 2), 8.0))
+    assert float(out.max()) == 1.0
+    assert not torch.equal(out, hot)
+
+
+def test_head_logits_reach_the_floor_given_time():
+    """tau_dn is in seconds: absent evidence must actually close the gate, and
+    a per-frame reading of tau would close it 100x too fast."""
+    g = PresenceGate(b_hi=0.5, b_lo=0.1, gain_floor_db=-26.0, tau_dn_s=1.0)
+    wav = torch.ones(1, 400 * 160)
+    out = g.apply(wav, hop=160, logits=torch.full((1, 400), -8.0))
+    tail_db = 20 * math.log10(float(out[0, -1].abs()))
+    assert abs(tail_db - (-26.0)) < 0.5, tail_db
+    # and it must NOT have closed within the first 100 ms
+    early = 20 * math.log10(float(out[0, 10 * 160].abs()))
+    assert early > -1.0, early
+
+
+def test_head_and_readout_paths_agree_on_the_same_s():
+    """Same presence sequence in, same gain out -- the estimator is swappable
+    and the actuator is not doing anything different for it."""
+    w = torch.zeros(8)
+    g_read = PresenceGate(weight=w, bias=-8.0, b_hi=0.5, b_lo=0.1, tau_dn_s=1.0)
+    g_head = PresenceGate(b_hi=0.5, b_lo=0.1, tau_dn_s=1.0)
+    wav = torch.ones(1, 300 * 160)
+    a = g_read.apply(wav, torch.zeros(1, 8, 4, 300), hop=160)
+    b = g_head.apply(wav, hop=160, logits=torch.full((1, 300), -8.0))
+    assert torch.allclose(a, b, atol=1e-6)

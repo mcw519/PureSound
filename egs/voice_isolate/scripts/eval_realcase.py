@@ -178,11 +178,23 @@ def main() -> None:
         raw_wav, sr = AudioIO.open(f_path=str(raw_path), target_lvl=None, resample_to=16000)
         raw_wav = raw_wav.view(1, -1)
         with torch.no_grad():
+            # A head-driven gate is applied below as its own system, so the
+            # `ours` row stays mask-only and the comparison has a baseline.
             ours = model(raw_wav.to(device), dry_blend=args.dry_blend,
-                         spec_floor=args.spec_floor, presence_gate=gate).detach().cpu().view(1, -1).clamp(min=-1.0, max=1.0)
+                         spec_floor=args.spec_floor,
+                         presence_gate=None if (gate is not None and gate.head_driven)
+                         else gate).detach().cpu().view(1, -1).clamp(min=-1.0, max=1.0)
             logits = getattr(model.backbone, "last_vad_logits", None)
 
         systems = {"ours": ours}
+        if gate is not None and gate.head_driven:
+            if logits is None:
+                raise RuntimeError(
+                    "--presence-gate-head needs a backbone with vad_head enabled "
+                    "(use a config whose backbone_args declares it)")
+            systems["presence_gate"] = gate.apply(
+                ours, hop=args.hop, logits=logits.detach().cpu()
+            ).clamp(-1.0, 1.0)
         if args.gate:
             if logits is None:
                 raise RuntimeError("--gate needs a backbone with vad_head enabled (see config/exp/train_dpcrn_gate.yaml)")

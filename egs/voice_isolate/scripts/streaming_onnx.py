@@ -130,8 +130,13 @@ def verify(args) -> None:
         rng = np.random.default_rng(args.seed)
         wav = torch.from_numpy((rng.standard_normal(args.seconds * runtime.sample_rate) * 0.2).astype(np.float32)).view(1, -1)
 
+    # The runtime applies the manifest's dry_blend after the graph, so the offline
+    # reference has to apply the same one -- otherwise this compares two different
+    # systems and reports the blend as an alignment error. It read -19 dB on an
+    # export that is bit-exact at 105 dB.
+    blend = float(runtime.manifest.get("recommended_inference", {}).get("dry_blend", 1.0))
     with torch.no_grad():
-        offline = system_model(wav).squeeze().cpu().numpy()
+        offline = system_model(wav, dry_blend=blend).squeeze().cpu().numpy()
 
     L = wav.shape[1]
     chunks = [runtime.process_samples(wav[0, i : i + 1024].numpy()) for i in range(0, L, 1024)]
@@ -143,6 +148,7 @@ def verify(args) -> None:
     lag, sisdr = _align_sisdr(offline, streaming, max_lag=max_lag, trim=args.trim)
     print(f"algorithmic latency: {delay_frames} frames (~{delay_frames * runtime.hop_length / 16:.0f} ms)")
     print(f"measured alignment lag: {lag} samples ({lag / runtime.sample_rate * 1000:.1f} ms)")
+    print(f"offline reference dry_blend: {blend} (matched to the manifest)")
     print(f"offline vs ORT streaming SI-SDR (aligned + trimmed): {sisdr:.1f} dB")
     print("PASS" if sisdr >= 40.0 else "LOW (check STFT/latency alignment)")
 

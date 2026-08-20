@@ -52,10 +52,19 @@ import torch
 class PresenceGate:
     """Inference-only near-presence gain.
 
+    Two ways to get ``s``, and the gain logic is identical either way:
+
+    * a **linear readout** on the frozen bottleneck (``weight``/``bias``) -- what
+      an untrained checkpoint can offer;
+    * a **trained presence head**'s logits, passed to ``apply(logits=...)``. A
+      head measured 0.953 in-domain across RT60 and 0.843 on an unseen device
+      orientation where the readout it replaces sat at 0.529
+      (``benchmarks/probes/presence_head_v11_README.md``), so this is the better
+      estimator when a checkpoint has one.
+
     Args:
         weight: readout coefficients over the frequency-pooled bottleneck,
-            shape ``[C]``. The standardizer is expected to be folded in already,
-            so scoring is one dot product.
+            shape ``[C]``, or None for head-driven use.
         bias: readout intercept.
         b_hi: dead-zone edge. At or above it the gain is exactly 1.0 and the
             output is bit-identical to not gating.
@@ -67,8 +76,8 @@ class PresenceGate:
         b_init: the state before any evidence. 1.0 presumes presence.
     """
 
-    weight: torch.Tensor
-    bias: float
+    weight: Optional[torch.Tensor] = None
+    bias: float = 0.0
     b_hi: float = 0.50
     b_lo: float = 0.10
     gain_floor_db: float = -26.0
@@ -77,7 +86,7 @@ class PresenceGate:
     b_init: float = 1.0
 
     def __post_init__(self):
-        if self.weight.dim() != 1:
+        if self.weight is not None and self.weight.dim() != 1:
             raise ValueError(f"weight must be 1-D [C], got {tuple(self.weight.shape)}")
         if not 0.0 < self.b_lo < self.b_hi <= 1.0:
             raise ValueError(
@@ -119,12 +128,22 @@ class PresenceGate:
         return cls(weight=torch.from_numpy(data["weight"]).float(),
                    bias=float(data["bias"]), **kwargs)
 
+    @property
+    def head_driven(self) -> bool:
+        """True when there is no readout, so ``s`` must be supplied."""
+        return self.weight is None
+
     def presence(self, bottleneck: torch.Tensor) -> torch.Tensor:
         """``s`` per frame from a ``[N, C, F, T]`` bottleneck.
 
         Pooled over frequency the same way the readout was fitted. Returns
         ``[N, T]`` in (0, 1).
         """
+        if self.weight is None:
+            raise ValueError(
+                "this gate has no readout; it is head-driven, so pass the head's "
+                "logits to apply(logits=...) instead of a bottleneck"
+            )
         if bottleneck.dim() != 4:
             raise ValueError(
                 f"bottleneck must be [N, C, F, T], got {tuple(bottleneck.shape)}"
@@ -166,17 +185,32 @@ class PresenceGate:
         return torch.pow(10.0, t * (self.gain_floor_db / 20.0))
 
     def apply(
-        self, wav: torch.Tensor, bottleneck: torch.Tensor, *, hop: int
+        self,
+        wav: torch.Tensor,
+        bottleneck: Optional[torch.Tensor] = None,
+        *,
+        hop: int,
+        logits: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
-        """Gate a finished waveform using the bottleneck it came from.
+        """Gate a finished waveform from a bottleneck or from head logits.
+
+        Exactly one source: ``bottleneck`` runs the linear readout, ``logits``
+        takes a trained head's per-frame output (``[N, T]``, pre-sigmoid).
 
         ``hop`` is the encoder hop in samples, which is what puts the frame grid
         and the sample grid in register. The gain is held over each frame's hop
         and the tail is padded with the last value; ``b`` is already smooth in
         time, so no extra smoothing is applied and none is needed.
         """
-        b = self.trajectory(self.presence(bottleneck), 16000.0 / hop
-                            if hop else 1.0)
+        if (bottleneck is None) == (logits is None):
+            raise ValueError("pass exactly one of bottleneck= or logits=")
+        if logits is not None:
+            s = torch.sigmoid(logits.float())
+            if s.dim() == 1:
+                s = s.unsqueeze(0)
+        else:
+            s = self.presence(bottleneck)
+        b = self.trajectory(s, 16000.0 / hop if hop else 1.0)
         g = self.gain(b)                                       # [N, T_frames]
         g = g.repeat_interleave(hop, dim=-1)
         n = wav.shape[-1]
@@ -198,5 +232,6 @@ class PresenceGate:
             "tau_up_s": float(self.tau_up_s),
             "tau_dn_s": float(self.tau_dn_s),
             "b_init": float(self.b_init),
-            "readout_dim": int(self.weight.shape[0]),
+            "readout_dim": None if self.weight is None else int(self.weight.shape[0]),
+            "source": "head" if self.weight is None else "readout",
         }
