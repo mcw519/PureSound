@@ -49,12 +49,12 @@ RealMAN、ai-coustics Dawn Chorus——用這裡的腳本重建它們是預期�
 
 ## 田野 benchmark
 
-`field_test_vector/` 是決定部署問題的那一個：兩支手工標記的真實錄音、27 個 clip，用兩種**永不
+`field_test_vector/` 是決定部署問題的那一個：十一支手工標記的真實錄音、64 個 clip，用兩種**永不
 平均**的模式評分——STREAM（連續錄音、近場錨在場，等同對話中的行為）與 COLD-START（每段切出來
 從第零秒餵入，等同機器閒置時的行為）。成績與方法見
 [`field_test_vector/RESULTS.md`](field_test_vector/RESULTS.md)。
 
-重建 clip（需要私有錄音已放在 `../test_vector/`）：
+重建 clip（需要私有錄音已放在 `../test_vec/`）：
 
 ```bash
 uv run python egs/voice_isolate/benchmarks/field_test_vector/build_cases.py

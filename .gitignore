@@ -62,9 +62,7 @@ anna_test.wav
 # audio; the recordings themselves are distributed out of band. Do not add negative
 # rules under these paths.
 egs/voice_isolate/test_vec/
-egs/voice_isolate/test_vector/
 egs/voice_isolate/data_report/field_cases/
-egs/voice_isolate/data_report/qvf22_real_cases/
 *.wav.private
 
 # Keep the RIR realism artifact index visible while ignoring generated payloads.

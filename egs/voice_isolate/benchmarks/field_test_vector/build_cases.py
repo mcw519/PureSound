@@ -58,9 +58,6 @@ RECIPE = REPO / "egs/voice_isolate"
 AUDIO_SRC = RECIPE / "test_vec"                                      # private, gitignored
 SPANS = HERE / "spans"                                               # tracked labels
 OUT = RECIPE / "data_report/field_cases/test_vector_cases"           # private, gitignored
-#: QVF2.2's own output for the three clips it published, carried over from the
-#: retired qvf22_real_cases set. The scorer picks these up as `reference`.
-QVF_REF_SRC = RECIPE / "data_report/field_cases/_superseded/qvf22_real_cases_retired"
 SR = 16000
 MIN_CLIP_S = 1.0
 SESSION_MIN_SPANS = 3
@@ -92,11 +89,13 @@ def tag_for(stem: str) -> str:
 
 
 def qvf_reference_for(stem: str) -> Path | None:
-    """The published QVF2.2 output matching a clip, if there is one."""
-    m = re.match(r"^QVF_(scenario\d)$", stem)
-    if not m:
-        return None
-    candidate = QVF_REF_SRC / f"{m.group(1)}_qvf22.wav"
+    """A commercial system's own output for this clip, if one sits beside it.
+
+    Convention: ``<stem>.qvf22.wav`` next to ``<stem>.wav``. These are QVF2.2's
+    published results -- they cannot be regenerated, so they live with the source
+    audio rather than in an archive that looks disposable.
+    """
+    candidate = AUDIO_SRC / f"{stem}.qvf22.wav"
     return candidate if candidate.is_file() else None
 
 
@@ -164,6 +163,10 @@ def main() -> None:
         (tag_for(p.name[: -len(".spans.json")]), p.name[: -len(".spans.json")])
         for p in SPANS.glob("*.spans.json")
     )
+    # A reference output is not a recording: it has no labels of its own, so it
+    # never appears here. Guard it anyway -- a stray `X.qvf22.spans.json` would
+    # otherwise score a commercial system's output as if it were our input.
+    sources = [(t, st) for t, st in sources if not st.endswith(".qvf22")]
     if not sources:
         raise SystemExit(f"no labels in {SPANS}")
 

@@ -59,13 +59,13 @@ comparable all the way back.
 
 ## The field benchmark
 
-`field_test_vector/` is the one that decides deployment questions: two hand-labelled real
+`field_test_vector/` is the one that decides deployment questions: eleven hand-labelled real
 recordings, 27 clips, scored two ways that are never averaged — STREAM (the continuous
 recording, near anchor present, mid-conversation behaviour) and COLD-START (each span cut
 out and fed from t=0, bot-idle behaviour). Standings and method:
 [`field_test_vector/RESULTS.md`](field_test_vector/RESULTS.md).
 
-Rebuild the clips (needs the private recordings in place under `../test_vector/`):
+Rebuild the clips (needs the private recordings in place under `../test_vec/`):
 
 ```bash
 uv run python egs/voice_isolate/benchmarks/field_test_vector/build_cases.py
