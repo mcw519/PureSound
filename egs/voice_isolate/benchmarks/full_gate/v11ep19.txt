@@ -1,0 +1,99 @@
+================ BENCHMARK SUMMARY [v11ep19]  (dry_blend=0.9, presence_gate=off, chain=1318e35) ================
+--- cross-chain reference (QVF2.2 clips) ---
+qvf_gym_session	STREAM: full QVF_GYM recording (near anchor present)	ours	   -0.77	  -29.30	   -7.28	  -49.94	    0.11	   21.40	    7.39	ok
+qvf_gym_near1	COLD-START lone near voice (keep)	ours	   -9.35	  -38.49	     n/a	     n/a	     n/a	     n/a	     n/a	KEEP-VIOLATION
+qvf_gym_dt1	COLD-START double-talk, keep-only (near must survive)	ours	   -2.12	  -32.23	     n/a	     n/a	     n/a	     n/a	     n/a	ok
+qvf_gym_far1	COLD-START lone far voice, no near anchor (suppress)	ours	     n/a	     n/a	  -12.19	  -54.85	   -4.80	   26.31	    7.39	ok
+qvf_gym_near2	COLD-START lone near voice (keep)	ours	   -0.15	  -25.57	     n/a	     n/a	     n/a	     n/a	     n/a	ok
+qvf_gym_dt2	COLD-START double-talk, keep-only (near must survive)	ours	   -1.51	  -31.30	     n/a	     n/a	     n/a	     n/a	     n/a	ok
+qvf_keep_in_touch_near1	COLD-START lone near voice (keep)	ours	  -19.28	  -49.61	     n/a	     n/a	     n/a	     n/a	     n/a	KEEP-VIOLATION
+qvf_keep_in_touch_dt1	COLD-START double-talk, keep-only (near must survive)	ours	   -9.34	  -43.24	     n/a	     n/a	     n/a	     n/a	     n/a	KEEP-VIOLATION
+qvf_plumbing_near1	COLD-START lone near voice (keep)	ours	   -0.21	  -22.29	     n/a	     n/a	     n/a	     n/a	     n/a	ok
+qvf_plumbing_far1	COLD-START lone far voice, no near anchor (suppress)	ours	     n/a	     n/a	   -1.03	  -42.56	   24.88	   20.47	   25.91	SUPPRESS-FAIL
+qvf_price_session	STREAM: full QVF_PRICE recording (near anchor present)	ours	   -0.71	  -28.91	   -9.06	  -50.13	    2.80	   21.93	   11.86	ok
+qvf_price_near1	COLD-START lone near voice (keep)	ours	   -6.36	  -36.20	     n/a	     n/a	     n/a	     n/a	     n/a	KEEP-VIOLATION
+qvf_price_far1	COLD-START lone far voice, no near anchor (suppress)	ours	     n/a	     n/a	   -2.95	  -46.31	    6.62	   18.11	    9.57	SUPPRESS-FAIL
+qvf_price_near2	COLD-START lone near voice (keep)	ours	   -0.45	  -28.39	     n/a	     n/a	     n/a	     n/a	     n/a	ok
+qvf_price_dt1	COLD-START double-talk, keep-only (near must survive)	ours	   -0.40	  -27.64	     n/a	     n/a	     n/a	     n/a	     n/a	ok
+qvf_price_dt2	COLD-START double-talk, keep-only (near must survive)	ours	   -0.96	  -29.13	     n/a	     n/a	     n/a	     n/a	     n/a	ok
+qvf_price_far2	COLD-START lone far voice, no near anchor (suppress)	ours	     n/a	     n/a	  -19.86	  -60.22	   -7.29	   32.02	   12.58	ok
+qvf_scenario1_near1	COLD-START lone near voice (keep)	ours	   -0.68	  -25.33	     n/a	     n/a	     n/a	     n/a	     n/a	ok
+qvf_scenario1_near1	COLD-START lone near voice (keep)	reference	   -0.15	  -24.81	     n/a	     n/a	     n/a	     n/a	     n/a	ok
+qvf_scenario2_far1	COLD-START lone far voice, no near anchor (suppress)	ours	     n/a	     n/a	   -1.16	  -30.41	   19.98	     n/a	   21.14	SUPPRESS-FAIL
+qvf_scenario2_far1	COLD-START lone far voice, no near anchor (suppress)	reference	     n/a	     n/a	    0.24	  -29.01	   21.38	     n/a	   21.14	SUPPRESS-FAIL
+qvf_scenario3_session	STREAM: full QVF_SCENARIO3 recording (near anchor present)	ours	   -0.87	  -25.22	   -0.85	  -37.07	    9.57	   12.72	   10.42	SUPPRESS-FAIL
+qvf_scenario3_session	STREAM: full QVF_SCENARIO3 recording (near anchor present)	reference	    0.10	  -24.26	  -29.71	  -65.93	  -19.29	   41.58	   10.42	ok
+qvf_scenario3_near1	COLD-START lone near voice (keep)	ours	   -0.69	  -25.38	     n/a	     n/a	     n/a	     n/a	     n/a	ok
+qvf_scenario3_far1	COLD-START lone far voice, no near anchor (suppress)	ours	     n/a	     n/a	   -0.88	  -37.10	    9.54	   12.75	   10.42	SUPPRESS-FAIL
+qvf_scenario3_near2	COLD-START lone near voice (keep)	ours	   -1.08	  -24.95	     n/a	     n/a	     n/a	     n/a	     n/a	ok
+# ours: FAIL -> 0d_near1:keep, 180d_far1:suppress, 180d_far2:suppress, 180d_far4:suppress, 270d_far1:suppress, 270d_far2:suppress, 270d_far3:suppress, 270d_far4:suppress, 90d_far3:suppress, 90d_far4:suppress, 90d_far5:suppress, 90d_far6:suppress, qvf_gym_near1:keep, qvf_keep_in_touch_near1:keep, qvf_keep_in_touch_dt1:keep, qvf_plumbing_far1:suppress, qvf_price_near1:keep, qvf_price_far1:suppress, qvf_scenario2_far1:suppress, qvf_scenario3_session:suppress, qvf_scenario3_far1:suppress
+# reference: FAIL -> qvf_scenario2_far1:suppress
+--- field scorecard (sessions + verdicts) ---
+180d_session	STREAM: full 180D recording (near anchor present)	ours	   -0.70	  -43.15	  -14.05	  -65.05	   13.80	   22.60	   27.84	SUPPRESS-PARTIAL
+270d_session	STREAM: full 270D recording (near anchor present)	ours	   -1.20	  -44.55	  -12.92	  -64.25	   14.28	   20.89	   27.20	SUPPRESS-PARTIAL
+90d_session	STREAM: full 90D recording (near anchor present)	ours	   -0.58	  -41.53	  -11.49	  -61.88	   16.83	   20.93	   28.32	SUPPRESS-PARTIAL
+qvf_gym_session	STREAM: full QVF_GYM recording (near anchor present)	ours	   -0.77	  -29.30	   -7.28	  -49.94	    0.11	   21.40	    7.39	ok
+qvf_price_session	STREAM: full QVF_PRICE recording (near anchor present)	ours	   -0.71	  -28.91	   -9.06	  -50.13	    2.80	   21.93	   11.86	ok
+qvf_scenario3_session	STREAM: full QVF_SCENARIO3 recording (near anchor present)	ours	   -0.87	  -25.22	   -0.85	  -37.07	    9.57	   12.72	   10.42	SUPPRESS-FAIL
+qvf_scenario3_session	STREAM: full QVF_SCENARIO3 recording (near anchor present)	reference	    0.10	  -24.26	  -29.71	  -65.93	  -19.29	   41.58	   10.42	ok
+# ours: FAIL -> 0d_near1:keep, 180d_far1:suppress, 180d_far2:suppress, 180d_far4:suppress, 270d_far1:suppress, 270d_far2:suppress, 270d_far3:suppress, 270d_far4:suppress, 90d_far3:suppress, 90d_far4:suppress, 90d_far5:suppress, 90d_far6:suppress, qvf_gym_near1:keep, qvf_keep_in_touch_near1:keep, qvf_keep_in_touch_dt1:keep, qvf_plumbing_far1:suppress, qvf_price_near1:keep, qvf_price_far1:suppress, qvf_scenario2_far1:suppress, qvf_scenario3_session:suppress, qvf_scenario3_far1:suppress
+# reference: FAIL -> qvf_scenario2_far1:suppress
+    cold-start far verdicts:
+      SUPPRESS-FAIL                            15
+      ok                                       3
+      SUPPRESS-PARTIAL                         2
+--- SYNTHESISED below (in-domain + 3 probes): produced by chain=1318e35, compare only against records on the same chain ---
+--- in-domain ---
+SI-SDRi : mean +8.23 dB, median +8.05 dB
+--------------------------------------------------------------
+     1N+0F            n= 244  median= +5.20  mean= +4.97
+     1N+1F            n= 321  median= +9.48  mean= +9.52
+  -- interferer-solo leakage (fg-present rows; ~0 dB = passthrough) --
+     n=614  median=-24.57  mean=-26.79
+  -- by solo leakage by turn_taking --
+     no-turn          n= 472  median=-25.76  mean=-27.49
+  -- F-only (silent-target) suppression --
+     n=86  median power reduction=-30.9 dB (more negative = better suppression)
+     false-near rate (reduction > -6 dB) = 8%
+--- probe expand/high/boundary (F-only median) ---
+3_probe_expand:   n=719  median power reduction=-26.5 dB (more negative = better suppression)
+4_probe_high:   n=719  median power reduction=-27.3 dB (more negative = better suppression)
+5_probe_boundary:   n=719  median power reduction=-23.6 dB (more negative = better suppression)
+--- Dawn WER (deletion guardrail) ---
+  350/450  running SI-SDRi: +0.76 dB
+  400/450  running SI-SDRi: +0.80 dB
+  450/450  running SI-SDRi: +0.85 dB
+SI-SDR  mix -> enhanced : -9.70 -> -8.85 dB  (SI-SDRi mean +0.85, median +0.95)
+wer_raw      : WER 0.184  (sub 0.048 / ins 0.053 / del 0.082)
+wer_enhanced : WER 0.173  (sub 0.054 / ins 0.032 / del 0.086)
+--- moderate-reverb WER (PRIMARY deployment gate) ---
+WER reverb floor (clean near-reverb fg, no itf/noise): 0.184  <- benchmark ceiling; if high, reverb-saturated
+WER mix      : 0.582  (sub 0.318 / ins 0.052 / del 0.212)
+WER enhanced : 0.394  (sub 0.185 / ins 0.033 / del 0.177)
+-> enhancement REDUCES WER by 0.188 vs mix
+   delta -0.1880  95% CI [-0.2321, -0.1465]
+   headroom on this set: mix 0.582 - reverb floor 0.184 = 0.398; this checkpoint captured 47% of it
+   1 itf (n=132): WER mix 0.491 -> enh 0.328
+        delta -0.1638  95% CI [-0.2165, -0.1146]
+   2 itf (n=68): WER mix 0.770 -> enh 0.532
+        delta -0.2386  95% CI [-0.3139, -0.1696]
+--- BUT-OFFICE WER (measured-RIR monitor; check the CI before reading a win) ---
+WER reverb floor (clean near-reverb fg, no itf/noise): 0.198  <- benchmark ceiling; if high, reverb-saturated
+WER mix      : 0.563  (sub 0.303 / ins 0.043 / del 0.217)
+WER enhanced : 0.548  (sub 0.269 / ins 0.041 / del 0.238)
+-> enhancement REDUCES WER by 0.014 vs mix
+   delta -0.0141  95% CI [-0.0425, +0.0129]   <- INSIDE NOISE: this set cannot resolve this difference
+   headroom on this set: mix 0.563 - reverb floor 0.198 = 0.365; this checkpoint captured 4% of it
+   1 itf (n=131): WER mix 0.518 -> enh 0.515
+        delta -0.0035  95% CI [-0.0380, +0.0310]   <- INSIDE NOISE: this set cannot resolve this difference
+   2 itf (n=69): WER mix 0.647 -> enh 0.612
+        delta -0.0343  95% CI [-0.0837, +0.0096]   <- INSIDE NOISE: this set cannot resolve this difference
+--- BUT reverb WER (secondary extreme-OOD monitor) ---
+WER enhanced : 0.658  (sub 0.346 / ins 0.048 / del 0.264)
+-> enhancement RAISES WER by 0.000 vs mix
+   1 itf (n=131): WER mix 0.618 -> enh 0.618
+   2 itf (n=69): WER mix 0.733 -> enh 0.734
+--- real-RIR turn-taking (KEEP near / SUPPRESS far-solo) ---
+system           KEEP med/mean   ok/viol      SUPPRESS med/mean   ok/fail   SI-SDR med
+ours          -0.15/ -0.56 dB   95/5         -15.82/ -13.67 dB   83/17         +4.89
+logs: /tmp/claude-1001/-home-milowu-A4Audio-PureSound/7b76fa14-55b2-4c0a-b797-c8214d986949/scratchpad/bench_v3/bench_v11ep19
