@@ -1,3 +1,4 @@
+import pytest
 import importlib.util
 from pathlib import Path
 
@@ -300,7 +301,10 @@ def test_enhance_audio_can_use_ort_streaming_backend(
 
     class FakeRuntime:
         sample_rate = 16000
+        hop_length = 160
         providers = ["CPUExecutionProvider"]
+        extra_names: list = []
+        manifest: dict = {}
 
         def process_samples(self, samples):
             return samples
@@ -311,7 +315,7 @@ def test_enhance_audio_can_use_ort_streaming_backend(
     monkeypatch.setattr(
         demo,
         "get_cached_ort_runtime",
-        lambda onnx_path, provider="auto": FakeRuntime(),
+        lambda onnx_path, provider="auto", collect_extras=False: FakeRuntime(),
     )
 
     class FakeMetrics:
@@ -338,3 +342,139 @@ def test_enhance_audio_can_use_ort_streaming_backend(
     assert Path(spectrogram).is_file()
     assert "Running ORT streaming inference" in status
     assert ["sample_rate", "16000", "16000", "Hz"] in metrics_rows
+
+
+def test_ort_gate_refuses_a_graph_without_logits(tmp_path, monkeypatch, write_tone_wav):
+    """The blanket "ORT cannot gate" refusal is gone; the remaining condition is
+    whether the GRAPH exports the logits. A model without them must say so and
+    name the config that produces one, not gate on nothing."""
+    demo = _load_demo_module()
+    config_path = _write_demo_config(tmp_path)
+    input_path = tmp_path / "input.wav"
+    onnx_path = tmp_path / "exp" / "work" / "model.onnx"
+    onnx_path.parent.mkdir(parents=True)
+    onnx_path.write_text("onnx", encoding="utf-8")
+    write_tone_wav(input_path, sample_rate=16000, duration=0.1)
+
+    class NoHeadRuntime:
+        sample_rate = 16000
+        hop_length = 160
+        providers = ["CPUExecutionProvider"]
+        extra_names: list = []
+        manifest: dict = {}
+
+        def process_samples(self, samples):
+            return samples
+
+        def flush(self):
+            return demo.np.zeros(0, dtype="float32")
+
+    monkeypatch.setattr(
+        demo, "get_cached_ort_runtime",
+        lambda onnx_path, provider="auto", collect_extras=False: NoHeadRuntime(),
+    )
+    with pytest.raises(ValueError, match="vad_logit") as excinfo:
+        demo.enhance_audio(
+            str(config_path), str(onnx_path), str(input_path),
+            backend="ORT streaming", gate_mode="Soft",
+        )
+    # It must name the config that produces a usable graph, not just refuse.
+    assert "infer_dpcrn_heads.yaml" in str(excinfo.value)
+
+
+def test_ort_gate_compensates_the_logit_lead(tmp_path, monkeypatch, write_tone_wav):
+    """The graph's logits lead the audio by streaming_delay_frames.
+
+    Not compensating makes the gate act ~30 ms early and clip the front of every
+    kept span, which no level summary would flag. The fake reports a lead and a
+    logit sequence long enough to see the drop.
+    """
+    demo = _load_demo_module()
+    config_path = _write_demo_config(tmp_path)
+    input_path = tmp_path / "input.wav"
+    onnx_path = tmp_path / "exp" / "work" / "model.onnx"
+    onnx_path.parent.mkdir(parents=True)
+    onnx_path.write_text("onnx", encoding="utf-8")
+    write_tone_wav(input_path, sample_rate=16000, duration=0.5)
+
+    seen = {}
+
+    class HeadRuntime:
+        sample_rate = 16000
+        hop_length = 160
+        providers = ["CPUExecutionProvider"]
+        extra_names = ["vad_logit"]
+        manifest = {"streaming_delay_frames": 3}
+
+        def process_samples(self, samples):
+            seen["n"] = len(samples)
+            return samples
+
+        def flush(self):
+            return demo.np.zeros(0, dtype="float32")
+
+        def drain_extras(self):
+            # 3 leading frames say "absent", every later frame says "present".
+            n = seen["n"] // self.hop_length + 4
+            v = demo.np.full(n, 8.0, dtype="float32")
+            v[:3] = -8.0
+            return {"vad_logit": v}
+
+    monkeypatch.setattr(
+        demo, "get_cached_ort_runtime",
+        lambda onnx_path, provider="auto", collect_extras=False: HeadRuntime(),
+    )
+    captured = {}
+    real_gate = demo.apply_vad_gate
+
+    def spy(enhanced, vad_logits, *a, **kw):
+        captured["logits"] = vad_logits.clone()
+        return real_gate(enhanced, vad_logits, *a, **kw)
+
+    monkeypatch.setattr(demo, "apply_vad_gate", spy)
+    outputs = demo.enhance_audio(
+        str(config_path), str(onnx_path), str(input_path),
+        backend="ORT streaming", gate_mode="Soft",
+    )
+    assert not outputs[4].startswith("Error:"), outputs[4]
+    assert "logit lead=3 frames compensated" in outputs[4]
+    # The ACTUAL behaviour: the three leading "absent" frames must be gone, so
+    # the gate never sees them and cannot close over the front of a kept span.
+    seq = captured["logits"].reshape(-1)
+    assert float(seq.min()) > 0.0, \
+        f"leading absent frames survived: {seq[:5].tolist()}"
+
+
+def test_ort_runtime_cache_key_separates_collecting_from_non_collecting():
+    """A gated run must not reuse a runtime built without collection.
+
+    Without collect_extras in the key, an earlier ungated run's runtime is
+    handed back and `drain_extras` raises -- or worse, returns nothing and the
+    gate silently does nothing.
+    """
+    demo = _load_demo_module()
+    built = []
+
+    class Fake:
+        def __init__(self, onnx_path, provider="auto", collect_extras=False):
+            built.append(bool(collect_extras))
+            self.collect_extras = bool(collect_extras)
+
+        def reset(self):
+            pass
+
+    import puresound.streaming as streaming_pkg
+
+    original = streaming_pkg.StreamingDparnOrt
+    streaming_pkg.StreamingDparnOrt = Fake
+    demo.ORT_RUNTIME_CACHE.clear()
+    try:
+        a = demo.get_cached_ort_runtime("m.onnx", provider="cpu", collect_extras=False)
+        b = demo.get_cached_ort_runtime("m.onnx", provider="cpu", collect_extras=True)
+        c = demo.get_cached_ort_runtime("m.onnx", provider="cpu", collect_extras=True)
+    finally:
+        streaming_pkg.StreamingDparnOrt = original
+        demo.ORT_RUNTIME_CACHE.clear()
+    assert built == [False, True], built      # the second is NOT a cache hit
+    assert a is not b
+    assert b is c                             # but a repeat of the same key is

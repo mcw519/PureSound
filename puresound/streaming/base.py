@@ -341,6 +341,7 @@ class StreamingOrt:
         onnx_path: str | Path,
         manifest_path: str | Path | None = None,
         provider: str = "auto",
+        collect_extras: bool = False,
     ):
         import onnxruntime
 
@@ -356,6 +357,12 @@ class StreamingOrt:
         self.hop_length = int(self.manifest["hop_length"])
         self.freq_bins = int(self.manifest["freq_bins"])
         self.window = np.hanning(self.win_length + 1)[:-1].astype(np.float32)
+        # Side-information history. OFF by default: a long-running stream would
+        # grow it without bound, and the common deployment does not read it.
+        # `drain_extras()` returns and clears, so a caller that drains stays
+        # bounded whatever the stream length.
+        self.collect_extras = bool(collect_extras)
+        self.extra_names = list(self.manifest.get("extra_output_names", []))
         # Post-graph relief, from the manifest. `export_streaming_onnx` records
         # it because the traced graph stops at the model, so a runtime that only
         # executes the graph is not the system the benchmarks measured. The SDK's
@@ -404,6 +411,7 @@ class StreamingOrt:
             for name, shape in self.manifest["state_shapes"].items()
         }
         self.extras = {}
+        self.extra_history = {name: [] for name in self.extra_names}
         self.input_buffer = np.zeros(0, dtype=np.float32)
         self.ola = np.zeros(0, dtype=np.float32)
         self.ola_norm = np.zeros(0, dtype=np.float32)
@@ -465,6 +473,11 @@ class StreamingOrt:
         extra_names = list(self.manifest.get("extra_output_names", []))
         first_state = 1 + len(extra_names)
         self.extras = dict(zip(extra_names, outputs[1:first_state]))
+        if self.collect_extras:
+            for name, value in self.extras.items():
+                self.extra_history.setdefault(name, []).append(
+                    float(np.asarray(value).reshape(-1)[0])
+                )
         state_names = self.manifest["state_input_names"]
         state_values = outputs[first_state:]
         if len(state_values) != len(state_names):
@@ -476,6 +489,25 @@ class StreamingOrt:
         for name, value in zip(state_names, state_values):
             self.state[name] = value
         return enhanced
+
+    def drain_extras(self) -> dict[str, np.ndarray]:
+        """The side-information collected so far, per port, then cleared.
+
+        One value per processed frame, in order. These LEAD the emitted audio by
+        `streaming_delay_frames`: they describe the bottleneck frame they were
+        computed from, which the output has not reached yet. A caller aligning
+        them to samples has to drop that many frames from the front.
+        """
+        if not self.collect_extras:
+            raise RuntimeError(
+                "construct StreamingOrt(collect_extras=True) to collect side "
+                "information; it is off by default so a long stream cannot grow "
+                "an unbounded history"
+            )
+        out = {name: np.asarray(vals, dtype=np.float32)
+               for name, vals in self.extra_history.items()}
+        self.extra_history = {name: [] for name in self.extra_names}
+        return out
 
     def _process_frame(self, frame: np.ndarray) -> np.ndarray:
         spec = np.fft.rfft(frame * self.window, n=self.fft_length).astype(np.complex64)

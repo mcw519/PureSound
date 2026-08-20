@@ -190,6 +190,7 @@ def test_state_outputs_are_located_from_the_manifest_not_assumed_at_index_one():
     }
     runtime.state = {"s0": np.zeros((1, 3), np.float32), "s1": np.zeros((1, 2), np.float32)}
     runtime.extras = {}
+    runtime.collect_extras = False
     runtime.run_frame(np.zeros((1, 4, 2), dtype=np.float32))
 
     assert runtime.state["s0"].shape == (1, 3)
@@ -215,5 +216,75 @@ def test_a_state_layout_mismatch_is_an_error_not_a_silent_truncation():
     }
     runtime.state = {}
     runtime.extras = {}
+    runtime.collect_extras = False
     with pytest.raises(RuntimeError, match="state tensors"):
         runtime.run_frame(np.zeros((1, 4, 2), dtype=np.float32))
+
+
+def test_side_information_collection_is_opt_in_and_drains():
+    """History collection is off by default so a long stream cannot grow one,
+    and `drain_extras` clears so a caller that drains stays bounded."""
+    import numpy as np
+
+    def make(collect):
+        r = StreamingOrt.__new__(StreamingOrt)
+        r.session = None
+        r.freq_bins = 2
+        r.manifest = {
+            "output_names": ["enhanced_frame", "aux_logit", "next_s0"],
+            "extra_output_names": ["aux_logit"],
+            "state_input_names": ["s0"],
+        }
+        r.collect_extras = collect
+        r.extra_names = ["aux_logit"]
+        r.state = {"s0": np.zeros((1, 1), np.float32)}
+        r.extras = {}
+        r.extra_history = {"aux_logit": []}
+
+        class S:
+            def run(self, names, feeds):
+                return [np.zeros((1, 2, 2), np.float32),
+                        np.full((1, 1), 3.0, np.float32),
+                        np.zeros((1, 1), np.float32)]
+        r.session = S()
+        return r
+
+    off = make(False)  # hand-built: exercises run_frame, not the constructor
+    for _ in range(3):
+        off.run_frame(np.zeros((1, 2, 2), np.float32))
+    assert off.extra_history["aux_logit"] == []
+    with pytest.raises(RuntimeError, match="collect_extras=True"):
+        off.drain_extras()
+
+    on = make(True)
+    for _ in range(3):
+        on.run_frame(np.zeros((1, 2, 2), np.float32))
+    drained = on.drain_extras()
+    assert drained["aux_logit"].shape == (3,)
+    assert float(drained["aux_logit"][0]) == 3.0
+    assert on.drain_extras()["aux_logit"].shape == (0,), "drain must clear"
+
+
+@pytest.mark.skipif(
+    not (_REPO / "egs/voice_isolate/pretrained_ckpt/streaming/dpcrn_v11_ep19_heads.onnx").is_file()
+    if (_REPO := Path(__file__).resolve().parents[2]) else True,
+    reason="needs the heads export",
+)
+def test_the_constructor_defaults_collection_off():
+    """Through the REAL constructor: the default must be off.
+
+    The hand-built fixtures above set the flag themselves, so they cannot see a
+    changed default -- and an always-on default is exactly the regression that
+    grows an unbounded history in a long-running stream.
+    """
+    root = Path(__file__).resolve().parents[2]
+    onnx = root / "egs/voice_isolate/pretrained_ckpt/streaming/dpcrn_v11_ep19_heads.onnx"
+    runtime = StreamingOrt(onnx_path=onnx, provider="cpu")
+    assert runtime.collect_extras is False
+    assert runtime.extra_names == ["vad_logit", "background_vad_logit"]
+    with pytest.raises(RuntimeError, match="collect_extras=True"):
+        runtime.drain_extras()
+
+    opted_in = StreamingOrt(onnx_path=onnx, provider="cpu", collect_extras=True)
+    assert opted_in.collect_extras is True
+    assert opted_in.drain_extras()["vad_logit"].shape == (0,)

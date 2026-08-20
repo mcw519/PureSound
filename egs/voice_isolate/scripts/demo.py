@@ -202,14 +202,18 @@ def get_cached_model(config_path: str | Path, checkpoint_path: str | Path) -> tu
     return MODEL_CACHE[cache_key], device
 
 
-def get_cached_ort_runtime(onnx_path: str | Path, provider: str = "auto"):
+def get_cached_ort_runtime(onnx_path: str | Path, provider: str = "auto",
+                           collect_extras: bool = False):
     from puresound.streaming import StreamingDparnOrt
 
     onnx_path = resolve_path(onnx_path)
-    cache_key = (str(onnx_path), provider)
+    # collect_extras is part of the key: a gated run must not reuse a runtime
+    # built without collection, which would silently hand back no logits.
+    cache_key = (str(onnx_path), provider, bool(collect_extras))
     if cache_key not in ORT_RUNTIME_CACHE:
         LOGGER.info("ORT runtime cache miss for onnx=%s provider=%s", onnx_path, provider)
-        ORT_RUNTIME_CACHE[cache_key] = StreamingDparnOrt(onnx_path=onnx_path, provider=provider)
+        ORT_RUNTIME_CACHE[cache_key] = StreamingDparnOrt(
+            onnx_path=onnx_path, provider=provider, collect_extras=collect_extras)
     else:
         LOGGER.info("ORT runtime cache hit for onnx=%s provider=%s", onnx_path, provider)
     runtime = ORT_RUNTIME_CACHE[cache_key]
@@ -509,17 +513,21 @@ def enhance_audio(
     )
 
     use_ort = backend.lower().startswith("ort")
-    if use_ort and gate_mode != "Off":
-        raise ValueError(
-            "Gate mode is currently supported only by PyTorch offline. "
-            "Use a gate-enabled PyTorch config/checkpoint."
-        )
     validate_backend_artifact(backend, checkpoint_path)
     report_progress("Loading checkpoint/model", log_messages, progress, 0.18)
     gate_probability = None
     gate_hop = 160
     if use_ort:
-        runtime = get_cached_ort_runtime(checkpoint_path, provider=ort_provider)
+        runtime = get_cached_ort_runtime(
+            checkpoint_path, provider=ort_provider,
+            collect_extras=gate_mode != "Off")
+        if gate_mode != "Off" and "vad_logit" not in runtime.extra_names:
+            raise ValueError(
+                f"Gate mode needs an ONNX graph that exports vad_logit; "
+                f"{Path(checkpoint_path).name} exports {runtime.extra_names or 'nothing'}. "
+                "Export with config/infer_dpcrn_heads.yaml (see "
+                "pretrained_ckpt/streaming/dpcrn_v11_ep19_heads.onnx)."
+            )
         target_sample_rate = runtime.sample_rate
         device = f"onnxruntime:{','.join(runtime.providers)}"
     else:
@@ -542,6 +550,42 @@ def enhance_audio(
         enhanced_np = runtime.process_samples(samples)
         enhanced_np = np.concatenate([enhanced_np, runtime.flush()])
         enhanced = torch.from_numpy(enhanced_np).view(1, -1).clamp(min=-1.0, max=1.0)
+        if gate_mode != "Off":
+            gate_hop = runtime.hop_length
+            history = runtime.drain_extras()
+            logits = torch.from_numpy(history["vad_logit"]).view(1, -1)
+            # The graph's logits LEAD the emitted audio by streaming_delay_frames:
+            # they describe the bottleneck frame they came from, which the output
+            # has not reached yet. Dropping that many from the front is what puts
+            # a logit on the sample it actually judges -- without it the gate acts
+            # 30 ms early and clips the front of every kept span.
+            lead = int(runtime.manifest.get("streaming_delay_frames", 0))
+            if lead:
+                logits = logits[..., lead:]
+            probability = torch.sigmoid(logits[0].reshape(-1))
+            gate_probability = gate_gain_from_probability(
+                probability,
+                gate_mode,
+                float(gate_threshold),
+                ema_alpha=float(gate_ema_alpha),
+                attack=float(gate_attack),
+                release=float(gate_release),
+            )
+            enhanced = apply_vad_gate(
+                enhanced,
+                logits,
+                gate_mode,
+                float(gate_threshold),
+                gate_hop,
+                ema_alpha=float(gate_ema_alpha),
+                attack=float(gate_attack),
+                release=float(gate_release),
+            )
+            log_messages.append(
+                f"Applied {gate_mode.lower()} VAD gate from the ONNX graph "
+                f"(threshold={float(gate_threshold):.2f}, hop={gate_hop}, "
+                f"logit lead={lead} frames compensated)"
+            )
         if dry_blend < 1.0:  # over-suppression relief (waveform-level; works on ORT)
             mix_ref = model_input.detach().cpu().view(1, -1)
             n = min(enhanced.shape[-1], mix_ref.shape[-1])
