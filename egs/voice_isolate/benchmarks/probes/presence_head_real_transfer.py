@@ -1,135 +1,96 @@
-"""The v11 presence heads on the real field recordings -- the transfer test.
+"""The wall: v11's near-presence head on the REAL field recordings, no refit.
 
-The stratified probe scores the heads on the distribution they trained on, where
-a high number is nearly free: the 2026-07-10 gate head reached 0.751 in-domain
-and never transferred to a real recording. This runs the SAME heads, with NOTHING
-refitted, on the v3 field set -- different chain, different rooms, real end-to-end
-captures instead of RIR convolution.
-
-Truth is the clip's own role: near/double-talk clips have a user talking, lone-far
-clips do not. Audible frames only (> -60 dBFS): a silent frame has no user to
-detect and no bystander to reject.
-
-`held_out` groups are reported SEPARATELY and never pooled into the headline --
-180D is a device orientation nothing has been fitted on, so it is the only column
-that speaks to generalisation rather than to memorisation.
+In-domain the head trains on the rows it's scored on, so a high AUC is expected.
+The chain boundary is where every presence readout has died in both directions
+(07-10 synthetic->real 0.500; v8 real->synthetic 0.529). This runs the v11
+last_vad_logits on the 27 field clips and asks: present (keep) vs absent
+(suppress) frames, per group, and does the score hold -- with NO fitting of
+anything. This is the same present/absent labelling the b-trajectory probe used.
 """
-import argparse, json, os, pathlib, sys, warnings
+import json, os, pathlib, sys, warnings
 warnings.filterwarnings("ignore")
-import numpy as np
-import torch
-
-REPO = pathlib.Path(__file__).resolve().parents[4]
-RECIPE = REPO / "egs/voice_isolate"
-sys.path.insert(0, str(REPO))
-sys.path.insert(0, str(RECIPE))
-
+sys.path.insert(0, "/home/milowu/A4Audio/PureSound")
+import numpy as np, torch
 from puresound.audio.io import AudioIO
 from puresound.config import load_recipe
 from puresound.recipes import init_siso_model
 
 CASES = pathlib.Path("data_report/field_cases/test_vector_cases")
-AUDIBLE_DBFS = -60.0
-SEG_S = 20.0
+CKPT = "exp/dpcrn_v11_presence/lightning_logs/version_2/checkpoints/epoch=19-step=10000.ckpt"
 
 
 def auc(pos, neg):
     if len(pos) == 0 or len(neg) == 0:
         return float("nan")
-    both = np.concatenate([pos, neg])
-    r = both.argsort().argsort() + 1
-    return float((r[: len(pos)].sum() - len(pos) * (len(pos) + 1) / 2)
-                 / (len(pos) * len(neg)))
+    both = np.concatenate([pos, neg]); order = both.argsort().argsort() + 1
+    rp = order[:len(pos)].sum()
+    return float((rp - len(pos)*(len(pos)+1)/2) / (len(pos)*len(neg)))
 
 
-def frame_dbfs(wav, n_frames, hop):
-    w = wav.view(-1).numpy()
-    return np.array([
-        10 * np.log10(float((w[t * hop:(t + 1) * hop] ** 2).mean()) + 1e-12)
-        if w[t * hop:(t + 1) * hop].size else -120.0 for t in range(n_frames)])
+dev = torch.device("cpu")
+model = init_siso_model(load_recipe("config/exp/train_dpcrn_v11_presence.yaml",
+                                    expected_task="voice_isolation",
+                                    expected_purpose="train").model)
+sd = torch.load(CKPT, map_location="cpu")["state_dict"]
+model.load_state_dict(sd, strict=False)
+model = model.eval().to(dev)
+windows = json.loads((CASES / "windows.json").read_text())
 
+def logits_for(clip, seg_s=20.0, sr=16000):
+    wav, _ = AudioIO.open(f_path=str(CASES / f"{clip}_raw.wav"), target_lvl=None, resample_to=16000)
+    wav = wav.view(1, -1); out = []
+    step = int(seg_s * sr)
+    for a in range(0, wav.shape[-1], step):
+        seg = wav[..., a:a+step]
+        if seg.shape[-1] < sr // 4: break
+        with torch.no_grad():
+            model(seg.to(dev))
+        out.append(model.backbone.last_vad_logits[0].cpu().numpy())
+    return np.concatenate(out)
 
-def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("config_path")
-    ap.add_argument("--ckpt", required=True)
-    ap.add_argument("--device", default="cuda:0")
-    a = ap.parse_args()
-    os.chdir(RECIPE)
+# cold-start clips: whole-clip present (near/dt) vs absent (far)
+cold = {"present": [], "absent": []}
+for clip, spec in windows.items():
+    if clip.startswith("_") or clip.endswith("_session"): continue
+    lg = logits_for(clip)
+    role = "absent" if "lone far" in spec["role"] else "present"
+    cold[role].append((clip, np.median(lg), lg))
+print("=== COLD-START clips (whole-clip median near-presence logit) ===")
+print(f"  {'clip':>12s} {'role':>8s} {'median':>8s}")
+for role in ("present", "absent"):
+    for clip, md, _ in sorted(cold[role], key=lambda r: r[1]):
+        print(f"  {clip:>12s} {role:>8s} {md:8.2f}")
+pres = np.concatenate([lg for _,_,lg in cold["present"]])
+absn = np.concatenate([lg for _,_,lg in cold["absent"]])
+print(f"\n  frame-level AUC present vs absent: {auc(pres, absn):.3f}  "
+      f"(n_pres {len(pres)}, n_abs {len(absn)})")
+clip_p = [md for _,md,_ in cold["present"]]; clip_a = [md for _,md,_ in cold["absent"]]
+print(f"  clip-level: present median-of-medians {np.median(clip_p):+.2f}, "
+      f"absent {np.median(clip_a):+.2f}, min present {min(clip_p):+.2f} vs max absent {max(clip_a):+.2f}")
 
-    model = init_siso_model(load_recipe(a.config_path, expected_task="voice_isolation",
-                                        expected_purpose="train").model)
-    sd = torch.load(a.ckpt, map_location="cpu")["state_dict"]
-    missing, unexpected = model.load_state_dict(sd, strict=False)
-    print(f"[load] missing={len(missing)} unexpected={len(unexpected)}")
-    if model.backbone.vad_head is None:
-        raise SystemExit("this checkpoint/config has no vad_head")
-    model = model.eval().to(a.device)
-    hop = model.encoder.hop_length
+# session clips: keep spans vs suppress spans
+print("\n=== SESSION clips (per-frame, keep spans vs suppress spans) ===")
+labeler_fps = None
+for clip in ("90d_session", "270d_session"):
+    spec = windows[clip]; lg = logits_for(clip); n = len(lg)
+    fps = n / spec["duration_s"]
+    P, A = [], []
+    for a, b in spec.get("keep", []):
+        P.append(lg[max(0,int(a*fps)):min(n,int(b*fps))])
+    for a, b in spec.get("suppress", []):
+        A.append(lg[max(0,int(a*fps)):min(n,int(b*fps))])
+    P = np.concatenate(P) if P else np.array([]); A = np.concatenate(A) if A else np.array([])
+    print(f"  {clip}: keep med {np.median(P):+.2f}  supp med {np.median(A):+.2f}  "
+          f"AUC {auc(P, A):.3f}  (n_keep {len(P)}, n_supp {len(A)})")
 
-    windows = json.loads((CASES / "windows.json").read_text())
-    rows = []
-    with torch.no_grad():
-        for clip, spec in windows.items():
-            if clip.startswith("_") or clip.endswith("_session"):
-                continue
-            role = spec["role"]
-            if "double-talk" in role:
-                truth = 1
-            elif "lone near" in role:
-                truth = 1
-            elif "lone far" in role:
-                truth = 0
-            else:
-                continue
-            wav, sr = AudioIO.open(f_path=str(CASES / f"{clip}_raw.wav"),
-                                   target_lvl=None, resample_to=16000)
-            wav = wav.view(1, -1)
-            near, bg = [], []
-            for start in range(0, wav.shape[-1], int(SEG_S * sr)):
-                seg = wav[..., start:start + int(SEG_S * sr)]
-                if seg.shape[-1] < sr // 4:
-                    break
-                model(seg.to(a.device))
-                near.append(model.backbone.last_vad_logits[0].float().cpu().numpy())
-                b = model.backbone.last_background_vad_logits
-                if b is not None:
-                    bg.append(b[0].float().cpu().numpy())
-            near = np.concatenate(near)
-            bg = np.concatenate(bg) if bg else None
-            e = frame_dbfs(wav, len(near), hop)
-            aud = e > AUDIBLE_DBFS
-            if aud.sum() < 10:
-                continue
-            rows.append(dict(clip=clip, group=spec["group"], truth=truth,
-                             held_out=bool(spec.get("held_out")),
-                             near=near[aud], bg=bg[aud] if bg is not None else None))
-
-    def report(title, subset, key="near"):
-        pres = np.concatenate([r[key] for r in subset if r["truth"] == 1] or [[]])
-        absn = np.concatenate([r[key] for r in subset if r["truth"] == 0] or [[]])
-        if len(pres) < 20 or len(absn) < 20:
-            print(f"  {title:26s} -- thin ({len(pres)} pres / {len(absn)} abs) --")
-            return
-        print(f"  {title:26s} {len(pres):7d} {len(absn):7d} "
-              f"{np.median(pres):9.2f} {np.median(absn):9.2f} {auc(pres, absn):7.3f}")
-
-    for key, label in (("near", "NEAR-PRESENCE head"), ("bg", "BACKGROUND head")):
-        if key == "bg" and rows[0]["bg"] is None:
-            continue
-        print(f"\n===== {label}: real field recordings, nothing refitted =====")
-        print(f"  {'scope':26s} {'n_pres':>7s} {'n_abs':>7s} "
-              f"{'med(pres)':>9s} {'med(abs)':>9s} {'AUC':>7s}")
-        fitted = [r for r in rows if not r["held_out"]]
-        report("fitted-on rooms (pooled)", fitted, key)
-        for g in sorted({r["group"] for r in fitted}):
-            report(f"  {g}", [r for r in fitted if r["group"] == g], key)
-        held = [r for r in rows if r["held_out"]]
-        if held:
-            print("  " + "-" * 60)
-            for g in sorted({r["group"] for r in held}):
-                report(f"HELD OUT: {g}", [r for r in held if r["group"] == g], key)
-
-
-if __name__ == "__main__":
-    main()
+# --- split rig-chain (0d/90d/180d/270d) vs qvf-chain ---
+def is_qvf(c): return c.startswith("qvf")
+for label, keep in (("RIG chain (0d/90d/180d/270d)", lambda c: not is_qvf(c)),
+                    ("QVF chain (ai-coustics)", is_qvf)):
+    p = np.concatenate([lg for c,_,lg in cold["present"] if keep(c)] or [np.array([])])
+    a = np.concatenate([lg for c,_,lg in cold["absent"] if keep(c)] or [np.array([])])
+    cp = [md for c,md,_ in cold["present"] if keep(c)]
+    ca = [md for c,md,_ in cold["absent"] if keep(c)]
+    print(f"\n  {label}:  frame AUC {auc(p,a):.3f}   "
+          f"clip present med {np.median(cp):+.2f} / absent {np.median(ca):+.2f}   "
+          f"min_pres {min(cp):+.2f} vs max_abs {max(ca):+.2f}")
