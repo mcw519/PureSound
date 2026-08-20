@@ -180,3 +180,98 @@ def test_background_loss_accepts_the_new_logits():
         torch.randint(0, 2, (2, 12)).float(),
     )
     assert torch.isfinite(loss)
+
+
+# ------------------------------------------------------------------ streaming
+
+
+@pytest.mark.parametrize("taus", [None, (0.05,), (0.05, 0.25, 1.0, 4.0)])
+def test_step_matches_forward_frame_by_frame(taus):
+    """The streaming head must BE the offline head, not approximate it.
+
+    This is the property the export rests on: a graph whose head drifts from the
+    offline one produces a presence signal nothing has been benchmarked against.
+    """
+    torch.manual_seed(0)
+    h = head(enc_channels=16, hidden=12, ema_taus_s=taus).eval()
+    x = torch.randn(2, 16, 5, 60)
+    with torch.no_grad():
+        offline = h(x)
+        state = h.initial_stream_state(2)
+        got = []
+        for t in range(x.shape[-1]):
+            logit, state = h.step(x[..., t : t + 1], state)
+            got.append(logit)
+        streamed = torch.cat(got, dim=-1)
+    assert torch.allclose(offline, streamed, atol=1e-6), \
+        float((offline - streamed).abs().max())
+
+
+def test_step_debias_needs_the_frame_count():
+    """A frozen or missing count makes every EMA column the wrong size -- a
+    level error the shapes cannot catch."""
+    h = head(ema_taus_s=(1.0,)).eval()
+    x = torch.randn(1, 8, 4, 1)
+    s0 = h.initial_stream_state(1)
+    with torch.no_grad():
+        _, s1 = h.step(x, s0)
+    assert float(s1[2]) == 1.0
+    with torch.no_grad():
+        _, s2 = h.step(x, s1)
+    assert float(s2[2]) == 2.0
+
+
+def test_step_ema_state_survives_a_bf16_graph():
+    """tau 4 s steps by 0.0025, which a bf16 accumulator swallows entirely.
+
+    Asserted on the VALUE, not the dtype: a dtype assertion passes as soon as
+    something upstream casts, while the slow averages quietly freeze. Feeding
+    bf16 frames must still track the float32 reference.
+    """
+    h = head(enc_channels=16, hidden=12, ema_taus_s=(4.0,)).eval()
+    x = torch.randn(1, 16, 4, 400)
+
+    def run(dtype):
+        state = h.initial_stream_state(1)
+        out = []
+        with torch.no_grad():
+            for t in range(x.shape[-1]):
+                logit, state = h.step(x[..., t : t + 1].to(dtype), state)
+                out.append(logit.float())
+        return torch.cat(out, dim=-1), state[0].float()
+
+    ref, ref_ema = run(torch.float32)
+    got, got_ema = run(torch.bfloat16)
+    # The EMA state itself is what a low-precision accumulator destroys.
+    assert torch.allclose(got_ema, ref_ema, atol=0.05), \
+        float((got_ema - ref_ema).abs().max())
+
+
+def test_step_ema_stays_float32_even_in_a_bf16_model():
+    """The dangerous case is a bf16-cast MODEL, not a bf16 caller.
+
+    With bf16 weights the whole head runs bf16, and a state that follows the
+    parameters would accumulate a 0.0025 step in bf16 -- the slow averages stop
+    moving. The recurrence has to hold float32 whatever the module is cast to.
+    """
+    h = head(enc_channels=16, hidden=12, ema_taus_s=(4.0,)).eval().to(torch.bfloat16)
+    state = h.initial_stream_state(1, dtype=torch.bfloat16)
+    assert state[0].dtype is torch.float32, "EMA state followed the module dtype"
+    x = torch.randn(1, 16, 4, 300).to(torch.bfloat16)
+    with torch.no_grad():
+        for t in range(x.shape[-1]):
+            _, state = h.step(x[..., t : t + 1], state)
+    assert state[0].dtype is torch.float32
+    # And it must actually have integrated: a frozen bf16 state stays ~0.
+    assert float(state[0].abs().max()) > 1e-3, float(state[0].abs().max())
+
+
+def test_step_conv_cache_carries_left_context():
+    """kernel_t-1 frames of context. A cache that is dropped turns the dwconv
+    into a 1-frame conv and silently shortens the receptive field."""
+    h = head(kernel_t=5, ema_taus_s=None).eval()
+    s = h.initial_stream_state(1)
+    assert s[1].shape == (1, 8, 4)
+    with torch.no_grad():
+        _, s2 = h.step(torch.randn(1, 8, 4, 1), s)
+    assert s2[1].shape == (1, 8, 4)

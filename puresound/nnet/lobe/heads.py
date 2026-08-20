@@ -165,6 +165,54 @@ class VADHead(nn.Module):
         h = self.act(self.dwconv(h))
         return self.out(h).squeeze(1)  # [N, T]
 
+    # ---------------------------------------------------------------- streaming
+
+    def initial_stream_state(self, batch_size: int = 1, device="cpu", dtype=None):
+        """(ema_state, conv_cache, count) matching what `forward` starts from.
+
+        ``ema_state`` is [N, K, C] of exponential averages, ``conv_cache`` the
+        causal dwconv's [N, hidden, kernel_t-1] left context, ``count`` the frames
+        seen so far (the debias normalizer needs it, and a wrong count is a
+        silent level error rather than a crash).
+        """
+        dtype = dtype or next(self.parameters()).dtype
+        c = self.proj.in_features // (1 + len(self._alphas))
+        return (
+            torch.zeros(batch_size, len(self._alphas), c, dtype=torch.float32, device=device),
+            torch.zeros(batch_size, self.dwconv.in_channels, self.kernel_t - 1,
+                        dtype=dtype, device=device),
+            torch.zeros(batch_size, 1, dtype=torch.float32, device=device),
+        )
+
+    def step(self, x: torch.Tensor, state):
+        """One frame. ``x`` is [N, C, F, 1]; returns (logit [N, 1], new_state).
+
+        Mirrors `forward` exactly: the EMA recurrence in float32, the same
+        closed-form debias, and the dwconv fed from a left-context cache instead
+        of zero padding.
+        """
+        ema, cache, count = state
+        # Match the parameters, not the caller: an exported graph may hand over
+        # bf16 activations while the weights stay float32, and Linear refuses
+        # the mix. The EMA recurrence below is float32 regardless.
+        h = x.mean(dim=2).to(self.proj.weight.dtype)         # [N, C, 1]
+        if self._alphas:
+            cur = h[..., 0].float()                          # [N, C]
+            n = count + 1.0
+            new_ema, cols = [], []
+            for k, a in enumerate(self._alphas):
+                s_k = ema[:, k] + a * (cur - ema[:, k])
+                new_ema.append(s_k)
+                # 1 - (1-a)^n, the same normalizer forward divides by
+                cols.append(s_k / (1.0 - (1.0 - a) ** n))
+            ema = torch.stack(new_ema, dim=1)
+            count = n
+            h = torch.cat([h] + [c.unsqueeze(-1).to(h.dtype) for c in cols], dim=1)
+        h = self.proj(h.transpose(1, 2)).transpose(1, 2)     # [N, hidden, 1]
+        window = torch.cat([cache.to(h.dtype), h], dim=-1)   # [N, hidden, kernel_t]
+        logit = self.out(self.act(self.dwconv(window))).squeeze(1)   # [N, 1]
+        return logit, (ema, window[..., 1:], count)
+
 
 class DistHead(nn.Module):
     """Utterance-level distance/DRR regression from the bottleneck.
