@@ -39,7 +39,8 @@ def load():
             continue
         clips[k] = dict(X=d[f"{k}_X"].T, dbfs=d[f"{k}_dbfs"],
                         fps=float(d[f"{k}_fps"][0]), spec=spec,
-                        group=spec["group"], session=k.endswith("_session"))
+                        group=spec["group"], session=k.endswith("_session"),
+                        held_out=bool(spec.get("held_out")))
     return clips
 
 
@@ -55,11 +56,22 @@ def role(name, spec):
 def training_rows(clips, group):
     """Labelled frames from one recording. Audible frames only -- a silent frame
     carries no presence evidence and training on it teaches the readout the room
-    tone."""
+    tone.
+
+    Refuses held-out material outright. A readout fitted on one room scored
+    0.958 held-out *within* that room and then deleted the user everywhere else
+    (full_gate/v8_gate050_VERDICT.md), so the reserve has to be enforced here
+    rather than remembered at each call site.
+    """
     X, y = [], []
     for name, c in clips.items():
         if c["group"] != group:
             continue
+        if c["held_out"]:
+            raise ValueError(
+                f"{name} is held_out: nothing may be fitted on group {group!r}. "
+                "Use it for evaluation only."
+            )
         aud = c["dbfs"] > AUDIBLE_DBFS
         if c["session"]:
             fps, n = c["fps"], c["X"].shape[0]

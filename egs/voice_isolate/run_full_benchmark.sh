@@ -36,16 +36,17 @@ CHAIN="$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
 ASR=faster-whisper; ASR_MODEL=large-v3   # strong ASR reveals over-suppression whisper-small hides
 say(){ echo "[bench $(date +%H:%M:%S)] $*"; }
 
-say "1/9 real-clip scorecard (voicebot gate): cross-chain reference + field benchmark"
-uv run python scripts/eval_realcase.py config/infer_dpcrn.yaml \
-  --ckpt "$CKPT" --cases-dir data_report/qvf22_real_cases --device cpu \
-  --dry-blend "$BLEND" $GATE_ARGS > "$OUT/1_scorecard.log" 2>&1
-# the field set is the one with STREAM vs COLD-START modes and absolute residual levels;
-# its 134.8 s session needs expandable_segments on a 24 GB card
+# ONE set since the v3 rebuild (2026-08-20): the QVF publication clips moved into
+# the field benchmark, so the cross-chain reference and the STREAM/COLD-START modes
+# are scored in a single pass. The 134.8 s 90D session needs expandable_segments on
+# a 24 GB card. 1_scorecard.log is kept as a symlink-free copy of the same output so
+# older summary greps still find their file.
+say "1/9 real-clip scorecard (voicebot gate): field benchmark incl. cross-chain reference"
 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True \
 uv run python scripts/eval_realcase.py config/infer_dpcrn.yaml \
   --ckpt "$CKPT" --cases-dir data_report/field_cases/test_vector_cases --device "$DEV" \
   --dry-blend "$BLEND" $GATE_ARGS > "$OUT/1_scorecard_field.log" 2>&1
+cp "$OUT/1_scorecard_field.log" "$OUT/1_scorecard.log"
 
 say "2/9 in-domain SI-SDRi + buckets + solo-leakage (phase1 bank)"
 uv run python scripts/eval_indomain.py config/exp/eval_indomain_phase1.yaml \
@@ -98,8 +99,8 @@ uv run python scripts/eval_turntaking.py config/infer_dpcrn.yaml \
   --dry-blend "$BLEND" $GATE_ARGS > "$OUT/9_turntaking.log" 2>&1
 
 echo; echo "================ BENCHMARK SUMMARY [$TAG]  (dry_blend=$BLEND, presence_gate=$GATE_TAG, chain=$CHAIN) ================"
-echo "--- real scorecard ---";        grep -E "scenario|# (ours|gate_|reference):" "$OUT/1_scorecard.log" 2>/dev/null
-echo "--- field scorecard ---";       grep -E "_session|# ours:" "$OUT/1_scorecard_field.log" 2>/dev/null
+echo "--- cross-chain reference (QVF2.2 clips) ---"; grep -E "qvf_(scenario|gym|price|keep|plumb)" "$OUT/1_scorecard_field.log" 2>/dev/null
+echo "--- field scorecard (sessions + verdicts) ---"; grep -E "_session|# (ours|reference):" "$OUT/1_scorecard_field.log" 2>/dev/null
 echo "    cold-start far verdicts:";  awk -F'\t' '/_far/ && $3=="ours" {v=$11; c[v]++} END {for (k in c) printf "      %-40s %d\n", k, c[k]}' "$OUT/1_scorecard_field.log" 2>/dev/null
 echo "--- SYNTHESISED below (in-domain + 3 probes): produced by chain=$CHAIN, compare only against records on the same chain ---"
 echo "--- in-domain ---";             grep -E "SI-SDRi :|1N\+0F|F-only|median power|interferer-solo leakage|by turn_taking" -A1 "$OUT/2_indomain.log" 2>/dev/null | grep -vE "^--$"

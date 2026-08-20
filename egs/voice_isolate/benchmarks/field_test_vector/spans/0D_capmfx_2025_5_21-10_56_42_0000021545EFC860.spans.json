@@ -1,0 +1,14 @@
+{
+  "file": "0D_capmfx_2025_5_21-10_56_42_0000021545EFC860.wav",
+  "sample_rate": 32000,
+  "duration_s": 8.8,
+  "spans": [
+    {
+      "start_s": 0.371,
+      "end_s": 8.575,
+      "duration_s": 8.204,
+      "tag": "near / keep",
+      "label": null
+    }
+  ]
+}

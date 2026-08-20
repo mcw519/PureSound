@@ -1,3 +1,8 @@
+> ⚠️ **Measured on field set v2 (27 clips, 90D/270D only).** The field benchmark was
+> rebuilt as v3 on 2026-08-20 (64 clips, four orientations + seven QVF clips, new
+> hand labelling) — see `benchmarks/field_test_vector/SET_V3.md`. **Numbers below do
+> not compare against v3 runs.** Synthetic and WER stages are unaffected.
+
 # One continuous near-presence quantity, run over the real recordings
 
 Run 2026-08-19 on `dpcrn_v8`. Scripts beside this note (`b_traj_extract.py`,

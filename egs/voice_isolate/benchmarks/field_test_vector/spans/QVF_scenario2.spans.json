@@ -1,0 +1,14 @@
+{
+  "file": "QVF_scenario2.wav",
+  "sample_rate": null,
+  "duration_s": null,
+  "spans": [
+    {
+      "start_s": 0.165,
+      "end_s": 6.412,
+      "duration_s": 6.247,
+      "tag": "far / suppress",
+      "label": null
+    }
+  ]
+}

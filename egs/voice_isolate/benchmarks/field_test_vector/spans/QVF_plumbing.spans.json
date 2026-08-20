@@ -1,0 +1,21 @@
+{
+  "file": "QVF_plumbing.wav",
+  "sample_rate": null,
+  "duration_s": null,
+  "spans": [
+    {
+      "start_s": 0.023,
+      "end_s": 1.949,
+      "duration_s": 1.926,
+      "tag": "near / keep",
+      "label": null
+    },
+    {
+      "start_s": 3.176,
+      "end_s": 5.937,
+      "duration_s": 2.761,
+      "tag": "far / suppress",
+      "label": null
+    }
+  ]
+}

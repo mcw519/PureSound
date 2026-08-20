@@ -1,3 +1,8 @@
+> ⚠️ **Measured on field set v2 (27 clips, 90D/270D only).** The field benchmark was
+> rebuilt as v3 on 2026-08-20 (64 clips, four orientations + seven QVF clips, new
+> hand labelling) — see `benchmarks/field_test_vector/SET_V3.md`. **Numbers below do
+> not compare against v3 runs.** Synthetic and WER stages are unaffected.
+
 # v8 + presence gate at b_hi 0.50 -- NOT a deployment candidate
 
 Run 2026-08-19, chain `3cde9d1`. `v8_baseline.txt` and `v8_gate050.txt` are the

@@ -1,0 +1,84 @@
+{
+  "file": "270D_capmfx_2026_3_17-14_29_0_0000014340D33DE0.wav",
+  "sample_rate": null,
+  "duration_s": null,
+  "spans": [
+    {
+      "start_s": 0.249,
+      "end_s": 12.853,
+      "duration_s": 12.604,
+      "tag": "near / keep",
+      "label": "50 cm"
+    },
+    {
+      "start_s": 13.355,
+      "end_s": 24.127,
+      "duration_s": 10.772,
+      "tag": "far / suppress",
+      "label": "200 cm"
+    },
+    {
+      "start_s": 24.187,
+      "end_s": 25.808,
+      "duration_s": 1.621,
+      "tag": "near / keep",
+      "label": "50 cm"
+    },
+    {
+      "start_s": 25.977,
+      "end_s": 42.138,
+      "duration_s": 16.161,
+      "tag": "far / suppress",
+      "label": "200 cm"
+    },
+    {
+      "start_s": 42.16,
+      "end_s": 44.579,
+      "duration_s": 2.419,
+      "tag": "near / keep",
+      "label": "50 cm"
+    },
+    {
+      "start_s": 44.647,
+      "end_s": 52.578,
+      "duration_s": 7.931,
+      "tag": "far / suppress",
+      "label": "300 cm"
+    },
+    {
+      "start_s": 53.366,
+      "end_s": 54.578,
+      "duration_s": 1.212,
+      "tag": "near / keep",
+      "label": "50 cm"
+    },
+    {
+      "start_s": 54.621,
+      "end_s": 69.255,
+      "duration_s": 14.634,
+      "tag": "far / suppress",
+      "label": "300 cm"
+    },
+    {
+      "start_s": 69.309,
+      "end_s": 71.091,
+      "duration_s": 1.782,
+      "tag": "near / keep",
+      "label": "50 cm"
+    },
+    {
+      "start_s": 72.074,
+      "end_s": 86.381,
+      "duration_s": 14.307,
+      "tag": "double-talk",
+      "label": "near 50 cm + far 200 cm"
+    },
+    {
+      "start_s": 86.504,
+      "end_s": 98.056,
+      "duration_s": 11.552,
+      "tag": "double-talk",
+      "label": "near 50 cm + far 200 cm"
+    }
+  ]
+}
