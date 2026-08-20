@@ -1,7 +1,7 @@
 {
   "model_type": "dpcrn_streaming_frame",
   "processor": "stft_frame_ort",
-  "created_at": 1787218732,
+  "created_at": 1787233074,
   "onnx_path": "pretrained_ckpt/streaming/dpcrn_v11_ep19_heads.onnx",
   "sample_rate": 16000,
   "fft_length": 512,

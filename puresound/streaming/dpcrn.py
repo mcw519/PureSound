@@ -383,13 +383,29 @@ class StreamingDpcrnFrameModel(StreamingFrameModelBase):
         # survives hundreds of frames -- measured as a logit error still growing
         # at frame 400. The inter-LSTM state is gated for exactly this reason a
         # few lines below; this is the same gate for the same reason.
+        # The gate is TENSOR ARITHMETIC, not a Python branch. `float(counter) <
+        # warmup` is evaluated once at export and baked in as a constant, so the
+        # traced graph froze the head state forever -- ORT diverged from torch
+        # from frame `warmup_frames` onward while the single-frame export check
+        # passed. Same reason the inter-LSTM gate below multiplies by `keep`.
         head_logits, next_head_states = [], []
-        warm = (state.counter is not None
-                and float(state.counter.reshape(-1)[0]) < float(self.warmup_frames))
+        if state.counter is not None:
+            hold = (state.counter.reshape(-1)[:1]
+                    < float(self.warmup_frames)).to(x.dtype)
+        else:
+            hold = None
         for (_, head), hstate in zip(self.heads, state.head_states):
             logit, new_hstate = head.step(x, hstate)
             head_logits.append(logit)
-            next_head_states.append(hstate if warm else new_hstate)
+            if hold is None:
+                next_head_states.append(new_hstate)
+            else:
+                blended = tuple(
+                    old_t + (1.0 - hold.to(old_t.dtype).reshape(
+                        [-1] + [1] * (old_t.dim() - 1))) * (new_t - old_t)
+                    for old_t, new_t in zip(hstate, new_hstate)
+                )
+                next_head_states.append(blended)
 
         next_skip: list[torch.Tensor] = []
         next_counter = state.counter

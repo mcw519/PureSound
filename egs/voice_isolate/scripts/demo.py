@@ -414,7 +414,16 @@ def save_spectrogram_comparison(
     gate_hop: int = 160,
     gate_threshold: float = 0.5,
     gate_mode: str = "Off",
+    head_probabilities: dict[str, np.ndarray] | None = None,
 ) -> str:
+    """Input / enhanced spectrograms, optionally what the heads say and what was applied.
+
+    `head_probabilities` and `gate_probability` are deliberately separate panels.
+    The first is the model's opinion; the second is the gain that reached the
+    audio. Drawing them as one curve hides the case that matters -- a head that
+    says "absent" while the gate is Off, which is exactly what a diagnostic run
+    is looking for.
+    """
     import matplotlib.pyplot as plt
 
     input_db = _spectrogram_db(input_wav)
@@ -429,11 +438,12 @@ def save_spectrogram_comparison(
     ]
 
     has_gate = gate_probability is not None
-    n_panels = 3 if has_gate else 2
+    has_heads = bool(head_probabilities)
+    n_panels = 2 + int(has_heads) + int(has_gate)
     fig, axes = plt.subplots(
         n_panels,
         1,
-        figsize=(11, 8 if has_gate else 6),
+        figsize=(11, 3 + 2.5 * n_panels),
         sharex=True,
         constrained_layout=True,
     )
@@ -454,21 +464,41 @@ def save_spectrogram_comparison(
         )
         ax.set_title(title)
         ax.set_ylabel("Frequency (Hz)")
+    panel = 2
+    if has_heads:
+        ax = axes[panel]
+        styles = {
+            "near": ("tab:blue", "near presence  p(a user is talking)"),
+            "background": ("tab:orange", "background  p(non-target speech)"),
+        }
+        for name, values in head_probabilities.items():
+            colour, label = styles.get(name, ("tab:grey", name))
+            values = np.asarray(values, dtype=np.float32).reshape(-1)
+            t = np.arange(values.shape[0], dtype=np.float32) * gate_hop / sample_rate
+            ax.plot(t, values, color=colour, linewidth=1.2, label=label)
+        ax.axhline(gate_threshold, color="tab:red", linestyle="--", linewidth=1,
+                   label=f"threshold={gate_threshold:.2f}")
+        ax.set_ylim(-0.05, 1.05)
+        ax.set_ylabel("p")
+        ax.set_title("VAD head outputs (model opinion -- not applied unless Gate mode is on)")
+        ax.legend(loc="upper right", fontsize=8)
+        panel += 1
     if has_gate:
         gate = gate_probability.detach().float().cpu().reshape(-1).numpy()
         gate_time = np.arange(gate.shape[0], dtype=np.float32) * gate_hop / sample_rate
-        axes[2].step(gate_time, gate, where="post", color="tab:green", label="applied gate gain")
-        axes[2].axhline(
+        axes[panel].step(gate_time, gate, where="post", color="tab:green",
+                         label="applied gate gain")
+        axes[panel].axhline(
             gate_threshold,
             color="tab:red",
             linestyle="--",
             linewidth=1,
             label=f"threshold={gate_threshold:.2f}",
         )
-        axes[2].set_ylim(-0.05, 1.05)
-        axes[2].set_ylabel("Gate")
-        axes[2].set_title(f"Applied near-field gate ({gate_mode})")
-        axes[2].legend(loc="upper right")
+        axes[panel].set_ylim(-0.05, 1.05)
+        axes[panel].set_ylabel("Gate")
+        axes[panel].set_title(f"Applied near-field gate ({gate_mode})")
+        axes[panel].legend(loc="upper right")
     axes[-1].set_xlabel("Time (s)")
     fig.colorbar(image, ax=axes, label="Magnitude (dB)")
     output_path = str(output_path)
@@ -490,6 +520,7 @@ def enhance_audio(
     gate_ema_alpha: float = 0.2,
     gate_attack: float = 0.25,
     gate_release: float = 0.05,
+    show_vad_heads: bool = False,
     progress: Any | None = None,
 ) -> tuple[str, str, str, list[list[str]], str]:
     if not input_audio_path:
@@ -516,11 +547,19 @@ def enhance_audio(
     validate_backend_artifact(backend, checkpoint_path)
     report_progress("Loading checkpoint/model", log_messages, progress, 0.18)
     gate_probability = None
+    head_probabilities: dict[str, np.ndarray] = {}
     gate_hop = 160
     if use_ort:
         runtime = get_cached_ort_runtime(
             checkpoint_path, provider=ort_provider,
-            collect_extras=gate_mode != "Off")
+            collect_extras=gate_mode != "Off" or show_vad_heads)
+        if show_vad_heads and not runtime.extra_names:
+            raise ValueError(
+                f"Show VAD heads needs an ONNX graph that exports them; "
+                f"{Path(checkpoint_path).name} exports nothing. Export with "
+                "config/infer_dpcrn_heads.yaml (see "
+                "pretrained_ckpt/streaming/dpcrn_v11_ep19_heads.onnx)."
+            )
         if gate_mode != "Off" and "vad_logit" not in runtime.extra_names:
             raise ValueError(
                 f"Gate mode needs an ONNX graph that exports vad_logit; "
@@ -550,16 +589,27 @@ def enhance_audio(
         enhanced_np = runtime.process_samples(samples)
         enhanced_np = np.concatenate([enhanced_np, runtime.flush()])
         enhanced = torch.from_numpy(enhanced_np).view(1, -1).clamp(min=-1.0, max=1.0)
+        # Drain ONCE: drain_extras clears, so a second call would hand back
+        # nothing and silently blank whichever consumer ran second.
+        history = (runtime.drain_extras()
+                   if (gate_mode != "Off" or show_vad_heads) else {})
+        lead = int(runtime.manifest.get("streaming_delay_frames", 0))
+        if show_vad_heads:
+            gate_hop = runtime.hop_length
+            for port, name in (("vad_logit", "near"),
+                               ("background_vad_logit", "background")):
+                if port in history:
+                    v = history[port][lead:] if lead else history[port]
+                    head_probabilities[name] = torch.sigmoid(
+                        torch.from_numpy(v)).numpy()
         if gate_mode != "Off":
             gate_hop = runtime.hop_length
-            history = runtime.drain_extras()
             logits = torch.from_numpy(history["vad_logit"]).view(1, -1)
             # The graph's logits LEAD the emitted audio by streaming_delay_frames:
             # they describe the bottleneck frame they came from, which the output
             # has not reached yet. Dropping that many from the front is what puts
             # a logit on the sample it actually judges -- without it the gate acts
             # 30 ms early and clips the front of every kept span.
-            lead = int(runtime.manifest.get("streaming_delay_frames", 0))
             if lead:
                 logits = logits[..., lead:]
             probability = torch.sigmoid(logits[0].reshape(-1))
@@ -610,6 +660,29 @@ def enhance_audio(
                 dry_blend=dry_blend, spec_floor=spec_floor,
             ).detach().cpu()
         enhanced = to_model_input(enhanced).clamp(min=-1.0, max=1.0)
+        if show_vad_heads:
+            gate_hop = int(
+                config.get("model", {})
+                .get("encoder", {})
+                .get("encoder_args", {})
+                .get("hop_length", 160)
+            )
+            # Offline, a head's frame lines up with the output frame -- there is
+            # no algorithmic delay to compensate, unlike the streaming graph.
+            found = False
+            for attr, name in (("last_vad_logits", "near"),
+                               ("last_background_vad_logits", "background")):
+                logits = getattr(model.backbone, attr, None)
+                if logits is not None:
+                    head_probabilities[name] = torch.sigmoid(
+                        logits[0].detach().float().cpu().reshape(-1)).numpy()
+                    found = True
+            if not found:
+                raise ValueError(
+                    "Show VAD heads needs a config whose backbone enables them; "
+                    f"{Path(config_path).name} builds none. Use "
+                    "config/infer_dpcrn_heads.yaml."
+                )
         if gate_mode != "Off":
             gate_hop = int(
                 config.get("model", {})
@@ -666,8 +739,15 @@ def enhance_audio(
         gate_hop=gate_hop,
         gate_threshold=float(gate_threshold),
         gate_mode=gate_mode,
+        head_probabilities=head_probabilities or None,
     )
 
+    if head_probabilities:
+        summary = ", ".join(
+            f"{name} p median {float(np.median(v)):.3f}"
+            for name, v in head_probabilities.items()
+        )
+        log_messages.append(f"VAD heads plotted ({summary})")
     report_progress("Computing no-reference metrics", log_messages, progress, 0.90)
     metrics_rows, dnsmos_note = compute_no_reference_metrics(model_input, enhanced, int(sample_rate))
     report_progress("Done", log_messages, progress, 1.0)
@@ -691,6 +771,7 @@ def run_demo_inference(
     gate_ema_alpha: float = 0.2,
     gate_attack: float = 0.25,
     gate_release: float = 0.05,
+    show_vad_heads: bool = False,
     progress=gr.Progress(track_tqdm=True),
 ):
     try:
@@ -707,6 +788,7 @@ def run_demo_inference(
             gate_ema_alpha=float(gate_ema_alpha),
             gate_attack=float(gate_attack),
             gate_release=float(gate_release),
+            show_vad_heads=bool(show_vad_heads),
             progress=progress,
         )
     except Exception as exc:
@@ -1052,6 +1134,17 @@ def build_offline_tab(default_config_path: str) -> None:
                 "(trades a little interferer leakage for fewer deletions)."
             ),
         )
+        show_vad_heads = gr.Checkbox(
+            label="Show VAD head outputs",
+            value=False,
+            info=(
+                "Plots what the presence heads say -- near (a user is talking) "
+                "and background (non-target speech) -- WITHOUT applying them. "
+                "Needs a heads-enabled config or ONNX export "
+                "(config/infer_dpcrn_heads.yaml). Independent of the gate below: "
+                "leave the gate Off to read the heads without touching the audio."
+            ),
+        )
         gate_mode = gr.Radio(
             label="Near-field gate",
             choices=[
@@ -1063,9 +1156,12 @@ def build_offline_tab(default_config_path: str) -> None:
             ],
             value="Off",
             info=(
-                "Requires a gate-enabled PyTorch checkpoint. Raw probability "
-                "uses sigmoid(gate); the other modes threshold first, then "
-                "optionally smooth the binary gain."
+                "Applies the near head to the audio. Works on PyTorch and on ORT "
+                "streaming when the graph exports vad_logit. Raw probability uses "
+                "sigmoid(gate); the other modes threshold first, then optionally "
+                "smooth the binary gain. MEASURED: soft costs a keep span up to "
+                "-35.5 dB and binary up to -61.6 dB, and the head is inverted on "
+                "some recording chains -- a diagnostic, not a deployment setting."
             ),
         )
         gate_threshold = gr.Slider(
@@ -1146,6 +1242,7 @@ def build_offline_tab(default_config_path: str) -> None:
                 gate_ema_alpha,
                 gate_attack,
                 gate_release,
+                show_vad_heads,
             ],
             outputs=[input_player, enhanced_player, spectrogram_image, metrics, status],
         )

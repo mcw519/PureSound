@@ -288,3 +288,72 @@ def test_the_constructor_defaults_collection_off():
     opted_in = StreamingOrt(onnx_path=onnx, provider="cpu", collect_extras=True)
     assert opted_in.collect_extras is True
     assert opted_in.drain_extras()["vad_logit"].shape == (0,)
+
+
+@pytest.mark.slow
+@pytest.mark.skipif(
+    not (Path(__file__).resolve().parents[2]
+         / "egs/voice_isolate/pretrained_ckpt/dpcrn_v11_ep19.ckpt").is_file(),
+    reason="needs the v11 checkpoint",
+)
+def test_exported_head_logits_track_torch_over_many_frames():
+    """The export's own check runs ONE frame from the initial state.
+
+    That is blind to anything that compounds -- and the warm-up gate did: written
+    as `if float(counter) < warmup`, a Python branch, it was evaluated once at
+    trace time and baked in, so the graph froze the head state forever. torch
+    matched offline to 8e-06 while ORT drifted to 6.75, starting exactly at frame
+    `warmup_frames`. Only a multi-frame ORT comparison sees it.
+    """
+    import json
+
+    import numpy as np
+    import onnxruntime as ort
+
+    from puresound.audio.io import AudioIO
+    from puresound.streaming import load_streaming_dpcrn_model
+
+    recipe_dir = Path(__file__).resolve().parents[2] / "egs/voice_isolate"
+    onnx_path = recipe_dir / "pretrained_ckpt/streaming/dpcrn_v11_ep19_heads.onnx"
+    if not onnx_path.is_file():
+        pytest.skip("heads export not built")
+    manifest = json.loads(onnx_path.with_suffix(".json").read_text())
+
+    frame_model = load_streaming_dpcrn_model(
+        recipe_dir / "config/infer_dpcrn_heads.yaml",
+        recipe_dir / "pretrained_ckpt/dpcrn_v11_ep19.ckpt",
+    ).eval()
+    system = frame_model.system_model.eval()
+
+    wav, _ = AudioIO.open(
+        f_path=str(recipe_dir / "data_report/field_cases/test_vector_cases/90d_near1_raw.wav"),
+        target_lvl=None, resample_to=16000)
+    wav = wav.view(1, -1)[..., : 4 * 16000]
+
+    session = ort.InferenceSession(str(onnx_path), providers=["CPUExecutionProvider"])
+    names = manifest["output_names"]
+    state_in = manifest["state_input_names"]
+
+    with torch.no_grad():
+        tf = system.encoder(wav)
+        state = frame_model.initial_state(batch_size=1)
+        torch_logits = []
+        for i in range(tf.shape[2]):
+            _, extras, state = frame_model.forward_frame(tf[:, :, i, :], state)
+            torch_logits.append(float(extras[0].reshape(-1)[0]))
+
+    ort_state = [t.numpy() for t in frame_model.initial_state_tensors(1)]
+    ort_logits = []
+    for i in range(tf.shape[2]):
+        feeds = {"noisy_frame": tf[:, :, i, :].numpy()}
+        feeds.update(dict(zip(state_in, ort_state)))
+        outputs = session.run(names, feeds)
+        ort_logits.append(float(outputs[1].reshape(-1)[0]))
+        ort_state = outputs[1 + len(manifest["extra_output_names"]):]
+
+    drift = np.abs(np.array(torch_logits) - np.array(ort_logits)).max()
+    assert drift < 1e-3, f"ORT drifted from torch by {drift}"
+    # And specifically past the warm-up boundary, where the baked branch bit.
+    warm = frame_model.warmup_frames
+    late = np.abs(np.array(torch_logits[warm + 1:]) - np.array(ort_logits[warm + 1:])).max()
+    assert late < 1e-3, f"drift after warm-up: {late}"
