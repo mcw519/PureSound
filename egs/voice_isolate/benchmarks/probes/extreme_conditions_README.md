@@ -108,6 +108,11 @@ several true distances and see whether the estimate tracks. If it does not, the
 distance readout does not function outside the training range, which would change
 how every out-of-distribution number on record should be read.
 
+**Settled (2026-08-21): see `dist_cue_anatomy_README.md`.** It tracks
+(rho +0.599 on the anechoic bank) at ~1/26 of the true scale -- a measurement,
+not a prior -- and the cue is the direct window's fine timing, read jointly
+with the spectrum as a comparison, not summed with it.
+
 ## Premises corrected along the way
 
 Three statements about this system that the analysis assumed and that are not
