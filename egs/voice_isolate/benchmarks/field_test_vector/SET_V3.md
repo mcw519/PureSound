@@ -67,3 +67,39 @@ block:
 4 dB of the user there. v2 had no recording in that condition, so no v2 scorecard
 could have shown it. This is a deployment-relevant keep failure on the shipped
 default, found by widening the set rather than by any model change.
+
+## v8 baseline (`dry_blend 0.9`, run 2026-08-20)
+
+Per clip: [`records/set_v3/scorecard_v8.tsv`](records/set_v3/scorecard_v8.tsv).
+First scorecard on this set -- later v3 runs compare against these rows, and
+against nothing older (see "v2 numbers do not carry over" above).
+
+| axis | v8 |
+|---|---|
+| KEEP-VIOLATIONS | **4** -- `0d_near1` -4.05 (sentinel), `qvf_price_near1` -6.29, `qvf_keep_in_touch_near1` -3.32, `qvf_keep_in_touch_dt1` **-11.79** |
+| keep, excluding violations | worst -2.35 / median -0.34 dB |
+| device-chain cold-start far (n=14) | median reduc **-0.31** (passthrough), residual 25.5 dB over floor; 0 ok / 2 PARTIAL / 12 FAIL |
+| QVF-chain cold-start far (n=6) | 2 ok / 4 FAIL; median headroom only 11.5 dB |
+| device-chain sessions (anchored) | reduc -9.25 / -11.29 / -12.35, all SUPPRESS-PARTIAL |
+| QVF sessions | gym / price ok; `qvf_scenario3_session` reduc **-0.80 FAIL** |
+| QVF2.2 reference rows | scenario3_session **-29.71 ok**; scenario1 keep ok; scenario2_far1 residual 21.4 **FAIL** |
+
+What is new against the v2 record, beyond the sentinel already described above:
+
+1. **"The keep side is not at risk" does not survive the wider set.** v2 scored
+   0/15 keep violations for every version; v3 finds four on v8, all on captures
+   v2 did not contain (the 25 dB-noisier sentinel and the QVF chain). The worst
+   is a *double-talk* deletion -- `qvf_keep_in_touch_dt1` at -11.79 dB -- on the
+   axis every synthetic gate run has held safe. Keep failures are a
+   recording-chain phenomenon, not a distance phenomenon.
+2. **Device-chain cold start is passthrough** (median -0.31 dB over 14 clips),
+   consistent with the whole record since `near-anchor-dependence`.
+3. **Do not read the two QVF-chain far `ok`s as the cold-start wall moving.**
+   Their captures have loud floors (median headroom 11.5 dB against the device
+   chain's 26.6), so the residual bar sits within reach of moderate reduction.
+   The reductions are real (-12.2 / -16.5 dB), but the pass is partly the floor.
+4. **The cross-chain wall in one paired row:** same audio, same spans --
+   `qvf_scenario3_session` ours -0.80 dB, QVF2.2's published output -29.71 dB.
+5. **The reference itself fails `qvf_scenario2_far1`** (residual 21.4 dB over
+   floor). The bar does not bend for the commercial system either; treat that
+   clip as hard, not as mislabelled.

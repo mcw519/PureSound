@@ -1,0 +1,78 @@
+clip	role	system	keep_preserv_dB	keep_out_dBFS	supp_reduc_dB	supp_out_dBFS	residual_dB	sir_out_dB	headroom_dB	verdict
+0d_near1	SENTINEL COLD-START lone near voice (keep)	ours	   -4.05	  -43.24	     n/a	     n/a	     n/a	     n/a	     n/a	KEEP-VIOLATION
+180d_session	STREAM: full 180D recording (near anchor present)	ours	   -0.66	  -43.11	   -9.25	  -60.26	   18.59	   17.81	   27.84	SUPPRESS-PARTIAL
+180d_near1	COLD-START lone near voice (keep)	ours	   -0.02	  -42.39	     n/a	     n/a	     n/a	     n/a	     n/a	ok
+180d_far1	COLD-START lone far voice, no near anchor (suppress)	ours	     n/a	     n/a	   -0.20	  -53.58	   25.27	   11.13	   25.47	SUPPRESS-FAIL
+180d_near2	COLD-START lone near voice (keep)	ours	   -0.05	  -41.21	     n/a	     n/a	     n/a	     n/a	     n/a	ok
+180d_far2	COLD-START lone far voice, no near anchor (suppress)	ours	     n/a	     n/a	   -0.28	  -48.64	   30.21	    6.19	   30.49	SUPPRESS-FAIL
+180d_near3	COLD-START lone near voice (keep)	ours	   -0.12	  -45.09	     n/a	     n/a	     n/a	     n/a	     n/a	ok
+180d_far3	COLD-START lone far voice, no near anchor (suppress)	ours	     n/a	     n/a	  -12.40	  -65.44	   13.41	   22.99	   25.80	SUPPRESS-PARTIAL
+180d_near4	COLD-START lone near voice (keep)	ours	   -0.16	  -40.99	     n/a	     n/a	     n/a	     n/a	     n/a	ok
+180d_far4	COLD-START lone far voice, no near anchor (suppress)	ours	     n/a	     n/a	   -0.12	  -50.70	   28.15	    8.25	   28.27	SUPPRESS-FAIL
+180d_near5	COLD-START lone near voice (keep)	ours	   -0.25	  -42.54	     n/a	     n/a	     n/a	     n/a	     n/a	ok
+180d_dt1	COLD-START double-talk, keep-only (near must survive)	ours	   -1.44	  -44.34	     n/a	     n/a	     n/a	     n/a	     n/a	ok
+180d_near6	COLD-START lone near voice (keep)	ours	   -0.34	  -38.33	     n/a	     n/a	     n/a	     n/a	     n/a	ok
+180d_dt2	COLD-START double-talk, keep-only (near must survive)	ours	   -1.41	  -47.02	     n/a	     n/a	     n/a	     n/a	     n/a	ok
+270d_session	STREAM: full 270D recording (near anchor present)	ours	   -1.11	  -44.47	  -11.29	  -62.62	   15.91	   19.26	   27.20	SUPPRESS-PARTIAL
+270d_near1	COLD-START lone near voice (keep)	ours	   -0.02	  -43.98	     n/a	     n/a	     n/a	     n/a	     n/a	ok
+270d_far1	COLD-START lone far voice, no near anchor (suppress)	ours	     n/a	     n/a	   -0.83	  -54.85	   23.68	   11.49	   24.51	SUPPRESS-FAIL
+270d_near2	COLD-START lone near voice (keep)	ours	   -0.13	  -45.21	     n/a	     n/a	     n/a	     n/a	     n/a	ok
+270d_far2	COLD-START lone far voice, no near anchor (suppress)	ours	     n/a	     n/a	   -2.99	  -51.96	   26.57	    8.60	   29.56	SUPPRESS-FAIL
+270d_near3	COLD-START lone near voice (keep)	ours	   -0.27	  -45.90	     n/a	     n/a	     n/a	     n/a	     n/a	ok
+270d_far3	COLD-START lone far voice, no near anchor (suppress)	ours	     n/a	     n/a	   -0.45	  -54.00	   24.53	   10.64	   24.98	SUPPRESS-FAIL
+270d_near4	COLD-START lone near voice (keep)	ours	   -0.33	  -42.86	     n/a	     n/a	     n/a	     n/a	     n/a	ok
+270d_far4	COLD-START lone far voice, no near anchor (suppress)	ours	     n/a	     n/a	   -0.33	  -52.85	   25.68	    9.49	   26.00	SUPPRESS-FAIL
+270d_near5	COLD-START lone near voice (keep)	ours	   -0.81	  -43.85	     n/a	     n/a	     n/a	     n/a	     n/a	ok
+270d_dt1	COLD-START double-talk, keep-only (near must survive)	ours	   -1.02	  -44.80	     n/a	     n/a	     n/a	     n/a	     n/a	ok
+270d_dt2	COLD-START double-talk, keep-only (near must survive)	ours	   -2.26	  -44.31	     n/a	     n/a	     n/a	     n/a	     n/a	ok
+90d_session	STREAM: full 90D recording (near anchor present)	ours	   -0.47	  -41.42	  -12.35	  -62.74	   15.97	   21.79	   28.32	SUPPRESS-PARTIAL
+90d_near1	COLD-START lone near voice (keep)	ours	   -0.05	  -43.98	     n/a	     n/a	     n/a	     n/a	     n/a	ok
+90d_far1	COLD-START lone far voice, no near anchor (suppress)	ours	     n/a	     n/a	   -6.98	  -58.55	   20.16	   17.60	   27.15	SUPPRESS-PARTIAL
+90d_near2	COLD-START lone near voice (keep)	ours	   -0.10	  -43.59	     n/a	     n/a	     n/a	     n/a	     n/a	ok
+90d_far2	COLD-START lone far voice, no near anchor (suppress)	ours	     n/a	     n/a	   -0.16	  -47.62	   31.09	    6.67	   31.25	SUPPRESS-FAIL
+90d_near3	COLD-START lone near voice (keep)	ours	   -0.17	  -43.13	     n/a	     n/a	     n/a	     n/a	     n/a	ok
+90d_far3	COLD-START lone far voice, no near anchor (suppress)	ours	     n/a	     n/a	   -0.23	  -53.44	   25.27	   12.49	   25.50	SUPPRESS-FAIL
+90d_near4	COLD-START lone near voice (keep)	ours	   -0.10	  -39.69	     n/a	     n/a	     n/a	     n/a	     n/a	ok
+90d_far4	COLD-START lone far voice, no near anchor (suppress)	ours	     n/a	     n/a	   -0.11	  -50.20	   28.51	    9.25	   28.62	SUPPRESS-FAIL
+90d_near5	COLD-START lone near voice (keep)	ours	   -0.08	  -38.84	     n/a	     n/a	     n/a	     n/a	     n/a	ok
+90d_far5	COLD-START lone far voice, no near anchor (suppress)	ours	     n/a	     n/a	   -0.05	  -53.77	   24.94	   12.82	   24.99	SUPPRESS-FAIL
+90d_dt1	COLD-START double-talk, keep-only (near must survive)	ours	   -1.80	  -43.35	     n/a	     n/a	     n/a	     n/a	     n/a	ok
+90d_near6	COLD-START lone near voice (keep)	ours	   -0.05	  -39.09	     n/a	     n/a	     n/a	     n/a	     n/a	ok
+90d_far6	COLD-START lone far voice, no near anchor (suppress)	ours	     n/a	     n/a	   -0.47	  -52.09	   26.62	   11.14	   27.10	SUPPRESS-FAIL
+90d_dt2	COLD-START double-talk, keep-only (near must survive)	ours	   -0.50	  -41.76	     n/a	     n/a	     n/a	     n/a	     n/a	ok
+qvf_gym_session	STREAM: full QVF_GYM recording (near anchor present)	ours	   -0.78	  -29.32	   -7.84	  -50.50	   -0.45	   21.96	    7.39	ok
+qvf_gym_near1	COLD-START lone near voice (keep)	ours	   -2.35	  -31.49	     n/a	     n/a	     n/a	     n/a	     n/a	ok
+qvf_gym_dt1	COLD-START double-talk, keep-only (near must survive)	ours	   -1.05	  -31.16	     n/a	     n/a	     n/a	     n/a	     n/a	ok
+qvf_gym_far1	COLD-START lone far voice, no near anchor (suppress)	ours	     n/a	     n/a	  -12.18	  -54.84	   -4.79	   26.30	    7.39	ok
+qvf_gym_near2	COLD-START lone near voice (keep)	ours	   -0.27	  -25.68	     n/a	     n/a	     n/a	     n/a	     n/a	ok
+qvf_gym_dt2	COLD-START double-talk, keep-only (near must survive)	ours	   -0.60	  -30.39	     n/a	     n/a	     n/a	     n/a	     n/a	ok
+qvf_keep_in_touch_near1	COLD-START lone near voice (keep)	ours	   -3.32	  -33.65	     n/a	     n/a	     n/a	     n/a	     n/a	KEEP-VIOLATION
+qvf_keep_in_touch_dt1	COLD-START double-talk, keep-only (near must survive)	ours	  -11.79	  -45.69	     n/a	     n/a	     n/a	     n/a	     n/a	KEEP-VIOLATION
+qvf_plumbing_near1	COLD-START lone near voice (keep)	ours	   -0.17	  -22.26	     n/a	     n/a	     n/a	     n/a	     n/a	ok
+qvf_plumbing_far1	COLD-START lone far voice, no near anchor (suppress)	ours	     n/a	     n/a	   -1.77	  -43.30	   24.14	   21.21	   25.91	SUPPRESS-FAIL
+qvf_price_session	STREAM: full QVF_PRICE recording (near anchor present)	ours	   -0.69	  -28.89	   -9.30	  -50.37	    2.56	   22.17	   11.86	ok
+qvf_price_near1	COLD-START lone near voice (keep)	ours	   -6.29	  -36.13	     n/a	     n/a	     n/a	     n/a	     n/a	KEEP-VIOLATION
+qvf_price_far1	COLD-START lone far voice, no near anchor (suppress)	ours	     n/a	     n/a	   -2.42	  -45.78	    7.15	   17.58	    9.57	SUPPRESS-FAIL
+qvf_price_near2	COLD-START lone near voice (keep)	ours	   -0.68	  -28.62	     n/a	     n/a	     n/a	     n/a	     n/a	ok
+qvf_price_dt1	COLD-START double-talk, keep-only (near must survive)	ours	   -1.40	  -28.64	     n/a	     n/a	     n/a	     n/a	     n/a	ok
+qvf_price_dt2	COLD-START double-talk, keep-only (near must survive)	ours	   -1.53	  -29.71	     n/a	     n/a	     n/a	     n/a	     n/a	ok
+qvf_price_far2	COLD-START lone far voice, no near anchor (suppress)	ours	     n/a	     n/a	  -16.46	  -56.82	   -3.89	   28.62	   12.58	ok
+qvf_scenario1_near1	COLD-START lone near voice (keep)	ours	   -0.70	  -25.35	     n/a	     n/a	     n/a	     n/a	     n/a	ok
+qvf_scenario1_near1	COLD-START lone near voice (keep)	reference	   -0.15	  -24.81	     n/a	     n/a	     n/a	     n/a	     n/a	ok
+qvf_scenario2_far1	COLD-START lone far voice, no near anchor (suppress)	ours	     n/a	     n/a	   -1.29	  -30.54	   19.85	     n/a	   21.14	SUPPRESS-FAIL
+qvf_scenario2_far1	COLD-START lone far voice, no near anchor (suppress)	reference	     n/a	     n/a	    0.24	  -29.01	   21.38	     n/a	   21.14	SUPPRESS-FAIL
+qvf_scenario3_session	STREAM: full QVF_SCENARIO3 recording (near anchor present)	ours	   -0.88	  -25.24	   -0.80	  -37.02	    9.62	   12.67	   10.42	SUPPRESS-FAIL
+qvf_scenario3_session	STREAM: full QVF_SCENARIO3 recording (near anchor present)	reference	    0.10	  -24.26	  -29.71	  -65.93	  -19.29	   41.58	   10.42	ok
+qvf_scenario3_near1	COLD-START lone near voice (keep)	ours	   -0.71	  -25.40	     n/a	     n/a	     n/a	     n/a	     n/a	ok
+qvf_scenario3_far1	COLD-START lone far voice, no near anchor (suppress)	ours	     n/a	     n/a	   -0.89	  -37.11	    9.53	   12.76	   10.42	SUPPRESS-FAIL
+qvf_scenario3_near2	COLD-START lone near voice (keep)	ours	   -1.10	  -24.96	     n/a	     n/a	     n/a	     n/a	     n/a	ok
+
+# keep_preserv_dB ~ 0 dB; < -3.0 dB = KEEP-VIOLATION (bot goes deaf to a user)
+# supp_reduc_dB very negative; > -6.0 dB = SUPPRESS-FAIL (non-user voice leaks)
+# residual_dB = output level above the recording's noise floor; > 12.0 dB with a
+#   passing reduction = SUPPRESS-PARTIAL (pushed, but the bystander is still above room tone)
+# sir_out_dB = how far the residual sits below the user's own voice (bigger is better)
+# headroom_dB = input level above the floor; < 6.0 dB = NOT-SCORABLE, there was
+#   nothing to remove and reduction_dB would only measure the floor
+# ours: FAIL -> 0d_near1:keep, 180d_far1:suppress, 180d_far2:suppress, 180d_far4:suppress, 270d_far1:suppress, 270d_far2:suppress, 270d_far3:suppress, 270d_far4:suppress, 90d_far2:suppress, 90d_far3:suppress, 90d_far4:suppress, 90d_far5:suppress, 90d_far6:suppress, qvf_keep_in_touch_near1:keep, qvf_keep_in_touch_dt1:keep, qvf_plumbing_far1:suppress, qvf_price_near1:keep, qvf_price_far1:suppress, qvf_scenario2_far1:suppress, qvf_scenario3_session:suppress, qvf_scenario3_far1:suppress
+# reference: FAIL -> qvf_scenario2_far1:suppress
