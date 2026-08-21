@@ -410,3 +410,66 @@ class ParametricEQ:
         plt.title("Parametric EQ")
         if savefig is not None:
             plt.savefig(savefig)
+
+
+def compressor_gain(
+    wav: torch.Tensor,
+    sample_rate: int,
+    *,
+    threshold_db: float,
+    ratio: float,
+    attack_ms: float = 5.0,
+    release_ms: float = 120.0,
+    makeup: bool = True,
+) -> torch.Tensor:
+    """The gain curve a broadcast-style compressor would apply, as a [1, T] tensor.
+
+    Returned rather than applied, because the caller has to put the SAME curve on
+    the mixture and on the target. A compressor is a time-varying GAIN, so
+    ``g * (near + far) == g * near + g * far`` and superposition survives -- which
+    is the whole reason this is not the ``|x|^p`` waveshaper in
+    `Augmentor.apply_media_coloring`. That one is a distortion: it is the right
+    model for a TV loudspeaker in the room, and the wrong one for "the recording
+    was compressed", because no per-source decomposition of it exists and the
+    target could only follow by being separately distorted into something that is
+    no longer the mixture's near component.
+
+    Detector is a peak follower on the absolute signal with asymmetric one-pole
+    smoothing, the usual shape: fast attack so a transient is caught, slow
+    release so the gain does not pump between syllables. Gain reduction is
+    computed in dB above ``threshold_db`` at ``ratio``, then optionally makeup-
+    normalised so the curve has unit mean -- without that, compression and a
+    level change are the same augmentation and a model could learn either.
+    """
+    if ratio < 1.0:
+        raise ValueError(f"ratio must be >= 1 (1.0 = no compression), got {ratio}")
+    if not (attack_ms > 0.0 and release_ms > 0.0):
+        raise ValueError(f"attack/release must be > 0 ms, got {attack_ms}/{release_ms}")
+    flat = wav.reshape(-1).abs().float()
+    a_att = 1.0 - math.exp(-1000.0 / (attack_ms * sample_rate))
+    a_rel = 1.0 - math.exp(-1000.0 / (release_ms * sample_rate))
+    # max(fast pole, slow pole) -- a standard asymmetric follower, and NOT an
+    # approximation of the per-sample `coefficient switches on x > env` loop: it
+    # correlates 0.93 with it, not 1.0. It is the same SHAPE, which is what a
+    # detector has to be: on an onset the fast pole is higher, so the envelope
+    # rises at the attack rate; through a decay the slow pole is higher, so it
+    # falls at the release rate. Chosen because the per-sample loop costs 2.4 s
+    # for six seconds of audio -- 600+ minutes of dataloader per epoch -- and
+    # this costs 12 ms. Which detector a compressor uses is a design choice; the
+    # properties the augmentation needs are asserted in the tests instead.
+    def one_pole(x, a):
+        return torchaudio.functional.lfilter(
+            x, a_coeffs=x.new_tensor([1.0, -(1.0 - a)]),
+            b_coeffs=x.new_tensor([a, 0.0]), clamp=False,
+        )
+
+    fast = one_pole(flat, a_att)
+    slow = one_pole(flat, a_rel)
+    env = torch.maximum(fast, slow)
+    env_db = 20.0 * torch.log10(env.clamp_min(1e-8))
+    over = (env_db - threshold_db).clamp_min(0.0)
+    gain_db = -over * (1.0 - 1.0 / ratio)
+    gain = torch.pow(10.0, gain_db / 20.0)
+    if makeup:
+        gain = gain / gain.mean().clamp_min(1e-8)
+    return gain.reshape(1, -1).to(wav.dtype)

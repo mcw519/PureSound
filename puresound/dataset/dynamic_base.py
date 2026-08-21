@@ -20,6 +20,7 @@ from puresound.config.augmentation import (
     SpeechAugmentation,
     VadLabelConfig,
     VolumeAugmentation,
+    CompressorAugmentation,
 )
 from puresound.audio.io import AudioIO
 from puresound.audio.noise import add_bg_white_noise
@@ -91,6 +92,7 @@ class DynamicBaseDataset(torch.utils.data.Dataset):
         "augmentation_src_args": SourceRateAugmentation,
         "augmentation_hpf_args": HighPassAugmentation,
         "augmentation_volume_args": VolumeAugmentation,
+        "augmentation_compressor_args": CompressorAugmentation,
         "vad_label_args": VadLabelConfig,
     }
 

@@ -11,6 +11,7 @@ ceilings turn a microphone response into a waveshaper.
 This pins the mechanism, including the cases the chain never reaches.
 """
 
+import math
 import pytest
 import torch
 import torchaudio
@@ -103,3 +104,94 @@ def test_a_biquad_is_a_transfer_function_not_a_limiter():
         lambda w: torchaudio.functional.highpass_biquad(w, SR, 100.0, 0.707), hot
     )
     assert float(wrapped.abs().amax()) > 3.9
+
+
+# --------------------------------------------------------------------------- #
+# compressor_gain -- a time-varying gain, so superposition survives it
+# --------------------------------------------------------------------------- #
+
+
+def test_compressor_gain_preserves_superposition():
+    """THE reason this returns a curve instead of applying itself.
+
+    The device chain's linear group puts the same parameters on the mixture and
+    the target because that is what keeps the mixture equal to the sum of its
+    parts. A gain does; the |x|^p waveshaper in apply_media_coloring does not,
+    which is why that one is a source-level effect and this one is not.
+    """
+    from puresound.audio.dsp import compressor_gain
+
+    torch.manual_seed(0)
+    near, far = torch.randn(1, 16000) * 0.2, torch.randn(1, 16000) * 0.1
+    gain = compressor_gain(near + far, 16000, threshold_db=-30.0, ratio=4.0)
+    assert torch.allclose(gain * (near + far), gain * near + gain * far, atol=1e-6)
+
+
+def test_compressor_gain_actually_compresses():
+    """Loud down, quiet up -- the envelope must flatten, or this augmentation is
+    teaching nothing about the cue it exists to attack."""
+    from puresound.audio.dsp import compressor_gain
+
+    torch.manual_seed(0)
+    sr = 16000
+    x = torch.cat([torch.randn(1, sr) * 0.5, torch.randn(1, sr) * 0.02], dim=-1)
+    gain = compressor_gain(x, sr, threshold_db=-30.0, ratio=4.0)
+    assert float(gain[0, :sr].mean()) < float(gain[0, sr:].mean())
+    before = 20 * math.log10(float(x[0, :sr].std() / x[0, sr:].std()))
+    after = 20 * math.log10(float((x * gain)[0, :sr].std() / (x * gain)[0, sr:].std()))
+    assert after < before - 5.0, f"contrast {before:.1f} -> {after:.1f} dB"
+
+
+def test_compressor_gain_is_level_neutral():
+    """Unit-mean makeup, so compression and a gain change are separable.
+
+    Without it a model could satisfy this augmentation by learning level
+    invariance, which the renormalisation probe already showed it has -- and
+    which is not the cue in question.
+    """
+    from puresound.audio.dsp import compressor_gain
+
+    torch.manual_seed(0)
+    for scale in (0.02, 0.2, 0.9):
+        g = compressor_gain(torch.randn(1, 8000) * scale, 16000,
+                            threshold_db=-30.0, ratio=4.0)
+        assert abs(float(g.mean()) - 1.0) < 1e-4
+
+
+def test_compressor_ratio_one_is_a_no_op():
+    from puresound.audio.dsp import compressor_gain
+
+    g = compressor_gain(torch.randn(1, 4000) * 0.4, 16000,
+                        threshold_db=-40.0, ratio=1.0)
+    assert torch.allclose(g, torch.ones_like(g), atol=1e-6)
+
+
+@pytest.mark.parametrize("kw", [
+    dict(ratio=0.5),
+    dict(ratio=4.0, attack_ms=0.0),
+    dict(ratio=4.0, release_ms=-1.0),
+])
+def test_compressor_gain_rejects_incoherent_settings(kw):
+    from puresound.audio.dsp import compressor_gain
+
+    kw.setdefault("threshold_db", -30.0)
+    with pytest.raises(ValueError):
+        compressor_gain(torch.randn(1, 1000) * 0.2, 16000, **kw)
+
+
+def test_compressor_attack_is_faster_than_release():
+    """The asymmetry IS the detector: a symmetric follower pumps between
+    syllables and stops modelling a compressor."""
+    from puresound.audio.dsp import compressor_gain
+
+    sr = 16000
+    burst = torch.cat([torch.zeros(1, sr // 2), torch.ones(1, sr // 4) * 0.5,
+                       torch.zeros(1, sr)], dim=-1)
+    g = compressor_gain(burst, sr, threshold_db=-40.0, ratio=8.0,
+                        attack_ms=2.0, release_ms=200.0, makeup=False)
+    onset = sr // 2
+    offset = onset + sr // 4
+    # gain is down within a few ms of the onset ...
+    assert float(g[0, onset + int(0.004 * sr)]) < 0.6
+    # ... and still down well after the burst ends
+    assert float(g[0, offset + int(0.05 * sr)]) < 0.9

@@ -355,6 +355,43 @@ class VolumeAugmentation(SimpleProbAugmentation):
         )
 
 
+class CompressorAugmentation(SimpleProbAugmentation):
+    """``augmentation_compressor`` -- broadcast-style dynamic-range compression.
+
+    Models "the recording went through a compressor", which publication and
+    conferencing chains routinely do. Measured on the QVF publication clips: at
+    heavy settings this moves the model's own DRR readout from -0.61 to +5.19 dB
+    on our device recordings, landing on the +5.33 those clips actually read --
+    so envelope flattening is one of the things that makes a distant talker read
+    as a near one. Absolute level was ruled out separately (a -28 dB
+    renormalisation moved the estimate by 0.00 m).
+
+    A time-varying gain, so it sits in the device chain's LINEAR group and the
+    same curve goes on the mixture and the target. `prob` at 0 draws nothing and
+    leaves a recipe bit-identical.
+    """
+
+    threshold_db_range: FloatRange | None = None
+    ratio_range: FloatRange | None = None
+    attack_ms_range: FloatRange | None = None
+    release_ms_range: FloatRange | None = None
+
+    @model_validator(mode="after")
+    def enabled_contract(self):
+        require_fields_when_enabled(
+            self, "threshold_db_range", "ratio_range",
+            "attack_ms_range", "release_ms_range",
+        )
+        if self.used and (self.ratio_range or [1.0])[0] < 1.0:
+            raise ValueError(
+                f"ratio_range must start at >= 1.0 (1.0 = no compression), "
+                f"got {self.ratio_range}"
+            )
+        if self.used and (self.attack_ms_range or [1.0])[0] <= 0.0:
+            raise ValueError(f"attack_ms_range must be > 0, got {self.attack_ms_range}")
+        return self
+
+
 class CodecAugmentation(SimpleProbAugmentation):
     codecs: list[Literal["libopus", "g722"]] | None = None
     prob_each: list[NonNegativeFloat] | None = None

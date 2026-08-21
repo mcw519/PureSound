@@ -22,6 +22,7 @@ from .augmentation import (
     TargetAbsentAugmentation,
     VadLabelConfig,
     VolumeAugmentation,
+    CompressorAugmentation,
 )
 from .base import Probability, StrictConfig
 
@@ -120,6 +121,7 @@ class BaseRecipe(StrictConfig):
     augmentation_src: SourceRateAugmentation | None = None
     augmentation_hpf: HighPassAugmentation | None = None
     augmentation_volume: VolumeAugmentation | None = None
+    augmentation_compressor: CompressorAugmentation | None = None
     vad_label: VadLabelConfig | None = None
 
     def augmentation_kwargs(self) -> dict[str, Any]:

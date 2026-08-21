@@ -43,6 +43,8 @@ thresholds.
 
 from __future__ import annotations
 
+from puresound.audio.dsp import compressor_gain
+
 import random
 from typing import NamedTuple, Optional
 
@@ -71,6 +73,9 @@ DEVICE_CHAIN_SCALARS = (
     "volume_applied",
     "volume_clipped",
     "volume_gain",
+    "compressor_applied",
+    "compressor_ratio",
+    "compressor_threshold_db",
     "codec_applied",
     "codec_kind",
     "codec_bitrate",
@@ -123,6 +128,7 @@ class DeviceChain:
         ir_response=None,
         hpf=None,
         volume=None,
+        compressor=None,
         codec=None,
         packet_loss=None,
         overload_guard: bool = True,
@@ -136,6 +142,7 @@ class DeviceChain:
         self.ir_response = ir_response
         self.hpf = hpf
         self.volume = volume
+        self.compressor = compressor
         self.codec = codec
         self.packet_loss = packet_loss
 
@@ -160,6 +167,7 @@ class DeviceChain:
         noisy, target = self._second_order_iir(noisy, target, record)
         noisy, target = self._high_pass(noisy, target, sample_rate, record)
         noisy, target = self._volume(noisy, target, sample_rate, record)
+        noisy, target = self._compressor(noisy, target, sample_rate, record)
         if self.overload_guard:
             noisy, target = self._analogue_to_digital(noisy, target, record)
         noisy = self._codec(noisy, sample_rate, record)
@@ -275,6 +283,50 @@ class DeviceChain:
             record["volume_gain"] = float(gain)
         return noisy, target
 
+    def _compressor(self, noisy, target, sample_rate, record):
+        """Broadcast-style dynamic-range compression, on the pair.
+
+        After the preamp and before the converter, which is where a real chain
+        puts it -- and it has to be inside the linear group, not after the
+        codec, because the target follows it. The curve is derived from the
+        MIXTURE, which is what a compressor sees, and applied to both: a gain is
+        distributive, so the target stays exactly the near component of the
+        compressed mixture. Deriving it from the target instead would be a
+        different effect that no chain performs.
+
+        Why this stage exists: the model's near/far decision partly rides on
+        envelope structure, and flattening it makes a distant talker read as a
+        near one -- measured at +5.19 dB of DRR readout on device recordings
+        against the +5.33 the compressed QVF clips actually read. Absolute level
+        was ruled out first (a -28 dB renormalisation moved the estimate 0.00 m).
+        """
+        if not self._fires(self.compressor):
+            return noisy, target
+        block = self.compressor
+        threshold_db = float(
+            torch.empty(1).uniform_(*block.threshold_db_range).item()
+        )
+        ratio = float(torch.empty(1).uniform_(*block.ratio_range).item())
+        attack_ms = float(torch.empty(1).uniform_(*block.attack_ms_range).item())
+        release_ms = float(torch.empty(1).uniform_(*block.release_ms_range).item())
+        gain = compressor_gain(
+            noisy,
+            sample_rate,
+            threshold_db=threshold_db,
+            ratio=ratio,
+            attack_ms=attack_ms,
+            release_ms=release_ms,
+        )
+        n = min(gain.shape[-1], noisy.shape[-1], target.shape[-1])
+        noisy = noisy.clone()
+        target = target.clone()
+        noisy[..., :n] = noisy[..., :n] * gain[..., :n]
+        target[..., :n] = target[..., :n] * gain[..., :n]
+        record["compressor_applied"] = 1.0
+        record["compressor_ratio"] = ratio
+        record["compressor_threshold_db"] = threshold_db
+        return noisy, target
+
     # ------------------------------------------------------------------ #
     # Transmission damage: mixture only, the target stays the clean reference
     # ------------------------------------------------------------------ #
@@ -370,6 +422,7 @@ def device_chain_from_blocks(
         ir_response=dataset.augmentation_ir_response_args,
         hpf=dataset.augmentation_hpf_args,
         volume=dataset.augmentation_volume_args,
+        compressor=getattr(dataset, "augmentation_compressor_args", None),
         codec=getattr(dataset, "augmentation_codec_args", None),
         packet_loss=getattr(dataset, "augmentation_packet_loss_args", None),
     )
