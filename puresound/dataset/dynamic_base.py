@@ -411,6 +411,15 @@ class DynamicBaseDataset(torch.utils.data.Dataset):
                 )
                 logger.info(f"Augmentor finished load {len(self.augmentor.rir.keys())} rirs")
 
+            smear_args = self.augmentation_reverb_args.direct_smear
+            if smear_args is not None and smear_args.used:
+                self.augmentor.init_direct_smear(delegated_kwargs(smear_args))
+                k = self.augmentor.direct_smear
+                logger.info(
+                    f"Augmentor direct-arrival smear: prob={k['prob']}, "
+                    f"{k['smear_ms_range'][0]}-{k['smear_ms_range'][1]} ms"
+                )
+
             drr_contrast_args = self.augmentation_reverb_args.drr_contrast
             if drr_contrast_args is not None and drr_contrast_args.used:
                 self.augmentor.init_drr_contrast(delegated_kwargs(drr_contrast_args))

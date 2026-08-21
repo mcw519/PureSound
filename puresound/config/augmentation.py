@@ -259,6 +259,42 @@ class DrrContrastConfig(StrictConfig):
         return self
 
 
+class DirectSmearConfig(StrictConfig):
+    """``augmentation_reverb.direct_smear`` -- scramble the direct arrival's timing.
+
+    The distance readout depends most on the direct window's fine timing:
+    noise-replacing the first 2.5 ms keeps 45% of the near/far separation
+    (early reflections 62%, late tail 60%), a 5 ms smear leaves 1%, and
+    destroying timing alone keeps 35% against 81% for flattening the spectrum
+    (probes/dist_cue_anatomy_README.md). One cue, and reverberation masks it --
+    which is why deletion rises monotonically with RT60.
+
+    Removing it on a fraction of rows asks the model to find a substitute.
+    Whether one exists to find is open: the same study measured timing and
+    spectrum as read jointly, not summed (destroying both keeps 54%, more than
+    timing alone), so spectral tilt is a candidate, not a guarantee. No recipe
+    sets this knob yet; it ships dark.
+
+    Applied to the RIR before it is sliced, so the ``full`` mixture and the
+    ``early`` target inherit the same smear. ``used: False`` needs no other
+    field; ``prob`` must sit in (0, 1].
+    """
+
+    used: StrictBool
+    prob: Probability | None = None
+    smear_ms_range: FloatRange | None = None
+
+    @model_validator(mode="after")
+    def enabled_contract(self):
+        require_fields_when_enabled(self, "prob", "smear_ms_range")
+        if self.used and (self.smear_ms_range or [1.0])[0] <= 0.0:
+            raise ValueError(
+                f"smear_ms_range must start above 0 ms (0 is a no-op and is "
+                f"already covered by prob < 1), got {self.smear_ms_range}"
+            )
+        return self
+
+
 class ReverbAugmentation(StrictConfig):
     used: StrictBool
     prob: Probability | None = None
@@ -266,6 +302,7 @@ class ReverbAugmentation(StrictConfig):
     rir_folder: str | None = None
     simulator: RoomSimulatorConfig | None = None
     drr_contrast: DrrContrastConfig | None = None
+    direct_smear: DirectSmearConfig | None = None
 
     @model_validator(mode="after")
     def enabled_contract(self):

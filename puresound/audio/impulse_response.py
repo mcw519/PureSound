@@ -129,3 +129,82 @@ def rand_add_2nd_filter_response(
     )
 
     return wav, a, b
+
+
+def smear_direct_arrival(
+    impaulse: torch.Tensor,
+    sample_rate: int,
+    *,
+    smear_ms: float,
+    generator: Optional[torch.Generator] = None,
+) -> torch.Tensor:
+    """Scramble the structure just after the direct arrival, keeping everything else.
+
+    Where the cue lives was measured window by window
+    (`egs/voice_isolate/benchmarks/probes/dist_cue_anatomy_README.md`):
+    noise-replacing the first 2.5 ms keeps 45% of the near/far separation against
+    60-62% for the early reflections or the late tail, a 5 ms smear leaves 1%,
+    and splitting the window from first principles puts it in the fine TIMING --
+    destroying timing alone keeps 35%, flattening the spectrum keeps 81%. One
+    cue, and reverberation masks it -- which is the mechanism behind deletion
+    rising monotonically with RT60.
+
+    This removes it on purpose, on a fraction of rows, so the model cannot rely
+    on it alone. Whether a substitute is then learnable is an open question, and
+    the same study is the caution: timing and spectrum are read jointly, not
+    summed (destroying both keeps 54% -- strictly more damage than timing alone,
+    yet a larger surviving gap, so the two readings partially cancel). Spectral
+    tilt (centroid 351 Hz near against 620 Hz far, unmasked by reverberation) is
+    a candidate substitute, not an established one -- which is why this knob
+    ships dark: no recipe sets it until a training run is worth that gamble.
+
+    What is preserved, so the manipulation is about TIMING and nothing else:
+
+    * **the peak index**, because `wav_apply_rir` reads `argmax` for both the
+      window cuts and the propagation-delay alignment -- move it and every
+      downstream offset moves with it;
+    * **the window's energy**, restored after smearing, so this is not a level
+      change (the pipeline peak-normalises RIRs anyway, deliberately removing the
+      1/r level cue);
+    * **the late tail**, untouched past ``smear_ms``.
+
+    Applied to the RIR before `wav_apply_rir` slices it, so the ``full`` mixture
+    and the ``early`` target inherit the same smear from the same impulse -- the
+    target stays the near component of the smeared mixture.
+    """
+    if smear_ms <= 0.0:
+        return impaulse
+    n = int(round(smear_ms * sample_rate / 1000.0))
+    if n < 2:
+        return impaulse
+    out = impaulse.clone()
+    for ch in range(out.shape[0]):
+        h = out[ch]
+        peak = int(h.abs().argmax().item())
+        end = min(h.shape[-1], peak + n)
+        if end - peak < 2:
+            continue
+        window = h[peak:end]
+        energy = window.pow(2).sum()
+        if float(energy) <= 0.0:
+            continue
+        # A random unit-energy kernel spreads the window in time. Causal, so
+        # nothing arrives before the direct path did.
+        kernel = torch.randn(end - peak, generator=generator,
+                             dtype=h.dtype, device=h.device)
+        kernel = kernel / kernel.pow(2).sum().sqrt().clamp_min(1e-12)
+        smeared = torch.nn.functional.conv1d(
+            torch.nn.functional.pad(window.view(1, 1, -1), (kernel.shape[-1] - 1, 0)),
+            kernel.flip(-1).view(1, 1, -1),
+        ).view(-1)
+        # Restore the peak's dominance BEFORE renormalising, not after: the smear
+        # can leave a later sample larger, which would move argmax and silently
+        # shift every window cut downstream -- but doing the fix afterwards adds
+        # energy back and the window no longer matches what it started with.
+        biggest = smeared.abs().max()
+        if float(smeared[0].abs()) < float(biggest):
+            sign = torch.sign(smeared[0]) if float(smeared[0]) != 0.0 else 1.0
+            smeared[0] = sign * biggest * 1.001
+        smeared = smeared * (energy / smeared.pow(2).sum().clamp_min(1e-12)).sqrt()
+        h[peak:end] = smeared
+    return out

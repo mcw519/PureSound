@@ -10,6 +10,7 @@ import torchaudio
 from puresound.audio.dsp import apply_linear, wav_resampling
 from puresound.audio.impulse_response import (
     compute_drr_db,
+    smear_direct_arrival,
     rand_add_2nd_filter_response,
     wav_apply_rir,
 )
@@ -88,6 +89,7 @@ class AudioEffectAugmentor:
         self.room_bank_kind = None
         self._last_bank_kind = None
         self.drr_contrast = None
+        self.direct_smear = None
         self.simulated_rir = OrderedDict()
         self.simulated_rir_cache_size = 32
         self.simulated_rir_counter = count()
@@ -282,6 +284,43 @@ class AudioEffectAugmentor:
             }
         else:
             raise ValueError("drr_contrast mode must be 'random' or 'deterministic'")
+
+    def init_direct_smear(self, config: dict) -> None:
+        """Store the direct-arrival smear knob. See DirectSmearConfig."""
+        options = set(config) - {"used", "prob", "smear_ms_range"}
+        if options:
+            raise ValueError(f"unknown direct_smear options: {sorted(options)}")
+        prob = config.get("prob")
+        span = config.get("smear_ms_range")
+        if prob is None or not 0.0 < float(prob) <= 1.0:
+            raise ValueError(f"direct_smear prob must lie in (0, 1], got {prob}")
+        if not span or float(span[0]) <= 0.0 or float(span[1]) < float(span[0]):
+            raise ValueError(f"direct_smear smear_ms_range invalid: {span}")
+        self.direct_smear = {"prob": float(prob),
+                             "smear_ms_range": (float(span[0]), float(span[1]))}
+
+    def _apply_direct_smear(self, impaulse, sample_rate, rir_metadata):
+        """Scramble the direct arrival's timing on a fraction of impulses.
+
+        Applied where `_apply_drr_contrast` is, and for the same reason: BEFORE
+        the impulse is cached under its `rir_id`. The target re-fetches that id to
+        get the same room in a different window, so smearing here is what makes
+        the ``early`` target the near component of the smeared ``full`` mixture.
+        Smearing after the cache would give the two different impulses.
+
+        The draw is inside the short circuit, so a disabled knob consumes no
+        randomness and a recipe without it regenerates bit-identically.
+        """
+        if self.direct_smear is None:
+            return impaulse, rir_metadata
+        if random.random() >= self.direct_smear["prob"]:
+            return impaulse, rir_metadata
+        low, high = self.direct_smear["smear_ms_range"]
+        smear_ms = random.uniform(low, high)
+        impaulse = smear_direct_arrival(impaulse, sample_rate, smear_ms=smear_ms)
+        meta = dict(rir_metadata or {})
+        meta["direct_smear_ms"] = smear_ms
+        return impaulse, meta
 
     def _apply_drr_contrast(
         self,
@@ -562,6 +601,9 @@ class AudioEffectAugmentor:
             impaulse, rir_metadata = self._apply_drr_contrast(
                 impaulse, sr, source_role, rir_metadata
             )
+            impaulse, rir_metadata = self._apply_direct_smear(
+                impaulse, sr, rir_metadata
+            )
             rir_id = f"bank-{next(self.simulated_rir_counter)}"
             self._cache_simulated_rir(rir_id, {
                 "impulse": impaulse,
@@ -577,6 +619,9 @@ class AudioEffectAugmentor:
             )
             impaulse, rir_metadata = self._apply_drr_contrast(
                 impaulse, sr, source_role, rir_metadata
+            )
+            impaulse, rir_metadata = self._apply_direct_smear(
+                impaulse, sr, rir_metadata
             )
             rir_id = f"simulated-{next(self.simulated_rir_counter)}"
             self._cache_simulated_rir(rir_id, {
