@@ -22,6 +22,33 @@ a cosine trough with `probes/presence_head_judgment.py` + the set-v3 scorecard,
 | 4 | **M6 / boundary banks for the HEAD** | swap/union `hybrid_rir_16k_m6_20260804` + `boundary_20260811` banks into the head-training recipe only | bank axis's real defect is COVERAGE (zero at the 1-2 m decision boundary) and M6's DRR gradient matches measurement -- the head's whole job is that boundary | RIR-axis non-transfer x3 on record; M6 banks already measured FLAT on every separator wall (m6bank runs, 08-04..10) -- expect head-metric gains or nothing | scenario3 / 180d AUC and boundary-band discrimination, NOT synthetic suppression |
 | 5 | **Reference architecture (layer 2)** | train the reference in: room-embedding conditioning (two segments, same room, embed one -- possibly bystander-only -- judge the other) or a contrastive nearer/farther objective | every failure on record is a missing comparison point; the model demonstrably compares (rho +0.599) and never reads absolutes; layer 1 proved the offset structure but cannot manufacture evidence at t=0 | architecture-level lift; RIR->real transfer must be earned again on the head side | cold-start lone-far on real recordings -- the one number nothing has ever moved |
 
+## External references logged 2026-08-22
+
+* **arXiv:2606.13109** (NTT, C2D projection) and **arXiv:2605.19695** (CTRnet /
+  PuLSS, CHiME-6 SOTA): two independent groups converging on the same answer to
+  OUR wall -- manufacture real-domain supervision from paired close+far
+  recordings instead of simulating. NTT's is a closed-form PMWF projection
+  (needs a clean-ish close signal; sufficient for VOiCES-style corpora where
+  the source file exists); CTRnet is UNSUPERVISED blind deconvolution on real
+  close/far pairs (no clean source needed -- works on pairs we could record
+  ourselves with the field rig + one extra far mic, which is the "rig value =
+  real device chain" thesis operationalised). Both feed axis 5's data recipe:
+  same-utterance near/far pairs on a real chain are exactly the contrastive
+  material the reference architecture needs. Both also independently confirm
+  the deletion mechanism ("severe speech distortion... detrimental to ASR")
+  and our early-target alignment choice (naive close-mic targets score
+  tcpWER 56-63% in the NTT ablation).
+* **Krisp Voice Isolation 2.5** (blog, 2026): second commercial proof beside
+  QVF2.2 that enrollment-free primary-speaker isolation ships. Their published
+  numbers: competing-speech WER 35.92 -> 10.90, clean-audio penalty held at
+  ~0 (2.15 vs 2.10 -- a KEEP guardrail, same philosophy as our gates), and
+  v2.5 explicitly fixed "over-processing in reverberant rooms" -- they hit our
+  deletion-vs-reverb wall too. 15 ms algorithmic latency at 16 kHz, CPU-only.
+  Actionable: their public demo clips can join the field set as a second
+  commercial reference group beside the QVF rows (same ingestion path as the
+  QVF publication clips). Our private recordings must NEVER be run through
+  their cloud to obtain comparisons -- that would distribute the recordings.
+
 Recommended order: **1 (offline part) immediately** -- it is nearly free and its
 outcome re-ranks everything else; **3 in parallel** (also free, uses existing
 caches); then decide 2 vs 4 vs 5 with those answers in hand. If chain factors
