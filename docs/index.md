@@ -24,6 +24,11 @@ PureSound is a modular audio processing and deep learning framework for speech e
 | [`puresound.config`](configuration.md) | Pydantic task recipes, capability models, migration, and validation |
 | [puresound.recipes](recipes.md) | High-level model initialization recipes |
 
+There is also a cross-module [Data Augmentation DSP Handbook](augmentation/index.md),
+organising the pipeline's signal processing techniques along two axes — algorithm
+and engineering: derivations and assumptions, config mapping, RNG determinism
+contracts, ordering constraints, and pitfalls.
+
 ## Architecture Overview
 
 ```

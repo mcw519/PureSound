@@ -25,6 +25,10 @@ PureSound 是一套模組化的音訊處理與深度學習框架，用於語音�
 | [`puresound.config`](configuration.md) | Pydantic task recipes、capability models、migration 與驗證 |
 | [puresound.recipes](recipes.md) | 高階的模型初始化 recipes |
 
+另有一份跨模組的 [Data Augmentation DSP 手冊](augmentation/index.zh-TW.md)：
+以「演算法 × 工程」兩個面向整理 augmentation pipeline 的訊號處理手法——公式
+與假設、config 對照、RNG 決定性契約、順序約束與陷阱（zh-TW 先行，英文版待補）。
+
 ## Architecture Overview
 
 ```
