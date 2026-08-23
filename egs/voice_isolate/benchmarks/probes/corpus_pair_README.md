@@ -58,6 +58,27 @@ recorded as a multi-task-drift datapoint.
   unambiguous (DiPCo 1.000 for every checkpoint), and the sharpest
   demonstration yet that absolute calibration is a per-chain lottery.
 
+## The distance ladder is shifted one notch against our spec (ear-verified)
+
+Confirmed by listening (2026-08-23) and consistent with the numbers: the
+corpora's "close" is a worn mic at ~5 cm -- one notch NEARER than our user
+(30-50 cm at a device mic), a different capture style entirely (proximity
+effect, no room). The meeting corpora's "far" table arrays sit at 0.5-1.5 m --
+which is OUR KEEP/boundary distance, not our suppress class. Only DiPCo's
+across-the-room arrays map onto our far class. Neither corpus publishes
+speaker-device geometry, so these are physics/ear calibrations, not labels.
+
+Consequences: (1) pair ordering here measures RANKING, never keep/suppress
+classification -- part of NOTSOFAR's "array reads present" is correct product
+behaviour, and the v12a verdict rests on the rig far clips (true 2-3 m), not
+on this. (2) Ingestion roles flip: headsets are reference sources for pair
+manufacturing, NOT keep-class inputs (teaching "5 cm proximity = user" is the
+v12a confound in another coat); the table arrays are the real-chain KEEP
+material we actually lack; DiPCo's distant arrays are the suppress material.
+(3) DiPCo's five dispersed arrays support a three-rung ladder probe
+(headset / near array / far array) that maps onto the product spec better
+than any binary pair.
+
 ## Caveats
 
 * AMI windows are energy-dominance picks (annotation-free v0); AMI/NOTSOFAR
