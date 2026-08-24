@@ -5,6 +5,7 @@ import torch.nn as nn
 
 from .lobe.heads import DistHead, VADHead
 from .lobe.rnn import SingleRNN
+from .lobe.ssm import MambaInter
 from .lobe.trivial import FiLM, spectral_compression
 from .unet import Unet
 
@@ -24,6 +25,8 @@ class DPRNNblock2D(nn.Module):
         input_size: int,
         hidden_size: int,
         dropout: float = 0.0,
+        inter_type: str = "lstm",
+        mamba_args: Optional[dict] = None,
         embedding_size: Optional[int] = None,
         fused_type: Optional[str] = None,
     ) -> None:
@@ -49,9 +52,19 @@ class DPRNNblock2D(nn.Module):
         )
         self.intra_norm = nn.LayerNorm(input_size)
 
-        self.inter_rnn = SingleRNN(
-            "LSTM", input_size, hidden_size, bidirectional=False, dropout=dropout
-        )
+        # inter(-time) path: "lstm" is the shipped default; "mamba" swaps in a
+        # selective-state-space block at matched parameter budget -- the P1
+        # experiment for long-context memory (see lobe/ssm.py).
+        if inter_type == "lstm":
+            self.inter_rnn = SingleRNN(
+                "LSTM", input_size, hidden_size, bidirectional=False, dropout=dropout
+            )
+        elif inter_type == "mamba":
+            self.inter_rnn = MambaInter(
+                d_model=input_size, dropout=dropout, **(mamba_args or {})
+            )
+        else:
+            raise ValueError(f"inter_type must be 'lstm' or 'mamba', got {inter_type!r}")
         self.inter_norm = nn.LayerNorm(input_size)
 
     def forward(
@@ -71,7 +84,8 @@ class DPRNNblock2D(nn.Module):
             output -- [N, ch, C, T]
         """
         self.intra_rnn.rnn.flatten_parameters()
-        self.inter_rnn.rnn.flatten_parameters()
+        if hasattr(self.inter_rnn, "rnn"):          # MambaInter has no cuDNN params
+            self.inter_rnn.rnn.flatten_parameters()
 
         x_intra_skip = x.clone()
         N, CH, C, T = x.shape
@@ -140,6 +154,8 @@ class DPCRN(Unet):
         dilation_f: Tuple = (1, 1, 1, 1, 1),
         delay: Tuple = (0, 0, 0, 0, 0),
         rnn_hidden: int = 128,
+        inter_type: str = "lstm",
+        mamba_args: Optional[dict] = None,
         spectral_compress: bool = False,
         vad_head: Optional[Dict] = None,
         background_vad_head: Optional[Dict] = None,
@@ -171,6 +187,8 @@ class DPCRN(Unet):
         # DPRNN block
         self.dprnn_block1 = DPRNNblock2D(
             input_size=channels[-1],
+            inter_type=inter_type,
+            mamba_args=mamba_args,
             hidden_size=rnn_hidden,
             dropout=dropout,
             embedding_size=dvec_dim,
@@ -178,6 +196,8 @@ class DPCRN(Unet):
         )
         self.dprnn_block2 = DPRNNblock2D(
             input_size=channels[-1],
+            inter_type=inter_type,
+            mamba_args=mamba_args,
             hidden_size=rnn_hidden,
             dropout=dropout,
             embedding_size=dvec_dim,

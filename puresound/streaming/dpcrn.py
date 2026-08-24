@@ -203,6 +203,11 @@ class StreamingDpcrnFrameModel(StreamingFrameModelBase):
         return names + self._head_state_names(prefix)
 
     def initial_state(self, batch_size: int = 1, device: torch.device | str = "cpu") -> DpcrnStreamingState:
+        if not hasattr(self.backbone.dprnn_block1.inter_rnn, "rnn"):
+            raise NotImplementedError(
+                "streaming for inter_type=mamba lands in P3; "
+                "MambaInter.step() exists, the wrapper wiring does not yet"
+            )
         device = torch.device(device)
         dtype = next(self.parameters()).dtype
         down_freqs, up_freqs = self.backbone.shape_info()
