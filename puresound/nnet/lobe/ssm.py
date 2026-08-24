@@ -100,48 +100,69 @@ class MambaInter(nn.Module):
         return u, z, delta_raw, B, C
 
     #: sequential-scan chunk length; the training-time memory knob. Backward
-    #: keeps only chunk boundaries and recomputes inside (checkpointing) --
-    #: without this the naive loop stores ~6 tensors per step and a 6 s batch
-    #: needs tens of GB, which is exactly how the first v13 launch died.
+    #: keeps only chunk boundaries and recomputes inside (checkpointing).
+    #: Everything fp32 lives INSIDE the checkpointed region: the naive version
+    #: kept full-length fp32 copies of u/dt/B/C/z outside it, which pushed the
+    #: whole model past the 22 GB the LSTM baseline already runs against --
+    #: that is how the second v13 launch died (OOM in the valid-loss WavLM,
+    #: the last straw, not the culprit).
     SCAN_CHUNK = 64
 
-    def _scan_chunk(self, h, u32, dt, A, B32, C32):
-        """One chunk of the sequential scan. All fp32. Returns (ys, h_end)."""
-        ys = []
-        for t in range(u32.shape[-1]):
-            dt_t = dt[:, t]
-            h = h * torch.exp(dt_t.unsqueeze(-1) * A) \
-                + (dt_t * u32[:, :, t]).unsqueeze(-1) * B32[:, t].unsqueeze(1)
-            ys.append((h * C32[:, t].unsqueeze(1)).sum(-1))
-        return torch.stack(ys, dim=-1), h
+    def _scan_chunk(self, h, u_c, draw_c, B_c, C_c, z_c):
+        """One chunk, bf16 in / bf16 out, fp32 only transiently inside."""
+        dev = u_c.device.type
+        with torch.autocast(device_type=dev, enabled=False):
+            u32 = u_c.float()
+            dt = F.softplus(draw_c.float() + self.dt_proj.bias.float())     # [N,t,d_inner]
+            A = -torch.exp(self.A_log.float())
+            B32, C32 = B_c.float(), C_c.float()
+            h = h.float()
+            ys = []
+            for t in range(u32.shape[-1]):
+                dt_t = dt[:, t]
+                h = h * torch.exp(dt_t.unsqueeze(-1) * A) \
+                    + (dt_t * u32[:, :, t]).unsqueeze(-1) * B32[:, t].unsqueeze(1)
+                ys.append((h * C32[:, t].unsqueeze(1)).sum(-1))
+            y = torch.stack(ys, dim=-1) + self.D.float().unsqueeze(-1) * u32
+            y = y * F.silu(z_c.float().transpose(1, 2))
+        return y.to(u_c.dtype), h
 
     def _scan_fallback(self, u, delta_raw, B, C, z):
-        """Chunked sequential scan, fp32 regardless of autocast (bf16
-        underflows dt*A). Under grad, each chunk is checkpointed."""
-        with torch.autocast(device_type=u.device.type, enabled=False):
-            u32 = u.float()
-            dt = F.softplus(delta_raw.float() + self.dt_proj.bias.float())  # [N,T,d_inner]
-            A = -torch.exp(self.A_log.float())                              # [d_inner,S]
-            B32, C32 = B.float(), C.float()
-            N, _, T = u32.shape
-            h = u32.new_zeros(N, self.d_inner, self.d_state)
-            use_ckpt = torch.is_grad_enabled() and self.training
-            outs = []
-            for a in range(0, T, self.SCAN_CHUNK):
-                b = min(T, a + self.SCAN_CHUNK)
-                args = (h, u32[:, :, a:b], dt[:, a:b], A, B32[:, a:b], C32[:, a:b])
-                if use_ckpt:
-                    ys, h = torch.utils.checkpoint.checkpoint(
-                        self._scan_chunk, *args, use_reentrant=False)
-                else:
-                    ys, h = self._scan_chunk(*args)
-                outs.append(ys)
-            y = torch.cat(outs, dim=-1) + self.D.float().unsqueeze(-1) * u32
-            y = y * F.silu(z.float().transpose(1, 2))
-        return y.to(u.dtype)
+        """Chunked sequential scan; under grad each chunk is checkpointed and
+        carries its own fp32 lifetime."""
+        N, _, T = u.shape
+        h = torch.zeros(N, self.d_inner, self.d_state,
+                        device=u.device, dtype=torch.float32)
+        use_ckpt = torch.is_grad_enabled() and self.training
+        outs = []
+        for a in range(0, T, self.SCAN_CHUNK):
+            b = min(T, a + self.SCAN_CHUNK)
+            args = (h, u[:, :, a:b], delta_raw[:, a:b], B[:, a:b], C[:, a:b],
+                    z[:, a:b])
+            if use_ckpt:
+                y_c, h = torch.utils.checkpoint.checkpoint(
+                    self._scan_chunk, *args, use_reentrant=False)
+            else:
+                y_c, h = self._scan_chunk(*args)
+            outs.append(y_c)
+        return torch.cat(outs, dim=-1)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """[N, D, T] -> [N, D, T], causal."""
+        """[N, D, T] -> [N, D, T], causal.
+
+        Fallback training wraps the WHOLE block (projections included) in an
+        outer checkpoint, nested over the per-chunk inner ones: the projection
+        intermediates were the remaining +1.6 GiB against the LSTM baseline,
+        which trains at the 22 GB card's edge. Recompute costs one extra
+        forward of cheap matmuls."""
+        use_kernel = (selective_scan_fn is not None and x.is_cuda
+                      and not torch.jit.is_tracing())
+        if not use_kernel and self.training and torch.is_grad_enabled():
+            return torch.utils.checkpoint.checkpoint(
+                self._forward_impl, x, use_reentrant=False)
+        return self._forward_impl(x)
+
+    def _forward_impl(self, x: torch.Tensor) -> torch.Tensor:
         u, z, delta_raw, B, C = self._pre(x)
         use_kernel = (selective_scan_fn is not None and u.is_cuda
                       and not torch.jit.is_tracing())
