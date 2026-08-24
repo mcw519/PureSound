@@ -84,7 +84,7 @@ def test_every_active_config_loads(rel):
 
 
 def test_active_config_inventory_is_complete():
-    assert len(ACTIVE_CONFIGS) == 39
+    assert len(ACTIVE_CONFIGS) == 40
 
 
 def test_the_default_recipe_still_builds_its_model():
