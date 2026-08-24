@@ -31,6 +31,7 @@ import numpy as np
 import torch
 
 CASES = pathlib.Path("data_report/field_cases/test_vector_cases")
+DEVICE = "cpu"   # set by callers that have a GPU free
 CKPT = "exp/dpcrn_v11_presence/lightning_logs/version_2/checkpoints/epoch=19-step=10000.ckpt"
 
 BURN_IN_S = 2.0        # measured: ~1 s of audible speech to settle, 2 s is the safe order
@@ -56,7 +57,7 @@ def extract(clip, model, seg_s=20.0, sr=16000):
         if seg.shape[-1] < sr // 4:
             break
         with torch.no_grad():
-            model(seg)
+            model(seg.to(DEVICE))
         logits.append(model.backbone.last_vad_logits[0].cpu().numpy())
     lg = np.concatenate(logits)
     hop = wav.shape[-1] / len(lg)

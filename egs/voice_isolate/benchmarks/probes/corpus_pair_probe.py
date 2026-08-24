@@ -146,6 +146,9 @@ def notsofar_pairs(max_per_session):
     return out
 
 
+DEVICE = "cpu"
+
+
 def load_model(ckpt):
     from puresound.config import load_recipe
     from puresound.recipes import init_siso_model
@@ -153,7 +156,7 @@ def load_model(ckpt):
                                         expected_task="voice_isolation",
                                         expected_purpose="train").model)
     model.load_state_dict(torch.load(ckpt, map_location="cpu")["state_dict"], strict=False)
-    return model.eval()
+    return model.eval().to(DEVICE)
 
 
 def readout(model, path, t0, t1):
@@ -162,9 +165,9 @@ def readout(model, path, t0, t1):
         raise ValueError(f"{path}: {sr} != {SR}")
     x = torch.from_numpy(np.ascontiguousarray(x)).float().view(1, -1)
     with torch.no_grad():
-        model(x)
-        lg = model.backbone.last_vad_logits[0].float().numpy()
-        dist = float(10.0 ** model.backbone.last_dist_preds[0, 1])
+        model(x.to(DEVICE))
+        lg = model.backbone.last_vad_logits[0].float().cpu().numpy()
+        dist = float(10.0 ** model.backbone.last_dist_preds[0, 1].cpu())
     hop = x.shape[-1] / len(lg)
     xm = x[0].numpy()
     dbfs = np.array([20 * np.log10(np.sqrt(np.mean(
@@ -179,8 +182,11 @@ def main():
     ap.add_argument("--corpus", required=True, choices=["dipco", "ami", "notsofar"])
     ap.add_argument("--ckpt", action="append", required=True, metavar="NAME=PATH")
     ap.add_argument("--max-per-session", type=int, default=15)
+    ap.add_argument("--device", default="cpu", help="cpu or cuda:N")
     args = ap.parse_args()
 
+    global DEVICE
+    DEVICE = args.device
     pairs = {"dipco": dipco_pairs, "ami": ami_pairs,
              "notsofar": notsofar_pairs}[args.corpus](args.max_per_session)
     print(f"{args.corpus}: {len(pairs)} solo pairs (close mic vs far device, same moment)\n")

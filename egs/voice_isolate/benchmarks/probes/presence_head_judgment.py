@@ -70,6 +70,7 @@ def main():
                     help="recipe whose .model section matches the checkpoint")
     ap.add_argument("--compare", action="append", default=[],
                     metavar="NAME=DIR", help="existing cache to print beside")
+    ap.add_argument("--device", default="cpu", help="cpu or cuda:N")
     args = ap.parse_args()
 
     windows = json.loads((CASES / "windows.json").read_text())
@@ -85,7 +86,9 @@ def main():
                                             expected_purpose="train").model)
         model.load_state_dict(torch.load(args.ckpt, map_location="cpu")["state_dict"],
                               strict=False)
-        model = model.eval()
+        model = model.eval().to(args.device)
+        import presence_selfcal_sim as _sim
+        _sim.DEVICE = args.device
         for i, clip in enumerate(todo):
             lg, dbfs, fps = extract(clip, model)
             np.savez(cache / f"{clip}.npz", lg=lg, dbfs=dbfs, fps=fps)
