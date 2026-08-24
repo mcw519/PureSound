@@ -30,10 +30,28 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-try:  # optional CUDA kernel for fast training; inference never needs it
-    from mamba_ssm.ops.selective_scan_interface import selective_scan_fn
-except Exception:  # pragma: no cover - absence is a supported configuration
-    selective_scan_fn = None
+def _load_selective_scan():
+    """Load mamba_ssm's kernel interface WITHOUT importing the package.
+
+    `import mamba_ssm` drags in generation utilities that require specific
+    transformers versions; the scan interface itself needs none of that. A
+    file-level load keeps the optional dependency surface to exactly the
+    compiled ops. Absence (or any failure) is a supported configuration --
+    the pure-PyTorch fallback is the deployment path anyway.
+    """
+    try:
+        import importlib.util
+        spec = importlib.util.find_spec("mamba_ssm.ops.selective_scan_interface")
+        if spec is None or spec.origin is None:
+            return None
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod.selective_scan_fn
+    except Exception:  # pragma: no cover
+        return None
+
+
+selective_scan_fn = _load_selective_scan()
 
 
 class MambaInter(nn.Module):
