@@ -27,6 +27,7 @@ import math
 from typing import Optional, Tuple
 
 import torch
+import torch.utils.checkpoint
 import torch.nn as nn
 import torch.nn.functional as F
 
@@ -168,14 +169,14 @@ class MambaInter(nn.Module):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """[N, D, T] -> [N, D, T], causal.
 
-        Fallback training wraps the WHOLE block (projections included) in an
-        outer checkpoint, nested over the per-chunk inner ones: the projection
-        intermediates were the remaining +1.6 GiB against the LSTM baseline,
-        which trains at the 22 GB card's edge. Recompute costs one extra
-        forward of cheap matmuls."""
-        use_kernel = (selective_scan_fn is not None and x.is_cuda
-                      and not torch.jit.is_tracing())
-        if not use_kernel and self.training and torch.is_grad_enabled():
+        Training wraps the WHOLE block (projections included) in an outer
+        checkpoint — on the fallback path nested over the per-chunk inner
+        ones: the projection intermediates were the remaining +1.6 GiB
+        against the LSTM baseline, which trains at the 22 GB card's edge.
+        The kernel path needs the same wrap (its scan is fast but the _pre
+        intermediates are identical). Recompute costs one extra forward of
+        cheap matmuls."""
+        if self.training and torch.is_grad_enabled():
             return torch.utils.checkpoint.checkpoint(
                 self._forward_impl, x, use_reentrant=False)
         return self._forward_impl(x)
