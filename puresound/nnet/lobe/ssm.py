@@ -99,8 +99,25 @@ class MambaInter(nn.Module):
         delta_raw = dt_r @ self.dt_proj.weight.t()              # bias applied later
         return u, z, delta_raw, B, C
 
+    #: sequential-scan chunk length; the training-time memory knob. Backward
+    #: keeps only chunk boundaries and recomputes inside (checkpointing) --
+    #: without this the naive loop stores ~6 tensors per step and a 6 s batch
+    #: needs tens of GB, which is exactly how the first v13 launch died.
+    SCAN_CHUNK = 64
+
+    def _scan_chunk(self, h, u32, dt, A, B32, C32):
+        """One chunk of the sequential scan. All fp32. Returns (ys, h_end)."""
+        ys = []
+        for t in range(u32.shape[-1]):
+            dt_t = dt[:, t]
+            h = h * torch.exp(dt_t.unsqueeze(-1) * A) \
+                + (dt_t * u32[:, :, t]).unsqueeze(-1) * B32[:, t].unsqueeze(1)
+            ys.append((h * C32[:, t].unsqueeze(1)).sum(-1))
+        return torch.stack(ys, dim=-1), h
+
     def _scan_fallback(self, u, delta_raw, B, C, z):
-        """Sequential scan, fp32 regardless of autocast (bf16 underflows dt*A)."""
+        """Chunked sequential scan, fp32 regardless of autocast (bf16
+        underflows dt*A). Under grad, each chunk is checkpointed."""
         with torch.autocast(device_type=u.device.type, enabled=False):
             u32 = u.float()
             dt = F.softplus(delta_raw.float() + self.dt_proj.bias.float())  # [N,T,d_inner]
@@ -108,13 +125,18 @@ class MambaInter(nn.Module):
             B32, C32 = B.float(), C.float()
             N, _, T = u32.shape
             h = u32.new_zeros(N, self.d_inner, self.d_state)
-            ys = []
-            for t in range(T):
-                dt_t = dt[:, t]                                             # [N,d_inner]
-                h = h * torch.exp(dt_t.unsqueeze(-1) * A) \
-                    + (dt_t * u32[:, :, t]).unsqueeze(-1) * B32[:, t].unsqueeze(1)
-                ys.append((h * C32[:, t].unsqueeze(1)).sum(-1))
-            y = torch.stack(ys, dim=-1) + self.D.float().unsqueeze(-1) * u32
+            use_ckpt = torch.is_grad_enabled() and self.training
+            outs = []
+            for a in range(0, T, self.SCAN_CHUNK):
+                b = min(T, a + self.SCAN_CHUNK)
+                args = (h, u32[:, :, a:b], dt[:, a:b], A, B32[:, a:b], C32[:, a:b])
+                if use_ckpt:
+                    ys, h = torch.utils.checkpoint.checkpoint(
+                        self._scan_chunk, *args, use_reentrant=False)
+                else:
+                    ys, h = self._scan_chunk(*args)
+                outs.append(ys)
+            y = torch.cat(outs, dim=-1) + self.D.float().unsqueeze(-1) * u32
             y = y * F.silu(z.float().transpose(1, 2))
         return y.to(u.dtype)
 

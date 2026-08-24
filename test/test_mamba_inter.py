@@ -107,3 +107,30 @@ def test_dpcrn_end_to_end_with_mamba_inter_via_recipe():
     # behavioural parity with the shipped variant is the honest contract.
     assert wav.shape[-1] - out.shape[-1] < 512
     assert torch.isfinite(out).all()
+
+
+def test_training_backward_fits_in_memory_via_checkpointing():
+    """The failure that killed the first v13 launch: a 6 s training batch
+    stores every scan step for backward. The chunked+checkpointed scan must
+    survive a realistic [batch*bins, T] shape with grad enabled."""
+    m = MambaInter(d_model=64, d_state=16).train()
+    x = torch.randn(66, 64, 300, requires_grad=True)   # scaled-down but same regime
+    y = m(x)
+    y.sum().backward()
+    assert x.grad is not None and torch.isfinite(x.grad).all()
+
+
+def test_checkpointed_grads_match_plain_grads():
+    torch.manual_seed(1)
+    m = MambaInter(d_model=32, d_state=8)
+    x = torch.randn(3, 32, 130)
+    m.train()
+    m(x).sum().backward()
+    g_ckpt = [p.grad.clone() for p in m.parameters()]
+    m.zero_grad()
+    m.eval()                       # eval path skips checkpointing
+    with torch.enable_grad():
+        m(x).sum().backward()
+    g_plain = [p.grad.clone() for p in m.parameters()]
+    for a, b in zip(g_ckpt, g_plain):
+        assert torch.allclose(a, b, atol=1e-5), float((a - b).abs().max())
