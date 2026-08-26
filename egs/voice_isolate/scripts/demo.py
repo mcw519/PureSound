@@ -70,9 +70,12 @@ def resolve_path(path: str | Path, base_dir: Path | None = None) -> Path:
 
 
 def recipe_root_from_config(config_path: str | Path) -> Path:
+    """The recipe root is the parent of the nearest ancestor named `config`,
+    so configs nested under config/exp/ resolve the same root as config/."""
     config_path = resolve_path(config_path)
-    if config_path.parent.name == "config":
-        return config_path.parent.parent
+    for parent in config_path.parents:
+        if parent.name == "config":
+            return parent.parent
     return config_path.parent
 
 
