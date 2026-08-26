@@ -203,11 +203,6 @@ class StreamingDpcrnFrameModel(StreamingFrameModelBase):
         return names + self._head_state_names(prefix)
 
     def initial_state(self, batch_size: int = 1, device: torch.device | str = "cpu") -> DpcrnStreamingState:
-        if not hasattr(self.backbone.dprnn_block1.inter_rnn, "rnn"):
-            raise NotImplementedError(
-                "streaming for inter_type=mamba lands in P3; "
-                "MambaInter.step() exists, the wrapper wiring does not yet"
-            )
         device = torch.device(device)
         dtype = next(self.parameters()).dtype
         down_freqs, up_freqs = self.backbone.shape_info()
@@ -230,10 +225,20 @@ class StreamingDpcrnFrameModel(StreamingFrameModelBase):
         h_states = []
         c_states = []
         for block in self.blocks:
-            hidden_size = block.inter_rnn.hidden_size
-            state_shape = (1, batch_size * bottleneck_freq, hidden_size)
-            h_states.append(torch.zeros(state_shape, dtype=dtype, device=device))
-            c_states.append(torch.zeros(state_shape, dtype=dtype, device=device))
+            inter = block.inter_rnn
+            if hasattr(inter, "rnn"):
+                hidden_size = inter.hidden_size
+                state_shape = (1, batch_size * bottleneck_freq, hidden_size)
+                h_states.append(torch.zeros(state_shape, dtype=dtype, device=device))
+                c_states.append(torch.zeros(state_shape, dtype=dtype, device=device))
+            else:
+                # MambaInter: (conv cache, ssm h) ride the (h, c) ports -- the
+                # runtime is port-name-driven and shape-agnostic, so the LSTM
+                # and Mamba exports share one manifest layout.
+                conv_c, ssm_h = inter.initial_stream_state(
+                    batch_size * bottleneck_freq, device=device, dtype=dtype)
+                h_states.append(conv_c)
+                c_states.append(ssm_h)
 
         skip_caches: list[torch.Tensor] = []
         noisy_cache = None
@@ -338,12 +343,22 @@ class StreamingDpcrnFrameModel(StreamingFrameModelBase):
         xi = xi.reshape(n_batch, n_frames, freq, -1).transpose(1, -1)
         x = x_intra_skip + xi
 
-        # inter: unidirectional LSTM over time -- the only per-block state (h, c).
+        # inter: unidirectional over time -- the only per-block state. For the
+        # LSTM that state is (h, c); for MambaInter it is (conv cache, ssm h)
+        # riding the same two ports.
         x_inter_skip = x
         seq = x.permute(0, 2, 3, 1).reshape(n_batch * freq, n_frames, channels)
-        rnn_out, (next_h, next_c) = block.inter_rnn.rnn(seq, (h, c))
-        rnn_out = block.inter_rnn.drop(rnn_out)
-        rnn_out = block.inter_rnn.proj(rnn_out.contiguous().view(-1, rnn_out.shape[2])).view(seq.shape)
+        if hasattr(block.inter_rnn, "rnn"):
+            rnn_out, (next_h, next_c) = block.inter_rnn.rnn(seq, (h, c))
+            rnn_out = block.inter_rnn.drop(rnn_out)
+            rnn_out = block.inter_rnn.proj(rnn_out.contiguous().view(-1, rnn_out.shape[2])).view(seq.shape)
+        else:
+            outs = []
+            next_h, next_c = h, c
+            for t in range(seq.shape[1]):
+                y_t, (next_h, next_c) = block.inter_rnn.step(seq[:, t], (next_h, next_c))
+                outs.append(y_t)
+            rnn_out = torch.stack(outs, dim=1)
         rnn_out = block.inter_norm(rnn_out)
         x = rnn_out.permute(0, 2, 1).reshape(n_batch, freq, channels, n_frames).permute(0, 2, 1, 3)
         return x_inter_skip + x, next_h, next_c

@@ -76,7 +76,9 @@ def _offline_vs_streaming_rel(config: str, seconds: float = 4.0):
         state = frame_model.initial_state(batch_size=1)
         stream_frames = []
         for i in range(tf.shape[2]):
-            out, state = frame_model.forward_frame(tf[:, :, i, :], state)
+            # with heads the frame model returns (wav, head_logits, state)
+            res = frame_model.forward_frame(tf[:, :, i, :], state)
+            out, state = res[0], res[-1]
             stream_frames.append(out)
         streaming = torch.cat(stream_frames, dim=0).numpy()
 
@@ -112,6 +114,18 @@ def test_dpcrn_streaming_matches_offline_for_lookahead_model():
     d, rel = _offline_vs_streaming_rel(LOOKAHEAD_CONFIG)
     assert d == model.bottleneck_delay, f"expected delay {model.bottleneck_delay}, got d={d}"
     assert rel < 1e-3, f"look-ahead streaming != offline (rel={rel:.3e})"
+
+
+def test_dpcrn_streaming_matches_offline_for_mamba_inter():
+    """inter_type=mamba: MambaInter.step() rides the (h, c) state ports, so the
+    manifest layout is unchanged. Per-frame streaming must reproduce offline at
+    the same bottleneck delay, warmup gate included."""
+    config = str(_REPO_ROOT / "egs/voice_isolate/config/exp/train_dpcrn_v13_mambainter.yaml")
+    model = load_streaming_dpcrn_model(config)
+    assert model.is_lookahead and model.bottleneck_delay == 3
+    d, rel = _offline_vs_streaming_rel(config)
+    assert d == model.bottleneck_delay, f"expected delay {model.bottleneck_delay}, got d={d}"
+    assert rel < 1e-3, f"mamba streaming != offline (rel={rel:.3e})"
 
 
 # --------------------------------------------------------------------------- #
