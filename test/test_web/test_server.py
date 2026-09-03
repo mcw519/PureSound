@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import io
+import time
 import wave
 
 import numpy as np
@@ -118,6 +119,7 @@ def test_web_audio_inspector_assets_are_packaged():
     service = WebService()
     html = (service.static_dir / "index.html").read_text()
     audio_view = (service.static_dir / "audio-view.js").read_text()
+    audio_worker = (service.static_dir / "audio-worker.js").read_text()
     app = (service.static_dir / "app.js").read_text()
     styles = (service.static_dir / "styles.css").read_text()
 
@@ -126,5 +128,81 @@ def test_web_audio_inspector_assets_are_packaged():
     assert "SPECTROGRAM · 0–8 KHZ" in audio_view
     assert "SAFE_PEAK_DBFS = -1.5" in audio_view
     assert "model input and exported WAV stay unchanged" in audio_view
+    assert "self.postMessage({ id, type: \"progress\"" in audio_worker
+    assert "/audio-worker.js" in audio_view
     assert 'provider.includes("CPU")' in app
+    assert 'api("/api/jobs"' in app
+    assert 'api("/api/measure"' in app
+    assert "sidebar-collapsed" in app
+    assert 'data-aside-toggle="voice"' in html
+    assert ".workspace.is-aside-collapsed > .workspace-main" in styles
+    assert ".workspace.is-aside-collapsed > .aside-reopen" in styles
     assert "overflow-wrap: anywhere" in styles
+
+
+def test_web_measurement_report_compares_selected_models(monkeypatch):
+    service = WebService()
+
+    class FakeRuntime:
+        def infer(self, *, inputs, parameters):
+            assert set(inputs) == {"audio"}
+            assert parameters == {"dry_blend": 0.8}
+            return InferenceResult(
+                model_id="voice-isolate-dpcrn-v8",
+                task="voice_isolation",
+                outputs={"audio": np.ones(160, dtype=np.float32) * 0.1},
+                provider="CPUExecutionProvider",
+                elapsed_seconds=0.01,
+                rtf=0.1,
+                sample_rate=16_000,
+            )
+
+    monkeypatch.setattr(service, "_runtime", lambda *args: FakeRuntime())
+    report = service.measure(
+        {
+            "inputs": {"audio": {"filename": "input.wav", "data": _wav_data_url()}},
+            "models": ["voice-isolate-dpcrn-v8"],
+            "provider": "cpu",
+            "parameters": {"dry_blend": 0.8},
+        }
+    )
+
+    assert report["input"]["sample_rate"] == 16_000
+    assert report["models"][0]["model_id"] == "voice-isolate-dpcrn-v8"
+    assert report["models"][0]["output"]["rms_dbfs"] < 0
+    assert report["models"][0]["quality"] == {}
+
+
+def test_web_async_job_reports_completion_and_keeps_result(monkeypatch):
+    service = WebService()
+
+    class FakeRuntime:
+        def infer(self, *, inputs, parameters):
+            return InferenceResult(
+                model_id="voice-isolate-dpcrn-v8",
+                task="voice_isolation",
+                outputs={"audio": np.zeros(160, dtype=np.float32)},
+                provider="CPUExecutionProvider",
+                elapsed_seconds=0.01,
+                rtf=0.1,
+                sample_rate=16_000,
+            )
+
+    monkeypatch.setattr(service, "_runtime", lambda *args: FakeRuntime())
+    job = service.submit_inference(
+        {
+            "model_id": "voice-isolate-dpcrn-v8",
+            "provider": "cpu",
+            "inputs": {"audio": {"filename": "input.wav", "data": _wav_data_url()}},
+        }
+    )
+    deadline = time.time() + 5
+    while time.time() < deadline:
+        current = service.job(job["job_id"])
+        if current["status"] in {"succeeded", "failed", "cancelled"}:
+            break
+        time.sleep(0.01)
+
+    assert current["status"] == "succeeded"
+    assert current["progress"] == 1.0
+    assert current["result"]["output_urls"]["audio"].startswith("/api/runs/")

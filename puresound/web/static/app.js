@@ -10,6 +10,9 @@
     svModels: [],
     files: {},
     audioPanels: {},
+    activeJobs: {},
+    measurementFiles: {},
+    jobs: [],
     toastTimer: null,
   };
 
@@ -136,6 +139,7 @@
       populateSelect($("#voice-model"), state.voiceModels, { includeVariants: true });
       populateSelect($("#sv-model"), state.svModels);
       populateVoiceVariants();
+      renderMeasurementModels();
       showToast(`Loaded ${state.models.length} catalog models.`);
     } catch (error) {
       $("#runtime-status").textContent = "Offline";
@@ -214,6 +218,84 @@
     target.innerHTML = metrics.map(([label, value]) => `<div class="metric"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></div>`).join("");
   }
 
+  function updateJobProgress(key, job) {
+    const progress = $(`#${key}-job-progress`);
+    if (!progress) return;
+    const amount = Math.round(Math.max(0, Math.min(1, Number(job.progress) || 0)) * 100);
+    progress.querySelector(".job-progress-bar span").style.width = `${amount}%`;
+    progress.querySelector("[data-job-phase]").textContent = job.phase || job.status || "working";
+    progress.querySelector("[data-job-percent]").textContent = `${amount}%`;
+    progress.hidden = false;
+  }
+
+  async function runInferenceJob(payload, key) {
+    const runButton = $(`#${key}-run`);
+    const cancelButton = $(`#${key}-cancel`);
+    const progress = $(`#${key}-job-progress`);
+    if (state.activeJobs[key]) throw new Error("An inference is already running.");
+    setBusy(runButton, true);
+    cancelButton.hidden = false;
+    progress.hidden = false;
+    try {
+      const initial = await api("/api/jobs", { method: "POST", body: JSON.stringify(payload) });
+      state.activeJobs[key] = initial.job_id;
+      updateJobProgress(key, initial);
+      while (true) {
+        const job = await api(`/api/jobs/${encodeURIComponent(initial.job_id)}`);
+        updateJobProgress(key, job);
+        if (job.status === "succeeded") return job.result;
+        if (job.status === "failed") throw new Error(job.error || "Inference failed.");
+        if (job.status === "cancelled") throw new Error("Inference cancelled.");
+        await new Promise((resolve) => window.setTimeout(resolve, 350));
+      }
+    } finally {
+      delete state.activeJobs[key];
+      setBusy(runButton, false);
+      cancelButton.hidden = true;
+      window.setTimeout(() => { if (!state.activeJobs[key]) progress.hidden = true; }, 900);
+    }
+  }
+
+  async function cancelInferenceJob(key) {
+    const jobId = state.activeJobs[key];
+    if (!jobId) return;
+    const button = $(`#${key}-cancel`);
+    button.disabled = true;
+    try {
+      await api(`/api/jobs/${encodeURIComponent(jobId)}/cancel`, { method: "POST", body: "{}" });
+    } finally {
+      button.disabled = false;
+    }
+  }
+
+  function renderJobHistory(jobs) {
+    const target = $("#job-history");
+    if (!target) return;
+    if (!jobs.length) {
+      target.innerHTML = '<span class="measure-empty">No asynchronous runs yet.</span>';
+      return;
+    }
+    target.innerHTML = jobs.map((job) => {
+      const result = job.result || {};
+      const score = result.scores?.cosine_similarity;
+      const detail = job.status === "succeeded"
+        ? `${result.rtf == null ? "—" : `RTF ${Number(result.rtf).toFixed(3)}`} · ${job.elapsed_seconds == null ? "—" : formatSeconds(job.elapsed_seconds)}`
+        : (job.error || job.phase || "—");
+      const output = result.output_urls?.audio ? `<a href="${escapeHtml(result.output_urls.audio)}" target="_blank" rel="noreferrer">Output ↗</a>` : "";
+      return `<article class="job-history-item"><div class="job-history-main"><strong>${escapeHtml(job.model_id)}</strong><span>${escapeHtml(detail)}</span></div><div class="job-history-side"><span class="job-status job-status-${escapeHtml(job.status)}">${escapeHtml(job.status)}</span>${score == null ? "" : `<span>${Number(score).toFixed(3)}</span>`}${output}</div></article>`;
+    }).join("");
+  }
+
+  async function refreshJobHistory() {
+    try {
+      const response = await api("/api/jobs?limit=20");
+      state.jobs = response.jobs || [];
+      renderJobHistory(state.jobs);
+    } catch (error) {
+      showToast(`Could not load run history: ${error.message}`, true);
+    }
+  }
+
   async function runVoiceInference() {
     const file = selectedFile("#voice-audio");
     const note = $("#voice-form-note");
@@ -225,7 +307,7 @@
       const input = await readDataUrl(file);
       const parameters = { dry_blend: Number($("#voice-dry-blend").value) };
       if ($("#voice-collect-extras").checked) parameters.collect_extras = true;
-      const result = await api("/api/infer", { method: "POST", body: JSON.stringify({ model_id: model.id, variant: $("#voice-variant").value, provider: $("#voice-provider").value, inputs: { audio: input }, parameters }) });
+      const result = await runInferenceJob({ model_id: model.id, variant: $("#voice-variant").value, provider: $("#voice-provider").value, inputs: { audio: input }, parameters }, "voice");
       const outputUrl = result.output_urls?.audio;
       if (!outputUrl) throw new Error("The runtime did not return an audio output.");
       $("#voice-result").hidden = false;
@@ -235,6 +317,7 @@
       try { await state.audioPanels.voiceOutput.loadUrl(outputUrl); } catch (error) { showToast(`Output preview failed: ${error.message}`, true); }
       note.textContent = "Inference complete. Streaming delay alignment was kept by the processor."; note.className = "form-note is-success";
       showToast(`Finished ${model.display_name}.`);
+      refreshJobHistory();
     } catch (error) { note.textContent = error.message; note.className = "form-note is-error"; showToast(error.message, true); }
     finally { setBusy(button, false); }
   }
@@ -250,7 +333,7 @@
       const model = selectedModel("#sv-model");
       const inputs = { enrollment: await readDataUrl(enrollment), test: await readDataUrl(test) };
       const threshold = Number($("#sv-threshold").value);
-      const result = await api("/api/infer", { method: "POST", body: JSON.stringify({ model_id: model.id, provider: $("#sv-provider").value, inputs, parameters: { threshold } }) });
+      const result = await runInferenceJob({ model_id: model.id, provider: $("#sv-provider").value, inputs, parameters: { threshold } }, "sv");
       const score = Number(result.scores?.cosine_similarity || 0);
       const verdict = Boolean(result.scores?.verdict);
       $("#sv-result").hidden = false;
@@ -264,6 +347,71 @@
       renderMetrics($("#sv-metrics"), [["Similarity", score.toFixed(3)], ["Threshold", threshold.toFixed(2)], ["Embedding", `${result.metadata?.embedding_dim || "—"} d`], ["Provider", providerLabel(result.provider)]]);
       note.textContent = "Verification complete."; note.className = "form-note is-success";
       showToast(verdict ? "Speaker match." : "No speaker match.");
+      refreshJobHistory();
+    } catch (error) { note.textContent = error.message; note.className = "form-note is-error"; showToast(error.message, true); }
+    finally { setBusy(button, false); }
+  }
+
+  function renderMeasurementModels() {
+    const target = $("#measure-model-list");
+    if (!target) return;
+    if (!state.voiceModels.length) {
+      target.innerHTML = '<span class="measure-empty">No runnable Voice Isolation models are available.</span>';
+      $("#measure-model-count").textContent = "0 selected";
+      return;
+    }
+    target.innerHTML = state.voiceModels.map((model, index) => {
+      const checked = modelIsDefault(model) || index === 0;
+      return `<label class="measure-model-option"><input type="checkbox" value="${escapeHtml(model.id)}"${checked ? " checked" : ""}><span class="measure-check"></span><span><strong>${escapeHtml(model.display_name)}</strong><small>${escapeHtml(model.id)} · ${escapeHtml(model.lifecycle)}</small></span></label>`;
+    }).join("");
+    target.querySelectorAll("input").forEach((input) => input.addEventListener("change", updateMeasurementModelCount));
+    updateMeasurementModelCount();
+  }
+
+  function updateMeasurementModelCount() {
+    const selected = $$("#measure-model-list input:checked").length;
+    $("#measure-model-count").textContent = `${selected} selected`;
+  }
+
+  function measurementValue(value, digits = 2, suffix = "") {
+    return value == null || !Number.isFinite(Number(value)) ? "—" : `${Number(value).toFixed(digits)}${suffix}`;
+  }
+
+  function renderMeasurementReport(report) {
+    $("#measurement-results").hidden = false;
+    const input = report.input || {};
+    const reference = report.reference;
+    $("#measurement-summary").innerHTML = [
+      ["Probe RMS", measurementValue(input.rms_dbfs, 1, " dBFS")],
+      ["Probe peak", measurementValue(input.peak_dbfs, 1, " dBFS")],
+      ["Clipping", measurementValue(input.clipping_ratio * 100, 2, "%")],
+      ["Reference", reference ? `${measurementValue(reference.duration_seconds, 2, " s")} · ${measurementValue(reference.rms_dbfs, 1, " dBFS")}` : "Not provided"],
+    ].map(([label, value]) => `<div class="measurement-summary-item"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></div>`).join("");
+    $("#measurement-result-time").textContent = `${measurementValue(report.elapsed_seconds, 2, " s")} total`;
+    $("#measurement-table-body").innerHTML = (report.models || []).map((model) => {
+      const output = model.output || {};
+      const quality = model.quality || {};
+      if (model.error) return `<tr><td><strong>${escapeHtml(model.model_id)}</strong><small class="table-error">${escapeHtml(model.error)}</small></td><td colspan="6">—</td></tr>`;
+      return `<tr><td><strong>${escapeHtml(model.display_name || model.model_id)}</strong><small>${escapeHtml(providerLabel(model.provider))}</small></td><td>${measurementValue(model.rtf, 3)}</td><td>${measurementValue(output.rms_dbfs, 1, " dB")}</td><td>${measurementValue(output.peak_dbfs, 1, " dB")}</td><td>${measurementValue(output.clipping_ratio * 100, 2, "%")}</td><td>${measurementValue(quality.si_sdr_db, 2, " dB")}</td><td>${measurementValue(quality.stoi, 3)}</td></tr>`;
+    }).join("");
+  }
+
+  async function runMeasurements() {
+    const file = state.measurementFiles.audio;
+    const reference = state.measurementFiles.reference;
+    const note = $("#measure-form-note");
+    const models = $$("#measure-model-list input:checked").map((input) => input.value);
+    if (!file) { note.textContent = "Select a probe audio file first."; note.className = "form-note is-error"; return; }
+    if (!models.length) { note.textContent = "Select at least one model to compare."; note.className = "form-note is-error"; return; }
+    const button = $("#measure-run");
+    setBusy(button, true); note.textContent = "Measuring input and running selected models…"; note.className = "form-note";
+    try {
+      const inputs = { audio: await readDataUrl(file) };
+      if (reference) inputs.reference = await readDataUrl(reference);
+      const report = await api("/api/measure", { method: "POST", body: JSON.stringify({ inputs, models, provider: "auto" }) });
+      renderMeasurementReport(report);
+      note.textContent = "Measurement complete. Reference scores are shown when a clean reference was supplied."; note.className = "form-note is-success";
+      showToast("Audio measurements complete.");
     } catch (error) { note.textContent = error.message; note.className = "form-note is-error"; showToast(error.message, true); }
     finally { setBusy(button, false); }
   }
@@ -295,6 +443,54 @@
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
+  function setSidebarCollapsed(collapsed) {
+    document.body.classList.toggle("sidebar-collapsed", collapsed);
+    const button = $("#sidebar-toggle");
+    button.setAttribute("aria-expanded", collapsed ? "false" : "true");
+    button.setAttribute("aria-label", collapsed ? "Expand navigation" : "Collapse navigation");
+    button.textContent = collapsed ? "›" : "‹";
+    try { localStorage.setItem("puresound.sidebar-collapsed", collapsed ? "1" : "0"); } catch { /* storage may be disabled */ }
+  }
+
+  function setAsideCollapsed(key, collapsed) {
+    const workspace = $(`#workspace-${key}`);
+    if (!workspace) return;
+    workspace.classList.toggle("is-aside-collapsed", collapsed);
+    $$(`[data-aside-toggle="${key}"]`).forEach((button) => {
+      button.setAttribute("aria-expanded", collapsed ? "false" : "true");
+      if (button.classList.contains("aside-toggle")) {
+        button.setAttribute("aria-label", collapsed ? "Show settings" : "Collapse settings");
+        button.textContent = collapsed ? "‹" : "›";
+      }
+    });
+    try { localStorage.setItem(`puresound.${key}-aside-collapsed`, collapsed ? "1" : "0"); } catch { /* storage may be disabled */ }
+  }
+
+  function restoreLayout() {
+    let sidebar = false;
+    let voice = false;
+    let sv = false;
+    try {
+      sidebar = localStorage.getItem("puresound.sidebar-collapsed") === "1";
+      voice = localStorage.getItem("puresound.voice-aside-collapsed") === "1";
+      sv = localStorage.getItem("puresound.sv-aside-collapsed") === "1";
+    } catch { /* storage may be disabled */ }
+    setSidebarCollapsed(sidebar);
+    setAsideCollapsed("voice", voice);
+    setAsideCollapsed("sv", sv);
+  }
+
+  function wireMeasurementFile(inputId, key) {
+    const input = $(inputId);
+    input.addEventListener("change", () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      state.measurementFiles[key] = file;
+      $(`[data-measure-name="${key}"]`).textContent = file.name;
+      $(`[data-measure-meta="${key}"]`).textContent = `${(file.size / 1024).toFixed(0)} KB · ready for analysis`;
+    });
+  }
+
   function wireEvents() {
     state.audioPanels = {
       voiceInput: new window.PureSoundAudioPanel($("#voice-input-audio")),
@@ -302,6 +498,11 @@
       svEnrollment: new window.PureSoundAudioPanel($("#sv-enrollment-audio")),
       svTest: new window.PureSoundAudioPanel($("#sv-test-audio")),
     };
+    $("#sidebar-toggle").addEventListener("click", () => setSidebarCollapsed(!document.body.classList.contains("sidebar-collapsed")));
+    $$('[data-aside-toggle]').forEach((button) => button.addEventListener("click", () => {
+      const key = button.dataset.asideToggle;
+      setAsideCollapsed(key, !$("#workspace-" + key).classList.contains("is-aside-collapsed"));
+    }));
     $$(".nav-link").forEach((link) => link.addEventListener("click", () => switchScreen(link.dataset.screen)));
     $$('[data-screen-target]').forEach((button) => button.addEventListener("click", () => switchScreen(button.dataset.screenTarget)));
     $("#model-search").addEventListener("input", renderModels);
@@ -313,8 +514,14 @@
     $("#voice-dry-blend").addEventListener("input", (event) => { $("#voice-dry-output").textContent = Number(event.target.value).toFixed(2); });
     $("#sv-threshold").addEventListener("input", (event) => { $("#sv-threshold-output").textContent = Number(event.target.value).toFixed(2); });
     $("#voice-run").addEventListener("click", runVoiceInference);
+    $("#voice-cancel").addEventListener("click", () => cancelInferenceJob("voice"));
     $("#sv-run").addEventListener("click", runSpeakerVerification);
+    $("#sv-cancel").addEventListener("click", () => cancelInferenceJob("sv"));
     $("#validate-button").addEventListener("click", runValidation);
+    $("#measure-run").addEventListener("click", runMeasurements);
+    $("#history-refresh").addEventListener("click", refreshJobHistory);
+    wireMeasurementFile("#measure-audio", "audio");
+    wireMeasurementFile("#measure-reference", "reference");
     $$(".workspace-tab").forEach((tab) => tab.addEventListener("click", () => {
       const workspace = tab.dataset.workspace;
       $$(".workspace-tab").forEach((item) => { const active = item === tab; item.classList.toggle("is-active", active); item.setAttribute("aria-selected", active ? "true" : "false"); });
@@ -323,6 +530,8 @@
     wireFileInput("#voice-audio", { preview: $("#voice-input-preview"), name: $("#voice-file-name"), meta: $("#voice-file-meta"), panel: state.audioPanels.voiceInput });
     wireFileInput("#sv-enrollment", { preview: $("#sv-enrollment-preview"), name: $("#sv-enrollment-name"), meta: $("#sv-enrollment-meta"), panel: state.audioPanels.svEnrollment });
     wireFileInput("#sv-test", { preview: $("#sv-test-preview"), name: $("#sv-test-name"), meta: $("#sv-test-meta"), panel: state.audioPanels.svTest });
+    restoreLayout();
+    refreshJobHistory();
   }
 
   wireEvents();

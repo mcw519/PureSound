@@ -29,6 +29,13 @@ puresound web --ip 0.0.0.0 --port 8080
   dry-blend override 仍由 processor 負責。
 - **Speaker Verification**：上傳 `enrollment` 與 `test` 音檔，呼叫兩次
   waveform embedding processor，顯示 cosine score 與 threshold verdict。
+- **Measurements**：提供 probe 音檔、可選的 clean reference，以及一個或
+  多個 Voice Isolation model。會回報可重現的音量／頻譜指標（RMS、peak、
+  clipping、silence、zero-crossing rate、spectral centroid）；有 reference
+  時再計算 SI-SDR、SNR、correlation、STOI 與 PESQ。
+
+左側主導航與 Playground 的右側設定欄可獨立收合；瀏覽器會記住下次開啟時
+的選擇。
 
 所有上傳或產生的音檔都使用相同的檢視 panel，提供共同時間軸、同步的
 waveform 與 0–8 kHz spectrogram、點擊定位播放，以及 Wave／Both／Spec
@@ -45,7 +52,17 @@ API 維持精簡：
 | GET | `/api/models/{model_id}` | 單一模型 contract |
 | GET | `/api/validate` | 路徑、sidecar、hash 與 graph 檢查 |
 | POST | `/api/infer` | 以 JSON named inputs 執行模型 |
+| POST | `/api/jobs` | 啟動非同步推論並取得 job id |
+| GET | `/api/jobs/{job_id}` | 讀取進度、狀態與結果 |
+| GET | `/api/jobs?limit=20` | 列出最近推論結果 |
+| POST | `/api/jobs/{job_id}/cancel` | 要求取消 queued／running job |
+| POST | `/api/measure` | 測量 probe 並比較選定的 Voice Isolation model |
 | GET | `/api/runs/{run_id}/{output}` | 下載產生的音檔 |
+
+非同步 job 會回報 `queued`、`running`、`succeeded`、`failed` 或
+`cancelled`，並提供粗略 phase／progress。取消採 cooperative 語意：若
+processor 已進入 ONNX 呼叫，背景工作會完成但丟棄結果，job 最終標記為
+cancelled。
 
 上傳資料使用下列 JSON descriptor：
 

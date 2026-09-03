@@ -3,13 +3,11 @@
 (() => {
   "use strict";
 
-  const FFT_SIZE = 1024;
   const MAX_BOOST_DB = 48;
   const SAFE_PEAK_DBFS = -1.5;
   const clamp = (value, low, high) => Math.min(high, Math.max(low, value));
   const linearGain = (db) => 10 ** (db / 20);
   const levelDb = (value) => 20 * Math.log10(Math.max(value, 1e-9));
-  const hann = Float32Array.from({ length: FFT_SIZE }, (_, index) => 0.5 - 0.5 * Math.cos(2 * Math.PI * index / (FFT_SIZE - 1)));
   const safetyCurve = Float32Array.from({ length: 2048 }, (_, index) => {
     const value = index / 2047 * 2 - 1;
     const magnitude = Math.abs(value);
@@ -29,48 +27,39 @@
     return `${minutes}:${(value - minutes * 60).toFixed(3).padStart(6, "0")}`;
   }
 
-  function fft(real, imaginary) {
-    const size = real.length;
-    for (let index = 1, swap = 0; index < size; index += 1) {
-      let bit = size >> 1;
-      for (; swap & bit; bit >>= 1) swap ^= bit;
-      swap ^= bit;
-      if (index < swap) {
-        [real[index], real[swap]] = [real[swap], real[index]];
-        [imaginary[index], imaginary[swap]] = [imaginary[swap], imaginary[index]];
-      }
-    }
-    for (let length = 2; length <= size; length <<= 1) {
-      const angle = -2 * Math.PI / length;
-      const stepReal = Math.cos(angle);
-      const stepImaginary = Math.sin(angle);
-      for (let start = 0; start < size; start += length) {
-        let phaseReal = 1;
-        let phaseImaginary = 0;
-        for (let offset = 0; offset < length / 2; offset += 1) {
-          const upperReal = real[start + offset];
-          const upperImaginary = imaginary[start + offset];
-          const lower = start + offset + length / 2;
-          const lowerReal = real[lower] * phaseReal - imaginary[lower] * phaseImaginary;
-          const lowerImaginary = real[lower] * phaseImaginary + imaginary[lower] * phaseReal;
-          real[start + offset] = upperReal + lowerReal;
-          imaginary[start + offset] = upperImaginary + lowerImaginary;
-          real[lower] = upperReal - lowerReal;
-          imaginary[lower] = upperImaginary - lowerImaginary;
-          const nextReal = phaseReal * stepReal - phaseImaginary * stepImaginary;
-          phaseImaginary = phaseReal * stepImaginary + phaseImaginary * stepReal;
-          phaseReal = nextReal;
-        }
-      }
-    }
-  }
+  let workerSequence = 0;
+  let spectrogramWorker = null;
+  const spectrogramJobs = new Map();
 
-  function colorRamp(value) {
-    const stops = [[1, 1, 32], [45, 42, 112], [32, 126, 138], [239, 44, 193], [252, 244, 220]];
-    const position = clamp(value, 0, 1) * (stops.length - 1);
-    const index = Math.min(stops.length - 2, Math.floor(position));
-    const fraction = position - index;
-    return stops[index].map((channel, offset) => channel + (stops[index + 1][offset] - channel) * fraction);
+  function requestSpectrogram(payload) {
+    if (typeof Worker === "undefined") return Promise.reject(new Error("Web Workers are unavailable"));
+    if (!spectrogramWorker) {
+      spectrogramWorker = new Worker("/audio-worker.js");
+      spectrogramWorker.onmessage = ({ data }) => {
+        const job = spectrogramJobs.get(data.id);
+        if (!job) return;
+        if (data.type === "progress") {
+          job.progress(data.value);
+          return;
+        }
+        spectrogramJobs.delete(data.id);
+        if (data.type === "complete") job.resolve(data);
+        else job.reject(new Error(data.error || "Spectrogram worker failed"));
+      };
+      spectrogramWorker.onerror = (event) => {
+        spectrogramJobs.forEach((job) => job.reject(new Error(event.message || "Spectrogram worker failed")));
+        spectrogramJobs.clear();
+        spectrogramWorker.terminate();
+        spectrogramWorker = null;
+      };
+    }
+    const id = `spec-${workerSequence += 1}`;
+    return new Promise((resolve, reject) => {
+      spectrogramJobs.set(id, { resolve, reject, progress: payload.onProgress || (() => {}) });
+      const message = { ...payload, id };
+      delete message.onProgress;
+      spectrogramWorker.postMessage(message, [message.samples]);
+    });
   }
 
   class AudioPanel {
@@ -89,6 +78,8 @@
       this.peak = 0;
       this.animation = null;
       this.spectrogram = null;
+      this.pendingSpectrogram = null;
+      this.spectrogramGeneration = 0;
       this.waveColor = root.dataset.waveColor || "#c8f6f9";
       this.renderShell();
       this.bindEvents();
@@ -120,6 +111,7 @@
           <div class="audio-pane audio-spec-pane"><span>SPECTROGRAM · 0–8 KHZ</span><canvas aria-label="Audio spectrogram"></canvas></div>
           <div class="audio-playhead" aria-hidden="true"></div>
           <div class="audio-empty">Decoding audio…</div>
+          <div class="audio-progress" data-audio-progress aria-live="polite"></div>
         </div>
         <p class="audio-audition-note">Boost affects browser audition only — model input and exported WAV stay unchanged.</p>`;
       this.stage = this.root.querySelector(".audio-stage");
@@ -135,6 +127,7 @@
       this.boostValue = this.root.querySelector("[data-boost-value]");
       this.autoButton = this.root.querySelector(".audio-auto");
       this.limiterBadge = this.root.querySelector("[data-limiter]");
+      this.progressLabel = this.root.querySelector("[data-audio-progress]");
     }
 
     bindEvents() {
@@ -161,11 +154,15 @@
       this.buffer = null;
       this.samples = null;
       this.spectrogram = null;
+      this.pendingSpectrogram = null;
+      this.spectrogramGeneration += 1;
       this.root.classList.remove("is-ready");
       this.playButton.disabled = true;
       this.stopButton.disabled = true;
       this.autoButton.disabled = true;
       this.durationClock.textContent = "0:00.000";
+      this.progressLabel.classList.remove("is-visible", "is-error");
+      this.progressLabel.textContent = "";
       this.draw();
       this.root.classList.add("is-loading");
       let decoded;
@@ -179,6 +176,7 @@
       this.peak = this.peakAcrossChannels(this.buffer);
       this.offset = 0;
       this.spectrogram = null;
+      this.spectrogramGeneration += 1;
       this.root.classList.add("is-ready");
       this.playButton.disabled = false;
       this.stopButton.disabled = false;
@@ -333,6 +331,8 @@
         canvas.width = width;
         canvas.height = height;
         this.spectrogram = null;
+        this.pendingSpectrogram = null;
+        this.spectrogramGeneration += 1;
       }
       return { context: canvas.getContext("2d"), width, height, ratio };
     }
@@ -391,51 +391,65 @@
     }
 
     drawSpectrogram() {
+      if (this.stage.classList.contains("is-wave")) return;
       const { context, width, height } = this.fitCanvas(this.spectrum);
       context.clearRect(0, 0, width, height);
       context.fillStyle = "#010120";
       context.fillRect(0, 0, width, height);
       if (!this.samples?.length || !this.buffer) return;
-      if (!this.spectrogram) this.spectrogram = this.buildSpectrogram(width, height);
-      context.imageSmoothingEnabled = true;
-      context.drawImage(this.spectrogram, 0, 0, width, height);
+      if (!this.spectrogram && !this.pendingSpectrogram) {
+        const generation = this.spectrogramGeneration;
+        const compact = this.compactSamples();
+        this.progressLabel.textContent = "Computing spectrogram · 0%";
+        this.progressLabel.classList.add("is-visible");
+        const request = requestSpectrogram({
+          samples: compact.samples.buffer,
+          sampleRate: compact.sampleRate,
+          width,
+          height,
+          onProgress: (value) => {
+            if (generation === this.spectrogramGeneration) this.progressLabel.textContent = `Computing spectrogram · ${Math.round(value * 100)}%`;
+          },
+        });
+        this.pendingSpectrogram = request;
+        request.then((result) => {
+          if (this.pendingSpectrogram !== request) return;
+          this.pendingSpectrogram = null;
+          if (generation !== this.spectrogramGeneration) return;
+          const offscreen = document.createElement("canvas");
+          offscreen.width = result.columns;
+          offscreen.height = result.rows;
+          offscreen.getContext("2d").putImageData(new ImageData(new Uint8ClampedArray(result.pixels), result.columns, result.rows), 0, 0);
+          this.spectrogram = offscreen;
+          this.progressLabel.textContent = "";
+          this.progressLabel.classList.remove("is-visible");
+          this.drawSpectrogram();
+        }).catch((error) => {
+          if (this.pendingSpectrogram !== request) return;
+          this.pendingSpectrogram = null;
+          this.progressLabel.textContent = `Spectrogram unavailable · ${error.message}`;
+          this.progressLabel.classList.add("is-visible", "is-error");
+        });
+      }
+      if (this.spectrogram) {
+        context.imageSmoothingEnabled = true;
+        context.drawImage(this.spectrogram, 0, 0, width, height);
+      }
     }
 
-    buildSpectrogram(width, height) {
-      const columns = Math.min(1000, Math.max(160, Math.floor(width)));
-      const rows = Math.min(280, Math.max(90, Math.floor(height)));
-      const offscreen = document.createElement("canvas");
-      offscreen.width = columns;
-      offscreen.height = rows;
-      const image = new ImageData(columns, rows);
-      const real = new Float32Array(FFT_SIZE);
-      const imaginary = new Float32Array(FFT_SIZE);
-      const maxFrequency = Math.min(8000, this.buffer.sampleRate / 2);
-      const maxBin = Math.max(8, Math.floor(maxFrequency / (this.buffer.sampleRate / FFT_SIZE)));
-      const sampleStep = this.samples.length / columns;
-      for (let x = 0; x < columns; x += 1) {
-        const center = Math.floor(x * sampleStep);
-        const start = center - FFT_SIZE / 2;
-        for (let index = 0; index < FFT_SIZE; index += 1) {
-          const sampleIndex = start + index;
-          real[index] = (sampleIndex >= 0 && sampleIndex < this.samples.length ? this.samples[sampleIndex] : 0) * hann[index];
-          imaginary[index] = 0;
-        }
-        fft(real, imaginary);
-        for (let y = 0; y < rows; y += 1) {
-          const bin = Math.min(maxBin, Math.floor((1 - y / rows) * maxBin));
-          const magnitude = Math.hypot(real[bin], imaginary[bin]) / (FFT_SIZE / 4);
-          const intensity = (20 * Math.log10(magnitude + 1e-9) + 92) / 82;
-          const [red, green, blue] = colorRamp(intensity);
-          const offset = (y * columns + x) * 4;
-          image.data[offset] = red;
-          image.data[offset + 1] = green;
-          image.data[offset + 2] = blue;
-          image.data[offset + 3] = 255;
-        }
+    compactSamples() {
+      const maximum = 4_000_000;
+      if (this.samples.length <= maximum) return { samples: this.samples.slice(), sampleRate: this.buffer.sampleRate };
+      const stride = Math.ceil(this.samples.length / maximum);
+      const compact = new Float32Array(Math.ceil(this.samples.length / stride));
+      for (let index = 0; index < compact.length; index += 1) {
+        const start = index * stride;
+        const end = Math.min(this.samples.length, start + stride);
+        let total = 0;
+        for (let sample = start; sample < end; sample += 1) total += this.samples[sample];
+        compact[index] = total / (end - start);
       }
-      offscreen.getContext("2d").putImageData(image, 0, 0);
-      return offscreen;
+      return { samples: compact, sampleRate: this.buffer.sampleRate / stride };
     }
   }
 

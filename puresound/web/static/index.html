@@ -16,7 +16,8 @@
               <path d="M2 17h4l2-8 4 16 4-20 4 20 3-12 2 4h5" />
             </svg>
           </span>
-          <span>PureSound</span>
+          <span class="brand-name">PureSound</span>
+          <button class="sidebar-toggle" id="sidebar-toggle" type="button" aria-label="Collapse navigation" aria-expanded="true">‹</button>
         </div>
 
         <nav class="nav-stack">
@@ -132,7 +133,7 @@
 
             <aside class="workspace-aside">
               <div class="panel settings-panel">
-                <div class="panel-header"><div><p class="eyebrow">CONFIGURATION</p><h2>Run settings</h2></div><span class="settings-icon" aria-hidden="true">⚙</span></div>
+                <div class="panel-header"><div><p class="eyebrow">CONFIGURATION</p><h2>Run settings</h2></div><div class="panel-header-actions"><span class="settings-icon" aria-hidden="true">⚙</span><button class="aside-toggle" data-aside-toggle="voice" type="button" aria-label="Collapse settings" aria-expanded="true">›</button></div></div>
                 <label class="field-label" for="voice-model">Model</label>
                 <select class="control" id="voice-model"></select>
                 <label class="field-label" for="voice-variant">Artifact variant</label>
@@ -144,10 +145,12 @@
                 <div class="range-hint"><span>wet</span><span>dry</span></div>
                 <label class="toggle-row"><input id="voice-collect-extras" type="checkbox" /><span class="toggle-ui"></span><span>Collect VAD heads</span></label>
                 <div class="contract-list"><div><span>Sample rate</span><strong id="voice-sample-rate">16 kHz</strong></div><div><span>Channels</span><strong id="voice-channels">Mono</strong></div><div><span>Delay alignment</span><strong id="voice-delay">Manifest</strong></div></div>
-                <button class="button button-dark run-button" id="voice-run" type="button"><span class="button-spinner" aria-hidden="true"></span>Run inference <span aria-hidden="true">→</span></button>
+                <div class="job-progress" id="voice-job-progress" hidden><div class="job-progress-bar"><span></span></div><div class="job-progress-copy"><span data-job-phase>Queued</span><strong data-job-percent>0%</strong></div></div>
+                <div class="run-actions"><button class="button button-dark run-button" id="voice-run" type="button"><span class="button-spinner" aria-hidden="true"></span>Run inference <span aria-hidden="true">→</span></button><button class="button button-outline cancel-button" id="voice-cancel" type="button" hidden>Cancel</button></div>
                 <p class="form-note" id="voice-form-note">Select an audio file to begin.</p>
               </div>
             </aside>
+            <button class="aside-reopen" data-aside-toggle="voice" type="button" aria-label="Show settings">‹ Settings</button>
           </div>
 
           <div class="workspace workspace-sv" id="workspace-sv" data-workspace-panel="sv" hidden>
@@ -170,13 +173,33 @@
                 <div class="metric-row" id="sv-metrics"></div>
               </div>
             </div>
-            <aside class="workspace-aside"><div class="panel settings-panel"><div class="panel-header"><div><p class="eyebrow">CONFIGURATION</p><h2>Run settings</h2></div><span class="settings-icon" aria-hidden="true">⚙</span></div><label class="field-label" for="sv-model">Model</label><select class="control" id="sv-model"></select><label class="field-label" for="sv-provider">Provider</label><select class="control" id="sv-provider"><option value="auto">Auto · fallback to CPU</option><option value="cpu">CPU</option><option value="cuda">CUDA</option></select><div class="field-label range-label"><span>Cosine threshold</span><output id="sv-threshold-output">0.80</output></div><input class="range" id="sv-threshold" type="range" min="0" max="1" step="0.01" value="0.8" /><div class="range-hint"><span>strict</span><span>lenient</span></div><div class="contract-list"><div><span>Sample rate</span><strong>16 kHz</strong></div><div><span>Embedding</span><strong>192 dimensions</strong></div><div><span>Decision</span><strong>Cosine similarity</strong></div></div><button class="button button-dark run-button" id="sv-run" type="button"><span class="button-spinner" aria-hidden="true"></span>Run verification <span aria-hidden="true">→</span></button><p class="form-note" id="sv-form-note">Select enrollment and test audio.</p></div></aside>
+            <aside class="workspace-aside"><div class="panel settings-panel"><div class="panel-header"><div><p class="eyebrow">CONFIGURATION</p><h2>Run settings</h2></div><div class="panel-header-actions"><span class="settings-icon" aria-hidden="true">⚙</span><button class="aside-toggle" data-aside-toggle="sv" type="button" aria-label="Collapse settings" aria-expanded="true">›</button></div></div><label class="field-label" for="sv-model">Model</label><select class="control" id="sv-model"></select><label class="field-label" for="sv-provider">Provider</label><select class="control" id="sv-provider"><option value="auto">Auto · fallback to CPU</option><option value="cpu">CPU</option><option value="cuda">CUDA</option></select><div class="field-label range-label"><span>Cosine threshold</span><output id="sv-threshold-output">0.80</output></div><input class="range" id="sv-threshold" type="range" min="0" max="1" step="0.01" value="0.8" /><div class="range-hint"><span>strict</span><span>lenient</span></div><div class="contract-list"><div><span>Sample rate</span><strong>16 kHz</strong></div><div><span>Embedding</span><strong>192 dimensions</strong></div><div><span>Decision</span><strong>Cosine similarity</strong></div></div><div class="job-progress" id="sv-job-progress" hidden><div class="job-progress-bar"><span></span></div><div class="job-progress-copy"><span data-job-phase>Queued</span><strong data-job-percent>0%</strong></div></div><div class="run-actions"><button class="button button-dark run-button" id="sv-run" type="button"><span class="button-spinner" aria-hidden="true"></span>Run verification <span aria-hidden="true">→</span></button><button class="button button-outline cancel-button" id="sv-cancel" type="button" hidden>Cancel</button></div><p class="form-note" id="sv-form-note">Select enrollment and test audio.</p></div></aside>
+            <button class="aside-reopen" data-aside-toggle="sv" type="button" aria-label="Show settings">‹ Settings</button>
           </div>
         </section>
 
         <section class="screen" id="screen-measurements" data-screen-panel="measurements">
           <div class="hero-row compact-hero"><div><p class="eyebrow accent-eyebrow">MEASUREMENTS / VALIDATION</p><h1>Measurements</h1><p class="lede">Check catalog integrity before sharing a model or benchmark result.</p></div><button class="button button-dark" id="validate-button" type="button">Validate catalog <span aria-hidden="true">→</span></button></div>
           <div class="panel validation-panel"><div class="validation-status" id="validation-status"><span class="status-icon">✓</span><div><strong>Validation has not run</strong><span>Run a CPU graph and SHA256 check from the local catalog.</span></div></div><div class="validation-summary" id="validation-summary"></div><pre class="validation-errors" id="validation-errors" hidden></pre></div>
+          <div class="measurement-layout">
+            <div class="panel measurement-controls">
+              <div class="panel-header"><div><p class="eyebrow">AUDIO / QUALITY PROBE</p><h2>Compare isolation models</h2></div><span class="measurement-icon" aria-hidden="true">⌁</span></div>
+              <div class="measurement-input-grid">
+                <label class="measure-file"><span class="field-label">Probe audio</span><input id="measure-audio" type="file" accept="audio/*,.wav,.flac,.mp3,.m4a" /><strong data-measure-name="audio">Choose a noisy recording</strong><small data-measure-meta="audio">Required · used as the common model input</small></label>
+                <label class="measure-file"><span class="field-label">Clean reference <em>optional</em></span><input id="measure-reference" type="file" accept="audio/*,.wav,.flac,.mp3,.m4a" /><strong data-measure-name="reference">Choose a clean reference</strong><small data-measure-meta="reference">Enables SI-SDR, SI-SNR and STOI</small></label>
+              </div>
+              <div class="field-label measure-model-label"><span>Models to compare</span><output id="measure-model-count">0 selected</output></div>
+              <div class="measure-model-list" id="measure-model-list"><span class="measure-empty">Load catalog to choose Voice Isolation models.</span></div>
+              <div class="measurement-actions"><button class="button button-dark" id="measure-run" type="button">Analyze audio <span aria-hidden="true">→</span></button><span class="form-note" id="measure-form-note">Select a probe audio file and at least one model.</span></div>
+            </div>
+            <div class="panel measurement-results" id="measurement-results" hidden>
+              <div class="panel-header"><div><p class="eyebrow">REPORT / MODEL COMPARISON</p><h2>Measured output</h2></div><span class="result-time" id="measurement-result-time">—</span></div>
+              <div class="measurement-summary" id="measurement-summary"></div>
+              <div class="measurement-table-wrap"><table class="measurement-table"><thead><tr><th>Model</th><th>RTF</th><th>RMS</th><th>Peak</th><th>Clip</th><th>SI-SDR</th><th>STOI</th></tr></thead><tbody id="measurement-table-body"></tbody></table></div>
+              <p class="measurement-footnote">SI-SDR and STOI require the optional clean reference. RMS, peak and clipping are measured on each enhanced output.</p>
+            </div>
+          </div>
+          <div class="panel result-history"><div class="panel-header"><div><p class="eyebrow">HISTORY / RECENT RUNS</p><h2>Inference results</h2></div><button class="button button-outline button-small" id="history-refresh" type="button">Refresh</button></div><div id="job-history" class="job-history"><span class="measure-empty">No asynchronous runs yet.</span></div></div>
           <div class="measurement-note panel"><span class="note-mark">i</span><div><strong>One contract, three clients.</strong><p>The web workspace uses the same Model Zoo and named-input processors as <code>puresound infer</code> and the existing Gradio demos.</p></div></div>
         </section>
       </main>

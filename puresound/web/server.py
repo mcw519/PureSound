@@ -29,6 +29,7 @@ from typing import Any, Mapping
 import numpy as np
 
 from puresound.inference import InferenceError, InferenceResult, ModelZoo, ModelZooError, load_model
+from puresound.web.measurements import audio_metrics, audio_metrics_from_path, reference_metrics
 
 
 class WebServiceError(RuntimeError):
@@ -141,6 +142,101 @@ class RunStore:
             return self._runs.get(token, {}).get(output_name)
 
 
+@dataclass
+class InferenceJob:
+    """Small in-memory job record used by the browser progress workflow."""
+
+    job_id: str
+    model_id: str
+    created_at: float
+    status: str = "queued"
+    phase: str = "queued"
+    progress: float = 0.0
+    started_at: float | None = None
+    finished_at: float | None = None
+    result: dict[str, Any] | None = None
+    error: str | None = None
+    cancel_requested: bool = False
+
+
+class InferenceJobStore:
+    """Thread-safe bounded history for asynchronous inference requests."""
+
+    def __init__(self, max_jobs: int = 64):
+        self.max_jobs = max(1, int(max_jobs))
+        self._jobs: dict[str, InferenceJob] = {}
+        self._lock = threading.RLock()
+
+    def create(self, model_id: str) -> InferenceJob:
+        job = InferenceJob(uuid.uuid4().hex, model_id, time.time())
+        with self._lock:
+            self._jobs[job.job_id] = job
+            self._trim_locked()
+        return job
+
+    def _trim_locked(self) -> None:
+        if len(self._jobs) <= self.max_jobs:
+            return
+        finished = sorted(
+            (job for job in self._jobs.values() if job.finished_at is not None),
+            key=lambda job: job.finished_at or job.created_at,
+        )
+        for job in finished[: max(0, len(self._jobs) - self.max_jobs)]:
+            self._jobs.pop(job.job_id, None)
+
+    def get(self, job_id: str) -> InferenceJob:
+        with self._lock:
+            try:
+                return self._jobs[job_id]
+            except KeyError as exc:
+                raise KeyError(f"job not found: {job_id}") from exc
+
+    def update(self, job_id: str, **values: Any) -> InferenceJob:
+        with self._lock:
+            job = self.get(job_id)
+            for name, value in values.items():
+                setattr(job, name, value)
+            return job
+
+    def cancel(self, job_id: str) -> InferenceJob:
+        with self._lock:
+            job = self.get(job_id)
+            if job.status in {"succeeded", "failed", "cancelled"}:
+                return job
+            job.cancel_requested = True
+            if job.status == "queued":
+                job.status = "cancelled"
+                job.phase = "cancelled"
+                job.finished_at = time.time()
+            else:
+                job.phase = "cancelling"
+            return job
+
+    def list(self, limit: int = 20) -> list[InferenceJob]:
+        with self._lock:
+            return sorted(self._jobs.values(), key=lambda job: job.created_at, reverse=True)[: max(1, min(int(limit), self.max_jobs))]
+
+    @staticmethod
+    def snapshot(job: InferenceJob) -> dict[str, Any]:
+        elapsed = None
+        if job.started_at is not None:
+            elapsed = (job.finished_at or time.time()) - job.started_at
+        return {
+            "job_id": job.job_id,
+            "model_id": job.model_id,
+            "status": job.status,
+            "phase": job.phase,
+            "progress": round(float(job.progress), 3),
+            "created_at": job.created_at,
+            "started_at": job.started_at,
+            "finished_at": job.finished_at,
+            "elapsed_seconds": elapsed,
+            "cancel_requested": job.cancel_requested,
+            "result": job.result,
+            "error": job.error,
+        }
+
+
 class WebService:
     """Application object shared by the HTTP handler and tests."""
 
@@ -158,6 +254,7 @@ class WebService:
         self.max_upload_bytes = max(1, int(max_upload_bytes))
         self.allow_local_paths = bool(allow_local_paths)
         self.runs = RunStore(max_runs=max_runs)
+        self.jobs = InferenceJobStore(max_jobs=max(16, max_runs * 2))
         self._runtime_cache: dict[tuple[str, str, str | None], Any] = {}
         self._runtime_lock = threading.Lock()
 
@@ -340,15 +437,15 @@ class WebService:
         provider = str(payload.get("provider") or "auto").lower()
         if provider not in {"auto", "cpu", "cuda"}:
             raise WebServiceError("provider must be one of: auto, cpu, cuda")
+        parameters = payload.get("parameters") or {}
+        if not isinstance(parameters, Mapping):
+            raise WebServiceError("parameters must be an object")
         variant = payload.get("variant")
         if variant is not None and not isinstance(variant, str):
             raise WebServiceError("variant must be a string")
         inputs = payload.get("inputs")
         if not isinstance(inputs, Mapping) or not inputs:
             raise WebServiceError("inputs must be a non-empty object")
-        parameters = payload.get("parameters") or {}
-        if not isinstance(parameters, Mapping):
-            raise WebServiceError("parameters must be an object")
 
         temp_paths: list[Path] = []
         try:
@@ -380,6 +477,157 @@ class WebService:
             return response
         except (InferenceError, ModelZooError, OSError, ValueError, TypeError) as exc:
             raise WebServiceError(str(exc)) from exc
+        finally:
+            for path in temp_paths:
+                try:
+                    path.unlink(missing_ok=True)
+                except OSError:
+                    pass
+
+    # Asynchronous inference --------------------------------------------------
+    def _run_job(self, job_id: str, payload: Mapping[str, Any]) -> None:
+        job = self.jobs.get(job_id)
+        if job.status == "cancelled":
+            return
+        started = time.time()
+        self.jobs.update(
+            job_id,
+            status="running",
+            phase="preparing",
+            progress=0.08,
+            started_at=started,
+        )
+        try:
+            if self.jobs.get(job_id).cancel_requested:
+                self.jobs.update(job_id, status="cancelled", phase="cancelled", finished_at=time.time())
+                return
+            self.jobs.update(job_id, phase="running", progress=0.25)
+            result = self.infer(payload)
+            job = self.jobs.get(job_id)
+            if job.cancel_requested:
+                self.jobs.update(
+                    job_id,
+                    status="cancelled",
+                    phase="cancelled",
+                    progress=1.0,
+                    finished_at=time.time(),
+                )
+                return
+            self.jobs.update(
+                job_id,
+                status="succeeded",
+                phase="complete",
+                progress=1.0,
+                result=result,
+                finished_at=time.time(),
+            )
+        except Exception as exc:  # surfaced through the job status endpoint
+            job = self.jobs.get(job_id)
+            if job.cancel_requested:
+                self.jobs.update(
+                    job_id,
+                    status="cancelled",
+                    phase="cancelled",
+                    progress=1.0,
+                    finished_at=time.time(),
+                )
+            else:
+                self.jobs.update(
+                    job_id,
+                    status="failed",
+                    phase="failed",
+                    error=str(exc),
+                    finished_at=time.time(),
+                )
+
+    def submit_inference(self, payload: Mapping[str, Any]) -> dict[str, Any]:
+        if not isinstance(payload, Mapping):
+            raise WebServiceError("request body must be a JSON object")
+        model_id = payload.get("model_id")
+        if not isinstance(model_id, str) or not model_id.strip():
+            raise WebServiceError("model_id is required")
+        inputs = payload.get("inputs")
+        if not isinstance(inputs, Mapping) or not inputs:
+            raise WebServiceError("inputs must be a non-empty object")
+        job = self.jobs.create(model_id)
+        thread = threading.Thread(
+            target=self._run_job,
+            args=(job.job_id, dict(payload)),
+            name=f"puresound-infer-{job.job_id[:8]}",
+            daemon=True,
+        )
+        thread.start()
+        return InferenceJobStore.snapshot(job)
+
+    def job(self, job_id: str) -> dict[str, Any]:
+        return InferenceJobStore.snapshot(self.jobs.get(job_id))
+
+    def cancel_job(self, job_id: str) -> dict[str, Any]:
+        return InferenceJobStore.snapshot(self.jobs.cancel(job_id))
+
+    def list_jobs(self, limit: int = 20) -> list[dict[str, Any]]:
+        return [InferenceJobStore.snapshot(job) for job in self.jobs.list(limit)]
+
+    # Measurements ------------------------------------------------------------
+    def measure(self, payload: Mapping[str, Any]) -> dict[str, Any]:
+        if not isinstance(payload, Mapping):
+            raise WebServiceError("request body must be a JSON object")
+        inputs = payload.get("inputs")
+        if not isinstance(inputs, Mapping) or "audio" not in inputs:
+            raise WebServiceError("inputs.audio is required")
+        model_ids = payload.get("models") or []
+        if not isinstance(model_ids, (list, tuple)):
+            raise WebServiceError("models must be an array of model ids")
+        model_ids = [str(model_id) for model_id in model_ids if str(model_id).strip()]
+        if not model_ids:
+            model_ids = [model.id for model in self.zoo.list(task="voice_isolation", runnable_only=True) if "default" in model.roles]
+        provider = str(payload.get("provider") or "cpu").lower()
+        if provider not in {"auto", "cpu", "cuda"}:
+            raise WebServiceError("provider must be one of: auto, cpu, cuda")
+        parameters = payload.get("parameters") or {}
+        if not isinstance(parameters, Mapping):
+            raise WebServiceError("parameters must be an object")
+        sample_rate = int(payload.get("sample_rate") or 16_000)
+        temp_paths: list[Path] = []
+        started = time.time()
+        try:
+            audio_path = self._materialize_input(inputs["audio"], temp_paths)
+            _, input_stats = audio_metrics_from_path(audio_path, sample_rate)
+            reference_values = None
+            reference_stats = None
+            if inputs.get("reference") is not None:
+                reference_path = self._materialize_input(inputs["reference"], temp_paths)
+                reference_values, reference_stats = audio_metrics_from_path(reference_path, sample_rate)
+            reports: list[dict[str, Any]] = []
+            for model_id in model_ids:
+                report: dict[str, Any] = {"model_id": model_id}
+                try:
+                    model = self.zoo.get(model_id)
+                    if model.task != "voice_isolation":
+                        raise WebServiceError("measurement comparison only supports voice isolation models")
+                    runtime = self._runtime(model_id, provider, None)
+                    result: InferenceResult = runtime.infer(inputs={"audio": audio_path}, parameters=dict(parameters))
+                    output = np.asarray(result.outputs.get("audio"), dtype=np.float32).reshape(-1)
+                    report.update(
+                        {
+                            "display_name": model.display_name,
+                            "provider": result.provider,
+                            "elapsed_seconds": result.elapsed_seconds,
+                            "rtf": result.rtf,
+                            "output": audio_metrics(output, result.sample_rate or sample_rate),
+                            "quality": reference_metrics(reference_values, output, result.sample_rate or sample_rate) if reference_values is not None else {},
+                        }
+                    )
+                except Exception as exc:
+                    report["error"] = str(exc)
+                reports.append(report)
+            return {
+                "sample_rate": sample_rate,
+                "input": input_stats,
+                "reference": reference_stats,
+                "models": reports,
+                "elapsed_seconds": time.time() - started,
+            }
         finally:
             for path in temp_paths:
                 try:
@@ -463,6 +711,17 @@ class _RequestHandler(BaseHTTPRequestHandler):
                     self.app.validate(verify_hash=verify_hash, check_graph=check_graph),
                 )
                 return
+            if path == "/api/jobs":
+                try:
+                    limit = int(query.get("limit", ["20"])[0])
+                except ValueError:
+                    limit = 20
+                self._json(HTTPStatus.OK, {"jobs": self.app.list_jobs(limit)})
+                return
+            if path.startswith("/api/jobs/"):
+                job_id = urllib.parse.unquote(path[len("/api/jobs/") :])
+                self._json(HTTPStatus.OK, self.app.job(job_id))
+                return
             if path.startswith("/api/runs/"):
                 parts = path.split("/")
                 if len(parts) != 5 or parts[1:3] != ["api", "runs"]:
@@ -489,7 +748,15 @@ class _RequestHandler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:  # noqa: N802
         parsed = urllib.parse.urlparse(self.path)
-        if parsed.path.rstrip("/") != "/api/infer":
+        path = parsed.path.rstrip("/") or "/"
+        if path.startswith("/api/jobs/") and path.endswith("/cancel"):
+            job_id = urllib.parse.unquote(path[len("/api/jobs/") : -len("/cancel")])
+            try:
+                self._json(HTTPStatus.OK, self.app.cancel_job(job_id))
+            except KeyError as exc:
+                self._error(HTTPStatus.NOT_FOUND, str(exc), "not_found")
+            return
+        if path not in {"/api/infer", "/api/jobs", "/api/measure"}:
             self._error(HTTPStatus.NOT_FOUND, "endpoint not found", "not_found")
             return
         try:
@@ -508,8 +775,15 @@ class _RequestHandler(BaseHTTPRequestHandler):
         try:
             raw = self.rfile.read(content_length)
             payload = json.loads(raw.decode("utf-8"))
-            response = self.app.infer(payload)
-            self._json(HTTPStatus.OK, response)
+            if path == "/api/jobs":
+                response = self.app.submit_inference(payload)
+                self._json(HTTPStatus.ACCEPTED, response)
+            elif path == "/api/measure":
+                response = self.app.measure(payload)
+                self._json(HTTPStatus.OK, response)
+            else:
+                response = self.app.infer(payload)
+                self._json(HTTPStatus.OK, response)
         except json.JSONDecodeError as exc:
             self._error(HTTPStatus.BAD_REQUEST, f"invalid JSON: {exc.msg}", "invalid_json")
         except WebServiceError as exc:

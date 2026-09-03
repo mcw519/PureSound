@@ -33,6 +33,14 @@ The browser client has three screens:
 - **Speaker Verification** uploads `enrollment` and `test` audio, calls the
   waveform embedding processor twice, and displays the cosine score and
   threshold verdict.
+- **Measurements** accepts a probe recording, an optional clean reference, and
+  one or more Voice Isolation models. It reports reproducible level/spectral
+  metrics (RMS, peak, clipping, silence, zero-crossing rate, and spectral
+  centroid) plus SI-SDR, SNR, correlation, STOI, and PESQ when a reference is
+  available.
+
+The primary navigation and each Playground configuration rail can be collapsed
+independently; the browser remembers those preferences for the next session.
 
 Every uploaded or generated audio file uses the same inspection panel. It
 provides a shared time ruler, synchronized waveform and 0–8 kHz spectrogram,
@@ -50,7 +58,17 @@ The API is intentionally small:
 | GET | `/api/models/{model_id}` | One model contract |
 | GET | `/api/validate` | Paths, sidecars, hashes, and graph checks |
 | POST | `/api/infer` | Run a model with JSON named inputs |
+| POST | `/api/jobs` | Start asynchronous inference and return a job id |
+| GET | `/api/jobs/{job_id}` | Read progress, status, and result |
+| GET | `/api/jobs?limit=20` | List recent inference results |
+| POST | `/api/jobs/{job_id}/cancel` | Request cancellation of a queued/running job |
+| POST | `/api/measure` | Measure a probe and compare selected Voice Isolation models |
 | GET | `/api/runs/{run_id}/{output}` | Download a generated audio output |
+
+Asynchronous jobs expose `queued`, `running`, `succeeded`, `failed`, or
+`cancelled` status and a coarse phase/progress value. Cancellation is
+cooperative: a processor that is already inside an ONNX call completes in the
+background, but its result is discarded and the job is reported as cancelled.
 
 Uploaded inputs are JSON descriptors such as:
 
