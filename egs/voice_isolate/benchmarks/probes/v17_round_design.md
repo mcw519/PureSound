@@ -118,3 +118,16 @@ conjure one. Zero-context cold start is treated from here as a DEPLOYMENT proble
 (never reset streaming state; prime new streams with buffered room audio — worth
 +11..13 dB on every model generation), and the `ambient` column is the
 deployment-truth metric. The knob stays in the tree (default off), harmless.
+
+---
+
+## ERRATUM (2026-09-03) — §2b is withdrawn
+
+The "real ambience (no voice)" pads of §2b were drawn from 90D 98.4–107.0 s, which holds an
+unlabelled utterance at 101.4–103.9 s (−47 dBFS, verified by level profile and whisper). Sliding
+a 2 s window across the gap: floor windows −0.2..−4 dB, the utterance window −22..−26 dB (both
+v8 and v16). True floor is a null on 5-checkpoint blocks (Δ −0.04 / +0.03 dB, p 0.08 / 0.76).
+So the model does not "self-calibrate against the room's true signature"; it re-uses a recent
+talker (any talker through the same chain) as anchor, for ~1–10 s. §1's refutations stand; §2a
+stands; §3's Part B (row-initial ambient lead-ins) was targeting a mechanism that does not exist,
+which is consistent with its negative verdict. Full matrix: `reference_matrix_README.md`.

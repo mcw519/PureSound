@@ -105,3 +105,11 @@ context the product has when it must decide).
 
 vs v16 ep19: cold-far `none` worse +0.53 dB (p=0.017); sessions ns; keep/s2f unchanged.
 Verdict and mechanism: `benchmarks/probes/v18_VERDICT.md`.
+
+### ERRATUM (2026-09-03) — `ambient` context condition
+
+The `ambient` pads contain an unlabelled utterance for the 90D recording (see
+`../probes/reference_matrix_README.md` §0). `cold-far device ambient` rows above measure
+"anchored by a talker", not "room tone"; true floor is a null. The condition is to be re-specified
+as explicit `anchor` (3 s near speech from another recording of the same room) + `floor` before the
+next block comparison.

@@ -128,6 +128,68 @@ def vad_to_waveform(
     return wave
 
 
+CONTEXT_CHOICES = ("none", "self", "background")
+BG_PAD_SEC = 3.0
+BG_MIN_SEC = 0.3
+
+
+def add_context_arg(parser):
+    """`--context` -- what streaming state the model gets before the utterance.
+
+    Today every WER gate feeds each utterance from zero state; deployment never
+    does. The prefix only touches the model input: the scored output is sliced
+    back to the utterance, so WER stays comparable across the choices.
+    """
+    parser.add_argument("--context", default="none", choices=list(CONTEXT_CHOICES),
+                        help="model warm-up prefix: none=cold start (default, "
+                             "bit-identical to before), self=the mix prepended to "
+                             "itself, background=~3 s of the mix's "
+                             "foreground-inactive parts (room + bystanders only)")
+    return parser
+
+
+def background_pad(
+    mix: np.ndarray,
+    ref: np.ndarray,
+    sr: int,
+    pad_sec: float = BG_PAD_SEC,
+    frame_ms: float = 20.0,
+    rel_db: float = 40.0,
+    abs_dbfs: float = -60.0,
+) -> np.ndarray | None:
+    """The foreground-inactive stretches of ``mix``, in time order, looped to
+    ``pad_sec``. A 20 ms frame is inactive when the clean reference's frame
+    energy is under (max frame energy - 40 dB) or under -60 dBFS. Returns None
+    when under ``BG_MIN_SEC`` of them exist (caller falls back to no context)."""
+    n = max(1, int(round(sr * frame_ms / 1000.0)))
+    n_frames = min(len(mix), len(ref)) // n
+    if n_frames == 0:
+        return None
+    e = (ref[: n_frames * n].reshape(n_frames, n).astype(np.float64) ** 2).mean(axis=1)
+    inactive = (e < e.max() * 10.0 ** (-rel_db / 10.0)) | (e < 10.0 ** (abs_dbfs / 10.0))
+    pad = mix[: n_frames * n].reshape(n_frames, n)[inactive].reshape(-1)
+    if len(pad) < int(BG_MIN_SEC * sr):
+        return None
+    need = int(pad_sec * sr)
+    if len(pad) < need:
+        pad = np.tile(pad, int(np.ceil(need / len(pad))))
+    return pad[:need]
+
+
+def context_input(
+    mix: np.ndarray, ref: np.ndarray, sr: int, context: str
+) -> tuple[np.ndarray, int, bool]:
+    """(model input, samples to drop off the front of the output, fell back)."""
+    if context == "self":
+        return np.concatenate([mix, mix]), len(mix), False
+    if context == "background":
+        pad = background_pad(mix, ref, sr)
+        if pad is None:
+            return mix, 0, True
+        return np.concatenate([pad, mix]), len(pad), False
+    return mix, 0, False
+
+
 def init_asr(backend: str, model_size: str, device: str):
     """Returns (name, transcribe_fn) or (None, None)."""
     if backend in ("auto", "faster-whisper"):
@@ -268,6 +330,7 @@ def main():
                    choices=["auto", "none", "faster-whisper", "openai-whisper", "azure"])
     p.add_argument("--asr-model", default="small")
     add_presence_gate_arg(p)
+    add_context_arg(p)
     p.add_argument("--dry-blend", type=float, default=1.0,
                    help="inference over-suppression relief: enh*b + mix*(1-b)")
     p.add_argument("--spec-floor", type=float, default=0.0,
@@ -304,7 +367,8 @@ def main():
         audio_dir.mkdir(parents=True, exist_ok=True)
 
     rows = []
-    refs, hyps_raw, hyps_enh = [], [], []
+    ids, refs, hyps_raw, hyps_enh = [], [], [], []
+    n_ctx_fallback = 0
     for i in range(n_eval):
         item = table.slice(i, 1).to_pylist()[0]
         mix = load_wav_bytes(item["mix"]["bytes"], args.sr)
@@ -312,11 +376,13 @@ def main():
         length = min(len(mix), len(ref))
         mix, ref = mix[:length], ref[:length]
 
-        enh, vad_prob = run_inference(model, mix, args.device,
+        model_in, offset, fell_back = context_input(mix, ref, args.sr, args.context)
+        n_ctx_fallback += int(fell_back)
+        enh, vad_prob = run_inference(model, model_in, args.device,
                                       dry_blend=args.dry_blend,
                                       spec_floor=args.spec_floor,
                                       presence_gate=gate)
-        enh = enh[:length]
+        enh = enh[offset:][:length]
         if len(enh) < length:
             enh = np.pad(enh, (0, length - len(enh)))
 
@@ -333,6 +399,7 @@ def main():
             row["vad_prob_mean"] = float(vad_prob.mean())
 
         if transcribe is not None:
+            ids.append(item["id"])
             refs.append(item["transcript"])
             hyps_raw.append(transcribe(mix, args.sr))
             hyps_enh.append(transcribe(enh, args.sr))
@@ -355,6 +422,8 @@ def main():
         "n_eval": n_eval,
         "ckpt": args.ckpt,
         "asr": asr_name,
+        "context": args.context,
+        "n_context_fallback": n_ctx_fallback,
         "si_sdr_mix_mean": float(np.mean([r["si_sdr_mix"] for r in rows])),
         "si_sdr_enh_mean": float(np.mean([r["si_sdr_enh"] for r in rows])),
         "si_sdr_i_mean": float(np.mean([r["si_sdr_i"] for r in rows])),
@@ -378,9 +447,20 @@ def main():
     report_path = out_dir / "report.json"
     report_path.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
 
+    # per-utterance transcripts, so paired deletion can be recomputed offline
+    tr_path = out_dir / "transcripts.jsonl"
+    if transcribe is not None:
+        with tr_path.open("w", encoding="utf-8") as fh:
+            for uid, rf, hr, he in zip(ids, refs, hyps_raw, hyps_enh):
+                fh.write(json.dumps({"id": uid, "ref": rf, "hyp_raw": hr,
+                                     "hyp_enh": he}, ensure_ascii=False) + "\n")
+
     print("\n" + "=" * 64)
     print("DAWN CHORUS SUMMARY")
     print("=" * 64)
+    print(f"context: {args.context}"
+          + (f"  ({n_ctx_fallback} utterances fell back to none)"
+             if n_ctx_fallback else ""))
     print(f"SI-SDR  mix -> enhanced : {report['si_sdr_mix_mean']:+.2f} -> "
           f"{report['si_sdr_enh_mean']:+.2f} dB  "
           f"(SI-SDRi mean {report['si_sdr_i_mean']:+.2f}, "
@@ -396,6 +476,8 @@ def main():
         print("WER skipped -- install `faster-whisper` (or `openai-whisper`) "
               "and rerun for the QVF2-style WER breakdown.")
     print(f"\nper-sample -> {csv_path}\nreport     -> {report_path}")
+    if transcribe is not None:
+        print(f"transcripts -> {tr_path}")
 
 
 if __name__ == "__main__":

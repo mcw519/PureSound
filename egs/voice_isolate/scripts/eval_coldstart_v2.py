@@ -58,9 +58,14 @@ def load_wav(clip: str) -> torch.Tensor:
 
 
 def ambient_pads(windows: dict, clip: str) -> list:
-    """3 s room-tone segments for this clip's recording: from the session clip of the
-    same group when one exists, else from the clip's own file -- always OUTSIDE every
-    annotated span. Deterministic per (clip, draw): provenance beats variety here."""
+    """3 s segments from un-annotated stretches of this clip's recording: from the session
+    clip of the same group when one exists, else from the clip's own file -- always OUTSIDE
+    every annotated span. Deterministic per (clip, draw): provenance beats variety here.
+
+    CAVEAT (2026-09-03, benchmarks/probes/reference_matrix_README.md): "un-annotated" is not
+    "room tone". The 90D gap 98.4-107.0 s holds an unlabelled utterance at 101.4-103.9 s, and
+    that utterance -- not the floor -- is what moves the cold-far numbers. Read this
+    condition as "anchor, sometimes"; true floor is a null."""
     group = group_of(clip)
     sessions = {group_of(c): c for c in windows if c.endswith("_session")}
     source = sessions.get(group, clip)

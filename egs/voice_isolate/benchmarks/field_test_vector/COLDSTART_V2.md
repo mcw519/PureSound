@@ -47,3 +47,14 @@ Paired verdicts:
   `ambient` column (calibrate faster from less), guards unchanged elsewhere.
 * Deployment note: the `ambient` column is the product's steady state — keep streaming
   state alive across silence, prime new streams with buffered room audio.
+
+## ERRATUM (2026-09-03) — the `ambient` column is speech, not room tone
+
+The `ambient` pads are drawn from the only ≥ 3 s un-annotated gap in set v3 (90D 98.4–107.0 s),
+and that gap contains an unlabelled utterance at 101.4–103.9 s (−47 dBFS). True floor from the
+same recording (or 180D's −79 dBFS gap) moves cold-far suppression by ≤ 0.1 dB on both v8 and v16
+blocks; the +11..13 dB was the utterance. Read every `ambient` number here as "3 s pad that
+sometimes contained a talker". The corrected instrument and the anchor-length / decay curves are
+in `../probes/reference_matrix_README.md` (anchor needs ≥ 1 s of speech, is gone after 10 s of
+floor, and costs keep violations on the next talker). The deployment note "prime new streams with
+buffered room audio" is withdrawn with it.

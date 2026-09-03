@@ -28,6 +28,7 @@ from puresound.recipes import init_siso_model  # noqa: E402
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from _gate_flags import add_presence_gate_arg, build_presence_gate
+from eval_dawn_chorus import add_context_arg, context_input
 
 def si_sdr(est, ref, eps=1e-8):
     est = est.reshape(-1)-est.reshape(-1).mean(); ref = ref.reshape(-1)-ref.reshape(-1).mean()
@@ -50,6 +51,7 @@ def main():
                     help="over-suppression relief: out=a*enh+(1-a)*mix; 1.0=off (default)")
     ap.add_argument("--spec-floor", type=float, default=0.0,
                     help="spectral floor: |enh|>=floor*|mix| per bin (keeps enh phase); 0.0=off (default)")
+    add_context_arg(ap)
     args = ap.parse_args()
     cfg_path=str(Path(args.config_path).resolve()); ckpt=str(Path(args.ckpt).resolve())
     sd=Path(args.set_dir).resolve(); os.chdir(RECIPE_DIR); torch.manual_seed(0)
@@ -90,15 +92,21 @@ def main():
         print(f"loaded {len(mix_hyp)} cached mix transcripts")
 
     refs,hyp_mix,hyp_enh,hyp_ref,sisdri=[],[],[],[],[]
-    by_itf={}
+    by_itf={}; n_ctx_fallback=0
     cache_fh = None if mix_cache.exists() else open(mix_cache,"w",encoding="utf-8")
     sr=16000
     with torch.no_grad():
         for i,it in enumerate(items):
             mix,_=sf.read(sd/f"{it['id']}_mix.wav"); ref,_=sf.read(sd/f"{it['id']}_ref.wav")
             mt=torch.tensor(mix,dtype=torch.float32,device=args.device).reshape(1,-1)
-            enh=model(mt,dry_blend=args.dry_blend,spec_floor=args.spec_floor,
-                      presence_gate=gate).reshape(-1)
+            # --context prepends a warm-up prefix to the MODEL INPUT only; the output
+            # is sliced back to the utterance so mix/enh/ref stay length-matched.
+            model_in,offset,fell_back=context_input(mix,ref,sr,args.context)
+            n_ctx_fallback+=int(fell_back)
+            xt=mt if model_in is mix else torch.tensor(
+                model_in,dtype=torch.float32,device=args.device).reshape(1,-1)
+            enh=model(xt,dry_blend=args.dry_blend,spec_floor=args.spec_floor,
+                      presence_gate=gate).reshape(-1)[offset:]
             T=min(enh.shape[-1],mt.shape[-1],len(ref))
             rt=torch.tensor(ref,dtype=torch.float32)
             ssi=si_sdr(enh[...,:T].cpu(),rt[...,:T])-si_sdr(mt[...,:T].cpu(),rt[...,:T])
@@ -115,7 +123,7 @@ def main():
             if (i+1)%25==0: print(f"  {i+1}/{len(items)}",flush=True)
     if cache_fh: cache_fh.close()
     # save raw transcripts so WER can be recomputed offline with any normalizer
-    tag = Path(ckpt).stem
+    tag = f"{Path(ckpt).stem}_ctx-{args.context}"
     with open(sd/f"transcripts_{asr_slug}_{tag}.jsonl","w",encoding="utf-8") as fh:
         for it,rf,hm,he in zip(items,refs,hyp_mix,hyp_enh):
             fh.write(json.dumps({"id":it["id"],"ref":rf,"mix":hm,"enh":he,"n_interferers":it["n_interferers"]},ensure_ascii=False)+"\n")
@@ -154,7 +162,9 @@ def main():
         return f"{label}delta {d:+.4f}  95% CI [{lo:+.4f}, {hi:+.4f}]{flag}"
 
     wm=norm_wer(refs,hyp_mix); we=norm_wer(refs,hyp_enh); wr=norm_wer(refs,hyp_ref)
-    print("="*64); print(f"BUT real-RIR WER benchmark (real LibriTTS transcripts, Whisper-normalized, n={len(refs)})"); print("="*64)
+    print("="*64); print(f"BUT real-RIR WER benchmark (real LibriTTS transcripts, Whisper-normalized, n={len(refs)})")
+    print(f"context: {args.context}"+(f"  ({n_ctx_fallback} utterances fell back to none)" if n_ctx_fallback else ""))
+    print(f"transcripts -> {sd}/transcripts_{asr_slug}_{tag}.jsonl"); print("="*64)
     print(f"SI-SDRi vs near-reverb ref : mean {st.mean(sisdri):+.2f} / median {st.median(sisdri):+.2f} dB  (secondary; ref=full near-reverb, not early)")
     print(f"WER reverb floor (clean near-reverb fg, no itf/noise): {wr['wer']:.3f}  <- benchmark ceiling; if high, reverb-saturated")
     print(f"WER mix      : {wm['wer']:.3f}  (sub {wm['substitution_rate']:.3f} / ins {wm['insertion_rate']:.3f} / del {wm['deletion_rate']:.3f})")
