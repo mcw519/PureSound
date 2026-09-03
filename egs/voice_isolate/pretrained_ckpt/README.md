@@ -47,6 +47,16 @@ path needs a gate rather than a blend.
 | **`dpcrn_v8.ckpt`** | **`config/train_dpcrn.yaml`** | v7 | measured-capture realism in synthesis: noise convolved with the speech's own room, an absolute dBFS microphone floor, and part of the synthetic mixture taking its SIR from the scene geometry | real far-field suppression **−15.91 dB** vs v7's −13.72 on identical files (leakage-free subset −17.74 vs −15.68), and the 2–3 m dip in v7's distance response filled in (−4.50 → −16.61) so grading is monotone; near-field keep flat (0.00) with the worst case improved (−5.45 → −1.06); Dawn WER 0.180 < 0.184 raw, deletion 0.094; reverberant-office WER −0.024 vs mix (both interferer counts); turn-taking KEEP 6 violations; in-domain +7.99. Costs: +0.020 WER on the extreme-reverb monitor where v7 was neutral (ep19, with `dry_blend 0.9`) |
 | `dpcrn_v9.ckpt` | `config/exp/train_dpcrn_drrcontrast.yaml` | v8 | DRR-contrast augmentation: per fresh RIR channel (prob 0.4) the reverberant tail is rescaled so foreground channels gain up to 4 dB DRR and far channels lose up to 4 dB | the ASR-gate-optimal operating point: reverberant-office WER **0.513, −0.050 vs mix** (v8: 0.539, −0.024; both interferer counts improve — 1 itf 0.480, 2 itf 0.576), **Dawn WER 0.172 / deletion 0.086** (both best of any version), extreme-reverb monitor **−0.003** (v8's +0.020 cost erased), turn-taking KEEP 94/6, in-domain +8.10. Costs: real far-field suppression −12.44 vs v8's −15.91 (paired, 24/71 files >3 dB shallower), turn-taking SUPPRESS 80/20 @ −13.43 vs v8's 87/13 @ −16.14 (ep19, with `dry_blend 0.9`) |
 | `dpcrn_v10.ckpt` | `config/exp/train_dpcrn_coldstart.yaml` | v8 | self-calibration curriculum: rows that OPEN with real far-field solo before any near anchor (row-initial-far exposure ~10% → ~23%, anchor-free real lone-far 3% → 7.5%), teaching the model to calibrate against whatever reference exists including the noise floor | **the cold-start axis moved and the deployment gate did not survive it** (ep39, full gate run). Won: bot-idle far suppression 5 of 10 isolated far clips clear −6 dB (v8 1, v9 2) with the deepest single result in the set, best near keep of any version (worst case −0.34 dB), turn-taking SUPPRESS 89/11 @ −15.98 (best ok-rate), Dawn WER 0.173 / deletion 0.088 ≈ v9. Lost: **on the deployment reverberation range it is 0.024 WER worse than v8**, paired on identical utterances, 95% CI [+0.008, +0.041]; turn-taking KEEP violations 6 → 10; in-domain +7.56 (v8 +7.99, v9 +8.10); extreme-reverb back to +0.017 (v9 −0.003). On BUT-OFFICE it reads −0.004 vs v8's −0.024, but that set cannot resolve either number (both intervals span zero at n=200) — it is a monitor, not the gate. The cold-start gain is confined to 200 cm. **Not a deployment candidate** — kept as the cold-start reference and a warm-start point |
+| `dpcrn_v16_ep19.ckpt` | `config/exp/train_dpcrn_v16_lengthmix.yaml` | v8 | length schedule: per-batch row length drawn from {3, 6, 12, 30 s} (chapter corpus + real-pool stitching, no zero padding) | field block protocol: keep-violation severity better than v8, session suppression shallower (block −9.73 vs v8 −11.78 dB); Azure WER: lowest deletion of any version on all four sets (Dawn 0.198 vs v8 0.226). Deployment candidate for ASR use; `dpcrn_v8` stays default for suppression depth. |
+
+> **Rounds v13–v18 (2026-08/09) that did not become a shipped version.** Their configs stay under
+> `config/exp/` and their verdicts under `benchmarks/probes/` and `benchmarks/field_test_vector/`:
+> v13 inter-LSTM→Mamba (re-init debt on the last curriculum rung), v14 zero-init parallel Mamba
+> branch (`v14_VERDICT.md`, no gain beyond a free `dry_blend` knob), v15 30 s-only rows (starves
+> scene variety), v17 room-audio lead-in (`v17_round_design.md`; cold start is a missing room
+> reference and is fixed on the deployment side, not by training), v18 loss floors
+> (`v18_VERDICT.md`; the relative inactive-SDR mode caps the suppression incentive). Checkpoints
+> for these live only in `exp/`.
 
 > **On the reverberant-office numbers above.** Every `reverberant-office WER` figure in this
 > table (v7 −0.024, v8 −0.024, v9 −0.050, v10 −0.004) comes from a 200-utterance set whose
@@ -152,6 +162,7 @@ Earlier logs and reports use the pre-versioning names:
 | `dpcrn_realism_0729_ep19.ckpt` | `dpcrn_v8.ckpt` |
 | `dpcrn_drrcontrast_ep19.ckpt` | `dpcrn_v9.ckpt` |
 | `dpcrn_coldstart_ep39.ckpt` | `dpcrn_v10.ckpt` |
+| `exp/dpcrn_v16_lengthmix/epoch=19*.ckpt` | `dpcrn_v16_ep19.ckpt` |
 
 Training-run directories keep their original names (`exp/dpcrn_wide_antisup_0702`,
 `exp/dpcrn_realE2E_v2c_0722`, `exp/dpcrn_realism_0729`, …).

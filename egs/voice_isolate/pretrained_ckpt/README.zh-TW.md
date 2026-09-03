@@ -46,6 +46,13 @@ manifest 把這個值放在 `recommended_inference` 底下。
 | **`dpcrn_v8.ckpt`** | **`config/train_dpcrn.yaml`** | v7 | 合成中的量測式擷取真實化：噪音與語音卷積同一個房間、絕對 dBFS 麥克風底噪、部分合成混音的 SIR 取自場景幾何 | 真實遠場壓制 **−15.91 dB**，優於 v7 在同一批檔案上的 −13.72（排除洩漏子集為 −17.74 對 −15.68），且補平了 v7 距離響應中的 2–3 m 凹陷（−4.50 → −16.61）使分級單調；近場 keep 持平（0.00），最差個案有改善（−5.45 → −1.06）；Dawn WER 0.180 < 0.184 raw，deletion 0.094；reverberant-office WER −0.024 vs mix（兩種干擾者數量皆然）；turn-taking KEEP 6 違規；in-domain +7.99。代價：極端殘響監看上 +0.020 WER，而 v7 在此為中性（ep19，搭配 `dry_blend 0.9`） |
 | `dpcrn_v9.ckpt` | `config/exp/train_dpcrn_drrcontrast.yaml` | v8 | DRR 對比增強：每個新取出的 RIR 通道（機率 0.4）重縮殘響尾——前景通道 DRR 最多 +4 dB、遠場通道最多 −4 dB | ASR 閘最優工作點：reverberant-office WER **0.513，−0.050 vs mix**（v8 為 0.539、−0.024；兩種干擾者數量皆改善——1 itf 0.480、2 itf 0.576），**Dawn WER 0.172 / deletion 0.086**（皆為歷來版本最佳），極端殘響監看 **−0.003**（v8 的 +0.020 代價歸零），turn-taking KEEP 94/6，in-domain +8.10。代價：真實遠場壓制 −12.44 對 v8 的 −15.91（逐檔配對，24/71 檔淺 >3 dB）、turn-taking SUPPRESS 80/20 @ −13.43 對 v8 的 87/13 @ −16.14（ep19，搭配 `dry_blend 0.9`） |
 | `dpcrn_v10.ckpt` | `config/exp/train_dpcrn_coldstart.yaml` | v8 | 自我校準課程：讓部分訓練列在任何近場錨出現**之前**就以真實遠場獨白開場（列首遠場曝光 ~10% → ~23%、完全無錨的真實 lone-far 3% → 7.5%），教模型拿現場既有的任何參考——包含從第零幀就存在的噪音底——來校準 | **冷啟動軸動了，但部署閘門沒撐住**（ep39，完整關卡）。贏的部分：機器閒置時的遠場壓制 10 個孤立 clip 中 5 個跨過 −6 dB（v8 為 1、v9 為 2），並產生全集最深的單一結果；近場保留歷來最佳（最差 −0.34 dB）；turn-taking SUPPRESS 89/11 @ −15.98（ok 率最佳）；Dawn WER 0.173 / deletion 0.088 ≈ v9。輸的部分：**在部署殘響範圍上比 v8 差 0.024 WER**（同一批語句配對，95% CI [+0.008, +0.041]）；turn-taking KEEP 違規 6 → 10；in-domain +7.56（v8 +7.99、v9 +8.10）；極端殘響回到 +0.017（v9 −0.003）。在 BUT-OFFICE 上讀到 −0.004 對 v8 的 −0.024，但該集合分辨不出這兩個數字（n=200，兩個區間都跨過 0）——它是監看，不是閘門。冷啟動的增益侷限在 200 cm。**非部署候選**——留作冷啟動參考與 warm-start 起點 |
+| `dpcrn_v16_ep19.ckpt` | `config/exp/train_dpcrn_v16_lengthmix.yaml` | v8 | 長度排程：每個 batch 從 {3, 6, 12, 30 s} 抽一個列長（章節語料＋真實池接續，不補零） | field block 協定：keep 違規嚴重度優於 v8、session 壓制較淺（block −9.73 vs v8 −11.78 dB）；Azure WER：四集 deletion 全部最低（Dawn 0.198 vs v8 0.226）。ASR 用途的部署候選；壓制深度仍以 `dpcrn_v8` 為預設。 |
+
+> **v13–v18（2026-08/09）沒有鑄成版本的回合。**設定留在 `config/exp/`，判定寫在 `benchmarks/probes/`
+> 與 `benchmarks/field_test_vector/`：v13 inter-LSTM→Mamba（最後一階課程的重初始化債）、v14 零初始化並聯
+> Mamba 分支（`v14_VERDICT.md`，只多了一顆免費的 `dry_blend` 旋鈕）、v15 只用 30 s 列（場景多樣性被餓死）、
+> v17 房間音前導（`v17_round_design.md`；冷啟動是缺房間參照，要在部署端解不是訓練端）、v18 損失地板
+> （`v18_VERDICT.md`；relative inactive-SDR 封頂了壓制誘因）。這些 ckpt 只留在 `exp/`。
 
 > **關於上表的 reverberant-office 數字。** 表中每一個 `reverberant-office WER`（v7 −0.024、
 > v8 −0.024、v9 −0.050、v10 −0.004）都來自一個 200 句的集合，其 bootstrap 區間約 ±0.03。
@@ -145,6 +152,7 @@ symlink 到工作用的 volume，已 gitignore，保留每個 epoch）。各版�
 | `dpcrn_realism_0729_ep19.ckpt` | `dpcrn_v8.ckpt` |
 | `dpcrn_drrcontrast_ep19.ckpt` | `dpcrn_v9.ckpt` |
 | `dpcrn_coldstart_ep39.ckpt` | `dpcrn_v10.ckpt` |
+| `exp/dpcrn_v16_lengthmix/epoch=19*.ckpt` | `dpcrn_v16_ep19.ckpt` |
 
 訓練執行的目錄仍保留原本的名稱（`exp/dpcrn_wide_antisup_0702`、
 `exp/dpcrn_realE2E_v2c_0722`、`exp/dpcrn_realism_0729`、……）。
