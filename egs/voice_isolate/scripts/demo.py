@@ -17,6 +17,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from puresound.audio.io import AudioIO
+from puresound.inference import ModelZoo, load_model as load_inference_model
 from puresound.utils import create_folder, load_hparam
 
 
@@ -24,7 +25,7 @@ PYTORCH_CHECKPOINT_EXTENSIONS = (".ckpt", ".pt", ".pth")
 ONNX_CHECKPOINT_EXTENSIONS = (".onnx",)
 DEFAULT_CONFIG_PATH = "config/infer_dpcrn.yaml"
 MODEL_CACHE: dict[tuple[str, str, str], torch.nn.Module] = {}
-ORT_RUNTIME_CACHE: dict[tuple[str, str], Any] = {}
+ORT_RUNTIME_CACHE: dict[tuple[Any, ...], Any] = {}
 STT_CACHE: dict[tuple[str, str, str], Any] = {}
 Metrics = None
 LOGGER = logging.getLogger("voice_isolate_demo")
@@ -206,22 +207,102 @@ def get_cached_model(config_path: str | Path, checkpoint_path: str | Path) -> tu
 
 
 def get_cached_ort_runtime(onnx_path: str | Path, provider: str = "auto",
-                           collect_extras: bool = False):
+                           collect_extras: bool = False,
+                           postprocess_overrides: dict[str, Any] | None = None):
     from puresound.streaming import StreamingDparnOrt
 
     onnx_path = resolve_path(onnx_path)
     # collect_extras is part of the key: a gated run must not reuse a runtime
     # built without collection, which would silently hand back no logits.
-    cache_key = (str(onnx_path), provider, bool(collect_extras))
+    override_key = tuple(sorted((postprocess_overrides or {}).items()))
+    cache_key = (str(onnx_path), provider, bool(collect_extras), override_key)
     if cache_key not in ORT_RUNTIME_CACHE:
         LOGGER.info("ORT runtime cache miss for onnx=%s provider=%s", onnx_path, provider)
-        ORT_RUNTIME_CACHE[cache_key] = StreamingDparnOrt(
-            onnx_path=onnx_path, provider=provider, collect_extras=collect_extras)
+        runtime_kwargs = {
+            "onnx_path": onnx_path,
+            "provider": provider,
+            "collect_extras": collect_extras,
+        }
+        if postprocess_overrides:
+            runtime_kwargs["postprocess_overrides"] = postprocess_overrides
+        ORT_RUNTIME_CACHE[cache_key] = StreamingDparnOrt(**runtime_kwargs)
     else:
         LOGGER.info("ORT runtime cache hit for onnx=%s provider=%s", onnx_path, provider)
     runtime = ORT_RUNTIME_CACHE[cache_key]
     runtime.reset()
     return runtime
+
+
+def _zoo_voice_isolation_choices(backend: str) -> list[tuple[str, str]]:
+    """Return UI choices from the catalog, with the release default first."""
+    zoo = ModelZoo.default()
+    models = zoo.list(task="voice_isolation")
+    models.sort(key=lambda model: ("default" not in model.roles, model.id))
+    choices: list[tuple[str, str]] = []
+    if backend.lower().startswith("ort"):
+        for model in models:
+            for artifact in model.artifacts:
+                path = zoo.path_for(artifact.path)
+                if path.is_file():
+                    label = model.display_name
+                    if artifact.variant != "default":
+                        label = f"{label} [{artifact.variant}]"
+                    choices.append((label, str(path.resolve())))
+    else:
+        for model in models:
+            if not model.source_checkpoint:
+                continue
+            path = zoo.path_for(model.source_checkpoint)
+            if path.is_file():
+                choices.append((model.display_name, str(path.resolve())))
+    return choices
+
+
+def refresh_model_choices(config_path: str | Path, backend: str = "PyTorch offline"):
+    """Refresh demo choices from Model Zoo, retaining old scan as a fallback."""
+    try:
+        choices = _zoo_voice_isolation_choices(backend)
+    except Exception as exc:  # noqa: BLE001
+        LOGGER.warning("Model Zoo unavailable; falling back to work-folder scan: %s", exc)
+        try:
+            choices = scan_checkpoints(config_path, backend=backend)
+        except Exception:
+            choices = []
+    if not choices:
+        kind = "ONNX models" if backend.lower().startswith("ort") else "checkpoints"
+        return gr.update(choices=[], value=None), f"No {kind} registered in the Model Zoo."
+    return gr.update(choices=choices, value=choices[0][1]), f"Model Zoo: {len(choices)} {backend_artifact_name(backend)} choice(s)."
+
+
+def _catalog_model_for_path(path: str | Path):
+    try:
+        return ModelZoo.default().find_by_artifact(path)
+    except Exception:
+        return None
+
+
+def _catalog_model_for_ref(ref: str | Path):
+    """Resolve a logical id or an artifact path to a catalog entry."""
+    try:
+        zoo = ModelZoo.default()
+        try:
+            model = zoo.get(str(ref))
+            return model, zoo.resolve_artifact(model.id)
+        except KeyError:
+            return zoo.find_by_artifact(ref)
+    except Exception:
+        return None
+
+
+def model_default_dry_blend(ref: str | Path):
+    """Gradio update for the catalog's recommended post-processing preset."""
+    entry = _catalog_model_for_ref(ref)
+    if entry is None:
+        return gr.update()
+    model, artifact = entry
+    del artifact
+    value = model.recommended_inference.get("dry_blend")
+    return gr.update(value=float(value)) if value is not None else gr.update()
 
 
 def to_model_input(wav: torch.Tensor) -> torch.Tensor:
@@ -532,10 +613,25 @@ def enhance_audio(
         raise ValueError("Please select a checkpoint.")
 
     log_messages: list[str] = []
+    use_ort = backend.lower().startswith("ort")
+    catalog_ref = _catalog_model_for_ref(checkpoint_path) if use_ort else None
     report_progress("Loading config", log_messages, progress, 0.03)
-    config_path, recipe_root, config = load_demo_config(config_path)
+    try:
+        config_path, recipe_root, config = load_demo_config(config_path)
+    except Exception:
+        if not (use_ort and catalog_ref is not None):
+            raise
+        # Catalog-backed ONNX inference has its own audio contract.  Keep the
+        # config optional for API callers; output files fall back beside the
+        # input when no legacy recipe is available.
+        config_path = Path(str(config_path))
+        recipe_root = REPO_ROOT
+        config = {}
+        log_messages.append("Catalog-backed ORT run: legacy config unavailable; using Model Zoo metadata")
     dataset_config = config.get("dataset", {})
     target_sample_rate = dataset_config.get("target_sample_rate")
+    if target_sample_rate is None and catalog_ref is not None:
+        target_sample_rate = catalog_ref[0].sample_rate
     if target_sample_rate is None:
         raise ValueError("dataset.target_sample_rate must be set in the config.")
     target_sample_rate = int(target_sample_rate)
@@ -546,16 +642,45 @@ def enhance_audio(
         0.10,
     )
 
-    use_ort = backend.lower().startswith("ort")
+    if use_ort and catalog_ref is not None and Path(str(checkpoint_path)).suffix.lower() != ".onnx":
+        checkpoint_path = ModelZoo.default().artifact_path(catalog_ref[0].id, catalog_ref[1].variant)
     validate_backend_artifact(backend, checkpoint_path)
     report_progress("Loading checkpoint/model", log_messages, progress, 0.18)
     gate_probability = None
     head_probabilities: dict[str, np.ndarray] = {}
     gate_hop = 160
+    catalog_runtime = None
+    ort_override_applied = False
     if use_ort:
-        runtime = get_cached_ort_runtime(
-            checkpoint_path, provider=ort_provider,
-            collect_extras=gate_mode != "Off" or show_vad_heads)
+        catalog_entry = _catalog_model_for_path(checkpoint_path) or catalog_ref
+        if catalog_entry is not None:
+            model_spec, artifact_spec = catalog_entry
+            catalog_runtime = load_inference_model(
+                model_spec.id,
+                provider=ort_provider,
+                variant=artifact_spec.variant,
+            )
+            runtime = catalog_runtime
+            ort_override_applied = True
+        else:
+            runtime_kwargs: dict[str, Any] = {
+                "provider": ort_provider,
+                "collect_extras": gate_mode != "Off" or show_vad_heads,
+            }
+            if float(dry_blend) < 1.0:
+                runtime_kwargs["postprocess_overrides"] = {"dry_blend": float(dry_blend)}
+            try:
+                runtime = get_cached_ort_runtime(checkpoint_path, **runtime_kwargs)
+                ort_override_applied = "postprocess_overrides" in runtime_kwargs
+            except TypeError:
+                # Third-party callers/tests may still monkeypatch the old
+                # three-argument helper.  Keep that compatibility bridge while
+                # catalog-backed runs always use the facade above.
+                runtime = get_cached_ort_runtime(
+                    checkpoint_path,
+                    provider=ort_provider,
+                    collect_extras=gate_mode != "Off" or show_vad_heads,
+                )
         if show_vad_heads and not runtime.extra_names:
             raise ValueError(
                 f"Show VAD heads needs an ONNX graph that exports them; "
@@ -589,14 +714,34 @@ def enhance_audio(
             0.50,
         )
         samples = model_input.squeeze(0).detach().cpu().numpy()
-        enhanced_np = runtime.process_samples(samples)
-        enhanced_np = np.concatenate([enhanced_np, runtime.flush()])
+        if catalog_runtime is not None:
+            parameters: dict[str, Any] = {
+                "dry_blend": float(dry_blend),
+                "collect_extras": gate_mode != "Off" or show_vad_heads,
+            }
+            if float(spec_floor) > 0.0:
+                log_messages.append(
+                    "spec_floor applies to the PyTorch backend only; ignored for ORT streaming"
+                )
+            result = catalog_runtime.infer(
+                inputs={"audio": str(input_audio_path)}, parameters=parameters
+            )
+            enhanced_np = np.asarray(result.outputs["audio"], dtype=np.float32)
+            history = {
+                name: np.asarray(value, dtype=np.float32)
+                for name, value in result.outputs.items()
+                if name != "audio"
+            }
+            lead = int(result.metadata.get("streaming_delay_frames", 0))
+        else:
+            enhanced_np = runtime.process_samples(samples)
+            enhanced_np = np.concatenate([enhanced_np, runtime.flush()])
+            # Drain ONCE: drain_extras clears, so a second call would hand back
+            # nothing and silently blank whichever consumer ran second.
+            history = (runtime.drain_extras()
+                       if (gate_mode != "Off" or show_vad_heads) else {})
+            lead = int(runtime.manifest.get("streaming_delay_frames", 0))
         enhanced = torch.from_numpy(enhanced_np).view(1, -1).clamp(min=-1.0, max=1.0)
-        # Drain ONCE: drain_extras clears, so a second call would hand back
-        # nothing and silently blank whichever consumer ran second.
-        history = (runtime.drain_extras()
-                   if (gate_mode != "Off" or show_vad_heads) else {})
-        lead = int(runtime.manifest.get("streaming_delay_frames", 0))
         if show_vad_heads:
             gate_hop = runtime.hop_length
             for port, name in (("vad_logit", "near"),
@@ -639,7 +784,7 @@ def enhance_audio(
                 f"(threshold={float(gate_threshold):.2f}, hop={gate_hop}, "
                 f"logit lead={lead} frames compensated)"
             )
-        if dry_blend < 1.0:  # over-suppression relief (waveform-level; works on ORT)
+        if dry_blend < 1.0 and not ort_override_applied:  # legacy runtime bridge
             mix_ref = model_input.detach().cpu().view(1, -1)
             n = min(enhanced.shape[-1], mix_ref.shape[-1])
             enhanced[..., :n] = (
@@ -880,10 +1025,20 @@ def _ensure_runtime(session: dict[str, Any], onnx_path: str, provider: str):
     if not onnx_path:
         return None, "Select an ONNX streaming model first (Refresh model list)."
     try:
-        from puresound.streaming import StreamingDparnOrt
+        catalog_entry = _catalog_model_for_path(onnx_path)
+        if catalog_entry is not None:
+            model_spec, artifact_spec = catalog_entry
+            runtime = load_inference_model(
+                model_spec.id,
+                provider=provider,
+                variant=artifact_spec.variant,
+            )
+            runtime.reset()
+        else:
+            from puresound.streaming import StreamingDparnOrt
 
-        runtime = StreamingDparnOrt(onnx_path=resolve_path(onnx_path), provider=provider)
-        runtime.reset()
+            runtime = StreamingDparnOrt(onnx_path=resolve_path(onnx_path), provider=provider)
+            runtime.reset()
         session["runtime"] = runtime
         session["key"] = (str(onnx_path), provider)
         return runtime, None
@@ -1027,7 +1182,15 @@ def build_realtime_tab(default_config_path: str) -> None:
     with gr.Row():
         rt_refresh = gr.Button("Refresh model list")
         rt_provider = gr.Dropdown(label="ORT Provider", choices=["auto", "cpu", "cuda"], value="auto")
-    rt_onnx = gr.Dropdown(label="ONNX Streaming Model", choices=[], value=None)
+    try:
+        rt_initial_choices = _zoo_voice_isolation_choices("ORT streaming")
+    except Exception:
+        rt_initial_choices = []
+    rt_onnx = gr.Dropdown(
+        label="ONNX Streaming Model",
+        choices=rt_initial_choices,
+        value=rt_initial_choices[0][1] if rt_initial_choices else None,
+    )
     with gr.Group():
         stt_enabled = gr.Checkbox(label="Enable realtime STT", value=False)
         with gr.Row():
@@ -1073,7 +1236,7 @@ def build_realtime_tab(default_config_path: str) -> None:
     rt_status = gr.Textbox(label="Status", lines=2)
 
     rt_refresh.click(
-        lambda cp: refresh_checkpoints(cp, "ORT streaming"),
+        lambda cp: refresh_model_choices(cp, "ORT streaming"),
         inputs=[rt_config],
         outputs=[rt_onnx, rt_status],
     )
@@ -1119,7 +1282,15 @@ def build_offline_tab(default_config_path: str) -> None:
             value="PyTorch offline",
         )
         refresh_button = gr.Button("Refresh model list")
-        checkpoint = gr.Dropdown(label="Checkpoint / ONNX Model", choices=[], value=None)
+        try:
+            initial_choices = _zoo_voice_isolation_choices("PyTorch offline")
+        except Exception:
+            initial_choices = []
+        checkpoint = gr.Dropdown(
+            label="Checkpoint / ONNX Model",
+            choices=initial_choices,
+            value=initial_choices[0][1] if initial_choices else None,
+        )
         ort_provider = gr.Dropdown(
             label="ORT Provider",
             choices=["auto", "cpu", "cuda"],
@@ -1130,9 +1301,10 @@ def build_offline_tab(default_config_path: str) -> None:
             minimum=0.5,
             maximum=1.0,
             step=0.05,
-            value=1.0,
+            value=0.9,
             info=(
-                "out = a*enhanced + (1-a)*input. 1.0 = off (default). Lower "
+                "out = a*enhanced + (1-a)*input. The catalog release preset is "
+                "0.9; 1.0 turns blending off. Lower "
                 "values blend the original mix back to recover deleted speech "
                 "(trades a little interferer leakage for fewer deletions)."
             ),
@@ -1228,8 +1400,9 @@ def build_offline_tab(default_config_path: str) -> None:
         )
         status = gr.Textbox(label="Status", lines=4)
 
-        refresh_button.click(refresh_checkpoints, inputs=[config_path, backend], outputs=[checkpoint, status])
-        backend.change(refresh_checkpoints, inputs=[config_path, backend], outputs=[checkpoint, status])
+        refresh_button.click(refresh_model_choices, inputs=[config_path, backend], outputs=[checkpoint, status])
+        backend.change(refresh_model_choices, inputs=[config_path, backend], outputs=[checkpoint, status])
+        checkpoint.change(model_default_dry_blend, inputs=[checkpoint], outputs=[dry_blend])
         run_button.click(
             run_demo_inference,
             inputs=[

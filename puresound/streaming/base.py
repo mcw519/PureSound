@@ -31,7 +31,7 @@ import json
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Sequence
+from typing import Any, Callable, Mapping, Sequence
 
 import numpy as np
 import torch
@@ -342,14 +342,22 @@ class StreamingOrt:
         manifest_path: str | Path | None = None,
         provider: str = "auto",
         collect_extras: bool = False,
+        postprocess_overrides: Mapping[str, Any] | None = None,
+        session: Any | None = None,
     ):
-        import onnxruntime
-
         self.onnx_path = Path(onnx_path)
         self.manifest_path = Path(manifest_path) if manifest_path else self.onnx_path.with_suffix(".json")
         self.manifest = json.loads(self.manifest_path.read_text(encoding="utf-8"))
-        providers = self._resolve_providers(provider, onnxruntime.get_available_providers())
-        self.session = onnxruntime.InferenceSession(str(self.onnx_path), providers=providers)
+        if session is None:
+            import onnxruntime
+
+            providers = self._resolve_providers(
+                provider, onnxruntime.get_available_providers()
+            )
+            session = onnxruntime.InferenceSession(
+                str(self.onnx_path), providers=providers
+            )
+        self.session = session
         self.providers = self.session.get_providers()
         self.sample_rate = int(self.manifest["sample_rate"])
         self.fft_length = int(self.manifest["fft_length"])
@@ -371,7 +379,22 @@ class StreamingOrt:
         # An absent section means no relief -- the documented convention, and the
         # same thing `Postprocessor()` defaults to. `dpcrn_v6` is the one shipped
         # export without it.
-        postprocess = self.manifest.get(Postprocessor.MANIFEST_KEY) or {}
+        postprocess = dict(self.manifest.get(Postprocessor.MANIFEST_KEY) or {})
+        if postprocess_overrides:
+            unknown = set(postprocess_overrides) - {"dry_blend", "spec_floor"}
+            if unknown:
+                raise ValueError(
+                    "unsupported postprocess override(s): "
+                    + ", ".join(sorted(unknown))
+                )
+            # Request values replace sidecar defaults.  They are applied here,
+            # before the streaming loop starts, so a dry blend is never
+            # post-processed a second time by a caller.
+            postprocess.update(dict(postprocess_overrides))
+            # The sidecar prose describes its original defaults; do not expose
+            # stale text after a request replaces them.
+            postprocess.pop("note", None)
+        self.postprocess = dict(postprocess)
         spec_floor = float(postprocess.get("spec_floor", 0.0))
         if spec_floor > 0.0:
             raise ValueError(

@@ -46,6 +46,9 @@ dependencies = [
   "faster-whisper>=1.2.1",
 ]
 
+[project.scripts]
+puresound = "puresound.cli:main"
+
 [project.optional-dependencies]
 hybrid-rir = [
   "pyroomacoustics",
