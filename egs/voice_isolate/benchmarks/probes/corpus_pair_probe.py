@@ -149,13 +149,18 @@ def notsofar_pairs(max_per_session):
 DEVICE = "cpu"
 
 
-def load_model(ckpt):
+def load_model(ckpt, recipe="config/exp/train_dpcrn_v11_presence.yaml"):
     from puresound.config import load_recipe
     from puresound.recipes import init_siso_model
-    model = init_siso_model(load_recipe("config/exp/train_dpcrn_v11_presence.yaml",
+    model = init_siso_model(load_recipe(recipe,
                                         expected_task="voice_isolation",
                                         expected_purpose="train").model)
-    model.load_state_dict(torch.load(ckpt, map_location="cpu")["state_dict"], strict=False)
+    # A silently dropped inter block would fake a verdict: missing model-side
+    # keys are fatal; extra ckpt-side keys (training aux) are fine.
+    missing, _ = model.load_state_dict(
+        torch.load(ckpt, map_location="cpu")["state_dict"], strict=False)
+    if missing:
+        raise RuntimeError(f"recipe/ckpt mismatch, missing: {missing[:6]}")
     return model.eval().to(DEVICE)
 
 
@@ -182,6 +187,8 @@ def main():
     ap.add_argument("--corpus", required=True, choices=["dipco", "ami", "notsofar"])
     ap.add_argument("--ckpt", action="append", required=True, metavar="NAME=PATH")
     ap.add_argument("--max-per-session", type=int, default=15)
+    ap.add_argument("--recipe", default="config/exp/train_dpcrn_v11_presence.yaml",
+                    help="recipe that matches the ckpt architecture")
     ap.add_argument("--device", default="cpu", help="cpu or cuda:N")
     args = ap.parse_args()
 
@@ -193,7 +200,7 @@ def main():
 
     for spec in args.ckpt:
         name, _, path = spec.partition("=")
-        model = load_model(path)
+        model = load_model(path, args.recipe)
         rows = []
         for tag, cp, ct0, ct1, fp, ft0, ft1 in pairs:
             lc, dc = readout(model, cp, ct0, ct1)

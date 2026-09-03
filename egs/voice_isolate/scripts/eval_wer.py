@@ -40,7 +40,7 @@ def main():
     ap.add_argument("--set-dir", default="data_report/but_wer_set")
     ap.add_argument("--device", default="cpu"); ap.add_argument("--asr-model", default="small")
     ap.add_argument("--asr", default="auto",
-                    choices=["auto", "faster-whisper", "openai-whisper", "azure"],
+                    choices=["auto", "faster-whisper", "openai-whisper", "azure", "azure-once"],
                     help="ASR backend. auto=faster-whisper>openai-whisper (local). "
                          "azure needs SPEECH_KEY+SPEECH_REGION env. --asr-model is the whisper "
                          "size (e.g. small / large-v3); ignored by azure.")

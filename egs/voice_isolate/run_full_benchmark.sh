@@ -22,6 +22,23 @@ if [ -n "$READOUT" ]; then
   GATE_ARGS="--presence-gate $READOUT ${GATE_EXTRA:-}"
   GATE_TAG="$(basename "$READOUT")${GATE_EXTRA:+ $GATE_EXTRA}"
 fi
+# Recipes the stages build their models from. Override them when the checkpoint's
+# backbone is NOT the shipped LSTM -- scripts/make_arch_eval_configs.py writes a
+# matching set from the training recipe, and stage 0 refuses to run if any of them
+# would silently drop trained weights:
+#   CFG_DIR=$(mktemp -d); uv run python scripts/make_arch_eval_configs.py \
+#     --from config/exp/train_dpcrn_v14_mambaparallel.yaml --out-dir "$CFG_DIR"
+#   CFG_INFER=$CFG_DIR/infer_dpcrn.yaml CFG_INDOMAIN=$CFG_DIR/eval_indomain_phase1.yaml \
+#   CFG_PROBE=$CFG_DIR/eval_targetabsent_probe.yaml CFG_PROBE_HIGH=$CFG_DIR/eval_targetabsent_probe_high.yaml \
+#   CFG_PROBE_BND=$CFG_DIR/eval_targetabsent_probe_boundary.yaml CFG_WER=$CFG_DIR/eval_but_real.yaml \
+#   bash run_full_benchmark.sh <ckpt> <tag>
+CFG_INFER="${CFG_INFER:-config/infer_dpcrn.yaml}"
+CFG_INDOMAIN="${CFG_INDOMAIN:-config/exp/eval_indomain_phase1.yaml}"
+CFG_PROBE="${CFG_PROBE:-config/exp/eval_targetabsent_probe.yaml}"
+CFG_PROBE_HIGH="${CFG_PROBE_HIGH:-config/exp/eval_targetabsent_probe_high.yaml}"
+CFG_PROBE_BND="${CFG_PROBE_BND:-config/exp/eval_targetabsent_probe_boundary.yaml}"
+CFG_WER="${CFG_WER:-config/exp/eval_but_real.yaml}"
+
 SD="${BENCH_SD:-${TMPDIR:-/tmp}}"
 OUT="$SD/bench_$TAG"; mkdir -p "$OUT"
 
@@ -41,31 +58,51 @@ say(){ echo "[bench $(date +%H:%M:%S)] $*"; }
 # are scored in a single pass. The 134.8 s 90D session needs expandable_segments on
 # a 24 GB card. 1_scorecard.log is kept as a symlink-free copy of the same output so
 # older summary greps still find their file.
+say "0/9 preflight: every stage's recipe must load this checkpoint WHOLE"
+uv run python scripts/preflight_ckpt_recipe.py --ckpt "$CKPT" \
+  "$CFG_INFER" "$CFG_INDOMAIN" "$CFG_PROBE" "$CFG_PROBE_HIGH" "$CFG_PROBE_BND" "$CFG_WER" \
+  > "$OUT/0_preflight.log" 2>&1
+if [ $? -ne 0 ]; then cat "$OUT/0_preflight.log"; echo "ABORTED before stage 1."; exit 1; fi
+cat "$OUT/0_preflight.log"
+
 say "1/9 real-clip scorecard (voicebot gate): field benchmark incl. cross-chain reference"
 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True \
-uv run python scripts/eval_realcase.py config/infer_dpcrn.yaml \
+uv run python scripts/eval_realcase.py "$CFG_INFER" \
   --ckpt "$CKPT" --cases-dir data_report/field_cases/test_vector_cases --device "$DEV" \
   --dry-blend "$BLEND" $GATE_ARGS > "$OUT/1_scorecard_field.log" 2>&1
 cp "$OUT/1_scorecard_field.log" "$OUT/1_scorecard.log"
 
+# Stage 1b (optional): the BLOCK protocol over the whole field set. Single-checkpoint
+# field numbers sit inside the same-run epoch noise band (COLDSTART_V2.md); pass the
+# run's last five checkpoints via BLOCK_CKPTS="a.ckpt b.ckpt ..." and this scores them
+# all with scripts/eval_field_block.py (block means, per-ckpt spread, ambient lead-in
+# on cold-start clips). Compare two blocks with `eval_field_block.py compare`.
+if [ -n "${BLOCK_CKPTS:-}" ]; then
+  say "1b/9 field BLOCK protocol (${BLOCK_CKPTS})"
+  PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True \
+  uv run python scripts/eval_field_block.py score "$CFG_INFER" \
+    $(for c in $BLOCK_CKPTS; do printf -- "--ckpt %s " "$c"; done) \
+    --tag "$TAG" --out "$OUT/1b_field_block.json" --device "$DEV" > "$OUT/1b_field_block.log" 2>&1
+fi
+
 say "2/9 in-domain SI-SDRi + buckets + solo-leakage (phase1 bank)"
-uv run python scripts/eval_indomain.py config/exp/eval_indomain_phase1.yaml \
+uv run python scripts/eval_indomain.py "$CFG_INDOMAIN" \
   --ckpt "$CKPT" --device "$DEV" --n-batches 80 --by-bucket --dump-distribution $GATE_ARGS > "$OUT/2_indomain.log" 2>&1
 
 say "3/9 synthetic far-only probe (expand bank, seen distances)"
-uv run python scripts/eval_indomain.py config/exp/eval_targetabsent_probe.yaml \
+uv run python scripts/eval_indomain.py "$CFG_PROBE" \
   --ckpt "$CKPT" --device "$DEV" --n-batches 60 --by-bucket $GATE_ARGS > "$OUT/3_probe_expand.log" 2>&1
 
 say "4/9 synthetic far-only probe (high bank rt60 0.85-1.5, UNSEEN reverb)"
-uv run python scripts/eval_indomain.py config/exp/eval_targetabsent_probe_high.yaml \
+uv run python scripts/eval_indomain.py "$CFG_PROBE_HIGH" \
   --ckpt "$CKPT" --device "$DEV" --n-batches 60 --by-bucket $GATE_ARGS > "$OUT/4_probe_high.log" 2>&1
 
 say "5/9 synthetic far-only probe (boundary held-out, UNSEEN boundary distances)"
-uv run python scripts/eval_indomain.py config/exp/eval_targetabsent_probe_boundary.yaml \
+uv run python scripts/eval_indomain.py "$CFG_PROBE_BND" \
   --ckpt "$CKPT" --device "$DEV" --n-batches 60 --by-bucket $GATE_ARGS > "$OUT/5_probe_boundary.log" 2>&1
 
 say "6/9 Dawn Chorus real WER (over-suppression deletion guardrail; $ASR/$ASR_MODEL)"
-uv run python scripts/eval_dawn_chorus.py config/infer_dpcrn.yaml \
+uv run python scripts/eval_dawn_chorus.py "$CFG_INFER" \
   --ckpt "$CKPT" --device "$DEV" --asr "$ASR" --asr-model "$ASR_MODEL" \
   --dry-blend "$BLEND" $GATE_ARGS > "$OUT/6_dawn_wer.log" 2>&1
 
@@ -75,17 +112,17 @@ uv run python scripts/eval_dawn_chorus.py config/infer_dpcrn.yaml \
 # is kept as a monitor, not a gate: at n=200 nothing we have is distinguishable from
 # doing nothing on it (see benchmarks/wer_sets/README.md).
 say "7a/9 moderate-reverb WER (PRIMARY deployment gate, RT60 0.20-0.65; $ASR/$ASR_MODEL)"
-uv run python scripts/eval_wer.py config/exp/eval_but_real.yaml \
+uv run python scripts/eval_wer.py "$CFG_WER" \
   --ckpt "$CKPT" --set-dir data_report/wer_set_moderate_test --device "$DEV" \
   --asr "$ASR" --asr-model "$ASR_MODEL" --dry-blend "$BLEND" $GATE_ARGS > "$OUT/7a_moderate_wer.log" 2>&1
 
 say "7b/9 BUT-OFFICE real-RIR WER (measured-RIR MONITOR, RT30 0.56-0.69; $ASR/$ASR_MODEL)"
-uv run python scripts/eval_wer.py config/exp/eval_but_real.yaml \
+uv run python scripts/eval_wer.py "$CFG_WER" \
   --ckpt "$CKPT" --set-dir data_report/but_wer_set_office --device "$DEV" \
   --asr "$ASR" --asr-model "$ASR_MODEL" --dry-blend "$BLEND" $GATE_ARGS > "$OUT/7_but_office_wer.log" 2>&1
 
 say "8/9 BUT high/extreme-reverb WER (secondary extreme-OOD do-no-harm MONITOR, RT30 1.15-1.84; $ASR/$ASR_MODEL)"
-uv run python scripts/eval_wer.py config/exp/eval_but_real.yaml \
+uv run python scripts/eval_wer.py "$CFG_WER" \
   --ckpt "$CKPT" --set-dir data_report/but_wer_set --device "$DEV" \
   --asr "$ASR" --asr-model "$ASR_MODEL" --dry-blend "$BLEND" $GATE_ARGS > "$OUT/8_but_reverb_wer.log" 2>&1
 
@@ -94,7 +131,7 @@ uv run python scripts/eval_wer.py config/exp/eval_but_real.yaml \
 #   scripts/build_turntaking_set.py ... --rir-folder exp/but_real_rir_16k_office
 TT_SET="${TT_SET:-/data/audio/eval_noisy_data/turntaking_set_realrir}"
 say "9/9 real-RIR turn-taking scorecard (KEEP near / SUPPRESS far-solo; $TT_SET)"
-uv run python scripts/eval_turntaking.py config/infer_dpcrn.yaml \
+uv run python scripts/eval_turntaking.py "$CFG_INFER" \
   --ckpt "$CKPT" --set-dir "$TT_SET" --device "$DEV" \
   --dry-blend "$BLEND" $GATE_ARGS > "$OUT/9_turntaking.log" 2>&1
 

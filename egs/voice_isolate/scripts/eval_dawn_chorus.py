@@ -161,7 +161,7 @@ def init_asr(backend: str, model_size: str, device: str):
         except ImportError:
             if backend == "openai-whisper":
                 raise
-    if backend == "azure":
+    if backend in ("azure", "azure-once"):
         import os
         try:
             import azure.cognitiveservices.speech as speechsdk
@@ -182,6 +182,21 @@ def init_asr(backend: str, model_size: str, device: str):
         speech_config.speech_recognition_language = os.environ.get("SPEECH_LANG", "en-US")
         # model_size is ignored for Azure (cloud model); device is irrelevant.
 
+        # "azure-once" = recognize_once(): ONE result, and the service stops at the
+        # first end-of-speech it detects. Measured on the moderate WER set: 65% of the
+        # deletions on the UNPROCESSED mix sit in the last third of the utterance
+        # (uniform would be 33%), so a pause or a suppressed stretch truncates the
+        # tail and inflates deletion for mix and enhanced alike. "azure" (default)
+        # runs continuous recognition over the whole pushed buffer and concatenates
+        # every Recognized segment -- the number an ASR downstream would actually see.
+        once = backend == "azure-once"
+        if not once:
+            # do not end the utterance on a mid-sentence pause; the clips are <= 10 s
+            speech_config.set_property(
+                speechsdk.PropertyId.Speech_SegmentationSilenceTimeoutMs, "2000")
+            speech_config.set_property(
+                speechsdk.PropertyId.SpeechServiceConnection_InitialSilenceTimeoutMs, "10000")
+
         def transcribe(wav: np.ndarray, sr: int) -> str:
             # float32 [-1,1] -> 16-bit little-endian PCM, fed via a push stream
             pcm = (np.clip(wav, -1.0, 1.0) * 32767.0).astype("<i2").tobytes()
@@ -195,13 +210,25 @@ def init_asr(backend: str, model_size: str, device: str):
             )
             stream.write(pcm)
             stream.close()
-            result = recognizer.recognize_once()
-            # display form (ITN/punct/caps) -> downstream EnglishTextNormalizer canonicalises it
-            if result.reason == speechsdk.ResultReason.RecognizedSpeech:
-                return result.text
-            return ""  # NoMatch / silence -> empty hyp
+            if once:
+                result = recognizer.recognize_once()
+                # display form (ITN/punct/caps) -> downstream EnglishTextNormalizer canonicalises it
+                if result.reason == speechsdk.ResultReason.RecognizedSpeech:
+                    return result.text
+                return ""  # NoMatch / silence -> empty hyp
+            import threading
+            parts, done = [], threading.Event()
+            recognizer.recognized.connect(
+                lambda evt: parts.append(evt.result.text)
+                if evt.result.reason == speechsdk.ResultReason.RecognizedSpeech else None)
+            recognizer.session_stopped.connect(lambda evt: done.set())
+            recognizer.canceled.connect(lambda evt: done.set())
+            recognizer.start_continuous_recognition()
+            done.wait(timeout=60.0)
+            recognizer.stop_continuous_recognition()
+            return " ".join(t for t in parts if t)
 
-        return f"azure/{region}", transcribe
+        return (f"azure-once/{region}" if once else f"azure/{region}"), transcribe
     return None, None
 
 

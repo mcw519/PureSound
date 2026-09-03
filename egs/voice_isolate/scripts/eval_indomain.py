@@ -90,7 +90,8 @@ def _solo_leakage_db(noisy, enh, clean, far, frame=512, hop=256,
 
 # mix_mode float codes -> names (mirror puresound/task/voice_isolation.py).
 MIX_MODE_NAMES = {0.0: "none", 1.0: "legacy", 2.0: "physical",
-                  3.0: "moderate", 4.0: "counter_level"}
+                  3.0: "moderate", 4.0: "counter_level",
+                  5.0: "distance_level"}
 _META_KEYS = ("drr_gap", "foreground_distance", "rt60", "n_interferers",
               "near_count", "far_count", "overlap_fraction", "mix_mode",
               "realized_speech_sir", "noise_snr",
@@ -131,19 +132,27 @@ def _as_int_label(value):
     return None if value is None else str(int(round(value)))
 
 
-def _report_buckets(title, rows, key_of, val_key="sisdri"):
+def _report_buckets(title, rows, key_of, val_key="sisdri", absolute=False):
     groups = defaultdict(list)
     for row in rows:
         k = key_of(row)
         if k is not None and row.get(val_key) is not None:
-            groups[k].append(row[val_key])
+            groups[k].append(row)
     if not groups:
         return
     print(f"  -- by {title} --")
     for k in sorted(groups, key=str):
-        v = groups[k]
-        print(f"     {str(k):16s} n={len(v):4d}  "
-              f"median={st.median(v):+6.2f}  mean={st.mean(v):+6.2f}")
+        g = groups[k]
+        v = [r[val_key] for r in g]
+        line = (f"     {str(k):16s} n={len(g):4d}  "
+                f"median={st.median(v):+6.2f}  mean={st.mean(v):+6.2f}")
+        # A delta metric compresses wherever the input is already clean, so a
+        # low SI-SDRi bucket is not by itself a weak bucket. Print the absolute
+        # endpoints too, and the comparison stops being a headroom artifact.
+        if absolute and all(r.get("mix") is not None for r in g):
+            line += (f"   [mix {st.median([r['mix'] for r in g]):+6.2f}"
+                     f" -> enh {st.median([r['enh'] for r in g]):+6.2f}]")
+        print(line)
 
 
 def main():
@@ -350,7 +359,8 @@ def main():
         print("aggregate median: easy buckets can hide damage on hard ones")
         _report_buckets("composition (near+far)", rows, lambda r: (
             None if r.get("near_count") is None or r.get("far_count") is None
-            else f"{int(r['near_count'])}N+{int(r['far_count'])}F"))
+            else f"{int(r['near_count'])}N+{int(r['far_count'])}F"),
+            absolute=True)
         _report_buckets("far_count", rows, lambda r: (
             None if r.get("far_count") is None else int(r["far_count"])))
         _report_buckets("mix_mode", rows,
