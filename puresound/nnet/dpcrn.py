@@ -52,19 +52,34 @@ class DPRNNblock2D(nn.Module):
         )
         self.intra_norm = nn.LayerNorm(input_size)
 
-        # inter(-time) path: "lstm" is the shipped default; "mamba" swaps in a
-        # selective-state-space block at matched parameter budget -- the P1
-        # experiment for long-context memory (see lobe/ssm.py).
-        if inter_type == "lstm":
+        # inter(-time) path. "lstm" is the shipped default. "mamba" REPLACES it
+        # with a selective-state-space block at matched parameter budget -- and
+        # a replacement re-initialises the network's only context carrier, which
+        # the v13 round measured as the dominant cost (a from-scratch LSTM on the
+        # same recipe scores worse than the swap did). "lstm+mamba" keeps the
+        # trained LSTM and adds the SSM as a parallel branch whose output
+        # projection starts at zero: the sum equals the LSTM alone at step 0, so
+        # a warm start carries no re-initialisation debt and the SSM can only
+        # earn its way in. See lobe/ssm.py.
+        self.inter_ssm = None
+        if inter_type in ("lstm", "lstm+mamba"):
             self.inter_rnn = SingleRNN(
                 "LSTM", input_size, hidden_size, bidirectional=False, dropout=dropout
             )
+            if inter_type == "lstm+mamba":
+                self.inter_ssm = MambaInter(
+                    d_model=input_size, dropout=dropout, zero_init_out=True,
+                    **(mamba_args or {})
+                )
         elif inter_type == "mamba":
             self.inter_rnn = MambaInter(
                 d_model=input_size, dropout=dropout, **(mamba_args or {})
             )
         else:
-            raise ValueError(f"inter_type must be 'lstm' or 'mamba', got {inter_type!r}")
+            raise ValueError(
+                "inter_type must be 'lstm', 'mamba' or 'lstm+mamba', "
+                f"got {inter_type!r}"
+            )
         self.inter_norm = nn.LayerNorm(input_size)
 
     def forward(
@@ -121,7 +136,10 @@ class DPRNNblock2D(nn.Module):
         x = x.permute(0, 2, 3, 1).reshape(
             N * C, T, -1
         )  # [N, CH, C, T] -> [N, C, T, CH] -> [N*C, T, CH]
-        x = self.inter_rnn(x.permute(0, 2, 1))  # [N*C, T, CH] -> [N*C, CH, T]
+        x_inter = x.permute(0, 2, 1)  # [N*C, T, CH] -> [N*C, CH, T]
+        x = self.inter_rnn(x_inter)
+        if self.inter_ssm is not None:
+            x = x + self.inter_ssm(x_inter)
         x = x.permute(0, 2, 1)  # [N*C, CH, T] -> [N*C, T, CH]
         x = self.inter_norm(x)
         x = x.permute(0, 2, 1)

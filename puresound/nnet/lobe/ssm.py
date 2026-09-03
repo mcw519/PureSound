@@ -61,6 +61,10 @@ class MambaInter(nn.Module):
     Width defaults (d_state 16, d_conv 4, expand 2) put the parameter count at
     ~116k for d_model 128 against the SingleRNN(LSTM 96)+proj's ~99k, so a
     swap is a like-for-like capacity trade, not a hidden size increase.
+
+    `zero_init_out` zeroes the output projection, which is what makes the
+    parallel-branch mode (DPRNNblock2D inter_type "lstm+mamba") a no-op at
+    initialisation instead of a re-initialisation.
     """
 
     def __init__(
@@ -74,6 +78,7 @@ class MambaInter(nn.Module):
         dt_min: float = 0.001,
         dt_max: float = 0.1,
         dt_init_floor: float = 1e-4,
+        zero_init_out: bool = False,
     ):
         super().__init__()
         self.d_model = d_model
@@ -104,6 +109,14 @@ class MambaInter(nn.Module):
         dt = dt.clamp(min=dt_init_floor)
         with torch.no_grad():
             self.dt_proj.bias.copy_(dt + torch.log(-torch.expm1(-dt)))
+            # Zero output projection: the block emits exactly 0 until training
+            # moves out_proj, so adding it as a parallel branch to an already
+            # trained path leaves that path's output bit-identical at step 0.
+            # Nothing else can be zeroed for this -- the inner parameters only
+            # start receiving gradient once out_proj is non-zero, which is the
+            # intended wake-up order.
+            if zero_init_out:
+                self.out_proj.weight.zero_()
 
     # ------------------------------------------------------------------ #
 

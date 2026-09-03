@@ -134,3 +134,63 @@ def test_checkpointed_grads_match_plain_grads():
     g_plain = [p.grad.clone() for p in m.parameters()]
     for a, b in zip(g_ckpt, g_plain):
         assert torch.allclose(a, b, atol=1e-5), float((a - b).abs().max())
+
+
+# --------------------------------------------------------------------------- #
+# inter_type "lstm+mamba": the SSM as a zero-initialised parallel branch.
+# The point of the mode is that a warm start pays NO re-initialisation debt --
+# so the contract under test is "identical to LSTM-only at step 0", plus the
+# state-dict key layout that makes an LSTM checkpoint load into it untouched.
+# --------------------------------------------------------------------------- #
+
+def _dprnn_block(inter_type):
+    torch.manual_seed(7)
+    return DPRNNblock2D(input_size=32, hidden_size=24, inter_type=inter_type,
+                        mamba_args={"d_state": 8}, fused_type="FiLM").eval()
+
+
+def test_parallel_branch_is_a_noop_at_init():
+    lstm_only, parallel = _dprnn_block("lstm"), _dprnn_block("lstm+mamba")
+    parallel.load_state_dict(lstm_only.state_dict(), strict=False)
+    x = torch.randn(2, 32, 6, 40)                      # [N, CH, C, T]
+    with torch.no_grad():
+        a, b = lstm_only(x), parallel(x)
+    assert torch.equal(a, b), float((a - b).abs().max())
+
+
+def test_parallel_branch_only_adds_keys():
+    """An LSTM checkpoint must land in the parallel block with nothing missing
+    on the LSTM side -- otherwise the warm start silently randomises it."""
+    missing, unexpected = _dprnn_block("lstm+mamba").load_state_dict(
+        _dprnn_block("lstm").state_dict(), strict=False)
+    assert unexpected == []
+    assert missing and all(k.startswith("inter_ssm.") for k in missing)
+
+
+def test_parallel_branch_trains_out_of_zero():
+    p = _dprnn_block("lstm+mamba").train()
+    x = torch.randn(2, 32, 6, 40)
+    p(x).sum().backward()
+    # out_proj wakes up first; the inner parameters have zero gradient until it
+    # is non-zero. Both facts are load-bearing for the no-debt claim.
+    assert p.inter_ssm.out_proj.weight.grad.abs().max() > 0
+    assert p.inter_ssm.A_log.grad.abs().max() == 0
+
+
+def test_streaming_refuses_the_parallel_branch():
+    """Streaming would otherwise run the LSTM branch alone and export a model
+    that is not the one that was trained."""
+    from types import SimpleNamespace
+    from puresound.streaming.dpcrn import StreamingDpcrnFrameModel
+    net = DPCRN(input_dim=256, channels=[2, 8, 16, 32], rnn_hidden=24,
+                kernel_t=[2, 2, 2], stride_t=[1, 1, 1], dilation_t=[1, 1, 1],
+                kernel_f=[5, 3, 3], stride_f=[2, 2, 1], dilation_f=[1, 1, 1],
+                delay=[0, 0, 0], inter_type="lstm+mamba", mamba_args={"d_state": 8})
+    stub = SimpleNamespace(backbone=net, feats=None, mask_type="complex")
+    with pytest.raises(NotImplementedError, match=r"lstm\+mamba"):
+        StreamingDpcrnFrameModel(stub)
+
+
+def test_unknown_inter_type_still_rejected():
+    with pytest.raises(ValueError, match=r"lstm\+mamba"):
+        DPRNNblock2D(input_size=32, hidden_size=24, inter_type="gru", fused_type="FiLM")

@@ -189,6 +189,7 @@ class DynamicBaseDataset(torch.utils.data.Dataset):
         self.gating_vad_labeler = EnergyVADLabeler(
             frame_length=cfg.args.get("frame_length", cfg.frame_length),
             hop_length=cfg.args.get("hop_length", cfg.hop_length),
+            eps_mode=cfg.args.get("eps_mode", "absolute"),
         )
 
         if cfg.backend == "silero":
@@ -214,7 +215,16 @@ class DynamicBaseDataset(torch.utils.data.Dataset):
 
     @property
     def sample_length(self) -> int:
-        """Training crop length in samples, at ``audio_sr``."""
+        """Training crop length in samples, at ``audio_sr``.
+
+        A length-schedule batch overrides it per item (set at the top of
+        ``__getitem__``, cleared on every item so a stale value cannot leak into
+        the next one; each DataLoader worker owns its own dataset copy and
+        synthesises one item at a time, so the attribute is not shared).
+        """
+        override = getattr(self, "_row_length_override", None)
+        if override is not None:
+            return int(override)
         if self.training_sample_length is not None:
             return self.training_sample_length
         return int(self.ori_audio_sr * self.training_sample_length_in_seconds)

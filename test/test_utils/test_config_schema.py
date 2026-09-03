@@ -84,7 +84,9 @@ def test_every_active_config_loads(rel):
 
 
 def test_active_config_inventory_is_complete():
-    assert len(ACTIVE_CONFIGS) == 40
+    # Bumped whenever config/exp gains a recipe -- the point is that a new
+    # experiment recipe is acknowledged, not that the number is stable.
+    assert len(ACTIVE_CONFIGS) == 45
 
 
 def test_the_default_recipe_still_builds_its_model():

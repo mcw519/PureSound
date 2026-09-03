@@ -9,7 +9,7 @@ import torch.nn.functional as F
 from torch.autograd import Function
 
 
-def stft(x, fft_size, hop_size, win_length, window):
+def stft(x, fft_size, hop_size, win_length, window, power_floor=1e-8, relative_floor=False):
     """Perform STFT and convert to magnitude spectrogram.
     Args:
         x (Tensor): Input signal tensor (B, T).
@@ -17,17 +17,29 @@ def stft(x, fft_size, hop_size, win_length, window):
         hop_size (int): Hop size.
         win_length (int): Window length.
         window (str): Window function type.
+        power_floor (float): the clamp on |X|^2. The historical 1e-8 (magnitude 1e-4,
+            ~ -80 dB re a full-scale bin) is a GRADIENT floor: every bin below it is
+            invisible to both STFT terms. Measured on this recipe it pins 32% of a
+            -53 dBFS clean target's bins and most of a well-suppressed lone-far output
+            (v17 investigation, loss-physics report), so the terms go blind on quiet
+            speech and on rows the model has already handled.
+        relative_floor (bool): if True, ``power_floor`` is a ratio to each row's own
+            peak bin power instead of an absolute value -- the floor then follows
+            the row's level, which is what a level-varying corpus needs.
     Returns:
         Tensor: Magnitude spectrogram (B, #frames, fft_size // 2 + 1).
     """
     x_stft = torch.stft(
         x, fft_size, hop_size, win_length, window.to(x.device), return_complex=True
     )
-    real = x_stft.real
-    imag = x_stft.imag
-
+    power = x_stft.real**2 + x_stft.imag**2
+    if relative_floor:
+        peak = power.amax(dim=(-2, -1), keepdim=True).clamp_min(1e-20)
+        floor = peak * power_floor
+    else:
+        floor = power_floor
     # NOTE(kan-bayashi): clamp is needed to avoid nan or inf
-    return torch.sqrt(torch.clamp(real**2 + imag**2, min=1e-8)).transpose(2, 1)
+    return torch.sqrt(torch.clamp(power, min=floor)).transpose(2, 1)
 
 
 def as_complex(x: torch.Tensor):
@@ -99,13 +111,16 @@ class STFTLoss(torch.nn.Module):
     """STFT loss module."""
 
     def __init__(
-        self, fft_size=1024, shift_size=120, win_length=600, window="hann_window"
+        self, fft_size=1024, shift_size=120, win_length=600, window="hann_window",
+        power_floor=1e-8, relative_floor=False,
     ):
         """Initialize STFT loss module."""
         super(STFTLoss, self).__init__()
         self.fft_size = fft_size
         self.shift_size = shift_size
         self.win_length = win_length
+        self.power_floor = float(power_floor)
+        self.relative_floor = bool(relative_floor)
         self.register_buffer("window", getattr(torch, window)(win_length))
         self.spectral_convergenge_loss = SpectralConvergengeLoss()
         self.log_stft_magnitude_loss = LogSTFTMagnitudeLoss()
@@ -119,8 +134,10 @@ class STFTLoss(torch.nn.Module):
             Tensor: Spectral convergence loss value.
             Tensor: Log STFT magnitude loss value.
         """
-        x_mag = stft(x, self.fft_size, self.shift_size, self.win_length, self.window)
-        y_mag = stft(y, self.fft_size, self.shift_size, self.win_length, self.window)
+        x_mag = stft(x, self.fft_size, self.shift_size, self.win_length, self.window,
+                     self.power_floor, self.relative_floor)
+        y_mag = stft(y, self.fft_size, self.shift_size, self.win_length, self.window,
+                     self.power_floor, self.relative_floor)
         sc_loss = self.spectral_convergenge_loss(x_mag, y_mag)
         mag_loss = self.log_stft_magnitude_loss(x_mag, y_mag)
 
@@ -138,6 +155,8 @@ class MultiResolutionSTFTLoss(torch.nn.Module):
         window="hann_window",
         factor_sc=0.1,
         factor_mag=0.1,
+        power_floor=1e-8,
+        relative_floor=False,
     ):
         """Initialize Multi resolution STFT loss module.
         Args:
@@ -151,7 +170,7 @@ class MultiResolutionSTFTLoss(torch.nn.Module):
         assert len(fft_sizes) == len(hop_sizes) == len(win_lengths)
         self.stft_losses = torch.nn.ModuleList()
         for fs, ss, wl in zip(fft_sizes, hop_sizes, win_lengths):
-            self.stft_losses += [STFTLoss(fs, ss, wl, window)]
+            self.stft_losses += [STFTLoss(fs, ss, wl, window, power_floor, relative_floor)]
         self.factor_sc = factor_sc
         self.factor_mag = factor_mag
 

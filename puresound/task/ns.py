@@ -12,6 +12,7 @@ from puresound.config.augmentation import (
     CodecAugmentation,
     PacketLossAugmentation,
     TargetAbsentAugmentation,
+    RowInitialAmbientAugmentation,
 )
 from puresound.dataset.dynamic_base import (
     DynamicBaseDataset,
@@ -66,6 +67,7 @@ class NoiseSuppressionDataset(DynamicBaseDataset):
         "augmentation_codec_args": CodecAugmentation,
         "augmentation_packet_loss_args": PacketLossAugmentation,
         "augmentation_target_absent_args": TargetAbsentAugmentation,
+        "augmentation_row_initial_ambient_args": RowInitialAmbientAugmentation,
     }
 
     def __init__(self, *args, **kwargs):
@@ -303,7 +305,17 @@ class NoiseSuppressionDataset(DynamicBaseDataset):
         # (deterministic validation): reseed every RNG the synthesis path uses
         # (utterance pick / room sim / augmentation draws) so the same item
         # regenerates bit-exact across epochs, runs and worker layouts.
-        if len(target_speaker) == 3:
+        # A 4-tuple additionally carries this batch's row length in seconds
+        # (trainer.length_schedule); its seed slot may be None.
+        self._row_length_override = None
+        if len(target_speaker) == 4:
+            target_speaker, batch_sr, item_seed, row_seconds = target_speaker
+            self._row_length_override = int(self.audio_sr * float(row_seconds))
+            if item_seed is not None:
+                random.seed(item_seed)
+                np.random.seed(item_seed % (2**32))
+                torch.manual_seed(item_seed)
+        elif len(target_speaker) == 3:
             target_speaker, batch_sr, item_seed = target_speaker
             random.seed(item_seed)
             np.random.seed(item_seed % (2**32))
@@ -524,6 +536,37 @@ class NoiseSuppressionDataset(DynamicBaseDataset):
             if noisy_speech.shape[0] != 1:
                 noisy_speech = noisy_speech[0].view(1, -1)
                 target_speech = target_speech[0].view(1, -1)
+
+        # Row-initial ambient lead (v17): silence EVERY speech component over the
+        # first 1-4 s so the noise stage below fills the lead with the row's own
+        # room sound. Placed here on purpose: after speed/reverb (timings final),
+        # before noise (the lead must contain ambience, not digital silence) and
+        # before the vad_reference snapshot (labels inherit the mask). Applied to
+        # keep and suppress rows alike -- the lead must never predict the label.
+        ria = self.augmentation_row_initial_ambient_args
+        if ria is not None and ria.used and torch.rand(1).item() < ria.prob:
+            lo, hi = ria.lead_seconds_range
+            n_lead = int(float(torch.empty(1).uniform_(lo, hi)) * self.audio_sr)
+            keep_min = int(0.5 * self.audio_sr)   # never mask a row into silence
+            if 0 < n_lead < noisy_speech.shape[-1] - keep_min:
+                n_fade = max(1, int(ria.fade_ms / 1000.0 * self.audio_sr))
+                n_fade = min(n_fade, noisy_speech.shape[-1] - n_lead)
+                mask = noisy_speech.new_ones(noisy_speech.shape[-1])
+                mask[:n_lead] = 0.0
+                ramp = torch.linspace(0.0, 1.0, n_fade, dtype=mask.dtype)
+                mask[n_lead : n_lead + n_fade] = 0.5 - 0.5 * torch.cos(ramp * torch.pi)
+                noisy_speech = noisy_speech * mask
+                # speed perturbation upstream changes noisy/target length but NOT
+                # background_speech_reference (a pre-speed snapshot), so every
+                # companion signal is masked over the overlap and truncated to it
+                # -- anything past noisy's length is cropped downstream anyway.
+                nt = min(target_speech.shape[-1], mask.shape[-1])
+                target_speech = target_speech[..., :nt] * mask[:nt]
+                if background_speech_reference is not None:
+                    nb = min(background_speech_reference.shape[-1], mask.shape[-1])
+                    background_speech_reference = (
+                        background_speech_reference[..., :nb] * mask[:nb]
+                    )
 
         # Noise: recorded at an SNR (optionally through this row's room), white
         # noise, then the absolute capture floor. Order and RNG discipline are

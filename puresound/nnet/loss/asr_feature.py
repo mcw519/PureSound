@@ -35,6 +35,7 @@ class ASRFeatureLoss(nn.Module):
         bundle: str = "HUBERT_BASE",
         layers=(6, 9),
         loss: str = "l1",
+        crop_seconds: float | None = None,
     ):
         super().__init__()
         import torchaudio
@@ -53,6 +54,13 @@ class ASRFeatureLoss(nn.Module):
         self.loss = loss.lower()
         if self.loss not in ("l1", "mse", "cosine"):
             raise NotImplementedError(f"Unsupported ASR feature loss: {loss}")
+        # These encoders are transformers: their memory grows with the SQUARE of
+        # the row length while every other term here grows linearly. At the 6 s
+        # rows this recipe was built on that is free; at 30 s it is what runs the
+        # card out of memory. The loss is a per-frame feature distance, so scoring
+        # a random window of the row means the same thing as scoring all of it --
+        # only the window moves each step. None keeps the whole row.
+        self.crop_seconds = None if crop_seconds is None else float(crop_seconds)
 
     @staticmethod
     def _to_bt(x: torch.Tensor) -> torch.Tensor:
@@ -73,6 +81,14 @@ class ASRFeatureLoss(nn.Module):
         length = min(enhanced.shape[-1], target.shape[-1])
         enhanced = enhanced[..., :length]
         target = target[..., :length]
+
+        crop = None if self.crop_seconds is None else int(self.sample_rate * self.crop_seconds)
+        if crop is not None and length > crop:
+            # Same window for both -- a feature distance between different moments
+            # is meaningless. Random per call so the whole row is seen over an epoch.
+            start = int(torch.randint(0, length - crop + 1, (1,)).item())
+            enhanced = enhanced[..., start : start + crop]
+            target = target[..., start : start + crop]
 
         ssl = self._ssl[0]
         if next(ssl.parameters()).device != enhanced.device:

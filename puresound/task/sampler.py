@@ -2,7 +2,7 @@ import logging
 import math
 import random
 from collections import defaultdict
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 import torch.distributed as dist
 
@@ -28,6 +28,7 @@ class SpeakerSampler:
         seed: Optional[int] = None,
         rank: Optional[int] = None,
         world_size: Optional[int] = None,
+        length_schedule: Optional[List[Tuple[float, int, float]]] = None,
     ):
         """
         Sample a batch of data for specific speaker number and per-speaker's utterance.
@@ -48,6 +49,13 @@ class SpeakerSampler:
         self.world_size = world_size
         self.n_batch = total_batch
         self.n_spks = n_spks
+        # (seconds, n_spks, prob) per bucket. The draw MUST NOT depend on rank:
+        # under DDP the ranks step in lockstep, and two ranks running different
+        # row lengths in the same step would average gradients over different
+        # batch sizes and stall on every sync. Speaker choice stays rank-offset,
+        # only the length is shared.
+        self.length_schedule = list(length_schedule) if length_schedule else None
+        self._epoch = -1
         self.n_per = n_per
         self.data = data
         self.spk_pool = list(data.keys())
@@ -97,20 +105,37 @@ class SpeakerSampler:
             rng = random.Random(random.getrandbits(63) + rank * 1_000_003)
         else:
             rng = random
+        self._epoch += 1
         for batch_idx in range(self.n_batch):
             batch = []
             sr = None
 
+            n_spks, row_seconds = self.n_spks, None
+            if self.length_schedule is not None:
+                # Seeded by (epoch, batch index) only -- identical on every rank.
+                draw = random.Random(
+                    (self.seed or 0) * 7_919 + self._epoch * 104_729 + batch_idx
+                )
+                r, acc = draw.random(), 0.0
+                for seconds, spks, prob in self.length_schedule:
+                    acc += prob
+                    if r <= acc:
+                        n_spks, row_seconds = spks, seconds
+                        break
+                else:
+                    seconds, spks, _ = self.length_schedule[-1]
+                    n_spks, row_seconds = spks, seconds
+
             if not self.fast_sampling:
                 if self.select_by_sr_first:
                     sr = rng.sample(list(self.sr_meta.keys()), 1)[0]
-                    classes = rng.sample(list(self.sr_meta[sr].keys()), self.n_spks)
+                    classes = rng.sample(list(self.sr_meta[sr].keys()), n_spks)
                 else:
-                    classes = rng.sample(self.spk_pool, self.n_spks)
+                    classes = rng.sample(self.spk_pool, n_spks)
             else:
                 # sample group first
                 group = rng.sample(self.spk_pool_group, 1)[0]
-                classes = rng.sample(group, self.n_spks)
+                classes = rng.sample(group, n_spks)
 
             for i, c in enumerate(classes):
                 if self.seed is not None:
@@ -123,6 +148,15 @@ class SpeakerSampler:
                     batch += [(c, sr, item_seed + j) for j in range(self.n_per)]
                 else:
                     batch += [(c, sr)] * self.n_per
+
+            if row_seconds is not None:
+                # 4-tuple = "this row is N seconds long". The seed slot stays in
+                # place (None when unseeded) so the arity alone says which shape
+                # this is; see NoiseSuppressionDataset.__getitem__.
+                batch = [
+                    (e[0], e[1], e[2] if len(e) == 3 else None, row_seconds)
+                    for e in batch
+                ]
 
             # shuffling the sequence
             rng.shuffle(batch)

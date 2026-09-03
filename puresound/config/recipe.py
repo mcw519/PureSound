@@ -15,6 +15,7 @@ from .augmentation import (
     PacketLossAugmentation,
     RealFarAugmentation,
     RealNearAugmentation,
+    RowInitialAmbientAugmentation,
     ReverbAugmentation,
     SimpleProbAugmentation,
     SourceRateAugmentation,
@@ -49,6 +50,14 @@ class DatasetConfig(StrictConfig):
     validation_pipeline_role: Literal["train", "validation", "test"] = "validation"
 
 
+class LengthBucket(StrictConfig):
+    """One (row length, batch size) pair a training batch can be drawn as."""
+
+    seconds: float = Field(gt=0.0)
+    n_spk: int = Field(gt=0)
+    prob: float = Field(gt=0.0, le=1.0)
+
+
 class TrainerConfig(StrictConfig):
     lightning_trainer_args: dict[str, Any]
     train_iter_per_epoch: int = Field(gt=0)
@@ -60,6 +69,26 @@ class TrainerConfig(StrictConfig):
     work_folder: str
     valid_seed: int = 1234
     find_unused_parameters: StrictBool = False
+    # Mixed row lengths. Each TRAINING batch draws one bucket, so the model is
+    # supervised at several context lengths instead of one. Why it exists: a row
+    # is scored as a whole, so the evidence-poor opening frames are weighted 1/N
+    # of the row -- train only at 30 s and short-context behaviour decays (v15
+    # measured 10 s suppression falling 4.18 -> 2.79 dB), train only at 6 s and
+    # it is merely tolerable. The batch size travels WITH the length because
+    # memory does: 3s x20 / 6s x12 / 12s x6 / 30s x2 all fit the same card.
+    # Validation always uses n_spk_per_batch / training_length_seconds, so valid
+    # loss stays comparable across epochs. None = single length, unchanged.
+    length_schedule: list[LengthBucket] | None = None
+
+    @model_validator(mode="after")
+    def length_schedule_probabilities(self):
+        if self.length_schedule:
+            total = sum(b.prob for b in self.length_schedule)
+            if abs(total - 1.0) > 1e-6:
+                raise ValueError(
+                    f"length_schedule probabilities must sum to 1, got {total}"
+                )
+        return self
 
 
 class OptimizerConfig(StrictConfig):
@@ -152,6 +181,7 @@ class NoiseSuppressionRecipe(SisoRecipe):
     augmentation_codec: CodecAugmentation | None = None
     augmentation_packet_loss: PacketLossAugmentation | None = None
     augmentation_target_absent: TargetAbsentAugmentation | None = None
+    augmentation_row_initial_ambient: RowInitialAmbientAugmentation | None = None
 
     @model_validator(mode="after")
     def reject_isolation_mix_modes(self):
@@ -171,6 +201,7 @@ class VoiceIsolationRecipe(SisoRecipe):
     augmentation_target_absent: TargetAbsentAugmentation | None = None
     augmentation_realfar: RealFarAugmentation | None = None
     augmentation_realnear: RealNearAugmentation | None = None
+    augmentation_row_initial_ambient: RowInitialAmbientAugmentation | None = None
 
 
 class SpeakerEmbeddingRecipe(SisoRecipe):

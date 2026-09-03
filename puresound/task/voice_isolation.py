@@ -114,6 +114,14 @@ class VoiceIsolationDataset(NoiseSuppressionDataset):
         # task-specific is loading the manifests they name.
         self._realfar_pool = self._load_real_pool(self.augmentation_realfar_args)
         self._realnear_pool = self._load_real_pool(self.augmentation_realnear_args)
+        # Only built when a block asks to stitch -- an index over 150k entries is
+        # not worth the startup cost for recipes that never look at it.
+        self._realfar_index = (
+            self._channel_index(self._realfar_pool)
+            if getattr(self.augmentation_realfar_args, "stitch_to_length", False) else {})
+        self._realnear_index = (
+            self._channel_index(self._realnear_pool)
+            if getattr(self.augmentation_realnear_args, "stitch_to_length", False) else {})
 
     # ------------------------------------------------------------------ #
     # real-recording pools
@@ -137,11 +145,57 @@ class VoiceIsolationDataset(NoiseSuppressionDataset):
                             "distance_m": e.get("distance_m"),
                             "room": e.get("room"),
                             "speaker": e.get("speaker"),
+                            "mic": e.get("mic"),
                         }
                     )
         if not pool:
             raise ValueError(f"real pool manifest has no entries: {manifest}")
         return pool
+
+    @staticmethod
+    def _channel_key(entry: Dict):
+        """What makes two takes the SAME recording chain and talker."""
+        return (entry.get("speaker"), entry.get("room"), entry.get("mic"))
+
+    def _channel_index(self, pool: List[Dict]) -> Dict:
+        index: Dict = {}
+        for entry in pool:
+            index.setdefault(self._channel_key(entry), []).append(entry)
+        return index
+
+    def _open_pool_wav(self, pick: Dict, index: Dict, stitch: bool) -> torch.Tensor:
+        """One pool recording, covering the row length when asked to.
+
+        A pool take is one utterance (VOiCES: ~16 s). Longer than the row it is
+        cropped downstream, which is fine; SHORTER, the aligner zero-pads -- and
+        on a real-near KEEP row that makes the target half digital silence, which
+        is precisely the lesson this recipe must never teach. With ``stitch`` on,
+        further takes from the same (speaker, room, mic) are appended until the
+        row is covered: same talker, same chain, so nothing about the row's
+        identity changes, only its length.
+        """
+        def _open(entry):
+            wav, _ = AudioIO.open(
+                f_path=entry["wav_path"],
+                target_lvl=self.audio_gain_normalized_to,
+                resample_to=self.audio_sr,
+            )
+            return wav[0].reshape(1, -1)
+
+        wav = _open(pick)
+        if not stitch or wav.shape[-1] >= self.sample_length:
+            return wav
+        siblings = [e for e in index.get(self._channel_key(pick), ())
+                    if e["wav_path"] != pick["wav_path"]]
+        random.shuffle(siblings)
+        parts, total = [wav], wav.shape[-1]
+        for entry in siblings:
+            if total >= self.sample_length:
+                break
+            extra = _open(entry)
+            parts.append(extra)
+            total += extra.shape[-1]
+        return torch.cat(parts, dim=-1) if len(parts) > 1 else wav
 
     def _sample_realfar_interferers(
         self,
@@ -174,13 +228,10 @@ class VoiceIsolationDataset(NoiseSuppressionDataset):
         picks = random.sample(candidates, k=n)
         wavs: List[torch.Tensor] = []
         metas: List[dict] = []
+        cfg = self.augmentation_realfar_args
+        stitch = bool(cfg is not None and getattr(cfg, "stitch_to_length", False))
         for p in picks:
-            wav, _ = AudioIO.open(
-                f_path=p["wav_path"],
-                target_lvl=self.audio_gain_normalized_to,
-                resample_to=sr,
-            )
-            wavs.append(wav[0].reshape(1, -1))
+            wavs.append(self._open_pool_wav(p, self._realfar_index, stitch))
             metas.append(
                 {"source_receiver_distance": p.get("distance_m"), "origin": "real"}
             )
@@ -206,13 +257,12 @@ class VoiceIsolationDataset(NoiseSuppressionDataset):
             near_pick = random.choice(self._realnear_pool)
             plan.realnear_room = near_pick.get("room")
             plan.realnear_speaker = near_pick.get("speaker")
-            near_wav, _ = AudioIO.open(
-                f_path=near_pick["wav_path"],
-                target_lvl=self.audio_gain_normalized_to,
-                resample_to=self.audio_sr,
+            near_wav = self._open_pool_wav(
+                near_pick, self._realnear_index,
+                bool(getattr(realnear_cfg, "stitch_to_length", False)),
             )
             target_speech = self.align_audio_list(
-                wav_list=[near_wav[0].reshape(1, -1)],
+                wav_list=[near_wav],
                 length=self.sample_length,
             )[0]
             plan.realnear_fg_metadata = {

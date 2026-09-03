@@ -50,11 +50,21 @@ class EnergyVADLabeler:
         hop_length: int = 160,
         activity_threshold_db: float = -40.0,
         eps: float = 1e-8,
+        eps_mode: str = "absolute",
     ):
         self.frame_length = int(frame_length)
         self.hop_length = int(hop_length)
         self.activity_threshold_db = float(activity_threshold_db)
         self.eps = float(eps)
+        # "absolute" (historical): the numerator is clamped at a FIXED 1e-8 power,
+        # so once the loudest frame drops below 1e-4 (peak-frame RMS < -40 dBFS)
+        # every silent frame reads within -40 dB of the peak and the labeler
+        # returns all-active (measured: 0.58 active at -40 dBFS, 1.00 at -45 and
+        # below). "relative" clamps at eps * reference instead, so the dynamic
+        # range is 80 dB below the row's own peak whatever its level.
+        if eps_mode not in ("absolute", "relative"):
+            raise ValueError(f"eps_mode must be absolute|relative, got {eps_mode!r}")
+        self.eps_mode = eps_mode
 
     def __call__(self, wav: torch.Tensor, sample_rate: Optional[int] = None) -> torch.Tensor:
         del sample_rate
@@ -64,7 +74,8 @@ class EnergyVADLabeler:
         frames = wav.unfold(-1, self.frame_length, self.hop_length)
         power = frames.square().mean(dim=-1).squeeze(0)
         reference = power.max().clamp_min(self.eps)
-        db = 10.0 * torch.log10(power.clamp_min(self.eps) / reference)
+        floor = self.eps * reference if self.eps_mode == "relative" else self.eps
+        db = 10.0 * torch.log10(power.clamp_min(floor) / reference)
         return (db > self.activity_threshold_db).float()
 
 

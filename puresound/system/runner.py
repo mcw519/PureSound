@@ -105,6 +105,10 @@ def build_dataloaders(
         n_spks=trainer.n_spk_per_batch,
         n_per=trainer.n_utt_per_speaker,
         select_by_sr_first=select_by_sr_first,
+        # Train only: validation keeps one length so its loss stays comparable.
+        length_schedule=[(b.seconds, b.n_spk, b.prob) for b in trainer.length_schedule]
+        if trainer.length_schedule
+        else None,
     )
     train_dataloader = torch.utils.data.DataLoader(
         dataset=train_dataset,

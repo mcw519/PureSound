@@ -146,6 +146,16 @@ class StreamingDpcrnFrameModel(StreamingFrameModelBase):
         self.feats = system_model.feats
         # DPCRN keeps its two DPRNN blocks as separate attributes (not a ModuleList).
         self.blocks = [self.backbone.dprnn_block1, self.backbone.dprnn_block2]
+        # inter_type "lstm+mamba" carries FOUR state tensors per block (LSTM h/c
+        # plus the SSM's conv cache and h) against the two ports this manifest
+        # layout exposes. Refuse it rather than stream the LSTM branch alone,
+        # which would silently export a different model than the one trained.
+        if any(getattr(b, "inter_ssm", None) is not None for b in self.blocks):
+            raise NotImplementedError(
+                "streaming export does not support inter_type='lstm+mamba' yet "
+                "(the parallel SSM branch needs its own state ports); export the "
+                "single-path 'lstm' or 'mamba' variant"
+            )
         self.n_down = len(self.backbone.cnn_down)
         self.n_up = len(self.backbone.cnn_up)
         self.n_blocks = len(self.blocks)

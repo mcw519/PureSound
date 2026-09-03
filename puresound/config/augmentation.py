@@ -475,12 +475,52 @@ class TargetAbsentAugmentation(StrictConfig):
     force_interferer: StrictBool = False
 
 
+class RowInitialAmbientAugmentation(StrictConfig):
+    """Open a row with scene sound only -- no speech -- for the first 1-4 s.
+
+    Why (benchmarks/probes/v17_round_design.md §2b, COLDSTART_V2.md): the model
+    self-calibrates against the ROOM. 3 s of real ambience ahead of a cold-start
+    clip moves suppression from -1.2 to -16.1 dB; every training row to date has
+    speech from the first frames, so that calibration was never a trained skill.
+    The lead is applied to BOTH keep and suppress rows (class-blind, so the lead
+    itself can never carry label information): all speech (foreground AND
+    interferers, target included) is masked out of the lead window before the
+    noise stage, which then fills it with the row's own room-coloured noise and
+    capture floor. Rows whose noise draw is off get a silent lead instead --
+    also a real deployment condition (stream start in a dead-quiet room).
+    """
+
+    used: StrictBool
+    prob: Probability = 0.0
+    #: lead length drawn uniformly, seconds
+    lead_seconds_range: list[float] = [1.0, 4.0]
+    #: raised-cosine ramp at the lead edge; a hard edge is a click the model
+    #: could key on
+    fade_ms: float = 50.0
+
+    @model_validator(mode="after")
+    def sane_range(self):
+        if len(self.lead_seconds_range) != 2:
+            raise ValueError("lead_seconds_range must be [lo, hi]")
+        lo, hi = self.lead_seconds_range
+        if not (0.0 < lo <= hi):
+            raise ValueError(f"lead_seconds_range must be 0 < lo <= hi, got {(lo, hi)}")
+        return self
+
+
 class RealFarAugmentation(StrictConfig):
     used: StrictBool
     pool_manifest: str | None = None
     prob: Probability = 0.0
     lone_far_prob: Probability = 0.0
     turn_taking_prob: Probability | None = None
+    # A pool recording is one take (VOiCES: ~16 s). Past the training length it
+    # is cropped; SHORT of it the aligner zero-pads, which on a keep row makes
+    # the target half silence. With this on, extra takes from the same
+    # (speaker, room, mic) -- same talker, same chain -- are concatenated until
+    # the row length is covered. Off by default: it changes nothing at the 6 s
+    # length every recipe before the long-context round used, RNG included.
+    stitch_to_length: StrictBool = False
 
     @model_validator(mode="after")
     def enabled_contract(self):
@@ -492,6 +532,9 @@ class RealNearAugmentation(StrictConfig):
     pool_manifest: str | None = None
     prob: Probability = 0.0
     turn_taking_prob: Probability | None = None
+    #: see RealFarAugmentation.stitch_to_length -- it matters more here, because
+    #: this pool supplies the KEEP row's target.
+    stitch_to_length: StrictBool = False
 
     @model_validator(mode="after")
     def enabled_contract(self):
