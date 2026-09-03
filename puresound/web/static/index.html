@@ -190,7 +190,8 @@
               </div>
               <div class="field-label measure-model-label"><span>Models to compare</span><output id="measure-model-count">0 selected</output></div>
               <div class="measure-model-list" id="measure-model-list"><span class="measure-empty">Load catalog to choose Voice Isolation models.</span></div>
-              <div class="measurement-actions"><button class="button button-dark" id="measure-run" type="button">Analyze audio <span aria-hidden="true">→</span></button><span class="form-note" id="measure-form-note">Select a probe audio file and at least one model.</span></div>
+              <div class="job-progress" id="measure-job-progress" hidden><div class="job-progress-bar"><span></span></div><div class="job-progress-copy"><span data-job-phase>Queued</span><strong data-job-percent>0%</strong></div></div>
+              <div class="measurement-actions"><button class="button button-dark" id="measure-run" type="button"><span class="button-spinner" aria-hidden="true"></span>Analyze audio <span aria-hidden="true">→</span></button><button class="button button-outline cancel-button" id="measure-cancel" type="button" hidden>Cancel</button><span class="form-note" id="measure-form-note">Select a probe audio file and at least one model.</span></div>
             </div>
             <div class="panel measurement-results" id="measurement-results" hidden>
               <div class="panel-header"><div><p class="eyebrow">REPORT / MODEL COMPARISON</p><h2>Measured output</h2></div><span class="result-time" id="measurement-result-time">—</span></div>

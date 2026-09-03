@@ -52,7 +52,7 @@ API 維持精簡：
 | GET | `/api/models/{model_id}` | 單一模型 contract |
 | GET | `/api/validate` | 路徑、sidecar、hash 與 graph 檢查 |
 | POST | `/api/infer` | 以 JSON named inputs 執行模型 |
-| POST | `/api/jobs` | 啟動非同步推論並取得 job id |
+| POST | `/api/jobs` | 啟動非同步推論或量測並取得 job id |
 | GET | `/api/jobs/{job_id}` | 讀取進度、狀態與結果 |
 | GET | `/api/jobs?limit=20` | 列出最近推論結果 |
 | POST | `/api/jobs/{job_id}/cancel` | 要求取消 queued／running job |
@@ -60,9 +60,12 @@ API 維持精簡：
 | GET | `/api/runs/{run_id}/{output}` | 下載產生的音檔 |
 
 非同步 job 會回報 `queued`、`running`、`succeeded`、`failed` 或
-`cancelled`，並提供粗略 phase／progress。取消採 cooperative 語意：若
-processor 已進入 ONNX 呼叫，背景工作會完成但丟棄結果，job 最終標記為
-cancelled。
+`cancelled`。Voice Isolation 每個 streaming frame 都會更新進度；Speaker
+Verification 則回報音訊載入、enrollment embedding、test embedding 與
+scoring 階段。量測可在相同 endpoint 帶入 `"kind": "measurement"`，進度
+會包含目前比較到的模型以及該模型的 frame progress。取消會在下一個
+streaming frame 或兩次 embedding 呼叫之間生效；ONNX Runtime 無法強制
+中斷單次已開始的 session call。
 
 上傳資料使用下列 JSON descriptor：
 

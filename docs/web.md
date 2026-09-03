@@ -58,7 +58,7 @@ The API is intentionally small:
 | GET | `/api/models/{model_id}` | One model contract |
 | GET | `/api/validate` | Paths, sidecars, hashes, and graph checks |
 | POST | `/api/infer` | Run a model with JSON named inputs |
-| POST | `/api/jobs` | Start asynchronous inference and return a job id |
+| POST | `/api/jobs` | Start asynchronous inference or measurement and return a job id |
 | GET | `/api/jobs/{job_id}` | Read progress, status, and result |
 | GET | `/api/jobs?limit=20` | List recent inference results |
 | POST | `/api/jobs/{job_id}/cancel` | Request cancellation of a queued/running job |
@@ -66,9 +66,13 @@ The API is intentionally small:
 | GET | `/api/runs/{run_id}/{output}` | Download a generated audio output |
 
 Asynchronous jobs expose `queued`, `running`, `succeeded`, `failed`, or
-`cancelled` status and a coarse phase/progress value. Cancellation is
-cooperative: a processor that is already inside an ONNX call completes in the
-background, but its result is discarded and the job is reported as cancelled.
+`cancelled` status. Voice Isolation reports progress for every streaming frame;
+Speaker Verification reports its audio loading, enrollment embedding, test
+embedding, and scoring phases. Submit a measurement through the same endpoint
+with `"kind": "measurement"`; its progress includes the current model and that
+model's frame progress. Cancellation takes effect at the next streaming frame
+or between embedding calls. ONNX Runtime does not forcibly interrupt a single
+active session call.
 
 Uploaded inputs are JSON descriptors such as:
 

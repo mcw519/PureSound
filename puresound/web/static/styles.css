@@ -259,8 +259,8 @@ h2 { margin-bottom: 0; font-size: 20px; font-weight: 500; letter-spacing: -.45px
 .job-progress-copy { display: flex; justify-content: space-between; gap: 10px; margin-top: 6px; color: var(--body); font-family: var(--mono); font-size: 9px; text-transform: uppercase; }
 .job-progress-copy strong { color: var(--ink); font-weight: 500; }
 .button-spinner { display: none; width: 12px; height: 12px; border: 1.5px solid rgba(255,255,255,.4); border-top-color: var(--canvas); border-radius: 50%; animation: spin .7s linear infinite; }
-.run-button.is-loading .button-spinner { display: inline-block; }
-.run-button.is-loading { pointer-events: none; opacity: .75; }
+.button.is-loading .button-spinner { display: inline-block; }
+.button.is-loading { pointer-events: none; opacity: .75; }
 @keyframes spin { to { transform: rotate(360deg); } }
 .form-note { min-height: 17px; margin: 11px 0 0; color: var(--body); font-size: 11px; line-height: 1.45; }
 .form-note.is-error { color: var(--danger); }

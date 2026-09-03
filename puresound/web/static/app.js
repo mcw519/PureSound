@@ -223,12 +223,15 @@
     if (!progress) return;
     const amount = Math.round(Math.max(0, Math.min(1, Number(job.progress) || 0)) * 100);
     progress.querySelector(".job-progress-bar span").style.width = `${amount}%`;
-    progress.querySelector("[data-job-phase]").textContent = job.phase || job.status || "working";
+    const phase = String(job.phase || job.status || "working")
+      .replace(/:/g, " · ")
+      .replace(/_/g, " ");
+    progress.querySelector("[data-job-phase]").textContent = phase;
     progress.querySelector("[data-job-percent]").textContent = `${amount}%`;
     progress.hidden = false;
   }
 
-  async function runInferenceJob(payload, key) {
+  async function runBackgroundJob(payload, key) {
     const runButton = $(`#${key}-run`);
     const cancelButton = $(`#${key}-cancel`);
     const progress = $(`#${key}-job-progress`);
@@ -244,8 +247,8 @@
         const job = await api(`/api/jobs/${encodeURIComponent(initial.job_id)}`);
         updateJobProgress(key, job);
         if (job.status === "succeeded") return job.result;
-        if (job.status === "failed") throw new Error(job.error || "Inference failed.");
-        if (job.status === "cancelled") throw new Error("Inference cancelled.");
+        if (job.status === "failed") throw new Error(job.error || "Job failed.");
+        if (job.status === "cancelled") throw new Error(job.kind === "measurement" ? "Measurement cancelled." : "Inference cancelled.");
         await new Promise((resolve) => window.setTimeout(resolve, 350));
       }
     } finally {
@@ -253,6 +256,7 @@
       setBusy(runButton, false);
       cancelButton.hidden = true;
       window.setTimeout(() => { if (!state.activeJobs[key]) progress.hidden = true; }, 900);
+      refreshJobHistory();
     }
   }
 
@@ -278,11 +282,15 @@
     target.innerHTML = jobs.map((job) => {
       const result = job.result || {};
       const score = result.scores?.cosine_similarity;
+      const measurement = job.kind === "measurement";
       const detail = job.status === "succeeded"
-        ? `${result.rtf == null ? "—" : `RTF ${Number(result.rtf).toFixed(3)}`} · ${job.elapsed_seconds == null ? "—" : formatSeconds(job.elapsed_seconds)}`
+        ? (measurement
+          ? `${result.models?.length || 0} models · ${job.elapsed_seconds == null ? "—" : formatSeconds(job.elapsed_seconds)}`
+          : `${result.rtf == null ? "—" : `RTF ${Number(result.rtf).toFixed(3)}`} · ${job.elapsed_seconds == null ? "—" : formatSeconds(job.elapsed_seconds)}`)
         : (job.error || job.phase || "—");
       const output = result.output_urls?.audio ? `<a href="${escapeHtml(result.output_urls.audio)}" target="_blank" rel="noreferrer">Output ↗</a>` : "";
-      return `<article class="job-history-item"><div class="job-history-main"><strong>${escapeHtml(job.model_id)}</strong><span>${escapeHtml(detail)}</span></div><div class="job-history-side"><span class="job-status job-status-${escapeHtml(job.status)}">${escapeHtml(job.status)}</span>${score == null ? "" : `<span>${Number(score).toFixed(3)}</span>`}${output}</div></article>`;
+      const title = measurement ? "Model comparison" : job.model_id;
+      return `<article class="job-history-item"><div class="job-history-main"><strong>${escapeHtml(title)}</strong><span>${escapeHtml(detail)}</span></div><div class="job-history-side"><span class="job-status job-status-${escapeHtml(job.status)}">${escapeHtml(job.status)}</span>${score == null ? "" : `<span>${Number(score).toFixed(3)}</span>`}${output}</div></article>`;
     }).join("");
   }
 
@@ -307,7 +315,7 @@
       const input = await readDataUrl(file);
       const parameters = { dry_blend: Number($("#voice-dry-blend").value) };
       if ($("#voice-collect-extras").checked) parameters.collect_extras = true;
-      const result = await runInferenceJob({ model_id: model.id, variant: $("#voice-variant").value, provider: $("#voice-provider").value, inputs: { audio: input }, parameters }, "voice");
+      const result = await runBackgroundJob({ model_id: model.id, variant: $("#voice-variant").value, provider: $("#voice-provider").value, inputs: { audio: input }, parameters }, "voice");
       const outputUrl = result.output_urls?.audio;
       if (!outputUrl) throw new Error("The runtime did not return an audio output.");
       $("#voice-result").hidden = false;
@@ -317,7 +325,6 @@
       try { await state.audioPanels.voiceOutput.loadUrl(outputUrl); } catch (error) { showToast(`Output preview failed: ${error.message}`, true); }
       note.textContent = "Inference complete. Streaming delay alignment was kept by the processor."; note.className = "form-note is-success";
       showToast(`Finished ${model.display_name}.`);
-      refreshJobHistory();
     } catch (error) { note.textContent = error.message; note.className = "form-note is-error"; showToast(error.message, true); }
     finally { setBusy(button, false); }
   }
@@ -333,7 +340,7 @@
       const model = selectedModel("#sv-model");
       const inputs = { enrollment: await readDataUrl(enrollment), test: await readDataUrl(test) };
       const threshold = Number($("#sv-threshold").value);
-      const result = await runInferenceJob({ model_id: model.id, provider: $("#sv-provider").value, inputs, parameters: { threshold } }, "sv");
+      const result = await runBackgroundJob({ model_id: model.id, provider: $("#sv-provider").value, inputs, parameters: { threshold } }, "sv");
       const score = Number(result.scores?.cosine_similarity || 0);
       const verdict = Boolean(result.scores?.verdict);
       $("#sv-result").hidden = false;
@@ -347,7 +354,6 @@
       renderMetrics($("#sv-metrics"), [["Similarity", score.toFixed(3)], ["Threshold", threshold.toFixed(2)], ["Embedding", `${result.metadata?.embedding_dim || "—"} d`], ["Provider", providerLabel(result.provider)]]);
       note.textContent = "Verification complete."; note.className = "form-note is-success";
       showToast(verdict ? "Speaker match." : "No speaker match.");
-      refreshJobHistory();
     } catch (error) { note.textContent = error.message; note.className = "form-note is-error"; showToast(error.message, true); }
     finally { setBusy(button, false); }
   }
@@ -408,7 +414,7 @@
     try {
       const inputs = { audio: await readDataUrl(file) };
       if (reference) inputs.reference = await readDataUrl(reference);
-      const report = await api("/api/measure", { method: "POST", body: JSON.stringify({ inputs, models, provider: "auto" }) });
+      const report = await runBackgroundJob({ kind: "measurement", inputs, models, provider: "auto" }, "measure");
       renderMeasurementReport(report);
       note.textContent = "Measurement complete. Reference scores are shown when a clean reference was supplied."; note.className = "form-note is-success";
       showToast("Audio measurements complete.");
@@ -519,6 +525,7 @@
     $("#sv-cancel").addEventListener("click", () => cancelInferenceJob("sv"));
     $("#validate-button").addEventListener("click", runValidation);
     $("#measure-run").addEventListener("click", runMeasurements);
+    $("#measure-cancel").addEventListener("click", () => cancelInferenceJob("measure"));
     $("#history-refresh").addEventListener("click", refreshJobHistory);
     wireMeasurementFile("#measure-audio", "audio");
     wireMeasurementFile("#measure-reference", "reference");

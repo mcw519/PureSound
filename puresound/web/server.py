@@ -24,11 +24,18 @@ from dataclasses import dataclass
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Callable, Mapping
 
 import numpy as np
 
-from puresound.inference import InferenceError, InferenceResult, ModelZoo, ModelZooError, load_model
+from puresound.inference import (
+    InferenceCancelled,
+    InferenceError,
+    InferenceResult,
+    ModelZoo,
+    ModelZooError,
+    load_model,
+)
 from puresound.web.measurements import audio_metrics, audio_metrics_from_path, reference_metrics
 
 
@@ -144,11 +151,12 @@ class RunStore:
 
 @dataclass
 class InferenceJob:
-    """Small in-memory job record used by the browser progress workflow."""
+    """Small in-memory record for inference and measurement work."""
 
     job_id: str
     model_id: str
     created_at: float
+    kind: str = "inference"
     status: str = "queued"
     phase: str = "queued"
     progress: float = 0.0
@@ -160,15 +168,15 @@ class InferenceJob:
 
 
 class InferenceJobStore:
-    """Thread-safe bounded history for asynchronous inference requests."""
+    """Thread-safe bounded history for asynchronous browser work."""
 
     def __init__(self, max_jobs: int = 64):
         self.max_jobs = max(1, int(max_jobs))
         self._jobs: dict[str, InferenceJob] = {}
         self._lock = threading.RLock()
 
-    def create(self, model_id: str) -> InferenceJob:
-        job = InferenceJob(uuid.uuid4().hex, model_id, time.time())
+    def create(self, model_id: str, *, kind: str = "inference") -> InferenceJob:
+        job = InferenceJob(uuid.uuid4().hex, model_id, time.time(), kind=kind)
         with self._lock:
             self._jobs[job.job_id] = job
             self._trim_locked()
@@ -191,12 +199,58 @@ class InferenceJobStore:
             except KeyError as exc:
                 raise KeyError(f"job not found: {job_id}") from exc
 
-    def update(self, job_id: str, **values: Any) -> InferenceJob:
+    def start(self, job_id: str, *, phase: str, progress: float) -> bool:
         with self._lock:
             job = self.get(job_id)
-            for name, value in values.items():
-                setattr(job, name, value)
-            return job
+            if job.cancel_requested or job.status == "cancelled":
+                return False
+            job.status = "running"
+            job.phase = phase
+            job.progress = float(progress)
+            job.started_at = time.time()
+            return True
+
+    def update_progress(self, job_id: str, *, phase: str, progress: float) -> bool:
+        with self._lock:
+            job = self.get(job_id)
+            if job.cancel_requested or job.status != "running":
+                return False
+            job.phase = phase
+            job.progress = max(job.progress, min(0.999, float(progress)))
+            return True
+
+    def succeed(self, job_id: str, result: dict[str, Any]) -> bool:
+        with self._lock:
+            job = self.get(job_id)
+            if job.cancel_requested or job.status != "running":
+                return False
+            job.status = "succeeded"
+            job.phase = "complete"
+            job.progress = 1.0
+            job.result = result
+            job.finished_at = time.time()
+            return True
+
+    def fail(self, job_id: str, error: str) -> bool:
+        with self._lock:
+            job = self.get(job_id)
+            if job.cancel_requested or job.status == "cancelled":
+                return False
+            job.status = "failed"
+            job.phase = "failed"
+            job.error = str(error)
+            job.finished_at = time.time()
+            return True
+
+    def finish_cancelled(self, job_id: str) -> None:
+        with self._lock:
+            job = self.get(job_id)
+            if job.status in {"succeeded", "failed"}:
+                return
+            job.cancel_requested = True
+            job.status = "cancelled"
+            job.phase = "cancelled"
+            job.finished_at = time.time()
 
     def cancel(self, job_id: str) -> InferenceJob:
         with self._lock:
@@ -212,17 +266,14 @@ class InferenceJobStore:
                 job.phase = "cancelling"
             return job
 
-    def list(self, limit: int = 20) -> list[InferenceJob]:
-        with self._lock:
-            return sorted(self._jobs.values(), key=lambda job: job.created_at, reverse=True)[: max(1, min(int(limit), self.max_jobs))]
-
     @staticmethod
-    def snapshot(job: InferenceJob) -> dict[str, Any]:
+    def _snapshot_locked(job: InferenceJob) -> dict[str, Any]:
         elapsed = None
         if job.started_at is not None:
             elapsed = (job.finished_at or time.time()) - job.started_at
         return {
             "job_id": job.job_id,
+            "kind": job.kind,
             "model_id": job.model_id,
             "status": job.status,
             "phase": job.phase,
@@ -235,6 +286,19 @@ class InferenceJobStore:
             "result": job.result,
             "error": job.error,
         }
+
+    def snapshot(self, job_id: str) -> dict[str, Any]:
+        with self._lock:
+            return self._snapshot_locked(self.get(job_id))
+
+    def list_snapshots(self, limit: int = 20) -> list[dict[str, Any]]:
+        with self._lock:
+            jobs = sorted(
+                self._jobs.values(),
+                key=lambda job: job.created_at,
+                reverse=True,
+            )[: max(1, min(int(limit), self.max_jobs))]
+            return [self._snapshot_locked(job) for job in jobs]
 
 
 class WebService:
@@ -428,7 +492,21 @@ class WebService:
         temp_paths.append(path)
         return path
 
-    def infer(self, payload: Mapping[str, Any]) -> dict[str, Any]:
+    def infer(
+        self,
+        payload: Mapping[str, Any],
+        *,
+        progress_callback: Callable[[float, str], None] | None = None,
+        cancel_check: Callable[[], bool] | None = None,
+    ) -> dict[str, Any]:
+        def emit_progress(value: float, phase: str) -> None:
+            if progress_callback is not None:
+                progress_callback(max(0.0, min(1.0, float(value))), phase)
+
+        def ensure_active() -> None:
+            if cancel_check is not None and cancel_check():
+                raise InferenceCancelled("inference cancelled")
+
         if not isinstance(payload, Mapping):
             raise WebServiceError("request body must be a JSON object")
         model_id = payload.get("model_id")
@@ -449,15 +527,29 @@ class WebService:
 
         temp_paths: list[Path] = []
         try:
+            ensure_active()
+            emit_progress(0.02, "preparing_inputs")
             materialized = {
                 str(name): self._materialize_input(value, temp_paths)
                 for name, value in inputs.items()
             }
+            ensure_active()
+            emit_progress(0.08, "loading_model")
             runtime = self._runtime(model_id, provider, variant)
+            ensure_active()
+
+            def processor_progress(value: float, phase: str) -> None:
+                ensure_active()
+                emit_progress(0.12 + 0.82 * value, phase)
+
             result: InferenceResult = runtime.infer(
                 inputs=materialized,
                 parameters=dict(parameters),
+                progress_callback=processor_progress,
+                cancel_check=cancel_check,
             )
+            ensure_active()
+            emit_progress(0.96, "writing_outputs")
             response = result.as_dict()
             downloadable: dict[str, StoredOutput] = {}
             output_urls: dict[str, str] = {}
@@ -474,6 +566,7 @@ class WebService:
                 }
             response["output_urls"] = output_urls
             response["input_names"] = list(materialized)
+            emit_progress(1.0, "complete")
             return response
         except (InferenceError, ModelZooError, OSError, ValueError, TypeError) as exc:
             raise WebServiceError(str(exc)) from exc
@@ -485,60 +578,49 @@ class WebService:
                     pass
 
     # Asynchronous inference --------------------------------------------------
+    def _job_cancelled(self, job_id: str) -> bool:
+        return self.jobs.get(job_id).cancel_requested
+
+    def _update_job_progress(self, job_id: str, value: float, phase: str) -> None:
+        if not self.jobs.update_progress(job_id, phase=phase, progress=value):
+            raise InferenceCancelled("inference cancelled")
+
+    def _finish_cancelled_job(self, job_id: str) -> None:
+        self.jobs.finish_cancelled(job_id)
+
     def _run_job(self, job_id: str, payload: Mapping[str, Any]) -> None:
-        job = self.jobs.get(job_id)
-        if job.status == "cancelled":
+        if not self.jobs.start(job_id, phase="preparing", progress=0.01):
             return
-        started = time.time()
-        self.jobs.update(
-            job_id,
-            status="running",
-            phase="preparing",
-            progress=0.08,
-            started_at=started,
-        )
         try:
-            if self.jobs.get(job_id).cancel_requested:
-                self.jobs.update(job_id, status="cancelled", phase="cancelled", finished_at=time.time())
-                return
-            self.jobs.update(job_id, phase="running", progress=0.25)
-            result = self.infer(payload)
-            job = self.jobs.get(job_id)
-            if job.cancel_requested:
-                self.jobs.update(
-                    job_id,
-                    status="cancelled",
-                    phase="cancelled",
-                    progress=1.0,
-                    finished_at=time.time(),
-                )
-                return
-            self.jobs.update(
-                job_id,
-                status="succeeded",
-                phase="complete",
-                progress=1.0,
-                result=result,
-                finished_at=time.time(),
+            result = self.infer(
+                payload,
+                progress_callback=lambda value, phase: self._update_job_progress(
+                    job_id, value, phase
+                ),
+                cancel_check=lambda: self._job_cancelled(job_id),
             )
+            if not self.jobs.succeed(job_id, result):
+                self._finish_cancelled_job(job_id)
+        except InferenceCancelled:
+            self._finish_cancelled_job(job_id)
         except Exception as exc:  # surfaced through the job status endpoint
-            job = self.jobs.get(job_id)
-            if job.cancel_requested:
-                self.jobs.update(
-                    job_id,
-                    status="cancelled",
-                    phase="cancelled",
-                    progress=1.0,
-                    finished_at=time.time(),
-                )
-            else:
-                self.jobs.update(
-                    job_id,
-                    status="failed",
-                    phase="failed",
-                    error=str(exc),
-                    finished_at=time.time(),
-                )
+            if not self.jobs.fail(job_id, str(exc)):
+                self._finish_cancelled_job(job_id)
+
+    def _start_job(
+        self,
+        job: InferenceJob,
+        target: Callable[[str, Mapping[str, Any]], None],
+        payload: Mapping[str, Any],
+    ) -> dict[str, Any]:
+        thread = threading.Thread(
+            target=target,
+            args=(job.job_id, dict(payload)),
+            name=f"puresound-{job.kind}-{job.job_id[:8]}",
+            daemon=True,
+        )
+        thread.start()
+        return self.jobs.snapshot(job.job_id)
 
     def submit_inference(self, payload: Mapping[str, Any]) -> dict[str, Any]:
         if not isinstance(payload, Mapping):
@@ -550,26 +632,66 @@ class WebService:
         if not isinstance(inputs, Mapping) or not inputs:
             raise WebServiceError("inputs must be a non-empty object")
         job = self.jobs.create(model_id)
-        thread = threading.Thread(
-            target=self._run_job,
-            args=(job.job_id, dict(payload)),
-            name=f"puresound-infer-{job.job_id[:8]}",
-            daemon=True,
-        )
-        thread.start()
-        return InferenceJobStore.snapshot(job)
+        return self._start_job(job, self._run_job, payload)
+
+    def _run_measurement_job(self, job_id: str, payload: Mapping[str, Any]) -> None:
+        if not self.jobs.start(
+            job_id,
+            phase="preparing_measurement",
+            progress=0.01,
+        ):
+            return
+        try:
+            result = self.measure(
+                payload,
+                progress_callback=lambda value, phase: self._update_job_progress(
+                    job_id, value, phase
+                ),
+                cancel_check=lambda: self._job_cancelled(job_id),
+            )
+            if not self.jobs.succeed(job_id, result):
+                self._finish_cancelled_job(job_id)
+        except InferenceCancelled:
+            self._finish_cancelled_job(job_id)
+        except Exception as exc:
+            if not self.jobs.fail(job_id, str(exc)):
+                self._finish_cancelled_job(job_id)
+
+    def submit_measurement(self, payload: Mapping[str, Any]) -> dict[str, Any]:
+        if not isinstance(payload, Mapping):
+            raise WebServiceError("request body must be a JSON object")
+        inputs = payload.get("inputs")
+        if not isinstance(inputs, Mapping) or "audio" not in inputs:
+            raise WebServiceError("inputs.audio is required")
+        job = self.jobs.create("model-comparison", kind="measurement")
+        return self._start_job(job, self._run_measurement_job, payload)
 
     def job(self, job_id: str) -> dict[str, Any]:
-        return InferenceJobStore.snapshot(self.jobs.get(job_id))
+        return self.jobs.snapshot(job_id)
 
     def cancel_job(self, job_id: str) -> dict[str, Any]:
-        return InferenceJobStore.snapshot(self.jobs.cancel(job_id))
+        self.jobs.cancel(job_id)
+        return self.jobs.snapshot(job_id)
 
     def list_jobs(self, limit: int = 20) -> list[dict[str, Any]]:
-        return [InferenceJobStore.snapshot(job) for job in self.jobs.list(limit)]
+        return self.jobs.list_snapshots(limit)
 
     # Measurements ------------------------------------------------------------
-    def measure(self, payload: Mapping[str, Any]) -> dict[str, Any]:
+    def measure(
+        self,
+        payload: Mapping[str, Any],
+        *,
+        progress_callback: Callable[[float, str], None] | None = None,
+        cancel_check: Callable[[], bool] | None = None,
+    ) -> dict[str, Any]:
+        def emit_progress(value: float, phase: str) -> None:
+            if progress_callback is not None:
+                progress_callback(max(0.0, min(1.0, float(value))), phase)
+
+        def ensure_active() -> None:
+            if cancel_check is not None and cancel_check():
+                raise InferenceCancelled("measurement cancelled")
+
         if not isinstance(payload, Mapping):
             raise WebServiceError("request body must be a JSON object")
         inputs = payload.get("inputs")
@@ -591,24 +713,51 @@ class WebService:
         temp_paths: list[Path] = []
         started = time.time()
         try:
+            ensure_active()
+            emit_progress(0.02, "preparing_probe")
             audio_path = self._materialize_input(inputs["audio"], temp_paths)
+            ensure_active()
+            emit_progress(0.05, "analyzing_probe")
             _, input_stats = audio_metrics_from_path(audio_path, sample_rate)
             reference_values = None
             reference_stats = None
             if inputs.get("reference") is not None:
+                ensure_active()
+                emit_progress(0.08, "analyzing_reference")
                 reference_path = self._materialize_input(inputs["reference"], temp_paths)
                 reference_values, reference_stats = audio_metrics_from_path(reference_path, sample_rate)
             reports: list[dict[str, Any]] = []
-            for model_id in model_ids:
-                report: dict[str, Any] = {"model_id": model_id}
+            model_count = max(1, len(model_ids))
+            for index, model_id in enumerate(model_ids):
+                ensure_active()
+                model_start = 0.1 + 0.86 * index / model_count
+                model_end = 0.1 + 0.86 * (index + 1) / model_count
+                model_report: dict[str, Any] = {"model_id": model_id}
                 try:
                     model = self.zoo.get(model_id)
                     if model.task != "voice_isolation":
                         raise WebServiceError("measurement comparison only supports voice isolation models")
+
+                    def model_progress(value: float, phase: str) -> None:
+                        emit_progress(
+                            model_start + (model_end - model_start) * value,
+                            f"model_{index + 1}_of_{model_count}:{phase}",
+                        )
+
+                    emit_progress(
+                        model_start,
+                        f"model_{index + 1}_of_{model_count}:loading_model",
+                    )
                     runtime = self._runtime(model_id, provider, None)
-                    result: InferenceResult = runtime.infer(inputs={"audio": audio_path}, parameters=dict(parameters))
+                    result: InferenceResult = runtime.infer(
+                        inputs={"audio": audio_path},
+                        parameters=dict(parameters),
+                        progress_callback=model_progress,
+                        cancel_check=cancel_check,
+                    )
+                    ensure_active()
                     output = np.asarray(result.outputs.get("audio"), dtype=np.float32).reshape(-1)
-                    report.update(
+                    model_report.update(
                         {
                             "display_name": model.display_name,
                             "provider": result.provider,
@@ -618,16 +767,26 @@ class WebService:
                             "quality": reference_metrics(reference_values, output, result.sample_rate or sample_rate) if reference_values is not None else {},
                         }
                     )
+                except InferenceCancelled:
+                    raise
                 except Exception as exc:
-                    report["error"] = str(exc)
-                reports.append(report)
-            return {
+                    model_report["error"] = str(exc)
+                reports.append(model_report)
+                emit_progress(
+                    model_end,
+                    f"model_{index + 1}_of_{model_count}:complete",
+                )
+            ensure_active()
+            emit_progress(0.98, "finalizing_report")
+            result = {
                 "sample_rate": sample_rate,
                 "input": input_stats,
                 "reference": reference_stats,
                 "models": reports,
                 "elapsed_seconds": time.time() - started,
             }
+            emit_progress(1.0, "complete")
+            return result
         finally:
             for path in temp_paths:
                 try:
@@ -776,7 +935,13 @@ class _RequestHandler(BaseHTTPRequestHandler):
             raw = self.rfile.read(content_length)
             payload = json.loads(raw.decode("utf-8"))
             if path == "/api/jobs":
-                response = self.app.submit_inference(payload)
+                kind = payload.get("kind", "inference") if isinstance(payload, Mapping) else "inference"
+                if kind == "measurement":
+                    response = self.app.submit_measurement(payload)
+                elif kind == "inference":
+                    response = self.app.submit_inference(payload)
+                else:
+                    raise WebServiceError("job kind must be one of: inference, measurement")
                 self._json(HTTPStatus.ACCEPTED, response)
             elif path == "/api/measure":
                 response = self.app.measure(payload)

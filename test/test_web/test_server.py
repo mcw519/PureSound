@@ -9,7 +9,7 @@ import numpy as np
 import pytest
 
 from puresound.cli import build_parser
-from puresound.inference import InferenceResult
+from puresound.inference import InferenceCancelled, InferenceResult
 from puresound.web import WebService
 import puresound.web.server as web_server
 
@@ -40,9 +40,18 @@ def test_web_infer_materializes_upload_and_exposes_download(monkeypatch):
     service = WebService()
 
     class FakeRuntime:
-        def infer(self, *, inputs, parameters):
+        def infer(
+            self,
+            *,
+            inputs,
+            parameters,
+            progress_callback=None,
+            cancel_check=None,
+        ):
             assert set(inputs) == {"audio"}
             assert parameters == {"dry_blend": 0.8}
+            assert cancel_check is None
+            progress_callback(1.0, "complete")
             return InferenceResult(
                 model_id="voice-isolate-dpcrn-v8",
                 task="voice_isolation",
@@ -132,7 +141,8 @@ def test_web_audio_inspector_assets_are_packaged():
     assert "/audio-worker.js" in audio_view
     assert 'provider.includes("CPU")' in app
     assert 'api("/api/jobs"' in app
-    assert 'api("/api/measure"' in app
+    assert 'kind: "measurement"' in app
+    assert 'id="measure-job-progress"' in html
     assert "sidebar-collapsed" in app
     assert 'data-aside-toggle="voice"' in html
     assert ".workspace.is-aside-collapsed > .workspace-main" in styles
@@ -144,9 +154,17 @@ def test_web_measurement_report_compares_selected_models(monkeypatch):
     service = WebService()
 
     class FakeRuntime:
-        def infer(self, *, inputs, parameters):
+        def infer(
+            self,
+            *,
+            inputs,
+            parameters,
+            progress_callback=None,
+            cancel_check=None,
+        ):
             assert set(inputs) == {"audio"}
             assert parameters == {"dry_blend": 0.8}
+            progress_callback(1.0, "complete")
             return InferenceResult(
                 model_id="voice-isolate-dpcrn-v8",
                 task="voice_isolation",
@@ -177,7 +195,15 @@ def test_web_async_job_reports_completion_and_keeps_result(monkeypatch):
     service = WebService()
 
     class FakeRuntime:
-        def infer(self, *, inputs, parameters):
+        def infer(
+            self,
+            *,
+            inputs,
+            parameters,
+            progress_callback=None,
+            cancel_check=None,
+        ):
+            progress_callback(0.5, "processing_frames")
             return InferenceResult(
                 model_id="voice-isolate-dpcrn-v8",
                 task="voice_isolation",
@@ -206,3 +232,86 @@ def test_web_async_job_reports_completion_and_keeps_result(monkeypatch):
     assert current["status"] == "succeeded"
     assert current["progress"] == 1.0
     assert current["result"]["output_urls"]["audio"].startswith("/api/runs/")
+
+
+def test_web_async_job_cancels_during_processor_progress(monkeypatch):
+    service = WebService()
+
+    class FakeRuntime:
+        def infer(
+            self,
+            *,
+            inputs,
+            parameters,
+            progress_callback=None,
+            cancel_check=None,
+        ):
+            for step in range(1, 101):
+                if cancel_check():
+                    raise InferenceCancelled("inference cancelled")
+                progress_callback(step / 100, "processing_frames")
+                time.sleep(0.002)
+            raise AssertionError("job should have been cancelled")
+
+    monkeypatch.setattr(service, "_runtime", lambda *args: FakeRuntime())
+    job = service.submit_inference(
+        {
+            "model_id": "voice-isolate-dpcrn-v8",
+            "inputs": {"audio": {"filename": "input.wav", "data": _wav_data_url()}},
+        }
+    )
+    deadline = time.time() + 5
+    while time.time() < deadline and service.job(job["job_id"])["progress"] <= 0.12:
+        time.sleep(0.002)
+    service.cancel_job(job["job_id"])
+    while time.time() < deadline:
+        current = service.job(job["job_id"])
+        if current["status"] == "cancelled":
+            break
+        time.sleep(0.002)
+
+    assert current["status"] == "cancelled"
+    assert current["progress"] < 1.0
+    assert current["result"] is None
+
+
+def test_web_measurement_runs_as_a_shared_background_job(monkeypatch):
+    service = WebService()
+
+    class FakeRuntime:
+        def infer(
+            self,
+            *,
+            inputs,
+            parameters,
+            progress_callback=None,
+            cancel_check=None,
+        ):
+            progress_callback(0.5, "processing_frames")
+            return InferenceResult(
+                model_id="voice-isolate-dpcrn-v8",
+                task="voice_isolation",
+                outputs={"audio": np.ones(160, dtype=np.float32) * 0.1},
+                provider="CPUExecutionProvider",
+                elapsed_seconds=0.01,
+                rtf=0.1,
+                sample_rate=16_000,
+            )
+
+    monkeypatch.setattr(service, "_runtime", lambda *args: FakeRuntime())
+    job = service.submit_measurement(
+        {
+            "inputs": {"audio": {"filename": "input.wav", "data": _wav_data_url()}},
+            "models": ["voice-isolate-dpcrn-v8"],
+        }
+    )
+    deadline = time.time() + 5
+    while time.time() < deadline:
+        current = service.job(job["job_id"])
+        if current["status"] in {"succeeded", "failed", "cancelled"}:
+            break
+        time.sleep(0.002)
+
+    assert current["kind"] == "measurement"
+    assert current["status"] == "succeeded"
+    assert current["result"]["models"][0]["model_id"] == "voice-isolate-dpcrn-v8"
