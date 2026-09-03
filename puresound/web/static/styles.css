@@ -256,7 +256,7 @@ h2 { margin-bottom: 0; font-size: 20px; font-weight: 500; letter-spacing: -.45px
 .status-icon { width: 34px; height: 34px; display: grid; place-items: center; color: var(--body); border: 1px solid var(--hairline); border-radius: 50%; font-family: var(--mono); }
 .validation-status.is-ok .status-icon { color: var(--green); border-color: rgba(30,141,91,.3); background: #eaf8f0; }
 .validation-status.is-error .status-icon { color: var(--danger); border-color: rgba(180,35,24,.3); background: #fef0ee; }
-.validation-status strong, .validation-status span { display: block; }
+.validation-status strong, .validation-status div span { display: block; }
 .validation-status strong { font-size: 17px; font-weight: 500; }
 .validation-status div span { margin-top: 3px; color: var(--body); font-size: 13px; }
 .validation-summary { display: flex; flex-wrap: wrap; gap: 9px; margin-top: 22px; }
