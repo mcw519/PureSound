@@ -10,7 +10,14 @@ from typing import Any, Mapping
 
 import numpy as np
 
-from .base import load_audio
+from .base import (
+    CancelCheck,
+    InferenceCancelled,
+    ProgressCallback,
+    check_cancelled,
+    load_audio,
+    report_progress,
+)
 
 
 class VoiceIsolationRuntime:
@@ -130,6 +137,9 @@ class VoiceIsolationRuntime:
         self,
         inputs: Mapping[str, Any],
         parameters: Mapping[str, Any] | None = None,
+        *,
+        progress_callback: ProgressCallback | None = None,
+        cancel_check: CancelCheck | None = None,
     ):
         from puresound.inference.runtime import InferenceResult
 
@@ -142,15 +152,45 @@ class VoiceIsolationRuntime:
             if extra:
                 details.append("unknown input(s): " + ", ".join(sorted(extra)))
             raise ValueError("voice isolation expects named input 'audio' (" + "; ".join(details) + ")")
+        check_cancelled(cancel_check)
+        report_progress(progress_callback, 0.0, "loading_audio")
         overrides, collect_extras = self._parameter_overrides(parameters)
         samples, sample_rate = load_audio(
             inputs["audio"], sample_rate=self.sample_rate, target_dbfs=None
         )
         if samples.size == 0:
             raise ValueError("audio input is empty")
+        check_cancelled(cancel_check)
+        report_progress(progress_callback, 0.02, "loading_model")
         started = time.perf_counter()
         stream = self._make_stream({**overrides, "collect_extras": collect_extras})
-        enhanced_parts = [stream.process_samples(samples), stream.flush()]
+        total_frames = max(1, int(np.ceil(samples.size / stream.hop_length)))
+        completed_frames = 0
+
+        def frame_complete() -> None:
+            nonlocal completed_frames
+            completed_frames += 1
+            report_progress(
+                progress_callback,
+                min(0.99, completed_frames / total_frames),
+                "processing_frames",
+            )
+
+        try:
+            enhanced_parts = [
+                stream.process_samples(
+                    samples,
+                    frame_callback=frame_complete,
+                    cancel_check=cancel_check,
+                ),
+                stream.flush(
+                    frame_callback=frame_complete,
+                    cancel_check=cancel_check,
+                ),
+            ]
+        except InterruptedError as exc:
+            raise InferenceCancelled("inference cancelled") from exc
+        check_cancelled(cancel_check)
         enhanced = np.concatenate([part for part in enhanced_parts if part.size])
         elapsed = time.perf_counter() - started
         outputs: dict[str, np.ndarray] = {"audio": enhanced.astype(np.float32, copy=False)}
@@ -172,7 +212,7 @@ class VoiceIsolationRuntime:
             "latency_ms": 1000.0 * float(stream.dry_delay) / sample_rate,
             "artifact_variant": self.artifact.variant,
         }
-        return InferenceResult(
+        result = InferenceResult(
             model_id=self.model.id,
             task=self.model.task,
             outputs=outputs,
@@ -183,6 +223,8 @@ class VoiceIsolationRuntime:
             sample_rate=sample_rate,
             metadata=metadata,
         )
+        report_progress(progress_callback, 1.0, "complete")
+        return result
 
     # Realtime compatibility -------------------------------------------------
     # A caller obtains one runtime per realtime session, so these mutable

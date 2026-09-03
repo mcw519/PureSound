@@ -3,8 +3,11 @@
 from .runtime import InferenceError, InferenceResult, load_model
 from .providers import resolve_providers
 from .processors import (
+    CancelCheck,
+    InferenceCancelled,
     PROCESSOR_REGISTRY,
     ProcessorProtocol,
+    ProgressCallback,
     SpeakerVerificationRuntime,
     StftFrameOrtProcessor,
     WaveformEmbeddingOrtProcessor,
@@ -24,6 +27,8 @@ __all__ = [
     "ArtifactSpec",
     "AudioSpec",
     "Catalog",
+    "CancelCheck",
+    "InferenceCancelled",
     "InferenceError",
     "InferenceResult",
     "ModelSpec",
@@ -35,6 +40,7 @@ __all__ = [
     "ParameterSpec",
     "PROCESSOR_REGISTRY",
     "ProcessorProtocol",
+    "ProgressCallback",
     "SpeakerVerificationRuntime",
     "StftFrameOrtProcessor",
     "WaveformEmbeddingOrtProcessor",

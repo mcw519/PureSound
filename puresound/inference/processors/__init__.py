@@ -1,6 +1,13 @@
 """Processor implementations for the unified ONNX facade."""
 
-from .base import AudioInputError, ProcessorProtocol, load_audio
+from .base import (
+    AudioInputError,
+    CancelCheck,
+    InferenceCancelled,
+    ProcessorProtocol,
+    ProgressCallback,
+    load_audio,
+)
 from .stft_frame import StftFrameOrtProcessor, VoiceIsolationRuntime
 from .waveform_embedding import SpeakerVerificationRuntime, WaveformEmbeddingOrtProcessor
 
@@ -11,7 +18,10 @@ PROCESSOR_REGISTRY = {
 
 __all__ = [
     "AudioInputError",
+    "CancelCheck",
+    "InferenceCancelled",
     "ProcessorProtocol",
+    "ProgressCallback",
     "PROCESSOR_REGISTRY",
     "load_audio",
     "SpeakerVerificationRuntime",

@@ -3,7 +3,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from puresound.inference import load_model
+from puresound.inference import InferenceCancelled, load_model
 
 
 @pytest.mark.parametrize(
@@ -92,3 +92,27 @@ def test_two_stream_runtimes_keep_independent_state():
     second_audio = np.concatenate(second_parts + [second.flush()])
     assert np.allclose(first_audio, solo_audio, rtol=1e-5, atol=1e-6)
     assert np.allclose(second_audio, solo_audio, rtol=1e-5, atol=1e-6)
+
+
+def test_voice_isolation_reports_frame_progress_and_stops_between_frames():
+    runtime = load_model("voice-isolate-dpcrn-v8", provider="cpu")
+    samples = np.zeros(3200, dtype=np.float32)
+    events: list[tuple[float, str]] = []
+
+    def on_progress(value: float, phase: str) -> None:
+        events.append((value, phase))
+
+    def should_cancel() -> bool:
+        return any(phase == "processing_frames" for _, phase in events)
+
+    with pytest.raises(InferenceCancelled, match="cancelled"):
+        runtime.infer(
+            {"audio": samples},
+            progress_callback=on_progress,
+            cancel_check=should_cancel,
+        )
+
+    frame_events = [value for value, phase in events if phase == "processing_frames"]
+    assert frame_events
+    assert frame_events == sorted(frame_events)
+    assert max(frame_events) < 1.0

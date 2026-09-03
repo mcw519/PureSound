@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Mapping, Protocol
+from typing import Any, Callable, Mapping, Protocol
 
 import numpy as np
 import torch
@@ -13,6 +13,28 @@ class AudioInputError(ValueError):
     """Raised when an inference audio input cannot be normalised."""
 
 
+class InferenceCancelled(RuntimeError):
+    """Raised when a caller requests cooperative inference cancellation."""
+
+
+ProgressCallback = Callable[[float, str], None]
+CancelCheck = Callable[[], bool]
+
+
+def check_cancelled(cancel_check: CancelCheck | None) -> None:
+    if cancel_check is not None and cancel_check():
+        raise InferenceCancelled("inference cancelled")
+
+
+def report_progress(
+    progress_callback: ProgressCallback | None,
+    value: float,
+    phase: str,
+) -> None:
+    if progress_callback is not None:
+        progress_callback(max(0.0, min(1.0, float(value))), str(phase))
+
+
 class ProcessorProtocol(Protocol):
     """Structural contract implemented by each facade processor."""
 
@@ -20,6 +42,9 @@ class ProcessorProtocol(Protocol):
         self,
         inputs: Mapping[str, Any],
         parameters: Mapping[str, Any] | None = None,
+        *,
+        progress_callback: ProgressCallback | None = None,
+        cancel_check: CancelCheck | None = None,
     ) -> Any:
         ...
 
@@ -115,4 +140,13 @@ def load_audio(
     return array.astype(np.float32, copy=False), sample_rate
 
 
-__all__ = ["AudioInputError", "ProcessorProtocol", "load_audio"]
+__all__ = [
+    "AudioInputError",
+    "CancelCheck",
+    "InferenceCancelled",
+    "ProcessorProtocol",
+    "ProgressCallback",
+    "check_cancelled",
+    "load_audio",
+    "report_progress",
+]

@@ -554,25 +554,48 @@ class StreamingOrt:
         self.ola_norm = self.ola_norm[self.hop_length :]
         return emit.astype(np.float32)
 
-    def process_samples(self, samples: np.ndarray) -> np.ndarray:
+    @staticmethod
+    def _check_cancelled(cancel_check: Callable[[], bool] | None) -> None:
+        if cancel_check is not None and cancel_check():
+            raise InterruptedError("streaming inference cancelled")
+
+    def process_samples(
+        self,
+        samples: np.ndarray,
+        *,
+        frame_callback: Callable[[], None] | None = None,
+        cancel_check: Callable[[], bool] | None = None,
+    ) -> np.ndarray:
         samples = np.asarray(samples, dtype=np.float32).reshape(-1)
         self._remember_dry(samples)
         self.input_buffer = np.concatenate([self.input_buffer, samples])
         chunks = []
         while self.input_buffer.shape[0] >= self.win_length:
+            self._check_cancelled(cancel_check)
             frame = self.input_buffer[: self.win_length]
             self.input_buffer = self.input_buffer[self.hop_length :]
             chunks.append(self._blend_dry(self._add_ola_frame(self._process_frame(frame))))
+            if frame_callback is not None:
+                frame_callback()
         return np.concatenate(chunks) if chunks else np.zeros(0, dtype=np.float32)
 
-    def flush(self) -> np.ndarray:
+    def flush(
+        self,
+        *,
+        frame_callback: Callable[[], None] | None = None,
+        cancel_check: Callable[[], bool] | None = None,
+    ) -> np.ndarray:
         chunks = []
         while self.input_buffer.size > 0:
+            self._check_cancelled(cancel_check)
             frame = np.zeros(self.win_length, dtype=np.float32)
             n = min(self.input_buffer.size, self.win_length)
             frame[:n] = self.input_buffer[:n]
             self.input_buffer = self.input_buffer[min(self.hop_length, self.input_buffer.size) :]
             chunks.append(self._blend_dry(self._add_ola_frame(self._process_frame(frame))))
+            if frame_callback is not None:
+                frame_callback()
+        self._check_cancelled(cancel_check)
         if self.ola.size:
             tail = self.ola / np.maximum(self.ola_norm, 1e-8)
             chunks.append(self._blend_dry(tail.astype(np.float32)))

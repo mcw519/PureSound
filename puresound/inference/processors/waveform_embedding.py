@@ -8,7 +8,13 @@ from typing import Any, Mapping
 
 import numpy as np
 
-from .base import load_audio
+from .base import (
+    CancelCheck,
+    ProgressCallback,
+    check_cancelled,
+    load_audio,
+    report_progress,
+)
 from ..providers import resolve_providers
 
 
@@ -106,6 +112,9 @@ class SpeakerVerificationRuntime:
         self,
         inputs: Mapping[str, Any],
         parameters: Mapping[str, Any] | None = None,
+        *,
+        progress_callback: ProgressCallback | None = None,
+        cancel_check: CancelCheck | None = None,
     ):
         from puresound.inference.runtime import InferenceResult
 
@@ -119,14 +128,22 @@ class SpeakerVerificationRuntime:
             if extra:
                 details.append("unknown input(s): " + ", ".join(sorted(extra)))
             raise ValueError("speaker verification expects named inputs 'enrollment' and 'test' (" + "; ".join(details) + ")")
+        check_cancelled(cancel_check)
+        report_progress(progress_callback, 0.0, "loading_audio")
         threshold, target_dbfs = self._parameters(parameters)
         enrollment, sample_rate = load_audio(
             inputs["enrollment"], sample_rate=self.sample_rate, target_dbfs=target_dbfs
         )
         test, _ = load_audio(inputs["test"], sample_rate=self.sample_rate, target_dbfs=target_dbfs)
+        check_cancelled(cancel_check)
+        report_progress(progress_callback, 0.1, "embedding_enrollment")
         started = time.perf_counter()
         enrollment_embedding = self._embedding(enrollment)
+        check_cancelled(cancel_check)
+        report_progress(progress_callback, 0.5, "embedding_test")
         test_embedding = self._embedding(test)
+        check_cancelled(cancel_check)
+        report_progress(progress_callback, 0.95, "scoring")
         denominator = float(np.linalg.norm(enrollment_embedding) * np.linalg.norm(test_embedding))
         similarity = float(np.dot(enrollment_embedding, test_embedding) / denominator) if denominator > 1e-12 else 0.0
         elapsed = time.perf_counter() - started
@@ -152,7 +169,7 @@ class SpeakerVerificationRuntime:
             "output_name": self.output_name,
             "artifact_variant": self.artifact.variant,
         }
-        return InferenceResult(
+        result = InferenceResult(
             model_id=self.model.id,
             task=self.model.task,
             outputs=outputs,
@@ -163,6 +180,8 @@ class SpeakerVerificationRuntime:
             sample_rate=sample_rate,
             metadata=metadata,
         )
+        report_progress(progress_callback, 1.0, "complete")
+        return result
 
 
 WaveformEmbeddingOrtProcessor = SpeakerVerificationRuntime
