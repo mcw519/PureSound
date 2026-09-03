@@ -64,6 +64,22 @@ Or with pip environment:
 pytest
 ```
 
+## Web Inference Workspace
+
+The local Model Zoo and unified ONNX runtime are also available through a
+small dependency-light browser workspace. It uses the same named-input
+processors as the CLI and Gradio compatibility demos:
+
+```bash
+puresound web
+# open http://127.0.0.1:7860
+```
+
+Use `puresound web --ip 0.0.0.0 --port 8080` to control the bind address and
+port when serving on a trusted network.
+
+See [`docs/web.md`](docs/web.md) for the API contract and upload format.
+
 ## Quick Start Recipes
 
 The `egs` folder contains runnable examples.

@@ -35,6 +35,16 @@ def _parameter(value: str) -> tuple[str, Any]:
     return name, parsed
 
 
+def _port(value: str) -> int:
+    try:
+        port = int(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("port must be an integer") from exc
+    if not 1 <= port <= 65535:
+        raise argparse.ArgumentTypeError("port must be between 1 and 65535")
+    return port
+
+
 def _json_dump(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False, indent=2, default=str)
 
@@ -102,6 +112,32 @@ def build_parser() -> argparse.ArgumentParser:
     infer.add_argument("--input", dest="inputs", action="append", type=_assignment, default=[], metavar="NAME=PATH")
     infer.add_argument("--output", dest="outputs", action="append", type=_assignment, default=[], metavar="NAME=PATH")
     infer.add_argument("--param", dest="parameters", action="append", type=_parameter, default=[], metavar="NAME=VALUE")
+
+    web = subparsers.add_parser("web", help="serve the local Model Zoo web workspace")
+    web.add_argument(
+        "--host",
+        "--ip",
+        dest="host",
+        default="127.0.0.1",
+        help="bind IP or hostname (default: 127.0.0.1)",
+    )
+    web.add_argument("--port", type=_port, default=7860, help="bind port (default: 7860)")
+    web.add_argument(
+        "--static-dir",
+        default=None,
+        help="override the directory containing the browser client",
+    )
+    web.add_argument(
+        "--allow-local-paths",
+        action="store_true",
+        help="allow API inputs to reference local paths (for trusted local clients)",
+    )
+    web.add_argument(
+        "--max-upload-mb",
+        type=int,
+        default=64,
+        help="maximum decoded audio upload size in MiB (default: 64)",
+    )
     return parser
 
 
@@ -130,6 +166,18 @@ def main(argv: list[str] | None = None) -> int:
             print(
                 f"Model Zoo valid: {report.models} logical models, "
                 f"{report.artifacts} ONNX artifacts"
+            )
+            return 0
+
+        if args.command == "web":
+            from puresound.web import run
+
+            run(
+                host=args.host,
+                port=args.port,
+                static_dir=args.static_dir,
+                max_upload_bytes=max(1, args.max_upload_mb) * 1024 * 1024,
+                allow_local_paths=args.allow_local_paths,
             )
             return 0
 

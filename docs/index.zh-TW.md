@@ -19,6 +19,7 @@ PureSound 是一套模組化的音訊處理與深度學習框架，用於語音�
 | [puresound.system](system/index.md) | PyTorch Lightning 訓練系統 |
 | [puresound.task](task/index.md) | Task-specific 的 dataset 實作 |
 | [puresound.streaming](streaming/index.md) | Streaming 推論與 ONNX Runtime 部署 |
+| [puresound.web](web.zh-TW.md) | 輕量 Model Zoo 瀏覽器工作區與 HTTP API |
 | [puresound.metrics](metrics.md) | 音訊品質評估 metrics |
 | [puresound.utils](utils.md) | 通用工具函式 |
 | `puresound.logging_setup` | 函式庫執行期輸出的去向，以及如何接手控制 |

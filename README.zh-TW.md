@@ -64,6 +64,21 @@ uv run pytest
 pytest
 ```
 
+## Web 推論工作區
+
+本地 Model Zoo 與統一 ONNX runtime 也提供一個不需額外前端框架的瀏覽器
+工作區。它與 CLI 及 Gradio 相容 demo 使用相同的 named-input processor：
+
+```bash
+puresound web
+# 開啟 http://127.0.0.1:7860
+```
+
+在可信任網路提供服務時，可用
+`puresound web --ip 0.0.0.0 --port 8080` 控制綁定的 IP 與 port。
+
+API 與上傳格式請參考 [`docs/web.zh-TW.md`](docs/web.zh-TW.md)。
+
 ## 快速開始（Recipes）
 
 `egs` 資料夾內含可直接執行的範例。

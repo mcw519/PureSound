@@ -78,6 +78,9 @@ explicit = true
 [tool.setuptools.packages.find]
 include = ["puresound*"]
 
+[tool.setuptools.package-data]
+puresound = ["web/static/*"]
+
 [tool.pytest.ini_options]
 markers = [
   "src",

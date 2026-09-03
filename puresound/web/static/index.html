@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#010120" />
+    <title>PureSound · Inference Workspace</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar" aria-label="Primary navigation">
+        <div class="brand">
+          <span class="brand-mark" aria-hidden="true">
+            <svg viewBox="0 0 32 32" role="img">
+              <path d="M2 17h4l2-8 4 16 4-20 4 20 3-12 2 4h5" />
+            </svg>
+          </span>
+          <span>PureSound</span>
+        </div>
+
+        <nav class="nav-stack">
+          <button class="nav-link is-active" data-screen="zoo" type="button">
+            <span class="nav-icon" aria-hidden="true">◈</span>
+            <span>Model Zoo</span>
+          </button>
+          <button class="nav-link" data-screen="playground" type="button">
+            <span class="nav-icon" aria-hidden="true">▷</span>
+            <span>Playground</span>
+          </button>
+          <button class="nav-link" data-screen="measurements" type="button">
+            <span class="nav-icon" aria-hidden="true">⌁</span>
+            <span>Measurements</span>
+          </button>
+        </nav>
+
+        <div class="sidebar-spacer"></div>
+        <div class="runtime-card">
+          <div class="status-line"><span class="status-dot"></span><span>Local runtime</span></div>
+          <div class="runtime-value" id="runtime-status">Connecting…</div>
+          <div class="runtime-meta" id="runtime-meta">Model Zoo</div>
+        </div>
+        <div class="sidebar-footer">
+          <span>PURESOUND / ONNX</span>
+          <span class="version-label">v0.1</span>
+        </div>
+      </aside>
+
+      <main class="main-content">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">LOCAL INFERENCE WORKSPACE</p>
+            <p class="topbar-context" id="topbar-context">Model Zoo / Overview</p>
+          </div>
+          <div class="topbar-actions">
+            <button class="icon-button" id="refresh-button" type="button" title="Refresh catalog" aria-label="Refresh catalog">↻</button>
+            <a class="button button-dark button-small" href="https://github.com/mcw519/PureSound" target="_blank" rel="noreferrer">Docs <span aria-hidden="true">↗</span></a>
+          </div>
+        </header>
+
+        <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+        <section class="screen is-visible" id="screen-zoo" data-screen-panel="zoo">
+          <div class="hero-row">
+            <div>
+              <p class="eyebrow accent-eyebrow">CATALOG / RELEASED ARTIFACTS</p>
+              <h1>Model Zoo</h1>
+              <p class="lede">A versioned, verifiable home for every PureSound ONNX model.</p>
+            </div>
+            <button class="button button-mint" data-screen-target="playground" type="button">Open playground <span aria-hidden="true">→</span></button>
+          </div>
+
+          <div class="stats-grid" aria-label="Catalog summary">
+            <div class="stat-card"><span class="stat-label">Logical models</span><strong id="stat-models">—</strong><span class="stat-hint">registered</span></div>
+            <div class="stat-card"><span class="stat-label">ONNX artifacts</span><strong id="stat-artifacts">—</strong><span class="stat-hint">hash checked</span></div>
+            <div class="stat-card stat-card-accent"><span class="stat-label">Default voice model</span><strong id="stat-default-voice">—</strong><span class="stat-hint">release preset</span></div>
+            <div class="stat-card"><span class="stat-label">Runtime</span><strong id="stat-runtime">CPU</strong><span class="stat-hint">provider auto</span></div>
+          </div>
+
+          <div class="toolbar panel">
+            <label class="search-field"><span aria-hidden="true">⌕</span><input id="model-search" type="search" placeholder="Search models…" autocomplete="off" /></label>
+            <label class="select-field"><span>Task</span><select id="task-filter"><option value="all">All tasks</option><option value="voice_isolation">Voice isolation</option><option value="speaker_embedding">Speaker verification</option></select></label>
+            <label class="select-field"><span>Lifecycle</span><select id="lifecycle-filter"><option value="all">All lifecycle</option><option value="released">Released</option><option value="candidate">Candidate</option><option value="reference">Reference</option><option value="experimental">Experimental</option></select></label>
+            <span class="toolbar-count" id="model-count">Loading…</span>
+          </div>
+
+          <div class="model-grid" id="model-grid" aria-live="polite">
+            <div class="empty-state">Loading Model Zoo…</div>
+          </div>
+        </section>
+
+        <section class="screen" id="screen-playground" data-screen-panel="playground">
+          <div class="hero-row compact-hero">
+            <div>
+              <p class="eyebrow accent-eyebrow">PLAYGROUND / AUDIO CONTRACTS</p>
+              <h1>Inference playground</h1>
+              <p class="lede">Run the same named-input contract used by the CLI and future APIs.</p>
+            </div>
+            <span class="provider-chip"><span class="status-dot"></span>Provider auto</span>
+          </div>
+
+          <div class="workspace-tabs" role="tablist" aria-label="Inference tasks">
+            <button class="workspace-tab is-active" data-workspace="voice" role="tab" aria-selected="true" type="button"><span class="tab-glyph glyph-wave">∿</span>Voice Isolation</button>
+            <button class="workspace-tab" data-workspace="sv" role="tab" aria-selected="false" type="button"><span class="tab-glyph glyph-spk">◌</span>Speaker Verification</button>
+          </div>
+
+          <div class="workspace" id="workspace-voice" data-workspace-panel="voice">
+            <div class="workspace-main">
+              <div class="panel input-panel">
+                <div class="panel-header"><div><p class="eyebrow">INPUT / AUDIO</p><h2>Upload a noisy recording</h2></div><span class="contract-label">audio</span></div>
+                <label class="dropzone" id="voice-dropzone" for="voice-audio">
+                  <input id="voice-audio" type="file" accept="audio/*,.wav,.flac,.mp3,.m4a" />
+                  <span class="upload-icon" aria-hidden="true">↑</span>
+                  <strong>Drop audio here</strong>
+                  <span>or click to browse · mono 16 kHz is prepared by the processor</span>
+                </label>
+                <div class="audio-preview" id="voice-input-preview" hidden>
+                  <div class="audio-preview-head"><span id="voice-file-name">input.wav</span><span class="audio-meta" id="voice-file-meta">—</span></div>
+                  <div class="audio-inspector" id="voice-input-audio" data-wave-color="#c8f6f9"></div>
+                </div>
+              </div>
+
+              <div class="panel result-panel" id="voice-result" hidden>
+                <div class="panel-header"><div><p class="eyebrow">OUTPUT / ENHANCED</p><h2>Voice isolation result</h2></div><a class="button button-outline button-small" id="voice-download" href="#" download="enhanced.wav">Export WAV <span aria-hidden="true">↓</span></a></div>
+                <div class="audio-preview audio-preview-output">
+                  <div class="audio-preview-head"><span>enhanced.wav</span><span class="audio-meta" id="voice-result-meta">—</span></div>
+                  <div class="audio-inspector" id="voice-output-audio" data-wave-color="#bdbbff"></div>
+                </div>
+                <div class="metric-row" id="voice-metrics"></div>
+              </div>
+            </div>
+
+            <aside class="workspace-aside">
+              <div class="panel settings-panel">
+                <div class="panel-header"><div><p class="eyebrow">CONFIGURATION</p><h2>Run settings</h2></div><span class="settings-icon" aria-hidden="true">⚙</span></div>
+                <label class="field-label" for="voice-model">Model</label>
+                <select class="control" id="voice-model"></select>
+                <label class="field-label" for="voice-variant">Artifact variant</label>
+                <select class="control" id="voice-variant"></select>
+                <label class="field-label" for="voice-provider">Provider</label>
+                <select class="control" id="voice-provider"><option value="auto">Auto · fallback to CPU</option><option value="cpu">CPU</option><option value="cuda">CUDA</option></select>
+                <div class="field-label range-label"><span>Dry blend</span><output id="voice-dry-output">0.90</output></div>
+                <input class="range" id="voice-dry-blend" type="range" min="0.1" max="1" step="0.05" value="0.9" />
+                <div class="range-hint"><span>wet</span><span>dry</span></div>
+                <label class="toggle-row"><input id="voice-collect-extras" type="checkbox" /><span class="toggle-ui"></span><span>Collect VAD heads</span></label>
+                <div class="contract-list"><div><span>Sample rate</span><strong id="voice-sample-rate">16 kHz</strong></div><div><span>Channels</span><strong id="voice-channels">Mono</strong></div><div><span>Delay alignment</span><strong id="voice-delay">Manifest</strong></div></div>
+                <button class="button button-dark run-button" id="voice-run" type="button"><span class="button-spinner" aria-hidden="true"></span>Run inference <span aria-hidden="true">→</span></button>
+                <p class="form-note" id="voice-form-note">Select an audio file to begin.</p>
+              </div>
+            </aside>
+          </div>
+
+          <div class="workspace workspace-sv" id="workspace-sv" data-workspace-panel="sv" hidden>
+            <div class="workspace-main">
+              <div class="sv-input-grid">
+                <div class="panel input-panel sv-card">
+                  <div class="panel-header"><div><p class="eyebrow">INPUT / ENROLLMENT</p><h2>Reference voice</h2></div><span class="contract-label contract-purple">enrollment</span></div>
+                  <label class="dropzone compact-dropzone" for="sv-enrollment"><input id="sv-enrollment" type="file" accept="audio/*,.wav,.flac,.mp3,.m4a" /><span class="upload-icon" aria-hidden="true">↑</span><strong>Drop enrollment audio</strong><span>one clear speech sample</span></label>
+                  <div class="audio-preview" id="sv-enrollment-preview" hidden><div class="audio-preview-head"><span id="sv-enrollment-name">enrollment.wav</span><span class="audio-meta" id="sv-enrollment-meta">—</span></div><div class="audio-inspector is-compact" id="sv-enrollment-audio" data-wave-color="#bdbbff"></div></div>
+                </div>
+                <div class="panel input-panel sv-card">
+                  <div class="panel-header"><div><p class="eyebrow">INPUT / TEST</p><h2>Test voice</h2></div><span class="contract-label contract-purple">test</span></div>
+                  <label class="dropzone compact-dropzone" for="sv-test"><input id="sv-test" type="file" accept="audio/*,.wav,.flac,.mp3,.m4a" /><span class="upload-icon" aria-hidden="true">↑</span><strong>Drop test audio</strong><span>same speaker or impostor</span></label>
+                  <div class="audio-preview" id="sv-test-preview" hidden><div class="audio-preview-head"><span id="sv-test-name">test.wav</span><span class="audio-meta" id="sv-test-meta">—</span></div><div class="audio-inspector is-compact" id="sv-test-audio" data-wave-color="#ef2cc1"></div></div>
+                </div>
+              </div>
+              <div class="panel result-panel sv-result-panel" id="sv-result" hidden>
+                <div class="panel-header"><div><p class="eyebrow">RESULT / COSINE DECISION</p><h2>Speaker verification</h2></div><span class="result-time" id="sv-result-time">—</span></div>
+                <div class="sv-result-body"><div class="score-gauge" id="sv-score-gauge"><span class="gauge-value" id="sv-score">—</span><span class="gauge-label">similarity</span></div><div class="decision-copy"><span class="eyebrow">VERDICT</span><strong class="verdict" id="sv-verdict">—</strong><p>Threshold <b id="sv-threshold-result">0.80</b> · <span id="sv-verdict-note">Run two audio files to compare.</span></p></div></div>
+                <div class="metric-row" id="sv-metrics"></div>
+              </div>
+            </div>
+            <aside class="workspace-aside"><div class="panel settings-panel"><div class="panel-header"><div><p class="eyebrow">CONFIGURATION</p><h2>Run settings</h2></div><span class="settings-icon" aria-hidden="true">⚙</span></div><label class="field-label" for="sv-model">Model</label><select class="control" id="sv-model"></select><label class="field-label" for="sv-provider">Provider</label><select class="control" id="sv-provider"><option value="auto">Auto · fallback to CPU</option><option value="cpu">CPU</option><option value="cuda">CUDA</option></select><div class="field-label range-label"><span>Cosine threshold</span><output id="sv-threshold-output">0.80</output></div><input class="range" id="sv-threshold" type="range" min="0" max="1" step="0.01" value="0.8" /><div class="range-hint"><span>strict</span><span>lenient</span></div><div class="contract-list"><div><span>Sample rate</span><strong>16 kHz</strong></div><div><span>Embedding</span><strong>192 dimensions</strong></div><div><span>Decision</span><strong>Cosine similarity</strong></div></div><button class="button button-dark run-button" id="sv-run" type="button"><span class="button-spinner" aria-hidden="true"></span>Run verification <span aria-hidden="true">→</span></button><p class="form-note" id="sv-form-note">Select enrollment and test audio.</p></div></aside>
+          </div>
+        </section>
+
+        <section class="screen" id="screen-measurements" data-screen-panel="measurements">
+          <div class="hero-row compact-hero"><div><p class="eyebrow accent-eyebrow">MEASUREMENTS / VALIDATION</p><h1>Measurements</h1><p class="lede">Check catalog integrity before sharing a model or benchmark result.</p></div><button class="button button-dark" id="validate-button" type="button">Validate catalog <span aria-hidden="true">→</span></button></div>
+          <div class="panel validation-panel"><div class="validation-status" id="validation-status"><span class="status-icon">✓</span><div><strong>Validation has not run</strong><span>Run a CPU graph and SHA256 check from the local catalog.</span></div></div><div class="validation-summary" id="validation-summary"></div><pre class="validation-errors" id="validation-errors" hidden></pre></div>
+          <div class="measurement-note panel"><span class="note-mark">i</span><div><strong>One contract, three clients.</strong><p>The web workspace uses the same Model Zoo and named-input processors as <code>puresound infer</code> and the existing Gradio demos.</p></div></div>
+        </section>
+      </main>
+    </div>
+
+    <dialog class="model-dialog" id="model-dialog">
+      <div class="dialog-header"><div><p class="eyebrow">MODEL / INSPECT</p><h2 id="dialog-title">Model details</h2></div><button class="icon-button" id="dialog-close" type="button" aria-label="Close">×</button></div>
+      <div id="dialog-body"></div>
+    </dialog>
+    <script src="/audio-view.js" defer></script>
+    <script src="/app.js" defer></script>
+  </body>
+</html>
