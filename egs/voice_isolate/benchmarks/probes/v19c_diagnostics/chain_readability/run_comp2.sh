@@ -1,0 +1,7 @@
+cd /home/milowu/A4Audio/PureSound/egs/voice_isolate
+D=/tmp/claude-1001/-home-milowu-A4Audio-PureSound/c52f3b49-8e8f-4f9f-a5ca-862771bd494c/scratchpad/v19_plan/chain_readability
+P=$D/comp_readability2.py
+uv run python $P --tag v8 --config config/train_dpcrn.yaml --ckpt pretrained_ckpt/dpcrn_v8.ckpt --device cuda:1 --out $D/comp2_v8.json 2>&1 | grep -vE "not in the model|Loaded params|done$"
+uv run python $P --tag v16 --config config/exp/train_dpcrn_v16_lengthmix.yaml --ckpt /work/any_exp_link/puresound_exp/dpcrn_v16_lengthmix/lightning_logs/version_0/checkpoints/epoch=19-step=10000.ckpt --device cuda:1 --out $D/comp2_v16.json 2>&1 | grep -vE "not in the model|Loaded params|done$"
+uv run python $P --tag v11b --config config/exp/train_dpcrn_v11b_compinv.yaml --ckpt exp/dpcrn_v11b_compinv/lightning_logs/version_0/checkpoints/epoch=31-step=16000.ckpt --device cuda:1 --out $D/comp2_v11b.json 2>&1 | grep -vE "not in the model|Loaded params|done$"
+echo COMP2DONE

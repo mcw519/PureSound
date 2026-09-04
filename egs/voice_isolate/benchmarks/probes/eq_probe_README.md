@@ -61,3 +61,17 @@ the standing finding that the model reads cues jointly, as comparisons.
   magnitude, not its direction).
 * `dark_tilt`'s DRR drop (-1.45) is larger than `bright_tilt`'s rise: the tilt
   cue is asymmetric at this readout, unquantified further.
+
+---
+
+## ERRATUM (2026-09-04) — Verdict 2 is withdrawn
+
+`eq_probe.py`'s `comp()` returns `compressor_gain(...)` — the GAIN CURVE — instead of `x * gain`, so the "comp" and
+"comp+broadcast" conditions fed the model a near-constant signal (measured std 2.3e-10), not compressed audio. The
+"1.009 → 0.582 m" reading and the conclusion "envelope compression plus mild EQ fully accounts for the QVF phantom near
+user; codec and noise-gate probes drop in priority" are artifacts of that bug. Re-run with the gain actually applied at
+the recipe's operating point, the envelope compressor moves the v8/v16/v11b distance readout by |ΔAUC| ≤ 0.013 (inert);
+the `|x|^p` waveshaper (the operator the ORIGINAL 2026-08-21 conviction used) does move it but degrades AUC to 0.880,
+never inverts it. Nothing applied to a device clip reproduces the QVF chain's 0.26. Verdict 1 (EQ is a minor
+accomplice) stands. Codec, noise gate and room/mic geometry go back onto the candidate list; the `+5.19 dB` DRR shift
+belongs to the waveshaper. See `v19c_diagnosis.md` (chain_readability) and `v19c_round_design.md` §4.

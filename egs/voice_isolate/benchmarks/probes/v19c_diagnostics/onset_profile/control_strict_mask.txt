@@ -1,0 +1,22 @@
+thr=40 v8 DAWN(real) n=446 fgproj_excess@0.5 med=  -3.85 p10=  -51.51 p5=  -69.41
+thr=40 v16 DAWN(real) n=446 fgproj_excess@0.5 med=  -3.90 p10=  -52.52 p5=  -75.60
+thr=20 v8 DAWN(real) n=450 fgproj_excess@0.5 med=  -2.87 p10=  -34.57 p5=  -62.29
+thr=20 v16 DAWN(real) n=450 fgproj_excess@0.5 med=  -2.97 p10=  -35.74 p5=  -60.61
+loss_func_list.1.stft_losses.0.window is not in the model.
+loss_func_list.1.stft_losses.1.window is not in the model.
+loss_func_list.1.stft_losses.2.window is not in the model.
+loss_func_list.2.hann_window is not in the model.
+Loaded params is ok.
+thr=40 v8 SYNTH-t0 wer_set_moderate_test    n=200 fgproj_excess@0.5 med=  -0.25 p10=   -5.34 p5=   -8.35
+thr=20 v8 SYNTH-t0 wer_set_moderate_test    n=200 fgproj_excess@0.5 med=  -0.22 p10=   -5.05 p5=   -8.29
+thr=40 v8 SYNTH-t0 indomain_wer_set         n=200 fgproj_excess@0.5 med=   0.30 p10=   -4.21 p5=   -8.41
+thr=20 v8 SYNTH-t0 indomain_wer_set         n=200 fgproj_excess@0.5 med=   0.22 p10=   -3.85 p5=   -8.23
+loss_func_list.1.stft_losses.0.window is not in the model.
+loss_func_list.1.stft_losses.1.window is not in the model.
+loss_func_list.1.stft_losses.2.window is not in the model.
+loss_func_list.2.hann_window is not in the model.
+Loaded params is ok.
+thr=40 v16 SYNTH-t0 wer_set_moderate_test    n=200 fgproj_excess@0.5 med=  -0.41 p10=   -6.52 p5=  -10.27
+thr=20 v16 SYNTH-t0 wer_set_moderate_test    n=200 fgproj_excess@0.5 med=  -0.41 p10=   -6.31 p5=  -10.19
+thr=40 v16 SYNTH-t0 indomain_wer_set         n=200 fgproj_excess@0.5 med=   0.21 p10=   -5.40 p5=   -8.00
+thr=20 v16 SYNTH-t0 indomain_wer_set         n=200 fgproj_excess@0.5 med=   0.11 p10=   -5.20 p5=   -7.82

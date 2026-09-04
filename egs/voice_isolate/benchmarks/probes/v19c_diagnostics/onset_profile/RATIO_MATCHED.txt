@@ -1,0 +1,49 @@
+ckpt  X    condition matched                                 real   synth   ratio    nR    nS
+v8    0.5  COLD onset, median | dawn<0.1s vs wer_set_moderate_t    4.22    0.25   17.01   146   200
+v8    0.5  COLD onset, median | dawn<0.1s vs indomain_wer_set    4.22   -0.30     nan   146   200
+v8    0.5  BG-first onset, median | dawn>=1s vs bg1 wer_set_modera    7.65    0.52   14.69   217   200
+v8    0.5  BG-first onset, median | dawn>=1s vs bg1 indomain_wer_s    7.65   -0.03     nan   217   200
+v8    0.5  COLD onset, p5 tail | dawn<0.1s vs wer_set_moderate_t   52.92    8.35    6.34   146   200
+v8    0.5  COLD onset, p5 tail | dawn<0.1s vs indomain_wer_set   52.92    8.41    6.29   146   200
+v8    0.5  BG-first onset, p5 tail | dawn>=1s vs bg1 wer_set_modera   76.72   16.42    4.67   217   200
+v8    0.5  BG-first onset, p5 tail | dawn>=1s vs bg1 indomain_wer_s   76.72   16.52    4.64   217   200
+v8    1.0  COLD onset, median | dawn<0.1s vs wer_set_moderate_t    3.27    0.16   20.72   147   200
+v8    1.0  COLD onset, median | dawn<0.1s vs indomain_wer_set    3.27   -0.06     nan   147   200
+v8    1.0  BG-first onset, median | dawn>=1s vs bg1 wer_set_modera    3.66    0.37    9.89   218   200
+v8    1.0  BG-first onset, median | dawn>=1s vs bg1 indomain_wer_s    3.66    0.27   13.34   218   200
+v8    1.0  COLD onset, p5 tail | dawn<0.1s vs wer_set_moderate_t   35.53    5.92    6.00   147   200
+v8    1.0  COLD onset, p5 tail | dawn<0.1s vs indomain_wer_set   35.53    5.29    6.72   147   200
+v8    1.0  BG-first onset, p5 tail | dawn>=1s vs bg1 wer_set_modera   62.66    9.65    6.49   218   200
+v8    1.0  BG-first onset, p5 tail | dawn>=1s vs bg1 indomain_wer_s   62.66   10.30    6.08   218   200
+v8    2.0  COLD onset, median | dawn<0.1s vs wer_set_moderate_t    1.46    0.06   23.36   147   200
+v8    2.0  COLD onset, median | dawn<0.1s vs indomain_wer_set    1.46   -0.05     nan   147   200
+v8    2.0  BG-first onset, median | dawn>=1s vs bg1 wer_set_modera    1.40    0.24    5.84   218   200
+v8    2.0  BG-first onset, median | dawn>=1s vs bg1 indomain_wer_s    1.40    0.25    5.62   218   200
+v8    2.0  COLD onset, p5 tail | dawn<0.1s vs wer_set_moderate_t   30.06    4.43    6.79   147   200
+v8    2.0  COLD onset, p5 tail | dawn<0.1s vs indomain_wer_set   30.06    4.24    7.09   147   200
+v8    2.0  BG-first onset, p5 tail | dawn>=1s vs bg1 wer_set_modera   45.66    6.98    6.54   218   200
+v8    2.0  BG-first onset, p5 tail | dawn>=1s vs bg1 indomain_wer_s   45.66    5.95    7.67   218   200
+v16   0.5  COLD onset, median | dawn<0.1s vs wer_set_moderate_t    4.61    0.41   11.29   146   200
+v16   0.5  COLD onset, median | dawn<0.1s vs indomain_wer_set    4.61   -0.21     nan   146   200
+v16   0.5  BG-first onset, median | dawn>=1s vs bg1 wer_set_modera    6.07    0.67    9.06   217   200
+v16   0.5  BG-first onset, median | dawn>=1s vs bg1 indomain_wer_s    6.07    0.10   59.21   217   200
+v16   0.5  COLD onset, p5 tail | dawn<0.1s vs wer_set_moderate_t   48.51   10.27    4.72   146   200
+v16   0.5  COLD onset, p5 tail | dawn<0.1s vs indomain_wer_set   48.51    8.00    6.06   146   200
+v16   0.5  BG-first onset, p5 tail | dawn>=1s vs bg1 wer_set_modera   84.25   15.85    5.32   217   200
+v16   0.5  BG-first onset, p5 tail | dawn>=1s vs bg1 indomain_wer_s   84.25   14.81    5.69   217   200
+v16   1.0  COLD onset, median | dawn<0.1s vs wer_set_moderate_t    3.30    0.30   10.99   147   200
+v16   1.0  COLD onset, median | dawn<0.1s vs indomain_wer_set    3.30    0.00 1318.80   147   200
+v16   1.0  BG-first onset, median | dawn>=1s vs bg1 wer_set_modera    3.51    0.48    7.36   218   200
+v16   1.0  BG-first onset, median | dawn>=1s vs bg1 indomain_wer_s    3.51    0.48    7.26   218   200
+v16   1.0  COLD onset, p5 tail | dawn<0.1s vs wer_set_moderate_t   31.54    8.06    3.91   147   200
+v16   1.0  COLD onset, p5 tail | dawn<0.1s vs indomain_wer_set   31.54    6.17    5.11   147   200
+v16   1.0  BG-first onset, p5 tail | dawn>=1s vs bg1 wer_set_modera   68.68    9.38    7.32   218   200
+v16   1.0  BG-first onset, p5 tail | dawn>=1s vs bg1 indomain_wer_s   68.68    9.50    7.23   218   200
+v16   2.0  COLD onset, median | dawn<0.1s vs wer_set_moderate_t    1.32    0.18    7.20   147   200
+v16   2.0  COLD onset, median | dawn<0.1s vs indomain_wer_set    1.32    0.04   33.37   147   200
+v16   2.0  BG-first onset, median | dawn>=1s vs bg1 wer_set_modera    2.18    0.32    6.88   218   200
+v16   2.0  BG-first onset, median | dawn>=1s vs bg1 indomain_wer_s    2.18    0.41    5.27   218   200
+v16   2.0  COLD onset, p5 tail | dawn<0.1s vs wer_set_moderate_t   31.85    5.22    6.10   147   200
+v16   2.0  COLD onset, p5 tail | dawn<0.1s vs indomain_wer_set   31.85    4.47    7.12   147   200
+v16   2.0  BG-first onset, p5 tail | dawn>=1s vs bg1 wer_set_modera   47.95    6.11    7.85   218   200
+v16   2.0  BG-first onset, p5 tail | dawn>=1s vs bg1 indomain_wer_s   47.95    6.09    7.87   218   200
