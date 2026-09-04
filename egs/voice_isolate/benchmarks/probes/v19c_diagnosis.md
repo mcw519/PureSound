@@ -1,3 +1,5 @@
+> **ERRATUM (2026-09-05):** the `onset_profile` diagnosis's Dawn foreground-projection numbers (−3.85/−3.90 dB, the 11–23× real/synthetic ratio) are invalid — Dawn's `speech` is not waveform-consistent with `mix` — and the real-vs-synthetic comparison was not SNR-matched. See `v19c_diagnostics/snr_strat/README.md` and the AMENDMENT in `v19c_round_design.md`. The other four diagnoses are unaffected; the synthetic wrong-anchor result is a paired within-utterance measure and stands.
+
 # v19c — the five diagnoses and the four killed proposals (2026-09-04)
 
 Raw structured outputs of the planning workflow, lightly formatted. Numbers are the agents' own measurements;

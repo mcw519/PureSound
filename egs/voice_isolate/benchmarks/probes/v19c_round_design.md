@@ -292,3 +292,33 @@ The diagnosis splits the two failures cleanly, and the plan follows the split:
 - Does the wrong-anchor template's channel component (samespk -0.44 dB, about 30% of diffspk -1.47 dB) shrink under a loss that never mentions channels? Expected: less than the talker component. If it does not shrink at all, the residual is a chain problem and belongs to R2B, not to any loss round.
 - Is there a real-recording construction that reproduces the cold-onset failure in a trainable form at all? Today the only synthetic prefix that reproduces Dawn's tail is digital silence, which is forbidden as a filler. Until R2B answers this, cold onset has no training axis and the shipped guard is the answer, with its suppression price stated as a product choice.
 - What is the actual wall-clock and memory cost of the new loss? Two unfolds and two inner products per row on resident tensors should be under 2% of step time, but this was not measured, and the 6 s and 12 s buckets already peak at 19.0-19.2 GiB on 23 GB cards.
+
+## AMENDMENT (2026-09-05) — noise-aware re-read; one diagnosis row downgraded, one gate replaced
+
+The user objected that onset/keep dB deltas were compared across sets without accounting for the noise level.
+Re-measured in `v19c_diagnostics/snr_strat/` (both scripts re-run by hand):
+
+1. **Dawn Chorus has no usable waveform reference** — `speech` is not waveform-consistent with `mix` (median
+   |corr| 0.30 at best lag, polarity flips, lags up to thousands of samples). Every Dawn SI-SDR and every
+   foreground-projection number on Dawn is invalid, including the diagnosis's "−3.85 / −3.90 dB @0.5 s".
+   Dawn is ASR-only from here (deletion / insertion / WER, paired per utterance).
+2. **§0 row 1 is downgraded from "real-only, not a loss axis" to "unresolved."** The 11–23× ratio rested on the
+   invalid Dawn numbers and on an SNR-unmatched comparison (synthetic onset windows sit at +0.6 dB local SNR).
+   On synthetic data with the background rescaled, the onset-specific excess stays within ±1.4 dB in the
+   median down to −15 dB SNR while the *whole utterance* is deleted (g_on −5 dB at −5 dB, −8/−9 at −10 dB);
+   the energy-based excess is biased positive at low SNR. Whether real recordings carry an onset-specific
+   effect beyond that cannot be measured with today's instruments; the ASR fact that the `pna` guard (dry for
+   ~1 s + 2 s release) cuts Dawn deletion 0.230 → 0.123 is the only valid real-recording evidence and it
+   stands.
+3. **Gate P1 is replaced.** Not `onset_real.py` fg-projection on Dawn. Instead: paired per-utterance ASR
+   deletion (`eval_dawn_chorus.py --context none` and `--context background`, large-v3, Wilcoxon) vs the v16
+   block, pass = deletion in `background` improves ≥ 0.03 absolute with p < 0.01 and the unguarded-vs-guarded
+   deletion gap shrinks by ≥ 1/3; kill = < 0.01 or p > 0.05. Gate G4 unchanged.
+4. **Metric policy, binding for every table in this plan**: onset/keep effects are reported as paired
+   within-utterance deltas (prefix vs none, or onset vs rest of the *same* utterance) and stratified by local
+   SNR of the window; no absolute-dB comparison across sets or chains; energy-based deltas are labelled
+   noise-confounded wherever the window's SNR is below +5 dB; the synthetic wrong-anchor result (Δon1) is
+   unaffected because it is paired at identical SNR.
+5. The round's *axis* is unchanged (wrong-anchor deletion, loss-only) — it never depended on the Dawn
+   projection numbers. R0.4 item 4 ("P replaces span energy") is restricted to data with an aligned clean
+   reference (synthetic rows, VOiCES/RealMAN-style corpora), never Dawn or the private field recordings.
