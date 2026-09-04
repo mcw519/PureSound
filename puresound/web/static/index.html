@@ -128,6 +128,7 @@
                   <div class="audio-inspector" id="voice-output-audio" data-wave-color="#bdbbff"></div>
                 </div>
                 <div class="metric-row" id="voice-metrics"></div>
+                <p class="applied-settings" id="voice-applied">Dry blend — · Onset guard —</p>
                 <p class="measurement-inline-note" id="voice-measurement-note">Reference-free quality measurement will appear after the output is ready.</p>
               </div>
             </div>
@@ -145,6 +146,15 @@
                 <div class="field-label range-label"><span>Dry blend</span><output id="voice-dry-output">0.90</output></div>
                 <input class="range" id="voice-dry-blend" type="range" min="0.1" max="1" step="0.05" value="0.9" />
                 <div class="range-hint"><span>wet</span><span>dry</span></div>
+                <label class="toggle-row"><input id="voice-onset-guard" type="checkbox" /><span class="toggle-ui"></span><span>Onset guard</span></label>
+                <p class="toggle-hint">Keeps the input untouched until a talker has been heard for 1 s: fewer deleted words, less suppression in the first second.</p>
+                <fieldset class="knob-grid" id="voice-onset-knobs" disabled>
+                  <legend>Guard knobs</legend>
+                  <label><span>Arm · s</span><input class="control" id="voice-onset-t-arm" type="number" min="0.2" max="5" step="0.1" value="1" /></label>
+                  <label><span>Forget · s</span><input class="control" id="voice-onset-t-forget" type="number" min="1" max="60" step="0.5" value="5" /></label>
+                  <label><span>Release · s</span><input class="control" id="voice-onset-tau-dn" type="number" min="0.1" max="10" step="0.1" value="2" /></label>
+                  <label><span>Margin · dB</span><input class="control" id="voice-onset-margin" type="number" min="3" max="20" step="0.5" value="8" /></label>
+                </fieldset>
                 <label class="toggle-row"><input id="voice-collect-extras" type="checkbox" /><span class="toggle-ui"></span><span>Collect VAD heads</span></label>
                 <div class="contract-list"><div><span>Sample rate</span><strong id="voice-sample-rate">16 kHz</strong></div><div><span>Channels</span><strong id="voice-channels">Mono</strong></div><div><span>Delay alignment</span><strong id="voice-delay">Manifest</strong></div></div>
                 <div class="job-progress" id="voice-job-progress" hidden><div class="job-progress-bar"><span></span></div><div class="job-progress-copy"><span data-job-phase>Queued</span><strong data-job-percent>0%</strong></div></div>
@@ -201,6 +211,7 @@
                   <div><strong>Level</strong><span>RMS and peak describe loudness and headroom.</span></div>
                   <div><strong>Quality</strong><span>DNSMOS works without a reference; higher SI-SDR and STOI need one.</span></div>
                 </div>
+                <p class="applied-settings" id="measurement-applied">Onset guard —</p>
                 <div class="measurement-table-wrap"><table class="measurement-table"><thead><tr><th>Model</th><th>Speed <abbr title="Real-time factor">RTF</abbr></th><th>Level</th><th>Peak</th><th>Clipped</th><th>DNSMOS <abbr title="Overall quality score">OVR</abbr></th><th>SI-SDR</th><th>STOI</th></tr></thead><tbody id="measurement-table-body"></tbody></table></div>
                 <p class="measurement-footnote">Lower RTF and clipping are safer for deployment. RMS and peak are level checks, not quality scores.</p>
                 <div class="measurement-audio-results" id="measurement-audio-results"></div>
@@ -219,6 +230,16 @@
               </div>
               <div class="measure-model-heading"><div><p class="eyebrow">STEP 2 / MODELS</p><div class="field-label measure-model-label"><span>Choose models to compare</span></div><p class="panel-help">Start with the default model, then add candidates for a fair side-by-side run.</p></div><output id="measure-model-count">0 selected</output></div>
               <div class="measure-model-list" id="measure-model-list"><span class="measure-empty">Load catalog to choose Voice Isolation models.</span></div>
+              <div class="measure-run-heading"><p class="eyebrow">OPTIONAL / ONSET GUARD</p><p>Applies to every selected model in this comparison.</p></div>
+              <label class="toggle-row"><input id="measure-onset-guard" type="checkbox" /><span class="toggle-ui"></span><span>Onset guard</span></label>
+              <p class="toggle-hint">Keeps the input untouched until a talker has been heard for 1 s: fewer deleted words, less suppression in the first second.</p>
+              <fieldset class="knob-grid" id="measure-onset-knobs" disabled>
+                <legend>Guard knobs</legend>
+                <label><span>Arm · s</span><input class="control" id="measure-onset-t-arm" type="number" min="0.2" max="5" step="0.1" value="1" /></label>
+                <label><span>Forget · s</span><input class="control" id="measure-onset-t-forget" type="number" min="1" max="60" step="0.5" value="5" /></label>
+                <label><span>Release · s</span><input class="control" id="measure-onset-tau-dn" type="number" min="0.1" max="10" step="0.1" value="2" /></label>
+                <label><span>Margin · dB</span><input class="control" id="measure-onset-margin" type="number" min="3" max="20" step="0.5" value="8" /></label>
+              </fieldset>
               <div class="measure-run-heading"><p class="eyebrow">STEP 3 / COMPARE</p><p>Run the same input through the selected models.</p></div>
               <div class="job-progress" id="measure-job-progress" hidden><div class="job-progress-bar"><span></span></div><div class="job-progress-copy"><span data-job-phase>Queued</span><strong data-job-percent>0%</strong></div></div>
               <div class="measurement-actions"><button class="button button-dark" id="measure-run" type="button"><span class="button-spinner" aria-hidden="true"></span>Compare selected models <span aria-hidden="true">→</span></button><button class="button button-outline cancel-button" id="measure-cancel" type="button" hidden>Cancel</button><span class="form-note" id="measure-form-note"></span></div>

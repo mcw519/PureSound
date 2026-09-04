@@ -824,6 +824,10 @@ class WebService:
                             "elapsed_seconds": result.elapsed_seconds,
                             "rtf": result.rtf,
                             "latency_samples": latency_samples,
+                            # The post-graph stages as the runtime applied them,
+                            # so the report says what ran rather than what was
+                            # requested.  ``None`` means no onset guard.
+                            "onset_guard": result.metadata.get("onset_guard"),
                             "output": audio_metrics(aligned_output, result.sample_rate or sample_rate),
                             "quality": reference_metrics(reference_values, aligned_output, result.sample_rate or sample_rate) if reference_values is not None else {},
                             "reference_free": reference_free,

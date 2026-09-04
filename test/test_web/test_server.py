@@ -82,6 +82,134 @@ def test_web_infer_materializes_upload_and_exposes_download(monkeypatch):
     assert stored.data[:4] == b"RIFF"
 
 
+def test_web_catalog_exposes_the_onset_guard_parameters():
+    parameters = WebService().inspect_model("voice-isolate-dpcrn-v8")["parameters"]
+
+    assert parameters["onset_guard"]["type"] == "bool"
+    assert parameters["onset_guard"]["default"] is False
+    assert parameters["onset_guard_t_arm_s"] == {
+        "type": "float",
+        "default": 1.0,
+        "minimum": 0.3,
+        "maximum": 5.0,
+        "choices": None,
+        "description": parameters["onset_guard_t_arm_s"]["description"],
+    }
+    assert parameters["onset_guard_t_forget_s"]["maximum"] == 60.0
+    assert parameters["onset_guard_tau_dn_s"]["minimum"] == 0.1
+    assert parameters["onset_guard_margin_db"]["minimum"] == 3.0
+
+
+def _guard_request():
+    return {
+        "onset_guard": True,
+        "onset_guard_t_arm_s": 1.5,
+        "onset_guard_t_forget_s": 8.0,
+        "onset_guard_tau_dn_s": 1.0,
+        "onset_guard_margin_db": 10.0,
+    }
+
+
+def _guard_runtime(seen):
+    class FakeRuntime:
+        def infer(self, *, inputs, parameters, progress_callback=None, cancel_check=None):
+            seen.append(dict(parameters))
+            if progress_callback is not None:
+                progress_callback(1.0, "complete")
+            return InferenceResult(
+                model_id="voice-isolate-dpcrn-v8",
+                task="voice_isolation",
+                outputs={"audio": np.ones(160, dtype=np.float32) * 0.1},
+                provider="CPUExecutionProvider",
+                elapsed_seconds=0.01,
+                rtf=0.1,
+                sample_rate=16_000,
+                metadata={"onset_guard": {"t_arm_s": 1.5, "tau_dn_s": 1.0}},
+            )
+
+    return FakeRuntime()
+
+
+def test_web_infer_forwards_the_onset_guard_parameters_unchanged(monkeypatch):
+    service = WebService()
+    seen: list[dict] = []
+    monkeypatch.setattr(service, "_runtime", lambda *args: _guard_runtime(seen))
+
+    response = service.infer(
+        {
+            "model_id": "voice-isolate-dpcrn-v8",
+            "inputs": {"audio": {"filename": "input.wav", "data": _wav_data_url()}},
+            "parameters": _guard_request(),
+        }
+    )
+
+    assert seen == [_guard_request()]
+    assert response["metadata"]["onset_guard"] == {"t_arm_s": 1.5, "tau_dn_s": 1.0}
+
+
+def test_web_async_job_forwards_the_onset_guard_parameters(monkeypatch):
+    service = WebService()
+    seen: list[dict] = []
+    monkeypatch.setattr(service, "_runtime", lambda *args: _guard_runtime(seen))
+
+    job = service.submit_inference(
+        {
+            "model_id": "voice-isolate-dpcrn-v8",
+            "inputs": {"audio": {"filename": "input.wav", "data": _wav_data_url()}},
+            "parameters": {"onset_guard": False},
+        }
+    )
+    deadline = time.time() + 5
+    while time.time() < deadline:
+        current = service.job(job["job_id"])
+        if current["status"] in {"succeeded", "failed", "cancelled"}:
+            break
+        time.sleep(0.01)
+
+    assert current["status"] == "succeeded"
+    assert seen == [{"onset_guard": False}]
+
+
+def test_web_measure_forwards_the_onset_guard_and_reports_what_ran(monkeypatch):
+    service = WebService()
+    seen: list[dict] = []
+    monkeypatch.setattr(service, "_runtime", lambda *args: _guard_runtime(seen))
+
+    report = service.measure(
+        {
+            "inputs": {"audio": {"filename": "input.wav", "data": _wav_data_url()}},
+            "models": ["voice-isolate-dpcrn-v8", "voice-isolate-dpcrn-v7"],
+            "parameters": _guard_request(),
+        }
+    )
+
+    assert seen == [_guard_request(), _guard_request()]
+    assert report["request"]["parameters"] == _guard_request()
+    assert report["models"][0]["onset_guard"] == {"t_arm_s": 1.5, "tau_dn_s": 1.0}
+
+
+@pytest.mark.parametrize(
+    "parameters",
+    [
+        {"onset_guard": True, "onset_guard_t_arm_s": 12.0},
+        {"onset_guard": True, "onset_guard_margin_db": "loud"},
+        {"onset_guard": "on"},
+    ],
+)
+def test_web_infer_rejects_malformed_onset_guard_values(parameters):
+    service = WebService()
+
+    with pytest.raises(web_server.WebServiceError, match="onset_guard"):
+        service.infer(
+            {
+                "model_id": "voice-isolate-dpcrn-v8",
+                "provider": "cpu",
+                "inputs": {"audio": {"filename": "input.wav", "data": _wav_data_url()}},
+                "parameters": parameters,
+            }
+        )
+
+
 def test_web_infer_can_attach_reference_free_measurements(monkeypatch):
     service = WebService()
 
@@ -207,6 +335,13 @@ def test_web_audio_inspector_assets_are_packaged():
     assert 'id="playground-drawer-sv"' in html
     assert 'id="playground-drawer-backdrop"' in html
     assert "setPlaygroundDrawer" in app
+    assert 'id="voice-onset-guard"' in html
+    assert 'id="voice-onset-knobs"' in html
+    assert 'id="measure-onset-guard"' in html
+    assert 'id="measure-onset-knobs"' in html
+    assert "onsetGuardParameters" in app
+    assert "onset_guard_margin_db" in app
+    assert ".knob-grid[disabled]" in styles
     assert ".playground-drawer.is-open" in styles
     assert ".measurement-icon, .step-number, .status-icon, .note-mark" in styles
     assert ".settings-icon,\n.catalog-check-chevron" in styles

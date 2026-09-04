@@ -18,6 +18,16 @@
     toastTimer: null,
   };
 
+  /* Onset guard: catalog parameter name -> control id suffix.  The switch is a
+   * per-request override of the manifest, so the browser only sends what the
+   * user actually chose. */
+  const ONSET_GUARD_KNOBS = [
+    { parameter: "onset_guard_t_arm_s", suffix: "t-arm" },
+    { parameter: "onset_guard_t_forget_s", suffix: "t-forget" },
+    { parameter: "onset_guard_tau_dn_s", suffix: "tau-dn" },
+    { parameter: "onset_guard_margin_db", suffix: "margin" },
+  ];
+
   const $ = (selector, root = document) => root.querySelector(selector);
   const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
 
@@ -119,6 +129,56 @@
     const hasHeads = Boolean(model.capabilities?.auxiliary_heads);
     $("#voice-collect-extras").disabled = !hasHeads;
     if (!hasHeads) $("#voice-collect-extras").checked = false;
+    applyOnsetGuardDefaults("voice", model);
+  }
+
+  function syncOnsetGuardKnobs(prefix) {
+    const toggle = $(`#${prefix}-onset-guard`);
+    const knobs = $(`#${prefix}-onset-knobs`);
+    if (!toggle || !knobs) return;
+    knobs.disabled = !toggle.checked;
+  }
+
+  function applyOnsetGuardDefaults(prefix, model) {
+    const toggle = $(`#${prefix}-onset-guard`);
+    if (!toggle) return;
+    const specs = model?.parameters || {};
+    const guardSpec = specs.onset_guard;
+    toggle.disabled = !guardSpec;
+    toggle.checked = Boolean(guardSpec?.default);
+    ONSET_GUARD_KNOBS.forEach(({ parameter, suffix }) => {
+      const input = $(`#${prefix}-onset-${suffix}`);
+      const spec = specs[parameter];
+      if (!input || !spec) return;
+      if (spec.minimum != null) input.min = spec.minimum;
+      if (spec.maximum != null) input.max = spec.maximum;
+      if (spec.default != null) input.value = spec.default;
+      if (spec.description) input.title = spec.description;
+    });
+    syncOnsetGuardKnobs(prefix);
+  }
+
+  function onsetGuardParameters(prefix) {
+    const toggle = $(`#${prefix}-onset-guard`);
+    if (!toggle || toggle.disabled) return {};
+    const parameters = { onset_guard: toggle.checked };
+    if (!toggle.checked) return parameters;
+    ONSET_GUARD_KNOBS.forEach(({ parameter, suffix }) => {
+      const value = Number($(`#${prefix}-onset-${suffix}`)?.value);
+      if (Number.isFinite(value)) parameters[parameter] = value;
+    });
+    return parameters;
+  }
+
+  function onsetGuardSummary(guard) {
+    if (!guard) return "off";
+    return [
+      "on",
+      `arm ${measurementValue(guard.t_arm_s, 2, " s")}`,
+      `forget ${measurementValue(guard.t_forget_s, 1, " s")}`,
+      `release ${measurementValue(guard.tau_dn_s, 2, " s")}`,
+      `margin ${measurementValue(guard.margin_db, 1, " dB")}`,
+    ].join(" · ");
   }
 
   function updateRuntimeStatus(health) {
@@ -339,7 +399,7 @@
     try {
       const model = selectedModel("#voice-model");
       const input = await readDataUrl(file);
-      const parameters = { dry_blend: Number($("#voice-dry-blend").value) };
+      const parameters = { dry_blend: Number($("#voice-dry-blend").value), ...onsetGuardParameters("voice") };
       if ($("#voice-collect-extras").checked) parameters.collect_extras = true;
       const result = await runBackgroundJob(
         {
@@ -365,6 +425,7 @@
         ["DNSMOS OVR", measurementValue(dnsMos.dnsmos_ovr, 2)],
         ["Output RMS", measurementValue(outputMeasurements.rms_dbfs, 1, " dBFS")],
       ]);
+      $("#voice-applied").textContent = `Dry blend ${measurementValue(result.metadata?.dry_blend, 2)} · Onset guard ${onsetGuardSummary(result.metadata?.onset_guard)}`;
       const measurementNote = $("#voice-measurement-note");
       const dnsError = result.measurements?.reference_free?.dnsmos_error;
       const dnsAvailable = Number.isFinite(Number(dnsMos.dnsmos_ovr));
@@ -428,6 +489,9 @@
     }).join("");
     target.querySelectorAll("input").forEach((input) => input.addEventListener("change", updateMeasurementModelCount));
     updateMeasurementModelCount();
+    // One switch for the whole comparison, so it takes its ranges and defaults
+    // from the release default model rather than from any one selection.
+    applyOnsetGuardDefaults("measure", state.voiceModels.find(modelIsDefault) || state.voiceModels[0]);
   }
 
   function updateMeasurementModelCount() {
@@ -507,7 +571,7 @@
       "rms_dbfs", "peak_dbfs", "clipping_ratio", "silence_ratio",
       "spectral_centroid_hz", "si_sdr_db", "snr_db", "correlation", "stoi", "pesq_wb",
       "dnsmos_p808", "dnsmos_sig", "dnsmos_bak", "dnsmos_ovr", "dnsmos_error", "error",
-      "latency_samples", "output_url",
+      "latency_samples", "onset_guard", "output_url",
     ];
     const cell = (value) => `"${String(value == null ? "" : value).replace(/"/g, '""')}"`;
     const rows = (report.models || []).map((model) => {
@@ -536,6 +600,7 @@
         model.reference_free?.dnsmos_error,
         model.error,
         model.latency_samples,
+        onsetGuardSummary(model.onset_guard),
         model.output_url,
       ].map(cell).join(",");
     });
@@ -580,6 +645,8 @@
       ["Reference", reference ? `${measurementValue(reference.duration_seconds, 2, " s")} · ${measurementValue(reference.rms_dbfs, 1, " dBFS")}` : "Not provided"],
     ].map(([label, value]) => `<div class="measurement-summary-item"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></div>`).join("");
     $("#measurement-result-time").textContent = `${measurementValue(report.elapsed_seconds, 2, " s")} total`;
+    const applied = (report.models || []).find((model) => !model.error) || {};
+    $("#measurement-applied").textContent = `Onset guard ${onsetGuardSummary(applied.onset_guard)} · applied to every model in this comparison`;
     $("#measurement-table-body").innerHTML = (report.models || []).map((model) => {
       const output = model.output || {};
       const quality = model.quality || {};
@@ -624,6 +691,7 @@
           inputs,
           models,
           provider: "auto",
+          parameters: onsetGuardParameters("measure"),
           measurements: { include_dnsmos: true },
         },
         "measure",
@@ -715,6 +783,8 @@
     $("#dialog-close").addEventListener("click", () => $("#model-dialog").close?.());
     $("#voice-model").addEventListener("change", populateVoiceVariants);
     $("#voice-dry-blend").addEventListener("input", (event) => { $("#voice-dry-output").textContent = Number(event.target.value).toFixed(2); });
+    $("#voice-onset-guard").addEventListener("change", () => syncOnsetGuardKnobs("voice"));
+    $("#measure-onset-guard").addEventListener("change", () => syncOnsetGuardKnobs("measure"));
     $("#sv-threshold").addEventListener("input", (event) => { $("#sv-threshold-output").textContent = Number(event.target.value).toFixed(2); });
     $("#voice-run").addEventListener("click", runVoiceInference);
     $("#voice-cancel").addEventListener("click", () => cancelInferenceJob("voice"));

@@ -48,6 +48,23 @@ The browser client has three screens:
   A comparison fails when no model succeeds and reports a warning when only
   some selected models fail.
 
+**Onset guard.** The Voice Isolation screen and the Measurements screen both
+carry an *Onset guard* switch, off by default. With it on, the output is the
+input untouched until a talker has been heard for `onset_guard_t_arm_s` (1 s) of
+sustained speech, then releases toward the model with time constant
+`onset_guard_tau_dn_s`; `onset_guard_t_forget_s` of quiet re-arms it, and
+`onset_guard_margin_db` is how far over the tracked noise floor a frame counts as
+speech. It buys keep-side safety — roughly half the keep violations and half the
+Dawn Chorus deletion — and it costs suppression depth (fit-set far median
+−15.2 → −12.0 dB), so it is a product choice rather than a better default. The
+switch is a **per-request override of the export manifest**: `false` turns off a
+guard the manifest records, `true` turns one on with the knobs given, and
+omitting it leaves the manifest in charge. On the Measurements screen the switch
+applies to every model in that comparison. `/api/infer` and `/api/measure` take
+the same five values in `parameters`, and every run reports the operating point
+that actually ran (`metadata.onset_guard` for inference, a per-model
+`onset_guard` in a measurement report; `null` means no guard).
+
 Provider choices are shared by the browser, CLI, and legacy streaming runtime:
 `auto` prefers CUDA, then Apple `CoreML`, then CPU; `cpu` forces CPU; `cuda`
 requests NVIDIA CUDA; and `coreml` requests Apple's CoreML execution provider.

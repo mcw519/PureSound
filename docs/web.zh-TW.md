@@ -40,6 +40,20 @@ puresound web --ip 0.0.0.0 --port 8080
   再使用與 Playground 相同的 waveform、spectrogram、播放 boost 與 limiter
   控制顯示。若所有模型都失敗，comparison 會直接失敗；只有部分失敗時則顯示警告。
 
+**Onset guard（起始保護）**：Voice Isolation 與 Measurements 兩個畫面都有
+*Onset guard* 開關，預設關閉。開啟後，在偵測到說話者持續講話達
+`onset_guard_t_arm_s`（預設 1 秒）之前，輸出就是未經處理的輸入；之後才以
+`onset_guard_tau_dn_s` 的時間常數交還給模型。安靜達 `onset_guard_t_forget_s`
+會重新武裝保護，`onset_guard_margin_db` 則是判定「有語音」時要高出追蹤噪音
+底多少。它換到的是 keep 側安全（keep 違規與 Dawn Chorus deletion 各約減半），
+代價是抑制深度（fit-set 遠場中位數 −15.2 → −12.0 dB），因此這是產品取捨，
+不是更好的預設值。這個開關是**對 export manifest 的單次請求覆寫**：`false`
+會關掉 manifest 記錄的 guard、`true` 會以送出的旋鈕值開啟，不帶這個欄位則
+完全交由 manifest 決定。在 Measurements 畫面，此開關會套用到該次比較的每一個
+模型。`/api/infer` 與 `/api/measure` 都接受相同的五個值放在 `parameters`，
+而每次執行都會回報實際生效的工作點（推論看 `metadata.onset_guard`，量測報表
+看各模型的 `onset_guard`；`null` 代表沒有 guard）。
+
 瀏覽器、CLI 與 legacy streaming runtime 共用相同的 provider 選擇：`auto` 依序
 偏好 CUDA、Apple `CoreML`、CPU；`cpu` 強制 CPU；`cuda` 要求 NVIDIA CUDA；
 `coreml` 要求 Apple CoreML execution provider。因為 ONNX Runtime 沒有原生的

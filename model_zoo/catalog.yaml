@@ -19,6 +19,11 @@ models:
     recommended_inference: {dry_blend: 1.0}
     parameters:
       dry_blend: {type: float, default: 1.0, minimum: 0.1, maximum: 1.0}
+      onset_guard: {type: bool, default: false, description: "Keep the input untouched until a talker has been heard for t_arm_s of speech; fewer deleted words, less suppression in the first second."}
+      onset_guard_t_arm_s: {type: float, default: 1.0, minimum: 0.3, maximum: 5.0, description: "Sustained speech that confirms a talker and hands the output over to the model."}
+      onset_guard_t_forget_s: {type: float, default: 5.0, minimum: 1.0, maximum: 60.0, description: "Quiet this long drops the anchor, so the next onset is protected again."}
+      onset_guard_tau_dn_s: {type: float, default: 2.0, minimum: 0.1, maximum: 10.0, description: "Release time constant from the untouched input back to the model output."}
+      onset_guard_margin_db: {type: float, default: 8.0, minimum: 3.0, maximum: 20.0, description: "How far over the tracked noise floor a frame counts as speech."}
     source_checkpoint: egs/voice_isolate/pretrained_ckpt/dpcrn_v6.ckpt
     source_config: egs/voice_isolate/config/infer_dpcrn.yaml
     benchmark_references: [egs/voice_isolate/pretrained_ckpt/README.md]
@@ -44,6 +49,11 @@ models:
     recommended_inference: {dry_blend: 0.9}
     parameters:
       dry_blend: {type: float, default: 0.9, minimum: 0.1, maximum: 1.0}
+      onset_guard: {type: bool, default: false, description: "Keep the input untouched until a talker has been heard for t_arm_s of speech; fewer deleted words, less suppression in the first second."}
+      onset_guard_t_arm_s: {type: float, default: 1.0, minimum: 0.3, maximum: 5.0, description: "Sustained speech that confirms a talker and hands the output over to the model."}
+      onset_guard_t_forget_s: {type: float, default: 5.0, minimum: 1.0, maximum: 60.0, description: "Quiet this long drops the anchor, so the next onset is protected again."}
+      onset_guard_tau_dn_s: {type: float, default: 2.0, minimum: 0.1, maximum: 10.0, description: "Release time constant from the untouched input back to the model output."}
+      onset_guard_margin_db: {type: float, default: 8.0, minimum: 3.0, maximum: 20.0, description: "How far over the tracked noise floor a frame counts as speech."}
     source_checkpoint: egs/voice_isolate/pretrained_ckpt/dpcrn_v7.ckpt
     source_config: egs/voice_isolate/config/infer_dpcrn.yaml
     benchmark_references: [egs/voice_isolate/benchmarks/README.md]
@@ -70,6 +80,11 @@ models:
     recommended_inference: {dry_blend: 0.9}
     parameters:
       dry_blend: {type: float, default: 0.9, minimum: 0.1, maximum: 1.0}
+      onset_guard: {type: bool, default: false, description: "Keep the input untouched until a talker has been heard for t_arm_s of speech; fewer deleted words, less suppression in the first second."}
+      onset_guard_t_arm_s: {type: float, default: 1.0, minimum: 0.3, maximum: 5.0, description: "Sustained speech that confirms a talker and hands the output over to the model."}
+      onset_guard_t_forget_s: {type: float, default: 5.0, minimum: 1.0, maximum: 60.0, description: "Quiet this long drops the anchor, so the next onset is protected again."}
+      onset_guard_tau_dn_s: {type: float, default: 2.0, minimum: 0.1, maximum: 10.0, description: "Release time constant from the untouched input back to the model output."}
+      onset_guard_margin_db: {type: float, default: 8.0, minimum: 3.0, maximum: 20.0, description: "How far over the tracked noise floor a frame counts as speech."}
     source_checkpoint: egs/voice_isolate/pretrained_ckpt/dpcrn_v8.ckpt
     source_config: egs/voice_isolate/config/infer_dpcrn.yaml
     benchmark_references:
@@ -97,6 +112,11 @@ models:
     recommended_inference: {dry_blend: 0.9}
     parameters:
       dry_blend: {type: float, default: 0.9, minimum: 0.1, maximum: 1.0}
+      onset_guard: {type: bool, default: false, description: "Keep the input untouched until a talker has been heard for t_arm_s of speech; fewer deleted words, less suppression in the first second."}
+      onset_guard_t_arm_s: {type: float, default: 1.0, minimum: 0.3, maximum: 5.0, description: "Sustained speech that confirms a talker and hands the output over to the model."}
+      onset_guard_t_forget_s: {type: float, default: 5.0, minimum: 1.0, maximum: 60.0, description: "Quiet this long drops the anchor, so the next onset is protected again."}
+      onset_guard_tau_dn_s: {type: float, default: 2.0, minimum: 0.1, maximum: 10.0, description: "Release time constant from the untouched input back to the model output."}
+      onset_guard_margin_db: {type: float, default: 8.0, minimum: 3.0, maximum: 20.0, description: "How far over the tracked noise floor a frame counts as speech."}
     source_checkpoint: egs/voice_isolate/pretrained_ckpt/dpcrn_v9.ckpt
     source_config: egs/voice_isolate/config/infer_dpcrn.yaml
     benchmark_references: [egs/voice_isolate/benchmarks/README.md]
@@ -122,6 +142,11 @@ models:
     recommended_inference: {dry_blend: 0.9}
     parameters:
       dry_blend: {type: float, default: 0.9, minimum: 0.1, maximum: 1.0}
+      onset_guard: {type: bool, default: false, description: "Keep the input untouched until a talker has been heard for t_arm_s of speech; fewer deleted words, less suppression in the first second."}
+      onset_guard_t_arm_s: {type: float, default: 1.0, minimum: 0.3, maximum: 5.0, description: "Sustained speech that confirms a talker and hands the output over to the model."}
+      onset_guard_t_forget_s: {type: float, default: 5.0, minimum: 1.0, maximum: 60.0, description: "Quiet this long drops the anchor, so the next onset is protected again."}
+      onset_guard_tau_dn_s: {type: float, default: 2.0, minimum: 0.1, maximum: 10.0, description: "Release time constant from the untouched input back to the model output."}
+      onset_guard_margin_db: {type: float, default: 8.0, minimum: 3.0, maximum: 20.0, description: "How far over the tracked noise floor a frame counts as speech."}
     source_checkpoint: egs/voice_isolate/pretrained_ckpt/dpcrn_v10.ckpt
     source_config: egs/voice_isolate/config/infer_dpcrn.yaml
     benchmark_references: [egs/voice_isolate/benchmarks/README.md]
@@ -148,6 +173,11 @@ models:
     parameters:
       dry_blend: {type: float, default: 0.9, minimum: 0.1, maximum: 1.0}
       spec_floor: {type: float, default: 0.0, minimum: 0.0, maximum: 0.0}
+      onset_guard: {type: bool, default: false, description: "Keep the input untouched until a talker has been heard for t_arm_s of speech; fewer deleted words, less suppression in the first second."}
+      onset_guard_t_arm_s: {type: float, default: 1.0, minimum: 0.3, maximum: 5.0, description: "Sustained speech that confirms a talker and hands the output over to the model."}
+      onset_guard_t_forget_s: {type: float, default: 5.0, minimum: 1.0, maximum: 60.0, description: "Quiet this long drops the anchor, so the next onset is protected again."}
+      onset_guard_tau_dn_s: {type: float, default: 2.0, minimum: 0.1, maximum: 10.0, description: "Release time constant from the untouched input back to the model output."}
+      onset_guard_margin_db: {type: float, default: 8.0, minimum: 3.0, maximum: 20.0, description: "How far over the tracked noise floor a frame counts as speech."}
     source_checkpoint: egs/voice_isolate/pretrained_ckpt/dpcrn_v11_ep19.ckpt
     source_config: egs/voice_isolate/config/infer_dpcrn_heads.yaml
     benchmark_references: [egs/voice_isolate/benchmarks/README.md]
@@ -180,6 +210,11 @@ models:
     recommended_inference: {dry_blend: 0.9}
     parameters:
       dry_blend: {type: float, default: 0.9, minimum: 0.1, maximum: 1.0}
+      onset_guard: {type: bool, default: false, description: "Keep the input untouched until a talker has been heard for t_arm_s of speech; fewer deleted words, less suppression in the first second."}
+      onset_guard_t_arm_s: {type: float, default: 1.0, minimum: 0.3, maximum: 5.0, description: "Sustained speech that confirms a talker and hands the output over to the model."}
+      onset_guard_t_forget_s: {type: float, default: 5.0, minimum: 1.0, maximum: 60.0, description: "Quiet this long drops the anchor, so the next onset is protected again."}
+      onset_guard_tau_dn_s: {type: float, default: 2.0, minimum: 0.1, maximum: 10.0, description: "Release time constant from the untouched input back to the model output."}
+      onset_guard_margin_db: {type: float, default: 8.0, minimum: 3.0, maximum: 20.0, description: "How far over the tracked noise floor a frame counts as speech."}
     source_checkpoint: egs/voice_isolate/pretrained_ckpt/dpcrn_v16_ep19.ckpt
     source_config: egs/voice_isolate/config/infer_dpcrn.yaml
     benchmark_references: [egs/voice_isolate/benchmarks/README.md]
