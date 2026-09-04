@@ -3,6 +3,8 @@ import torch.nn as nn
 
 from .asr_feature import ASRFeatureLoss
 from .dist import DistHeadRegressionLoss
+from .identity import IdentityContrastiveLoss
+from .proximity import RelativeProximityLoss
 from .residual import ResidualReferenceLoss
 from .sdr import SDRLoss
 from .spk import AAMsoftmax, GE2ELoss, SphereFace2, TripletLoss
@@ -19,8 +21,10 @@ __all__ = [
     "DistHeadRegressionLoss",
     "F1_loss",
     "GE2ELoss",
+    "IdentityContrastiveLoss",
     "MultiResolutionSTFTLoss",
     "OverSuppressionLoss",
+    "RelativeProximityLoss",
     "ResidualReferenceLoss",
     "SDRLoss",
     "SpectralLoss",

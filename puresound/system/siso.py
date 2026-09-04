@@ -356,6 +356,20 @@ class EncDecMaskBase(BaseLightningModule):
             "background_vad_logits": lambda: side("last_background_vad_logits"),
             "background_vad_target": background_vad_target,
             "dist_preds": lambda: side("last_dist_preds"),
+            # v20 R1a. `bottleneck` is the frequency-pooled [N, C, T] bottleneck
+            # WITH its graph, materialized only when the backbone was built with
+            # `backbone_args.expose_bottleneck: true`; `last_bottleneck` (the
+            # detached inference stash the presence gate reads) is deliberately
+            # a different attribute and a different switch. `identity_head`
+            # hands over the module rather than a tensor, which is the one entry
+            # in this table that does: the identity loss keeps a stop-gradient
+            # EMA *copy of the head's weights* inside itself, so it needs the
+            # head, and the alternative -- a second teacher head living on the
+            # backbone -- would put non-trained weights in the checkpoint.
+            "bottleneck": lambda: side("last_bottleneck_graph"),
+            "identity_emb": lambda: side("last_identity_emb"),
+            "identity_head": lambda: side("identity_head"),
+            "proximity": lambda: side("last_proximity"),
         }
 
     def training_step(self, batch, batch_idx):

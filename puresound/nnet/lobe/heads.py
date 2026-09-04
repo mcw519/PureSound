@@ -73,6 +73,34 @@ class DistHeadConfig(StrictConfig):
     n_out: int = Field(default=3, gt=0)
 
 
+class IdentityHeadConfig(StrictConfig):
+    """``backbone_args.identity_head``.
+
+    ``dim`` is the embedding width the contrastive loss compares (64-d in the
+    v20 design); ``kernel_t`` the causal depthwise conv's window in frames
+    (5 = 50 ms at hop 160, the same default the VAD head uses). The conv only
+    has to smooth: the loss pools over a whole turn, so the effective receptive
+    field is the turn, not ``kernel_t``.
+    """
+
+    enabled: bool = False
+    dim: int = Field(default=64, gt=0)
+    kernel_t: int = Field(default=5, gt=0)
+
+
+class ProximityHeadConfig(StrictConfig):
+    """``backbone_args.proximity_head``.
+
+    Only ``hidden`` is a knob: the trunk is deliberately the identity head's
+    (same causal depthwise conv + LN), so a recipe cannot give the two heads
+    different time scales by accident. ``kernel_t`` is therefore not a key here
+    -- ``extra="forbid"`` will say so rather than accept it silently.
+    """
+
+    enabled: bool = False
+    hidden: int = Field(default=64, gt=0)
+
+
 class VADHead(nn.Module):
     """Frame-level speech-activity logits from the bottleneck. Causal in time."""
 
@@ -246,3 +274,121 @@ class DistHead(nn.Module):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         # x: [N, C, F, T] -> global pool -> [N, C] -> [N, n_out]
         return self.net(x.mean(dim=(2, 3)))
+
+
+def _pool_frequency(x: torch.Tensor) -> torch.Tensor:
+    """The one pooled-bottleneck convention: ``[N, C, F, T] -> [N, C, T]``.
+
+    Already-pooled input passes through, so a head can be applied either to a
+    backbone's raw bottleneck or to the frequency-pooled side output the
+    ``bottleneck`` provider hands a loss (and that the offline probes cache as
+    ``feat``). Same tensor either way -- the mean is over F, exactly as
+    ``VADHead`` and ``anchor_gate_cache.py`` take it.
+    """
+    if x.dim() == 4:
+        return x.mean(dim=2)
+    if x.dim() == 3:
+        return x
+    raise ValueError(
+        f"expected [N, C, F, T] or pooled [N, C, T], got {tuple(x.shape)}"
+    )
+
+
+class _FrameTrunk(nn.Module):
+    """Causal depthwise conv over time + channel LayerNorm on ``[N, C, T]``.
+
+    Shared by `IdentityHead` and `ProximityHead` so the two per-frame readouts
+    see the same temporal support. Depthwise (``groups=C``) on purpose: this is
+    a per-channel smoother, not a mixer -- the mixing is the linear layer each
+    head puts on top, which is also where their parameter counts differ.
+    """
+
+    def __init__(self, enc_channels: int, kernel_t: int):
+        super().__init__()
+        self.kernel_t = int(kernel_t)
+        self.dwconv = nn.Conv1d(
+            enc_channels, enc_channels, self.kernel_t, padding=0, groups=enc_channels
+        )
+        self.norm = nn.LayerNorm(enc_channels)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        h = _pool_frequency(x)                       # [N, C, T]
+        h = F.pad(h, (self.kernel_t - 1, 0))         # causal: left context only
+        h = self.dwconv(h)                           # [N, C, T]
+        return self.norm(h.transpose(1, 2))          # [N, T, C]
+
+
+class IdentityHead(nn.Module):
+    """Per-frame speaker-identity embedding from the bottleneck. Causal in time.
+
+    ``[N, C, F, T] -> [N, T, dim]``, L2-normalised on the last axis, so the
+    contrastive loss's cosine similarity is a plain dot product and no turn can
+    win by growing its norm. Training-only in the v11 pattern: nothing in the
+    inference or streaming path reads it, and with the block absent the backbone
+    forward is bit-identical (no parameters, no ops).
+
+    What the loss does with it (`IdentityContrastiveLoss`): mean-pool over the
+    frames of one single-talker turn, re-normalise, and contrast against a
+    stop-gradient EMA teacher's turn embeddings across the whole batch. The head
+    is therefore not asked to be discriminative frame by frame -- only to make a
+    turn's mean point somewhere that depends on the speaker and not on the
+    device chain the row was rendered through.
+    """
+
+    @classmethod
+    def from_config(
+        cls, config: Optional[Mapping[str, Any]], *, enc_channels: int
+    ) -> Optional["IdentityHead"]:
+        """Build from a recipe block, or None when it is absent or disabled."""
+        parsed = IdentityHeadConfig.model_validate(dict(config or {}))
+        if not parsed.enabled:
+            return None
+        return cls(enc_channels=enc_channels, dim=parsed.dim, kernel_t=parsed.kernel_t)
+
+    def __init__(self, enc_channels: int, dim: int = 64, kernel_t: int = 5):
+        super().__init__()
+        self.dim = int(dim)
+        self.trunk = _FrameTrunk(enc_channels, kernel_t)
+        self.out = nn.Linear(enc_channels, self.dim)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return F.normalize(self.out(self.trunk(x)), dim=-1, p=2)  # [N, T, dim]
+
+
+class ProximityHead(nn.Module):
+    """Per-frame relative-proximity scalar from the bottleneck. Causal in time.
+
+    ``[N, C, F, T] -> [N, T]``, in the head's own arbitrary units: only
+    *differences* are supervised (`RelativeProximityLoss` asks for a margin
+    between the user's turns and a bystander's, and for that difference to
+    survive a change of capture chain). Nothing downstream reads an absolute
+    value, deliberately -- fixed thresholds on a drifting readout are the
+    failure this repo has recorded three times, and the metres regression
+    (`DistHead`) stays only as an auxiliary.
+
+    Training-only, same as `IdentityHead`.
+    """
+
+    @classmethod
+    def from_config(
+        cls, config: Optional[Mapping[str, Any]], *, enc_channels: int
+    ) -> Optional["ProximityHead"]:
+        """Build from a recipe block, or None when it is absent or disabled."""
+        parsed = ProximityHeadConfig.model_validate(dict(config or {}))
+        if not parsed.enabled:
+            return None
+        return cls(enc_channels=enc_channels, hidden=parsed.hidden)
+
+    def __init__(
+        self, enc_channels: int, hidden: int = 64, kernel_t: int = 5
+    ):
+        super().__init__()
+        self.trunk = _FrameTrunk(enc_channels, kernel_t)
+        self.net = nn.Sequential(
+            nn.Linear(enc_channels, hidden),
+            nn.SiLU(),
+            nn.Linear(hidden, 1),
+        )
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.net(self.trunk(x)).squeeze(-1)  # [N, T]

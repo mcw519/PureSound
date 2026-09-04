@@ -3,7 +3,7 @@ from typing import Dict, Optional, Tuple
 import torch
 import torch.nn as nn
 
-from .lobe.heads import DistHead, VADHead
+from .lobe.heads import DistHead, IdentityHead, ProximityHead, VADHead
 from .lobe.rnn import SingleRNN
 from .lobe.ssm import MambaInter
 from .lobe.trivial import FiLM, spectral_compression
@@ -178,6 +178,9 @@ class DPCRN(Unet):
         vad_head: Optional[Dict] = None,
         background_vad_head: Optional[Dict] = None,
         dist_head: Optional[Dict] = None,
+        identity_head: Optional[Dict] = None,
+        proximity_head: Optional[Dict] = None,
+        expose_bottleneck: bool = False,
     ):
         super().__init__(
             input_dim,
@@ -240,12 +243,38 @@ class DPCRN(Unet):
         self.dist_head = DistHead.from_config(dist_head, enc_channels=channels[-1])
         self.last_dist_preds: Optional[torch.Tensor] = None
 
+        # Per-frame identity / relative-proximity readouts (v20 R1a). Same
+        # training-only contract as the heads above: enabled from
+        # `backbone_args`, never read by inference or by the streaming export,
+        # and absent from the module (so from the checkpoint) when disabled.
+        self.identity_head = IdentityHead.from_config(
+            identity_head, enc_channels=channels[-1]
+        )
+        self.last_identity_emb: Optional[torch.Tensor] = None
+        self.proximity_head = ProximityHead.from_config(
+            proximity_head, enc_channels=channels[-1]
+        )
+        self.last_proximity: Optional[torch.Tensor] = None
+
         # The bottleneck itself, for readouts that are not modules -- the
         # inference-only presence gate fits a linear probe on exactly this
         # tensor. Off by default: a reference here would keep the graph alive
         # for the whole step, and training has no use for it.
         self.stash_bottleneck: bool = False
         self.last_bottleneck: Optional[torch.Tensor] = None
+
+        # ...and the same tensor WITH its graph, frequency-pooled, for losses
+        # that have to run a module of their own over the bottleneck -- the
+        # identity loss's EMA teacher is a second copy of the head, so it needs
+        # the features, not the head's output. Two separate switches on purpose:
+        # `stash_bottleneck` is an inference flag flipped per call by
+        # `EncDecMaskBase.forward` and its tensor is detached, and handing a
+        # gradient path to something that expected a detached probe input is
+        # exactly the kind of silent change this repo does not want. This one is
+        # a build-time flag (`backbone_args.expose_bottleneck: true`), so what a
+        # recipe trains is visible in the recipe.
+        self.expose_bottleneck: bool = bool(expose_bottleneck)
+        self.last_bottleneck_graph: Optional[torch.Tensor] = None
 
     def forward(
         self, x: torch.Tensor, dvec: Optional[torch.Tensor] = None
@@ -294,7 +323,21 @@ class DPCRN(Unet):
         else:
             self.last_dist_preds = None
 
+        if self.identity_head is not None:
+            self.last_identity_emb = self.identity_head(x)  # [N, T, D]
+        else:
+            self.last_identity_emb = None
+
+        if self.proximity_head is not None:
+            self.last_proximity = self.proximity_head(x)  # [N, T]
+        else:
+            self.last_proximity = None
+
         self.last_bottleneck = x.detach() if self.stash_bottleneck else None
+        # Frequency-pooled and NOT detached: `[N, C, T]`, the same convention
+        # the probes cache as `feat` (`anchor_gate_cache.py`) and the same one
+        # every per-frame head pools to internally.
+        self.last_bottleneck_graph = x.mean(dim=2) if self.expose_bottleneck else None
 
         # forward CNN-up layers
         for i, cnn_layer in enumerate(self.cnn_up):
