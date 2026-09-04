@@ -284,3 +284,55 @@ only matches the shipped guard at the guard's suppression price produced nothing
 `v19c`'s hinge is a subset of 4.2 on today's data and its pre-flight is S0 here. The shipped `OnsetGuard`
 is the external form of §3.3's no-read-before-commit rule; the programme's success criterion is that the
 model reproduces that protection internally *and* keeps the far suppression the guard gives up.
+
+---
+
+## 10. Rev 3 addendum (2026-09-04) — S0 and P0 results, and what they change
+
+**S0 (v19c pre-flight, `v19c_preflight/README.md`): the loss-only axis is closed.** On the real train
+loader the anchor-inheritance hinge is eligible on 4.9 % of rows but has median 0 (non-zero on 0.9 %
+of all rows; reproduced at a second seed), passing the output through the OnsetGuard *raises* the
+score instead of lowering it (the contrast is keyed to the bystander's proximity class: training
+pre-onset material is a far interferer at −27 dB, the measured failure has a near-talker prefix at
+−8 dB), and where non-zero the term owns 50–105 % of the gradient. The row shape (user onset ≥ 1 s
+into the row: 6.8 % of rows) has to come from data. This is the pre-registered fork and R1a's
+data half (`v20_session_rows/README.md`, committed) is that data: session rows with all four turn
+shapes, per-turn labels, one chain draw per row, target-absent share unchanged, no memory cost.
+
+**P0 (`identity_probe/README.md`): the frozen bottleneck does not carry talker identity across
+channels.** Real corpora: best cross-channel pair AUC 0.59 (per-recording centred; raw 0.15–0.49
+because the chain offset dominates), leave-speakers-out linear ceiling 0.73–0.76 — below the P3
+target of 0.80. Synthetic: identity is present when chain, room and distance are all fixed (0.805)
+and one chain swap removes it (0.012); factor ladder distance > chain > room ≫ talker. **The repo's
+frozen SV backbone (`speaker-verification-ps-spk-v1-1`, 192-d) scores 0.94–0.999 on the very same
+pairs**, and costs 78 ms per 2 s window single-threaded on this host's CPU (≈ 8 % of one core at
+1 Hz, 16 % at 2 Hz; 15 M parameters), measured 2026-09-04.
+
+**Design change (supersedes §4.2(i) and the identity part of §4.3):**
+
+1. **Identity is supplied, not learned from scratch.** The identity carrier for the candidate /
+   committed slots is the frozen SV embedding computed on single-talker speech runs (sliding 2 s
+   window, ≥ 1 Hz, only while presence is confirmed and `bystander_active`-style overlap is not
+   flagged). The DPCRN learns what P0 shows it can: proximity (capability A) and presence. The
+   memory stores an SV embedding; the commit / replacement rules of §3.3 are unchanged; identity
+   similarity in the replacement rule is SV cosine (the same quantity that scored ≥ 0.94 across
+   DiPCo's close/array channels).
+2. **`L_id` becomes distillation, optional.** If the SV side stream is too expensive on the target
+   device, `IdentityContrastiveLoss`'s EMA teacher is replaced by the SV embedding of the turn
+   (frozen teacher, same loss code path: one `teacher` provider), i.e. the bottleneck head is
+   trained to *predict* SV identity rather than to invent one. Whether that costs separation is a
+   measured question for R1a, not an assumption; the head stays training-only either way.
+3. **R1a scope, as it launches:** session rows ON; `RelativeProximityLoss` ON (capability A; gate
+   R6 on the QVF readability AUC and the device AUC); presence head retrained on `user_active`;
+   `IdentityContrastiveLoss` ON only in its distillation form and at 0.1 (or OFF for the first
+   cycle if the SV provider is not wired in time — state which in the round file). P3 is re-based:
+   for the SV carrier it is met by construction (0.94–0.999 measured) and the gate moves to the
+   *write decision* (P6); for the distilled head it stays as written.
+4. **R1b stores SV embeddings.** The write gate reads the R1a proximity head and presence; the
+   candidate/committed logic and P6 audit are unchanged. The streaming export gains the SV model
+   as a second session beside the DPCRN graph (or the distilled head if item 2 is taken); the
+   cost budget for G5 must include it.
+
+What does not change: sessions as the training material, relative proximity as the write criterion,
+no-read-before-commit, the read as a zero-initialised residual branch in R2, every guard in §6, and
+the real-chain fork in R1a.
