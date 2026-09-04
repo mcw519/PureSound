@@ -139,6 +139,14 @@ def test_get_cached_model_reuses_same_config_checkpoint_pair(tmp_path, monkeypat
     assert len(calls) == 1
 
 
+def test_default_torch_device_uses_mps_when_cuda_is_missing(monkeypatch):
+    demo = _load_demo_module()
+    monkeypatch.setattr(demo.torch.cuda, "is_available", lambda: False)
+    monkeypatch.setattr(demo.torch.backends.mps, "is_available", lambda: True)
+
+    assert demo.default_torch_device() == "mps"
+
+
 def test_enhance_audio_writes_output_and_skips_dnsmos(
     tmp_path, monkeypatch, write_tone_wav
 ):

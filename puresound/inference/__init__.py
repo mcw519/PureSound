@@ -1,7 +1,17 @@
 """Unified PureSound model-zoo and ONNX inference API."""
 
 from .runtime import InferenceError, InferenceResult, load_model
-from .providers import resolve_providers
+from .providers import (
+    COREML_PROVIDER,
+    CPU_PROVIDER,
+    CUDA_PROVIDER,
+    PROVIDER_ALIASES,
+    PROVIDER_CHOICES,
+    available_providers,
+    normalize_provider,
+    provider_is_available,
+    resolve_providers,
+)
 from .processors import (
     CancelCheck,
     InferenceCancelled,
@@ -44,6 +54,14 @@ __all__ = [
     "SpeakerVerificationRuntime",
     "StftFrameOrtProcessor",
     "WaveformEmbeddingOrtProcessor",
+    "COREML_PROVIDER",
+    "CPU_PROVIDER",
+    "CUDA_PROVIDER",
+    "PROVIDER_ALIASES",
+    "PROVIDER_CHOICES",
+    "available_providers",
+    "normalize_provider",
+    "provider_is_available",
     "resolve_providers",
     "ValidationReport",
     "validate_catalog",

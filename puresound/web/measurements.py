@@ -3,16 +3,21 @@
 The functions in this module intentionally return JSON-safe scalar values. They
 are useful for a quick model comparison when no full benchmark manifest is
 available; reference-dependent scores are left absent rather than fabricated.
+Reference-free DNSMOS is opt-in because its scorer may load an additional model.
 """
 
 from __future__ import annotations
 
+import threading
 from pathlib import Path
 from typing import Any
 
 import numpy as np
 
 from puresound.inference.processors.base import load_audio
+
+
+_DNSMOS_LOCK = threading.Lock()
 
 
 def _db(value: float, floor: float = -120.0) -> float:
@@ -70,6 +75,26 @@ def audio_metrics_from_path(path: str | Path, sample_rate: int = 16_000) -> tupl
     return values, audio_metrics(values, actual_rate)
 
 
+def align_streaming_output(
+    candidate: Any,
+    *,
+    latency_samples: int = 0,
+    target_samples: int | None = None,
+) -> np.ndarray:
+    """Remove streaming warm-up and bound an output to the source duration."""
+
+    values = np.asarray(candidate, dtype=np.float32).reshape(-1)
+    latency = max(0, int(latency_samples))
+    if latency >= values.size:
+        raise ValueError("streaming latency consumes the entire model output")
+    values = values[latency:]
+    if target_samples is not None:
+        values = values[: max(0, int(target_samples))]
+    if values.size == 0:
+        raise ValueError("aligned model output is empty")
+    return values
+
+
 def reference_metrics(reference: Any, candidate: Any, sample_rate: int) -> dict[str, float | None]:
     """Compare two aligned waveforms using reference-dependent quality scores."""
 
@@ -109,4 +134,41 @@ def reference_metrics(reference: Any, candidate: Any, sample_rate: int) -> dict[
         # Optional metric dependencies and short-reference constraints should
         # not prevent the always-available NumPy scores from being reported.
         pass
+    return result
+
+
+def reference_free_metrics(
+    samples: Any,
+    sample_rate: int,
+    *,
+    include_dnsmos: bool = False,
+) -> dict[str, Any]:
+    """Return quality metrics that do not require a clean reference.
+
+    DNSMOS is intentionally optional at runtime.  Its model and audio
+    dependencies can be relatively heavy (and may not be installed in a
+    minimal CPU environment), so an unavailable scorer is represented in the
+    report instead of making the whole inference fail.
+    """
+
+    result: dict[str, Any] = {"dnsmos": {}}
+    if not include_dnsmos:
+        return result
+    try:
+        import torch
+
+        from puresound.metrics import Metrics
+
+        values = np.asarray(samples, dtype=np.float32).reshape(-1)
+        with _DNSMOS_LOCK:
+            scores = Metrics.dnsmos_p835(
+                torch.zeros(1, dtype=torch.float32),
+                torch.from_numpy(values),
+                sr=int(sample_rate),
+            )
+        result["dnsmos"] = {
+            str(name): _finite(float(value)) for name, value in scores.items()
+        }
+    except Exception as exc:  # optional scorer must not block core metrics
+        result["dnsmos_error"] = str(exc)
     return result

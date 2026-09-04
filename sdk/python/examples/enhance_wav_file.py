@@ -73,8 +73,8 @@ def main() -> None:
     parser.add_argument(
         "--provider",
         default="auto",
-        choices=["auto", "cpu", "cuda"],
-        help="ONNX Runtime execution provider (default: auto)",
+        choices=["auto", "cpu", "cuda", "coreml", "mps"],
+        help="ONNX Runtime provider (mps is a CoreML alias; default: auto)",
     )
     args = parser.parse_args()
     enhance_file(

@@ -17,7 +17,11 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from puresound.audio.io import AudioIO
-from puresound.inference import ModelZoo, load_model as load_inference_model
+from puresound.inference import (
+    ModelZoo,
+    PROVIDER_CHOICES,
+    load_model as load_inference_model,
+)
 from puresound.utils import create_folder, load_hparam
 
 
@@ -31,7 +35,25 @@ Metrics = None
 LOGGER = logging.getLogger("voice_isolate_demo")
 
 STREAMING_SAMPLE_RATE = 16000
-DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+
+
+def default_torch_device() -> str:
+    """Choose the best PyTorch device without assuming NVIDIA is present."""
+
+    if torch.cuda.is_available():
+        return "cuda"
+    mps_backend = getattr(torch.backends, "mps", None)
+    try:
+        if mps_backend is not None and mps_backend.is_available():
+            return "mps"
+    except (AttributeError, RuntimeError):
+        # Older PyTorch builds or non-macOS builds may not expose a usable MPS
+        # backend. Keep the legacy CPU fallback in those environments.
+        pass
+    return "cpu"
+
+
+DEVICE = default_torch_device()
 
 
 def configure_logging() -> None:
@@ -196,7 +218,7 @@ def get_cached_model(config_path: str | Path, checkpoint_path: str | Path) -> tu
     if not checkpoint_path.is_file():
         raise FileNotFoundError(f"Checkpoint not found: {checkpoint_path}")
 
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device = torch.device(default_torch_device())
     cache_key = (str(config_path), str(checkpoint_path), str(device))
     if cache_key not in MODEL_CACHE:
         LOGGER.info("Model cache miss for checkpoint=%s device=%s", checkpoint_path, device)
@@ -1181,7 +1203,7 @@ def build_realtime_tab(default_config_path: str) -> None:
     rt_config = gr.Textbox(label="Config Path (for model discovery)", value=default_config_path)
     with gr.Row():
         rt_refresh = gr.Button("Refresh model list")
-        rt_provider = gr.Dropdown(label="ORT Provider", choices=["auto", "cpu", "cuda"], value="auto")
+        rt_provider = gr.Dropdown(label="ORT Provider", choices=list(PROVIDER_CHOICES), value="auto")
     try:
         rt_initial_choices = _zoo_voice_isolation_choices("ORT streaming")
     except Exception:
@@ -1293,7 +1315,7 @@ def build_offline_tab(default_config_path: str) -> None:
         )
         ort_provider = gr.Dropdown(
             label="ORT Provider",
-            choices=["auto", "cpu", "cuda"],
+            choices=list(PROVIDER_CHOICES),
             value="auto",
         )
         dry_blend = gr.Slider(

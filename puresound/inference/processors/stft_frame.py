@@ -18,6 +18,7 @@ from .base import (
     load_audio,
     report_progress,
 )
+from ..providers import normalize_provider
 
 
 class VoiceIsolationRuntime:
@@ -35,9 +36,7 @@ class VoiceIsolationRuntime:
     def __init__(self, model, artifact, *, provider: str = "auto", root: str | Path | None = None):
         self.model = model
         self.artifact = artifact
-        self.provider_requested = str(provider).lower()
-        if self.provider_requested not in {"auto", "cpu", "cuda"}:
-            raise ValueError("provider must be one of: auto, cpu, cuda")
+        self.provider_requested = normalize_provider(provider)
         self.root = Path(root) if root is not None else Path.cwd()
         self.onnx_path = Path(self._root_path(artifact.path))
         self.manifest_path = (
@@ -198,6 +197,8 @@ class VoiceIsolationRuntime:
             outputs.update(stream.drain_extras())
         duration = samples.size / float(sample_rate)
         metadata = {
+            "requested_provider": self.provider_requested,
+            "selected_provider": stream.providers[0] if stream.providers else "",
             "provider": ",".join(stream.providers),
             "providers": list(stream.providers),
             "sample_rate": sample_rate,

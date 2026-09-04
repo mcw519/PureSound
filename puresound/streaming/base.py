@@ -40,6 +40,7 @@ import torch.nn.functional as F
 
 from puresound.system.postprocess import IDENTITY, Postprocessor
 from puresound.utils import load_hparam
+from puresound.inference.providers import normalize_provider, resolve_providers
 
 
 def require(condition: bool, message: str) -> None:
@@ -281,10 +282,10 @@ def export_streaming_onnx(
         verbose=False,
     )
 
-    providers = ["CUDAExecutionProvider", "CPUExecutionProvider"]
-    available = onnxruntime.get_available_providers()
-    providers = [provider for provider in providers if provider in available]
-    session = onnxruntime.InferenceSession(str(onnx_path), providers=providers or ["CPUExecutionProvider"])
+    # Use the same provider policy as inference so an export validation run on
+    # macOS can exercise CoreML, while CUDA remains preferred on NVIDIA hosts.
+    providers = resolve_providers("auto", onnxruntime.get_available_providers())
+    session = onnxruntime.InferenceSession(str(onnx_path), providers=providers)
     ort_inputs = {"noisy_frame": noisy_frame.numpy()}
     for name, tensor in zip(frame_model.state_input_names, state):
         ort_inputs[name] = tensor.numpy()
@@ -321,7 +322,7 @@ def export_streaming_onnx(
             name: tensor_shape(tensor)
             for name, tensor in zip(frame_model.state_input_names, state)
         },
-        "providers": providers or ["CPUExecutionProvider"],
+        "providers": providers,
         # Applied by the runtime after the graph, not baked into it. Carries
         # `suppression_ceiling_db` too, because `dry_blend` bounds how deep the
         # deployed system can attenuate and that is worth reading off the
@@ -348,11 +349,12 @@ class StreamingOrt:
         self.onnx_path = Path(onnx_path)
         self.manifest_path = Path(manifest_path) if manifest_path else self.onnx_path.with_suffix(".json")
         self.manifest = json.loads(self.manifest_path.read_text(encoding="utf-8"))
+        self.provider_requested = normalize_provider(provider)
         if session is None:
             import onnxruntime
 
             providers = self._resolve_providers(
-                provider, onnxruntime.get_available_providers()
+                self.provider_requested, onnxruntime.get_available_providers()
             )
             session = onnxruntime.InferenceSession(
                 str(self.onnx_path), providers=providers
@@ -417,14 +419,7 @@ class StreamingOrt:
 
     @staticmethod
     def _resolve_providers(provider: str, available: Sequence[str]) -> list[str]:
-        provider = provider.lower()
-        if provider == "cuda":
-            return ["CUDAExecutionProvider", "CPUExecutionProvider"] if "CUDAExecutionProvider" in available else ["CPUExecutionProvider"]
-        if provider == "cpu":
-            return ["CPUExecutionProvider"]
-        if provider == "auto":
-            return ["CUDAExecutionProvider", "CPUExecutionProvider"] if "CUDAExecutionProvider" in available else ["CPUExecutionProvider"]
-        raise ValueError("provider must be one of: auto, cpu, cuda")
+        return resolve_providers(provider, available)
 
     def reset(self, batch_size: int = 1) -> None:
         if batch_size != 1:

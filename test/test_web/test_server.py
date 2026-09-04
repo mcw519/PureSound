@@ -12,6 +12,7 @@ from puresound.cli import build_parser
 from puresound.inference import InferenceCancelled, InferenceResult
 from puresound.web import WebService
 import puresound.web.server as web_server
+from puresound.web.measurements import align_streaming_output
 
 
 def _wav_data_url(samples: int = 160) -> str:
@@ -81,6 +82,51 @@ def test_web_infer_materializes_upload_and_exposes_download(monkeypatch):
     assert stored.data[:4] == b"RIFF"
 
 
+def test_web_infer_can_attach_reference_free_measurements(monkeypatch):
+    service = WebService()
+
+    class FakeRuntime:
+        def infer(
+            self,
+            *,
+            inputs,
+            parameters,
+            progress_callback=None,
+            cancel_check=None,
+        ):
+            return InferenceResult(
+                model_id="voice-isolate-dpcrn-v8",
+                task="voice_isolation",
+                outputs={"audio": np.ones(160, dtype=np.float32) * 0.1},
+                provider="CPUExecutionProvider",
+                elapsed_seconds=0.01,
+                rtf=0.1,
+                sample_rate=16_000,
+            )
+
+    monkeypatch.setattr(service, "_runtime", lambda *args: FakeRuntime())
+    monkeypatch.setattr(
+        web_server,
+        "reference_free_metrics",
+        lambda samples, sample_rate, *, include_dnsmos: {
+            "dnsmos": {"dnsmos_ovr": 4.2}
+        }
+        if include_dnsmos
+        else {"dnsmos": {}},
+    )
+
+    response = service.infer(
+        {
+            "model_id": "voice-isolate-dpcrn-v8",
+            "inputs": {"audio": {"filename": "input.wav", "data": _wav_data_url()}},
+            "measurements": {"include_dnsmos": True},
+        }
+    )
+
+    assert response["measurements"]["output"]["sample_rate"] == 16_000
+    assert response["measurements"]["reference_free"]["dnsmos"]["dnsmos_ovr"] == 4.2
+
+
 def test_web_upload_rejects_local_paths_by_default():
     service = WebService()
     try:
@@ -140,18 +186,47 @@ def test_web_audio_inspector_assets_are_packaged():
     assert "self.postMessage({ id, type: \"progress\"" in audio_worker
     assert "/audio-worker.js" in audio_view
     assert 'provider.includes("CPU")' in app
+    assert "updateProviderAvailability" in app
+    assert "Apple MPS" in html
     assert 'api("/api/jobs"' in app
     assert 'kind: "measurement"' in app
+    assert "measurementCsv" in app
+    assert 'id="measure-export-json"' in html
+    assert 'id="measure-export-csv"' in html
     assert 'id="measure-job-progress"' in html
+    assert "Compare model outputs" in html
+    assert "measurement-steps" in html
+    assert 'id="measurement-drawer"' in html
+    assert 'id="measurement-audio-results"' in html
+    assert "setMeasurementDrawer" in app
+    assert 'id="measure-form-note"></span>' in html
+    assert "DNSMOS" in html
+    assert "include_dnsmos" in app
     assert "sidebar-collapsed" in app
-    assert 'data-aside-toggle="voice"' in html
-    assert ".workspace.is-aside-collapsed > .workspace-main" in styles
-    assert ".workspace.is-aside-collapsed > .aside-reopen" in styles
+    assert 'id="playground-drawer-voice"' in html
+    assert 'id="playground-drawer-sv"' in html
+    assert 'id="playground-drawer-backdrop"' in html
+    assert "setPlaygroundDrawer" in app
+    assert ".playground-drawer.is-open" in styles
+    assert ".measurement-icon, .step-number, .status-icon, .note-mark" in styles
+    assert ".settings-icon,\n.catalog-check-chevron" in styles
+    assert ".audio-limiter { display: inline-flex; align-items: center; justify-content: center;" in styles
+    assert ".measurement-step strong, .measurement-step div > span" in styles
     assert "overflow-wrap: anywhere" in styles
 
 
 def test_web_measurement_report_compares_selected_models(monkeypatch):
     service = WebService()
+
+    monkeypatch.setattr(
+        web_server,
+        "reference_free_metrics",
+        lambda samples, sample_rate, *, include_dnsmos: {
+            "dnsmos": {"dnsmos_ovr": 3.5}
+        }
+        if include_dnsmos
+        else {"dnsmos": {}},
+    )
 
     class FakeRuntime:
         def infer(
@@ -182,13 +257,46 @@ def test_web_measurement_report_compares_selected_models(monkeypatch):
             "models": ["voice-isolate-dpcrn-v8"],
             "provider": "cpu",
             "parameters": {"dry_blend": 0.8},
+            "measurements": {"include_dnsmos": True},
         }
     )
 
     assert report["input"]["sample_rate"] == 16_000
+    assert report["request"]["models"] == ["voice-isolate-dpcrn-v8"]
+    assert report["request"]["provider"] == "cpu"
     assert report["models"][0]["model_id"] == "voice-isolate-dpcrn-v8"
     assert report["models"][0]["output"]["rms_dbfs"] < 0
     assert report["models"][0]["quality"] == {}
+    assert report["models"][0]["reference_free"]["dnsmos"]["dnsmos_ovr"] == 3.5
+    assert report["models"][0]["output_url"].startswith("/api/runs/")
+    assert report["summary"] == {"succeeded": 1, "failed": 0}
+    assert report["request"]["measurements"] == {"include_dnsmos": True}
+
+
+def test_streaming_output_alignment_removes_latency_and_bounds_duration():
+    output = np.concatenate([np.zeros(3), np.arange(8, dtype=np.float32)])
+
+    aligned = align_streaming_output(output, latency_samples=3, target_samples=5)
+
+    np.testing.assert_array_equal(aligned, np.arange(5, dtype=np.float32))
+
+
+def test_web_measurement_fails_when_every_model_fails(monkeypatch):
+    service = WebService()
+
+    class BrokenRuntime:
+        def infer(self, **kwargs):
+            raise RuntimeError("broken graph")
+
+    monkeypatch.setattr(service, "_runtime", lambda *args: BrokenRuntime())
+
+    with pytest.raises(web_server.WebServiceError, match="all selected models failed"):
+        service.measure(
+            {
+                "inputs": {"audio": {"filename": "input.wav", "data": _wav_data_url()}},
+                "models": ["voice-isolate-dpcrn-v8"],
+            }
+        )
 
 
 def test_web_async_job_reports_completion_and_keeps_result(monkeypatch):

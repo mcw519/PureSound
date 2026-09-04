@@ -29,14 +29,25 @@ from typing import Any, Callable, Mapping
 import numpy as np
 
 from puresound.inference import (
+    COREML_PROVIDER,
+    CPU_PROVIDER,
+    CUDA_PROVIDER,
     InferenceCancelled,
     InferenceError,
     InferenceResult,
     ModelZoo,
     ModelZooError,
+    available_providers,
     load_model,
+    normalize_provider,
 )
-from puresound.web.measurements import audio_metrics, audio_metrics_from_path, reference_metrics
+from puresound.web.measurements import (
+    align_streaming_output,
+    audio_metrics,
+    audio_metrics_from_path,
+    reference_free_metrics,
+    reference_metrics,
+)
 
 
 class WebServiceError(RuntimeError):
@@ -512,12 +523,16 @@ class WebService:
         model_id = payload.get("model_id")
         if not isinstance(model_id, str) or not model_id.strip():
             raise WebServiceError("model_id is required")
-        provider = str(payload.get("provider") or "auto").lower()
-        if provider not in {"auto", "cpu", "cuda"}:
-            raise WebServiceError("provider must be one of: auto, cpu, cuda")
+        try:
+            provider = normalize_provider(payload.get("provider") or "auto")
+        except ValueError as exc:
+            raise WebServiceError(str(exc)) from exc
         parameters = payload.get("parameters") or {}
         if not isinstance(parameters, Mapping):
             raise WebServiceError("parameters must be an object")
+        measurement_options = payload.get("measurements")
+        if measurement_options is not None and not isinstance(measurement_options, Mapping):
+            raise WebServiceError("measurements must be an object")
         variant = payload.get("variant")
         if variant is not None and not isinstance(variant, str):
             raise WebServiceError("variant must be a string")
@@ -566,6 +581,25 @@ class WebService:
                 }
             response["output_urls"] = output_urls
             response["input_names"] = list(materialized)
+            if measurement_options is not None and "audio" in result.outputs:
+                output_samples = np.asarray(
+                    result.outputs["audio"], dtype=np.float32
+                ).reshape(-1)
+                output_rate = result.sample_rate or 16_000
+                include_dnsmos = bool(
+                    measurement_options.get(
+                        "include_dnsmos",
+                        measurement_options.get("dnsmos", False),
+                    )
+                )
+                response["measurements"] = {
+                    "output": audio_metrics(output_samples, output_rate),
+                    "reference_free": reference_free_metrics(
+                        output_samples,
+                        output_rate,
+                        include_dnsmos=include_dnsmos,
+                    ),
+                }
             emit_progress(1.0, "complete")
             return response
         except (InferenceError, ModelZooError, OSError, ValueError, TypeError) as exc:
@@ -703,12 +737,22 @@ class WebService:
         model_ids = [str(model_id) for model_id in model_ids if str(model_id).strip()]
         if not model_ids:
             model_ids = [model.id for model in self.zoo.list(task="voice_isolation", runnable_only=True) if "default" in model.roles]
-        provider = str(payload.get("provider") or "cpu").lower()
-        if provider not in {"auto", "cpu", "cuda"}:
-            raise WebServiceError("provider must be one of: auto, cpu, cuda")
+        try:
+            provider = normalize_provider(payload.get("provider") or "auto")
+        except ValueError as exc:
+            raise WebServiceError(str(exc)) from exc
         parameters = payload.get("parameters") or {}
         if not isinstance(parameters, Mapping):
             raise WebServiceError("parameters must be an object")
+        measurement_options = payload.get("measurements") or {}
+        if not isinstance(measurement_options, Mapping):
+            raise WebServiceError("measurements must be an object")
+        include_dnsmos = bool(
+            measurement_options.get(
+                "include_dnsmos",
+                measurement_options.get("dnsmos", False),
+            )
+        )
         sample_rate = int(payload.get("sample_rate") or 16_000)
         temp_paths: list[Path] = []
         started = time.time()
@@ -718,7 +762,7 @@ class WebService:
             audio_path = self._materialize_input(inputs["audio"], temp_paths)
             ensure_active()
             emit_progress(0.05, "analyzing_probe")
-            _, input_stats = audio_metrics_from_path(audio_path, sample_rate)
+            input_values, input_stats = audio_metrics_from_path(audio_path, sample_rate)
             reference_values = None
             reference_stats = None
             if inputs.get("reference") is not None:
@@ -727,6 +771,7 @@ class WebService:
                 reference_path = self._materialize_input(inputs["reference"], temp_paths)
                 reference_values, reference_stats = audio_metrics_from_path(reference_path, sample_rate)
             reports: list[dict[str, Any]] = []
+            downloadable: dict[str, StoredOutput] = {}
             model_count = max(1, len(model_ids))
             for index, model_id in enumerate(model_ids):
                 ensure_active()
@@ -757,16 +802,41 @@ class WebService:
                     )
                     ensure_active()
                     output = np.asarray(result.outputs.get("audio"), dtype=np.float32).reshape(-1)
+                    latency_samples = int(result.metadata.get("latency_samples", 0))
+                    aligned_output = align_streaming_output(
+                        output,
+                        latency_samples=latency_samples,
+                        target_samples=input_values.size,
+                    )
+                    emit_progress(
+                        model_end - (model_end - model_start) * 0.04,
+                        f"model_{index + 1}_of_{model_count}:scoring_output",
+                    )
+                    reference_free = reference_free_metrics(
+                        aligned_output,
+                        result.sample_rate or sample_rate,
+                        include_dnsmos=include_dnsmos,
+                    )
                     model_report.update(
                         {
                             "display_name": model.display_name,
                             "provider": result.provider,
                             "elapsed_seconds": result.elapsed_seconds,
                             "rtf": result.rtf,
-                            "output": audio_metrics(output, result.sample_rate or sample_rate),
-                            "quality": reference_metrics(reference_values, output, result.sample_rate or sample_rate) if reference_values is not None else {},
+                            "latency_samples": latency_samples,
+                            "output": audio_metrics(aligned_output, result.sample_rate or sample_rate),
+                            "quality": reference_metrics(reference_values, aligned_output, result.sample_rate or sample_rate) if reference_values is not None else {},
+                            "reference_free": reference_free,
                         }
                     )
+                    output_key = f"model-{index}"
+                    downloadable[output_key] = StoredOutput(
+                        _audio_wav_bytes(aligned_output, result.sample_rate or sample_rate),
+                        "audio/wav",
+                        f"{_safe_filename(model_id, 'model')}.wav",
+                        time.time(),
+                    )
+                    model_report["_output_key"] = output_key
                 except InferenceCancelled:
                     raise
                 except Exception as exc:
@@ -776,13 +846,38 @@ class WebService:
                     model_end,
                     f"model_{index + 1}_of_{model_count}:complete",
                 )
+            successes = sum("error" not in report for report in reports)
+            if successes == 0:
+                errors = "; ".join(
+                    f"{report['model_id']}: {report.get('error', 'unknown error')}"
+                    for report in reports
+                )
+                raise WebServiceError(f"all selected models failed: {errors}")
+            if downloadable:
+                token = self.runs.put(downloadable)
+                for report in reports:
+                    output_key = report.pop("_output_key", None)
+                    if output_key is not None:
+                        report["output_url"] = (
+                            f"/api/runs/{token}/{urllib.parse.quote(output_key, safe='')}"
+                        )
             ensure_active()
             emit_progress(0.98, "finalizing_report")
             result = {
                 "sample_rate": sample_rate,
                 "input": input_stats,
                 "reference": reference_stats,
+                "request": {
+                    "models": model_ids,
+                    "provider": provider,
+                    "parameters": dict(parameters),
+                    "measurements": {"include_dnsmos": include_dnsmos},
+                },
                 "models": reports,
+                "summary": {
+                    "succeeded": successes,
+                    "failed": len(reports) - successes,
+                },
                 "elapsed_seconds": time.time() - started,
             }
             emit_progress(1.0, "complete")
@@ -842,6 +937,7 @@ class _RequestHandler(BaseHTTPRequestHandler):
         try:
             if path == "/api/health":
                 models = self.app.list_models(include_empty=True)
+                ort_providers = available_providers()
                 self._json(
                     HTTPStatus.OK,
                     {
@@ -850,6 +946,12 @@ class _RequestHandler(BaseHTTPRequestHandler):
                         "schema_version": self.app.zoo.schema_version,
                         "models": len(models),
                         "runnable_models": sum(bool(item["runnable"]) for item in models),
+                        "available_providers": ort_providers,
+                        "provider_capabilities": {
+                            "cpu": CPU_PROVIDER in ort_providers,
+                            "cuda": CUDA_PROVIDER in ort_providers,
+                            "coreml": COREML_PROVIDER in ort_providers,
+                        },
                     },
                 )
                 return

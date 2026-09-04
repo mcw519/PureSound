@@ -23,7 +23,7 @@ It provides reusable audio utilities, model components, and training recipes for
 
 ## Requirements
 
-- Python 3.10+
+- Python 3.12+
 - A working PyTorch environment compatible with your platform
 
 ## Installation
@@ -33,10 +33,44 @@ It provides reusable audio utilities, model components, and training recipes for
 ```bash
 git clone <project-url>
 cd PureSound
-uv sync --locked --group dev
+uv sync --locked --group dev --extra cpu
 ```
 
-The repository pins `torch`, `torchaudio`, and `torchcodec` to the PyTorch CUDA 12.4 wheel index in `pyproject.toml` and `uv.lock`, so the same `uv` setup can be reused on another machine without re-resolving to a different CUDA build.
+Linux uses the pinned PyTorch CUDA 12.4 wheels; macOS uses the standard platform
+wheels so PyTorch MPS remains installable.
+
+ONNX Runtime uses mutually exclusive extras because its CPU and GPU
+distributions provide the same Python package. Choose exactly one runtime:
+
+```bash
+uv sync --locked --group dev --extra cpu   # CPU or macOS CoreML
+uv sync --locked --group dev --extra cuda  # NVIDIA CUDA 12.x
+```
+
+Do not enable both extras. The portable SDK follows the same `cpu`/`cuda`
+selection. Verify the active wheel before running an inference:
+
+`faster-whisper` is available through `--extra asr` for CPU/CoreML
+environments. It cannot be combined with `--extra cuda` because its package
+metadata requires the CPU ONNX Runtime distribution.
+
+```bash
+python -c "import onnxruntime as ort; print(ort.__version__); print(ort.get_available_providers())"
+# or
+puresound providers
+```
+
+`CUDAExecutionProvider` must be listed for CUDA inference.  A CUDA-enabled
+PyTorch wheel alone does not add CUDA support to ONNX Runtime; the NVIDIA
+driver, CUDA, and cuDNN libraries must also be loadable by the process.
+
+On macOS, install the normal `onnxruntime` wheel.  Official macOS wheels can
+expose `CoreMLExecutionProvider`, which uses Apple's GPU/Neural Engine when the
+model operators are supported.  ONNX Runtime has no native
+`MPSExecutionProvider`; PureSound accepts `--provider mps` as an alias for
+CoreML (`--provider coreml` is the explicit spelling).  `auto` selects CUDA,
+then CoreML, then CPU.  PyTorch-only advanced paths may use PyTorch's separate
+MPS backend when `torch.backends.mps.is_available()` is true.
 
 ### Option 2: Use pip
 
@@ -233,8 +267,7 @@ in both English (`name.md`) and Traditional Chinese (`name.zh-TW.md`).
 
 This script runs:
 
-- `uv sync --group dev`
-- `uv sync --locked --group dev`
+- `uv sync --locked --group dev --extra cpu`
 - `uv build`
 
 ## Notes
@@ -252,7 +285,7 @@ Cause:
 Fix:
 
 ```bash
-uv sync --locked --group dev
+uv sync --locked --group dev --extra cpu
 # or
 python -m pip install -r requirements.txt
 python -m pip install -e . --no-deps
@@ -285,6 +318,21 @@ python -c "import torch; print(torch.cuda.is_available(), torch.version.cuda)"
 
 If CUDA is required, reinstall a CUDA-enabled PyTorch build matching your system.
 This repository's reusable `uv` setup targets CUDA 12.4.
+
+For ONNX inference, check ONNX Runtime separately:
+
+```bash
+python -c "import onnxruntime as ort; print(ort.get_available_providers())"
+```
+
+If `CUDAExecutionProvider` is missing, the CPU wheel is still installed (or
+the GPU wheel cannot load its CUDA/cuDNN dependencies). Replace the wheel as
+shown in the installation section and restart the web service. The API and UI
+report the provider actually selected; an explicit CUDA request falls back to
+CPU when the provider is unavailable.
+
+On macOS, look for `CoreMLExecutionProvider` instead. Select `coreml` or the
+`mps` alias; `MPSExecutionProvider` is not an ONNX Runtime provider.
 
 ### 4) Recipe starts but cannot find data files
 

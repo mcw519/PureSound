@@ -7,16 +7,19 @@ name = "puresound"
 version = "0.1.0"
 description = "A speech processing toolkit based on PyTorch for speech research"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.12"
 authors = [
   { name = "Milo Wu" },
 ]
 dependencies = [
   "google",
   "protobuf",
-  "torch==2.6.0+cu124",
-  "torchaudio==2.6.0+cu124",
-  "torchcodec==0.2.1+cu124",
+  "torch==2.6.0+cu124; sys_platform != 'darwin'",
+  "torchaudio==2.6.0+cu124; sys_platform != 'darwin'",
+  "torchcodec==0.2.1+cu124; sys_platform != 'darwin'",
+  "torch==2.6.0; sys_platform == 'darwin'",
+  "torchaudio==2.6.0; sys_platform == 'darwin'",
+  "torchcodec==0.2.1; sys_platform == 'darwin'",
   "matplotlib",
   "numpy",
   "scipy",
@@ -36,20 +39,31 @@ dependencies = [
   "lightning",
   "gradio",
   "onnx",
-  "onnxruntime",
   "requests",
   "silero-vad",
   "librosa",
   "torchmetrics",
   "pyarrow>=24.0.0",
   "jiwer>=4.0.0",
-  "faster-whisper>=1.2.1",
 ]
 
 [project.scripts]
 puresound = "puresound.cli:main"
 
 [project.optional-dependencies]
+cpu = [
+  "onnxruntime>=1.24,<2; sys_platform != 'darwin'",
+  # ORT 1.24+ arm64 wheels require macOS 14; keep macOS 13 compatible.
+  "onnxruntime==1.23.2; sys_platform == 'darwin'",
+]
+cuda = [
+  "onnxruntime-gpu==1.24.1; sys_platform != 'darwin'",
+]
+asr = [
+  # faster-whisper requires the CPU `onnxruntime` distribution by name and
+  # therefore cannot share an environment with the CUDA ORT wheel.
+  "faster-whisper>=1.2.1",
+]
 hybrid-rir = [
   "pyroomacoustics",
 ]
@@ -66,9 +80,15 @@ dev = [
 ]
 
 [tool.uv.sources]
-torch = { index = "pytorch-cu124" }
-torchaudio = { index = "pytorch-cu124" }
-torchcodec = { index = "pytorch-cu124" }
+torch = [{ index = "pytorch-cu124", marker = "sys_platform != 'darwin'" }]
+torchaudio = [{ index = "pytorch-cu124", marker = "sys_platform != 'darwin'" }]
+torchcodec = [{ index = "pytorch-cu124", marker = "sys_platform != 'darwin'" }]
+
+[tool.uv]
+conflicts = [
+  [{ extra = "cpu" }, { extra = "cuda" }],
+  [{ extra = "asr" }, { extra = "cuda" }],
+]
 
 [[tool.uv.index]]
 name = "pytorch-cu124"

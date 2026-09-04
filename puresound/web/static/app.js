@@ -12,6 +12,8 @@
     audioPanels: {},
     activeJobs: {},
     measurementFiles: {},
+    measurementReport: null,
+    measurementAudioPanels: [],
     jobs: [],
     toastTimer: null,
   };
@@ -125,6 +127,28 @@
     $("#stat-models").textContent = health.models ?? "—";
   }
 
+  function updateProviderAvailability(health) {
+    const capabilities = health?.provider_capabilities;
+    if (!capabilities) return;
+    const labels = { cuda: "CUDA", mps: "Apple MPS · CoreML" };
+    ["#voice-provider", "#sv-provider"].forEach((selector) => {
+      const select = $(selector);
+      if (!select) return;
+      Object.entries(labels).forEach(([value, label]) => {
+        const option = select.querySelector(`option[value="${value}"]`);
+        if (!option) return;
+        const available = value === "mps" ? Boolean(capabilities.coreml) : Boolean(capabilities[value]);
+        option.disabled = !available;
+        option.textContent = available ? label : `${label} · unavailable`;
+      });
+    });
+    const preferred = capabilities.cuda ? "CUDA" : capabilities.coreml ? "Apple CoreML" : "CPU";
+    const chipLabel = $("#provider-chip-label");
+    if (chipLabel) chipLabel.textContent = `Provider auto · ${preferred}`;
+    const runtimeStat = $("#stat-runtime");
+    if (runtimeStat) runtimeStat.textContent = preferred;
+  }
+
   async function loadCatalog() {
     try {
       const [health, catalog] = await Promise.all([api("/api/health"), api("/api/models?include_empty=1")]);
@@ -132,6 +156,7 @@
       state.voiceModels = state.models.filter((model) => model.task === "voice_isolation" && model.runnable);
       state.svModels = state.models.filter((model) => model.task === "speaker_embedding" && model.runnable);
       updateRuntimeStatus(health);
+      updateProviderAvailability(health);
       const artifacts = state.models.reduce((total, model) => total + (model.artifacts?.length || 0), 0);
       $("#stat-artifacts").textContent = artifacts;
       $("#stat-default-voice").textContent = state.voiceModels.find(modelIsDefault)?.display_name?.replace("Voice Isolation ", "") || "—";
@@ -187,6 +212,7 @@
   function providerLabel(value) {
     const provider = String(value || "");
     if (provider.includes("CUDA")) return "CUDA";
+    if (provider.includes("CoreML")) return "Apple CoreML";
     if (provider.includes("CPU")) return "CPU";
     return provider || "—";
   }
@@ -289,7 +315,7 @@
           : `${result.rtf == null ? "—" : `RTF ${Number(result.rtf).toFixed(3)}`} · ${job.elapsed_seconds == null ? "—" : formatSeconds(job.elapsed_seconds)}`)
         : (job.error || job.phase || "—");
       const output = result.output_urls?.audio ? `<a href="${escapeHtml(result.output_urls.audio)}" target="_blank" rel="noreferrer">Output ↗</a>` : "";
-      const title = measurement ? "Model comparison" : job.model_id;
+      const title = measurement ? "Measurement comparison" : job.model_id;
       return `<article class="job-history-item"><div class="job-history-main"><strong>${escapeHtml(title)}</strong><span>${escapeHtml(detail)}</span></div><div class="job-history-side"><span class="job-status job-status-${escapeHtml(job.status)}">${escapeHtml(job.status)}</span>${score == null ? "" : `<span>${Number(score).toFixed(3)}</span>`}${output}</div></article>`;
     }).join("");
   }
@@ -315,15 +341,44 @@
       const input = await readDataUrl(file);
       const parameters = { dry_blend: Number($("#voice-dry-blend").value) };
       if ($("#voice-collect-extras").checked) parameters.collect_extras = true;
-      const result = await runBackgroundJob({ model_id: model.id, variant: $("#voice-variant").value, provider: $("#voice-provider").value, inputs: { audio: input }, parameters }, "voice");
+      const result = await runBackgroundJob(
+        {
+          model_id: model.id,
+          variant: $("#voice-variant").value,
+          provider: $("#voice-provider").value,
+          inputs: { audio: input },
+          parameters,
+          measurements: { include_dnsmos: true },
+        },
+        "voice",
+      );
       const outputUrl = result.output_urls?.audio;
       if (!outputUrl) throw new Error("The runtime did not return an audio output.");
       $("#voice-result").hidden = false;
       $("#voice-download").href = outputUrl;
       $("#voice-result-meta").textContent = `${result.sample_rate ? `${result.sample_rate / 1000} kHz` : "—"} · ${formatSeconds(result.metadata?.duration_seconds)}`;
-      renderMetrics($("#voice-metrics"), [["RTF", result.rtf == null ? "—" : Number(result.rtf).toFixed(3)], ["Latency", result.metadata?.latency_ms == null ? "—" : `${Number(result.metadata.latency_ms).toFixed(1)} ms`], ["Output", `${result.outputs?.audio?.shape?.[0] || "—"} samples`], ["Provider", providerLabel(result.provider)]]);
+      const outputMeasurements = result.measurements?.output || {};
+      const dnsMos = result.measurements?.reference_free?.dnsmos || {};
+      renderMetrics($("#voice-metrics"), [
+        ["RTF", result.rtf == null ? "—" : Number(result.rtf).toFixed(3)],
+        ["Latency", result.metadata?.latency_ms == null ? "—" : `${Number(result.metadata.latency_ms).toFixed(1)} ms`],
+        ["DNSMOS OVR", measurementValue(dnsMos.dnsmos_ovr, 2)],
+        ["Output RMS", measurementValue(outputMeasurements.rms_dbfs, 1, " dBFS")],
+      ]);
+      const measurementNote = $("#voice-measurement-note");
+      const dnsError = result.measurements?.reference_free?.dnsmos_error;
+      const dnsAvailable = Number.isFinite(Number(dnsMos.dnsmos_ovr));
+      if (dnsError) {
+        measurementNote.textContent = `Output measured on ${providerLabel(result.provider)}. DNSMOS unavailable: ${dnsError}`;
+      } else if (dnsAvailable) {
+        measurementNote.textContent = `Output measured on ${providerLabel(result.provider)}. DNSMOS OVR is a reference-free quality score (1–5; higher is better).`;
+      } else {
+        measurementNote.textContent = `Output measured on ${providerLabel(result.provider)}. DNSMOS was not returned by the runtime.`;
+      }
+      measurementNote.className = `measurement-inline-note${dnsError || !dnsAvailable ? " is-warning" : ""}`;
       try { await state.audioPanels.voiceOutput.loadUrl(outputUrl); } catch (error) { showToast(`Output preview failed: ${error.message}`, true); }
       note.textContent = "Inference complete. Streaming delay alignment was kept by the processor."; note.className = "form-note is-success";
+      setPlaygroundDrawer(null);
       showToast(`Finished ${model.display_name}.`);
     } catch (error) { note.textContent = error.message; note.className = "form-note is-error"; showToast(error.message, true); }
     finally { setBusy(button, false); }
@@ -353,6 +408,7 @@
       $("#sv-result-time").textContent = formatSeconds(result.elapsed_seconds);
       renderMetrics($("#sv-metrics"), [["Similarity", score.toFixed(3)], ["Threshold", threshold.toFixed(2)], ["Embedding", `${result.metadata?.embedding_dim || "—"} d`], ["Provider", providerLabel(result.provider)]]);
       note.textContent = "Verification complete."; note.className = "form-note is-success";
+      setPlaygroundDrawer(null);
       showToast(verdict ? "Speaker match." : "No speaker match.");
     } catch (error) { note.textContent = error.message; note.className = "form-note is-error"; showToast(error.message, true); }
     finally { setBusy(button, false); }
@@ -383,23 +439,171 @@
     return value == null || !Number.isFinite(Number(value)) ? "—" : `${Number(value).toFixed(digits)}${suffix}`;
   }
 
+  function setMeasurementDrawer(open) {
+    const drawer = $("#measurement-drawer");
+    const backdrop = $("#measurement-drawer-backdrop");
+    $("#measure-configure").setAttribute("aria-expanded", open ? "true" : "false");
+    drawer.setAttribute("aria-hidden", open ? "false" : "true");
+    document.body.classList.toggle("measurement-drawer-open", open);
+    if (open) {
+      backdrop.hidden = false;
+      requestAnimationFrame(() => {
+        drawer.classList.add("is-open");
+        backdrop.classList.add("is-open");
+        $("#measurement-drawer-close").focus();
+      });
+      return;
+    }
+    drawer.classList.remove("is-open");
+    backdrop.classList.remove("is-open");
+    window.setTimeout(() => { if (!drawer.classList.contains("is-open")) backdrop.hidden = true; }, 240);
+  }
+
+  function activePlaygroundKey() {
+    return $(".workspace-tab.is-active")?.dataset.workspace || "voice";
+  }
+
+  function setPlaygroundDrawer(key) {
+    const backdrop = $("#playground-drawer-backdrop");
+    const openButton = $("#playground-settings-open");
+    const drawer = key ? $(`#playground-drawer-${key}`) : null;
+    $$(".playground-drawer").forEach((item) => {
+      const open = item === drawer;
+      item.classList.toggle("is-open", open);
+      item.setAttribute("aria-hidden", open ? "false" : "true");
+    });
+    openButton.setAttribute("aria-expanded", drawer ? "true" : "false");
+    openButton.setAttribute("aria-controls", `playground-drawer-${key || activePlaygroundKey()}`);
+    document.body.classList.toggle("playground-drawer-open", Boolean(drawer));
+    if (drawer) {
+      backdrop.hidden = false;
+      requestAnimationFrame(() => {
+        backdrop.classList.add("is-open");
+        drawer.querySelector("[data-playground-settings-close]")?.focus();
+      });
+      return;
+    }
+    backdrop.classList.remove("is-open");
+    window.setTimeout(() => {
+      if (!$(".playground-drawer.is-open")) backdrop.hidden = true;
+    }, 240);
+  }
+
+  function downloadText(filename, content, type) {
+    const blob = new Blob([content], { type });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 0);
+  }
+
+  function measurementCsv(report) {
+    const columns = [
+      "model_id", "display_name", "provider", "elapsed_seconds", "rtf",
+      "rms_dbfs", "peak_dbfs", "clipping_ratio", "silence_ratio",
+      "spectral_centroid_hz", "si_sdr_db", "snr_db", "correlation", "stoi", "pesq_wb",
+      "dnsmos_p808", "dnsmos_sig", "dnsmos_bak", "dnsmos_ovr", "dnsmos_error", "error",
+      "latency_samples", "output_url",
+    ];
+    const cell = (value) => `"${String(value == null ? "" : value).replace(/"/g, '""')}"`;
+    const rows = (report.models || []).map((model) => {
+      const output = model.output || {};
+      const quality = model.quality || {};
+      return [
+        model.model_id,
+        model.display_name,
+        model.provider,
+        model.elapsed_seconds,
+        model.rtf,
+        output.rms_dbfs,
+        output.peak_dbfs,
+        output.clipping_ratio,
+        output.silence_ratio,
+        output.spectral_centroid_hz,
+        quality.si_sdr_db,
+        quality.snr_db,
+        quality.correlation,
+        quality.stoi,
+        quality.pesq_wb,
+        model.reference_free?.dnsmos?.dnsmos_p808,
+        model.reference_free?.dnsmos?.dnsmos_sig,
+        model.reference_free?.dnsmos?.dnsmos_bak,
+        model.reference_free?.dnsmos?.dnsmos_ovr,
+        model.reference_free?.dnsmos_error,
+        model.error,
+        model.latency_samples,
+        model.output_url,
+      ].map(cell).join(",");
+    });
+    return [columns.map(cell).join(","), ...rows].join("\n") + "\n";
+  }
+
+  function exportMeasurement(format) {
+    if (!state.measurementReport) return;
+    const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+    if (format === "csv") {
+      downloadText(`puresound-measurements-${stamp}.csv`, measurementCsv(state.measurementReport), "text/csv;charset=utf-8");
+    } else {
+      downloadText(`puresound-measurements-${stamp}.json`, JSON.stringify(state.measurementReport, null, 2), "application/json;charset=utf-8");
+    }
+  }
+
   function renderMeasurementReport(report) {
-    $("#measurement-results").hidden = false;
+    state.measurementReport = report;
+    $("#measurement-report-content").hidden = false;
+    $("#measure-export-json").hidden = false;
+    $("#measure-export-csv").hidden = false;
     const input = report.input || {};
     const reference = report.reference;
+    const dnsMosErrors = (report.models || [])
+      .map((model) => model.reference_free?.dnsmos_error)
+      .filter(Boolean);
+    const summary = reference
+      ? "Reference supplied — use SI-SDR and STOI for quality, then check speed and clipping for deployment."
+      : "No clean reference — DNSMOS provides a reference-free quality signal; also compare speed, level, and clipping.";
+    const modelCount = (report.models || []).length;
+    const failedModels = Number(report.summary?.failed || 0);
+    const resultSummary = dnsMosErrors.length > 0 && dnsMosErrors.length === modelCount
+      ? `${summary} DNSMOS is unavailable in this runtime.`
+      : summary;
+    $("#measurement-result-summary").textContent = failedModels
+      ? `${failedModels} selected model${failedModels === 1 ? "" : "s"} failed. ${resultSummary}`
+      : resultSummary;
     $("#measurement-summary").innerHTML = [
-      ["Probe RMS", measurementValue(input.rms_dbfs, 1, " dBFS")],
-      ["Probe peak", measurementValue(input.peak_dbfs, 1, " dBFS")],
-      ["Clipping", measurementValue(input.clipping_ratio * 100, 2, "%")],
+      ["Input RMS", measurementValue(input.rms_dbfs, 1, " dBFS")],
+      ["Input peak", measurementValue(input.peak_dbfs, 1, " dBFS")],
+      ["Input clipping", measurementValue(input.clipping_ratio * 100, 2, "%")],
       ["Reference", reference ? `${measurementValue(reference.duration_seconds, 2, " s")} · ${measurementValue(reference.rms_dbfs, 1, " dBFS")}` : "Not provided"],
     ].map(([label, value]) => `<div class="measurement-summary-item"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></div>`).join("");
     $("#measurement-result-time").textContent = `${measurementValue(report.elapsed_seconds, 2, " s")} total`;
     $("#measurement-table-body").innerHTML = (report.models || []).map((model) => {
       const output = model.output || {};
       const quality = model.quality || {};
-      if (model.error) return `<tr><td><strong>${escapeHtml(model.model_id)}</strong><small class="table-error">${escapeHtml(model.error)}</small></td><td colspan="6">—</td></tr>`;
-      return `<tr><td><strong>${escapeHtml(model.display_name || model.model_id)}</strong><small>${escapeHtml(providerLabel(model.provider))}</small></td><td>${measurementValue(model.rtf, 3)}</td><td>${measurementValue(output.rms_dbfs, 1, " dB")}</td><td>${measurementValue(output.peak_dbfs, 1, " dB")}</td><td>${measurementValue(output.clipping_ratio * 100, 2, "%")}</td><td>${measurementValue(quality.si_sdr_db, 2, " dB")}</td><td>${measurementValue(quality.stoi, 3)}</td></tr>`;
+      const referenceFree = model.reference_free || {};
+      const dnsMos = referenceFree.dnsmos || {};
+      const dnsMosTitle = referenceFree.dnsmos_error
+        ? `DNSMOS unavailable: ${referenceFree.dnsmos_error}`
+        : "DNSMOS overall quality, 1–5; higher is better";
+      if (model.error) return `<tr><td><strong>${escapeHtml(model.model_id)}</strong><small class="table-error">${escapeHtml(model.error)}</small></td><td colspan="7">—</td></tr>`;
+      return `<tr><td><strong>${escapeHtml(model.display_name || model.model_id)}</strong><small>${escapeHtml(providerLabel(model.provider))}</small></td><td>${measurementValue(model.rtf, 3)}</td><td>${measurementValue(output.rms_dbfs, 1, " dB")}</td><td>${measurementValue(output.peak_dbfs, 1, " dB")}</td><td>${measurementValue(output.clipping_ratio * 100, 2, "%")}</td><td title="${escapeHtml(dnsMosTitle)}">${measurementValue(dnsMos.dnsmos_ovr, 2)}</td><td>${measurementValue(quality.si_sdr_db, 2, " dB")}</td><td>${measurementValue(quality.stoi, 3)}</td></tr>`;
     }).join("");
+    state.measurementAudioPanels.forEach((panel) => panel.stop());
+    state.measurementAudioPanels = [];
+    const playable = (report.models || []).filter((model) => model.output_url && !model.error);
+    $("#measurement-audio-results").innerHTML = playable.map((model, index) => `
+      <section class="measurement-audio-card">
+        <div class="measurement-audio-card-head"><strong>${escapeHtml(model.display_name || model.model_id)}</strong><span>${escapeHtml(providerLabel(model.provider))}</span></div>
+        <div class="audio-inspector is-compact" id="measurement-audio-${index}" data-wave-color="#c8f6f9"></div>
+      </section>`).join("");
+    playable.forEach((model, index) => {
+      const panel = new window.PureSoundAudioPanel($(`#measurement-audio-${index}`));
+      state.measurementAudioPanels.push(panel);
+      panel.loadUrl(model.output_url).catch((error) => showToast(error.message, true));
+    });
   }
 
   async function runMeasurements() {
@@ -407,17 +611,29 @@
     const reference = state.measurementFiles.reference;
     const note = $("#measure-form-note");
     const models = $$("#measure-model-list input:checked").map((input) => input.value);
-    if (!file) { note.textContent = "Select a probe audio file first."; note.className = "form-note is-error"; return; }
+    if (!file) { note.textContent = "Choose the recording to compare first."; note.className = "form-note is-error"; return; }
     if (!models.length) { note.textContent = "Select at least one model to compare."; note.className = "form-note is-error"; return; }
     const button = $("#measure-run");
     setBusy(button, true); note.textContent = "Measuring input and running selected models…"; note.className = "form-note";
     try {
       const inputs = { audio: await readDataUrl(file) };
       if (reference) inputs.reference = await readDataUrl(reference);
-      const report = await runBackgroundJob({ kind: "measurement", inputs, models, provider: "auto" }, "measure");
+      const report = await runBackgroundJob(
+        {
+          kind: "measurement",
+          inputs,
+          models,
+          provider: "auto",
+          measurements: { include_dnsmos: true },
+        },
+        "measure",
+      );
       renderMeasurementReport(report);
-      note.textContent = "Measurement complete. Reference scores are shown when a clean reference was supplied."; note.className = "form-note is-success";
-      showToast("Audio measurements complete.");
+      const failed = Number(report.summary?.failed || 0);
+      note.textContent = failed ? `Comparison complete with ${failed} failed model${failed === 1 ? "" : "s"}.` : "Comparison complete.";
+      note.className = failed ? "form-note is-error" : "form-note is-success";
+      setMeasurementDrawer(false);
+      showToast(failed ? "Comparison completed with warnings." : "Audio measurements complete.", failed > 0);
     } catch (error) { note.textContent = error.message; note.className = "form-note is-error"; showToast(error.message, true); }
     finally { setBusy(button, false); }
   }
@@ -442,6 +658,8 @@
   }
 
   function switchScreen(screen) {
+    setPlaygroundDrawer(null);
+    setMeasurementDrawer(false);
     $$('[data-screen-panel]').forEach((panel) => panel.classList.toggle("is-visible", panel.dataset.screenPanel === screen));
     $$(".nav-link").forEach((link) => link.classList.toggle("is-active", link.dataset.screen === screen));
     const labels = { zoo: "Model Zoo / Overview", playground: "Playground / Inference", measurements: "Measurements / Validation" };
@@ -458,32 +676,12 @@
     try { localStorage.setItem("puresound.sidebar-collapsed", collapsed ? "1" : "0"); } catch { /* storage may be disabled */ }
   }
 
-  function setAsideCollapsed(key, collapsed) {
-    const workspace = $(`#workspace-${key}`);
-    if (!workspace) return;
-    workspace.classList.toggle("is-aside-collapsed", collapsed);
-    $$(`[data-aside-toggle="${key}"]`).forEach((button) => {
-      button.setAttribute("aria-expanded", collapsed ? "false" : "true");
-      if (button.classList.contains("aside-toggle")) {
-        button.setAttribute("aria-label", collapsed ? "Show settings" : "Collapse settings");
-        button.textContent = collapsed ? "‹" : "›";
-      }
-    });
-    try { localStorage.setItem(`puresound.${key}-aside-collapsed`, collapsed ? "1" : "0"); } catch { /* storage may be disabled */ }
-  }
-
   function restoreLayout() {
     let sidebar = false;
-    let voice = false;
-    let sv = false;
     try {
       sidebar = localStorage.getItem("puresound.sidebar-collapsed") === "1";
-      voice = localStorage.getItem("puresound.voice-aside-collapsed") === "1";
-      sv = localStorage.getItem("puresound.sv-aside-collapsed") === "1";
     } catch { /* storage may be disabled */ }
     setSidebarCollapsed(sidebar);
-    setAsideCollapsed("voice", voice);
-    setAsideCollapsed("sv", sv);
   }
 
   function wireMeasurementFile(inputId, key) {
@@ -505,10 +703,9 @@
       svTest: new window.PureSoundAudioPanel($("#sv-test-audio")),
     };
     $("#sidebar-toggle").addEventListener("click", () => setSidebarCollapsed(!document.body.classList.contains("sidebar-collapsed")));
-    $$('[data-aside-toggle]').forEach((button) => button.addEventListener("click", () => {
-      const key = button.dataset.asideToggle;
-      setAsideCollapsed(key, !$("#workspace-" + key).classList.contains("is-aside-collapsed"));
-    }));
+    $("#playground-settings-open").addEventListener("click", () => setPlaygroundDrawer(activePlaygroundKey()));
+    $$("[data-playground-settings-close]").forEach((button) => button.addEventListener("click", () => setPlaygroundDrawer(null)));
+    $("#playground-drawer-backdrop").addEventListener("click", () => setPlaygroundDrawer(null));
     $$(".nav-link").forEach((link) => link.addEventListener("click", () => switchScreen(link.dataset.screen)));
     $$('[data-screen-target]').forEach((button) => button.addEventListener("click", () => switchScreen(button.dataset.screenTarget)));
     $("#model-search").addEventListener("input", renderModels);
@@ -526,13 +723,25 @@
     $("#validate-button").addEventListener("click", runValidation);
     $("#measure-run").addEventListener("click", runMeasurements);
     $("#measure-cancel").addEventListener("click", () => cancelInferenceJob("measure"));
+    $("#measure-export-json").addEventListener("click", () => exportMeasurement("json"));
+    $("#measure-export-csv").addEventListener("click", () => exportMeasurement("csv"));
+    $("#measure-configure").addEventListener("click", () => setMeasurementDrawer(true));
+    $("#measurement-empty-configure").addEventListener("click", () => setMeasurementDrawer(true));
+    $("#measurement-drawer-close").addEventListener("click", () => setMeasurementDrawer(false));
+    $("#measurement-drawer-backdrop").addEventListener("click", () => setMeasurementDrawer(false));
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" && $("#measurement-drawer").classList.contains("is-open")) setMeasurementDrawer(false);
+      if (event.key === "Escape" && $(".playground-drawer.is-open")) setPlaygroundDrawer(null);
+    });
     $("#history-refresh").addEventListener("click", refreshJobHistory);
     wireMeasurementFile("#measure-audio", "audio");
     wireMeasurementFile("#measure-reference", "reference");
     $$(".workspace-tab").forEach((tab) => tab.addEventListener("click", () => {
       const workspace = tab.dataset.workspace;
+      setPlaygroundDrawer(null);
       $$(".workspace-tab").forEach((item) => { const active = item === tab; item.classList.toggle("is-active", active); item.setAttribute("aria-selected", active ? "true" : "false"); });
       $$("[data-workspace-panel]").forEach((panel) => { panel.hidden = panel.dataset.workspacePanel !== workspace; });
+      $("#playground-settings-open").setAttribute("aria-controls", `playground-drawer-${workspace}`);
     }));
     wireFileInput("#voice-audio", { preview: $("#voice-input-preview"), name: $("#voice-file-name"), meta: $("#voice-file-meta"), panel: state.audioPanels.voiceInput });
     wireFileInput("#sv-enrollment", { preview: $("#sv-enrollment-preview"), name: $("#sv-enrollment-name"), meta: $("#sv-enrollment-meta"), panel: state.audioPanels.svEnrollment });

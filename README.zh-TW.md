@@ -23,7 +23,7 @@ English version: [`README.md`](README.md)
 
 ## 系統需求
 
-- Python 3.10+
+- Python 3.12+
 - 一套與你的平台相容、可正常運作的 PyTorch 環境
 
 ## 安裝
@@ -33,10 +33,41 @@ English version: [`README.md`](README.md)
 ```bash
 git clone <project-url>
 cd PureSound
-uv sync --locked --group dev
+uv sync --locked --group dev --extra cpu
 ```
 
-本專案在 `pyproject.toml` 與 `uv.lock` 中，將 `torch`、`torchaudio`、`torchcodec` 釘選在 PyTorch CUDA 12.4 wheel 索引上，因此同一套 `uv` 設定可以在其他機器上重複使用，不會重新解析成不同的 CUDA build。
+Linux 使用固定的 PyTorch CUDA 12.4 wheels；macOS 使用標準平台 wheels，因此可安裝並使用 PyTorch MPS。
+
+ONNX Runtime 的 CPU 與 GPU distributions 提供相同 Python package，因此改用
+互斥 extras；請只選一種 runtime：
+
+```bash
+uv sync --locked --group dev --extra cpu   # CPU 或 macOS CoreML
+uv sync --locked --group dev --extra cuda  # NVIDIA CUDA 12.x
+```
+
+請勿同時啟用兩個 extras。`sdk/python` 的可攜式 SDK 也採相同的 `cpu`／`cuda`
+選擇方式。執行推論前可確認目前使用的 wheel：
+
+CPU／CoreML 環境若要使用 `faster-whisper`，可再加上 `--extra asr`。它的 package
+metadata 會要求 CPU ONNX Runtime distribution，因此不能和 `--extra cuda` 併用。
+
+```bash
+python -c "import onnxruntime as ort; print(ort.__version__); print(ort.get_available_providers())"
+# 或
+puresound providers
+```
+
+輸出必須包含 `CUDAExecutionProvider` 才代表 ONNX Runtime 能使用 CUDA。只有
+CUDA 版 PyTorch 並不會自動替 ONNX Runtime 加入 CUDA；NVIDIA driver、CUDA 與
+cuDNN 動態函式庫也必須能被目前的 process 載入。
+
+在 macOS 上安裝一般的 `onnxruntime` wheel。官方 macOS wheel 可提供
+`CoreMLExecutionProvider`，在 operator 支援時使用 Apple GPU／Neural Engine。
+ONNX Runtime 沒有原生的 `MPSExecutionProvider`；PureSound 接受
+`--provider mps` 作為 CoreML 的 alias（明確寫法是 `--provider coreml`）。
+`auto` 會依序選擇 CUDA、CoreML、CPU。只有 PyTorch 的 advanced path 才會使用
+PyTorch 自己的 MPS backend，且需 `torch.backends.mps.is_available()` 為 true。
 
 ### 方案 2：使用 pip
 
@@ -227,8 +258,7 @@ PureSound/
 
 此腳本會依序執行：
 
-- `uv sync --group dev`
-- `uv sync --locked --group dev`
+- `uv sync --locked --group dev --extra cpu`
 - `uv build`
 
 ## 備註
@@ -246,7 +276,7 @@ PureSound/
 解法：
 
 ```bash
-uv sync --locked --group dev
+uv sync --locked --group dev --extra cpu
 # 或
 python -m pip install -r requirements.txt
 python -m pip install -e . --no-deps
@@ -280,6 +310,20 @@ python -c "import torch; print(torch.cuda.is_available(), torch.version.cuda)"
 
 若需要 CUDA，請重新安裝與你系統相符、支援 CUDA 的 PyTorch build。本專案
 可重複使用的 `uv` 設定是以 CUDA 12.4 為目標。
+
+ONNX 推論要另外檢查 ONNX Runtime：
+
+```bash
+python -c "import onnxruntime as ort; print(ort.get_available_providers())"
+```
+
+若沒有 `CUDAExecutionProvider`，通常代表仍安裝 CPU wheel，或 GPU wheel 無法
+載入 CUDA／cuDNN 相依函式庫。請依安裝章節替換 wheel，並重新啟動 web service。
+API 與 UI 會回報實際選到的 provider；當 provider 不可用時，即使明確要求 CUDA
+也會依相容性規則 fallback 到 CPU。
+
+在 macOS 上請檢查 `CoreMLExecutionProvider`，並選擇 `coreml` 或 `mps` alias；
+ONNX Runtime 沒有 `MPSExecutionProvider`。
 
 ### 4）Recipe 啟動後找不到資料檔案
 

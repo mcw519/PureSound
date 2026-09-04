@@ -10,7 +10,17 @@ from typing import Any
 
 import numpy as np
 
-from puresound.inference import InferenceError, ModelZoo, ModelZooError, load_model
+from puresound.inference import (
+    InferenceError,
+    ModelZoo,
+    ModelZooError,
+    PROVIDER_CHOICES,
+    COREML_PROVIDER,
+    CPU_PROVIDER,
+    CUDA_PROVIDER,
+    available_providers,
+    load_model,
+)
 
 
 def _assignment(value: str) -> tuple[str, str]:
@@ -108,10 +118,17 @@ def build_parser() -> argparse.ArgumentParser:
     infer = subparsers.add_parser("infer", help="run a catalog model")
     infer.add_argument("model_id")
     infer.add_argument("--variant", help="artifact variant (defaults to the model's default variant)")
-    infer.add_argument("--provider", choices=["auto", "cpu", "cuda"], default="auto")
+    infer.add_argument(
+        "--provider",
+        choices=PROVIDER_CHOICES,
+        default="auto",
+        help="ONNX Runtime provider: auto, cpu, cuda, coreml, or mps (CoreML alias)",
+    )
     infer.add_argument("--input", dest="inputs", action="append", type=_assignment, default=[], metavar="NAME=PATH")
     infer.add_argument("--output", dest="outputs", action="append", type=_assignment, default=[], metavar="NAME=PATH")
     infer.add_argument("--param", dest="parameters", action="append", type=_parameter, default=[], metavar="NAME=VALUE")
+
+    subparsers.add_parser("providers", help="show ONNX Runtime providers available in this environment")
 
     web = subparsers.add_parser("web", help="serve the local Model Zoo web workspace")
     web.add_argument(
@@ -178,6 +195,24 @@ def main(argv: list[str] | None = None) -> int:
                 static_dir=args.static_dir,
                 max_upload_bytes=max(1, args.max_upload_mb) * 1024 * 1024,
                 allow_local_paths=args.allow_local_paths,
+            )
+            return 0
+
+        if args.command == "providers":
+            installed = available_providers()
+            print(
+                _json_dump(
+                    {
+                        "available": installed,
+                        "capabilities": {
+                            "cpu": CPU_PROVIDER in installed,
+                            "cuda": CUDA_PROVIDER in installed,
+                            "coreml": COREML_PROVIDER in installed,
+                        },
+                        "mps_alias": "coreml",
+                        "auto_order": ["cuda", "coreml", "cpu"],
+                    }
+                )
             )
             return 0
 

@@ -90,8 +90,10 @@ uv run python <your_recipe>/streaming_onnx.py infer \
 
 Provider options:
 
-- `auto`: use CUDA when available, otherwise CPU
+- `auto`: use CUDA when available, then CoreML on macOS, otherwise CPU
 - `cuda`: request CUDA with CPU fallback
+- `coreml`: request Apple's CoreML execution provider (macOS)
+- `mps`: alias for `coreml`; ONNX Runtime has no native MPS provider
 - `cpu`: force CPU
 
 Benchmark realtime factor:

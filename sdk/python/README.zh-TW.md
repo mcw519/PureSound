@@ -12,10 +12,21 @@ English version: [`README.md`](README.md)
 - 一個已匯出的 `model.onnx`
 - 對應的 `model.json` manifest
 
+ONNX Runtime 請只選一個 extra：
+
+```bash
+python -m pip install "sdk/python[cpu]"   # CPU 或 macOS CoreML
+python -m pip install "sdk/python[cuda]"  # NVIDIA CUDA 12.x
+```
+
+Runtime 接受 `auto`、`cpu`、`cuda`、`coreml` 與 `mps`。`auto` 依序偏好 CUDA、
+CoreML、CPU；因為 ONNX Runtime 沒有原生 MPS execution provider，`mps` 是 CoreML
+的 alias。可用 `onnxruntime.get_available_providers()` 確認目前實際 provider。
+
 ## 從這個資料夾安裝
 
 ```bash
-python -m pip install sdk/python
+python -m pip install "sdk/python[cpu]"
 ```
 
 或直接把 `puresound_streaming/` 複製進你的專案。

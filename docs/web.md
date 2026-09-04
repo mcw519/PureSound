@@ -29,18 +29,44 @@ The browser client has three screens:
 - **Voice Isolation** uploads one audio file and calls the named `audio` input
   through `stft_frame_ort`. The output is available as a browser player and a
   WAV download; the processor remains responsible for manifest delay
-  alignment and dry-blend overrides.
+  alignment and dry-blend overrides. The result also includes output level
+  metrics and a reference-free DNSMOS score when the scorer is available, so a
+  Playground run is already a small quality check.
 - **Speaker Verification** uploads `enrollment` and `test` audio, calls the
   waveform embedding processor twice, and displays the cosine score and
   threshold verdict.
 - **Measurements** accepts a probe recording, an optional clean reference, and
   one or more Voice Isolation models. It reports reproducible level/spectral
   metrics (RMS, peak, clipping, silence, zero-crossing rate, and spectral
-  centroid) plus SI-SDR, SNR, correlation, STOI, and PESQ when a reference is
-  available.
+  centroid), reference-free DNSMOS when requested, plus SI-SDR, SNR,
+  correlation, STOI, and PESQ when a reference is available. The page explains
+  the three-step flow and keeps Model Zoo integrity checks in a separate
+  technical disclosure. Setup lives in a right-side drawer so the report keeps
+  the full workspace width. Successful model outputs are latency-aligned,
+  stored in the bounded in-memory run store, and shown with the same waveform,
+  spectrogram, playback boost, and limiter controls used by the Playground.
+  A comparison fails when no model succeeds and reports a warning when only
+  some selected models fail.
 
-The primary navigation and each Playground configuration rail can be collapsed
-independently; the browser remembers those preferences for the next session.
+Provider choices are shared by the browser, CLI, and legacy streaming runtime:
+`auto` prefers CUDA, then Apple `CoreML`, then CPU; `cpu` forces CPU; `cuda`
+requests NVIDIA CUDA; and `coreml` requests Apple's CoreML execution provider.
+`mps` is accepted as a user-facing alias for `coreml` because ONNX Runtime does
+not expose a native MPS execution provider. The `/api/health` response reports
+the providers registered by the active ONNX Runtime wheel, and the Playground
+disables unavailable explicit choices. A requested CUDA/CoreML provider may
+still fall back to CPU if its shared libraries or driver cannot be loaded; each
+inference result reports the actual provider list.
+
+The completed Measurements report can be downloaded directly as JSON (full
+request, input/reference metrics, and per-model results) or CSV (one row per
+model). These downloads are generated in the browser and do not persist data
+on the server.
+
+The primary navigation can be collapsed and the browser remembers that
+preference. Playground configuration uses task-specific right-side drawers, so
+Voice Isolation and Speaker Verification keep the full workspace width while
+their settings are closed.
 
 Every uploaded or generated audio file uses the same inspection panel. It
 provides a shared time ruler, synchronized waveform and 0–8 kHz spectrogram,
@@ -57,12 +83,12 @@ The API is intentionally small:
 | GET | `/api/models?task=voice_isolation` | Catalog entries |
 | GET | `/api/models/{model_id}` | One model contract |
 | GET | `/api/validate` | Paths, sidecars, hashes, and graph checks |
-| POST | `/api/infer` | Run a model with JSON named inputs |
+| POST | `/api/infer` | Run a model with JSON named inputs; optionally attach output measurements |
 | POST | `/api/jobs` | Start asynchronous inference or measurement and return a job id |
 | GET | `/api/jobs/{job_id}` | Read progress, status, and result |
-| GET | `/api/jobs?limit=20` | List recent inference results |
+| GET | `/api/jobs?limit=20` | List recent inference and measurement jobs |
 | POST | `/api/jobs/{job_id}/cancel` | Request cancellation of a queued/running job |
-| POST | `/api/measure` | Measure a probe and compare selected Voice Isolation models |
+| POST | `/api/measure` | Measure a probe and compare selected Voice Isolation models, including optional DNSMOS |
 | GET | `/api/runs/{run_id}/{output}` | Download a generated audio output |
 
 Asynchronous jobs expose `queued`, `running`, `succeeded`, `failed`, or
@@ -87,3 +113,9 @@ Local filesystem paths are disabled by default. For a trusted local client,
 `puresound web --allow-local-paths` enables the compatibility form
 `{"path": "/absolute/path/input.wav"}`. Generated outputs stay in a bounded
 in-memory store and are discarded when the process exits.
+
+To request reference-free quality metrics from either inference or measurement,
+include `"measurements": {"include_dnsmos": true}`. The browser clients send
+this flag automatically. DNSMOS is optional: if its scorer or model assets are
+unavailable, the response keeps the level metrics and reports the DNSMOS error
+instead of failing the run.

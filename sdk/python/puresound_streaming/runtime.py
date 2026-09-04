@@ -6,6 +6,18 @@ from typing import Protocol, Sequence
 import numpy as np
 
 
+_PROVIDER_ALIASES = {
+    "auto": "auto",
+    "cpu": "cpu",
+    "cuda": "cuda",
+    "coreml": "coreml",
+    "mps": "coreml",
+}
+_CPU_PROVIDER = "CPUExecutionProvider"
+_CUDA_PROVIDER = "CUDAExecutionProvider"
+_COREML_PROVIDER = "CoreMLExecutionProvider"
+
+
 class InferenceSessionLike(Protocol):
     def get_providers(self) -> list[str]:
         ...
@@ -291,18 +303,23 @@ class PureSoundStreamingRuntime:
 
     @staticmethod
     def resolve_providers(provider: str, available: Sequence[str]) -> list[str]:
-        provider = provider.lower()
-        if provider == "cpu":
-            return ["CPUExecutionProvider"]
-        if provider == "cuda":
-            if "CUDAExecutionProvider" in available:
-                return ["CUDAExecutionProvider", "CPUExecutionProvider"]
-            return ["CPUExecutionProvider"]
-        if provider == "auto":
-            if "CUDAExecutionProvider" in available:
-                return ["CUDAExecutionProvider", "CPUExecutionProvider"]
-            return ["CPUExecutionProvider"]
-        raise ValueError("provider must be one of: auto, cpu, cuda")
+        choice = _PROVIDER_ALIASES.get(str(provider).strip().lower())
+        if choice is None:
+            choices = ", ".join(_PROVIDER_ALIASES)
+            raise ValueError(f"provider must be one of: {choices}")
+        available = list(available)
+        if choice == "cpu":
+            return [_CPU_PROVIDER]
+        if choice == "cuda":
+            return ([_CUDA_PROVIDER, _CPU_PROVIDER]
+                    if _CUDA_PROVIDER in available else [_CPU_PROVIDER])
+        if choice == "coreml":
+            return ([_COREML_PROVIDER, _CPU_PROVIDER]
+                    if _COREML_PROVIDER in available else [_CPU_PROVIDER])
+        for candidate in (_CUDA_PROVIDER, _COREML_PROVIDER):
+            if candidate in available:
+                return [candidate, _CPU_PROVIDER]
+        return [_CPU_PROVIDER]
 
     def reset(self, batch_size: int = 1) -> None:
         self.processor.reset(batch_size=batch_size)

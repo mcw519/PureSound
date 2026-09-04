@@ -15,7 +15,7 @@ from .base import (
     load_audio,
     report_progress,
 )
-from ..providers import resolve_providers
+from ..providers import normalize_provider, resolve_providers
 
 
 class SpeakerVerificationRuntime:
@@ -34,7 +34,7 @@ class SpeakerVerificationRuntime:
     ):
         self.model = model
         self.artifact = artifact
-        self.provider_requested = provider
+        self.provider_requested = normalize_provider(provider)
         self.root = Path(root) if root is not None else Path.cwd()
         path = Path(artifact.path)
         self.onnx_path = path if path.is_absolute() else self.root / path
@@ -158,6 +158,8 @@ class SpeakerVerificationRuntime:
             "verdict": bool(similarity > threshold),
         }
         metadata = {
+            "requested_provider": self.provider_requested,
+            "selected_provider": self.providers[0] if self.providers else "",
             "provider": ",".join(self.providers),
             "providers": list(self.providers),
             "sample_rate": sample_rate,

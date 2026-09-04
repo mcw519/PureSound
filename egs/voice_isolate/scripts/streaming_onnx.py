@@ -24,6 +24,7 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
+from puresound.inference import PROVIDER_CHOICES  # noqa: E402
 from puresound.streaming import StreamingDpcrnOrt, export_streaming_dpcrn_onnx  # noqa: E402
 from puresound.system.postprocess import Postprocessor  # noqa: E402
 
@@ -179,13 +180,13 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("input_audio", type=Path)
     p.add_argument("output_audio", type=Path)
     p.add_argument("--manifest_path", type=Path, default=None)
-    p.add_argument("--provider", choices=["auto", "cpu", "cuda"], default="auto")
+    p.add_argument("--provider", choices=PROVIDER_CHOICES, default="auto")
     p.set_defaults(func=infer)
 
     p = sub.add_parser("benchmark", help="benchmark streaming ONNX runtime")
     p.add_argument("onnx_path", type=Path)
     p.add_argument("--manifest_path", type=Path, default=None)
-    p.add_argument("--provider", choices=["auto", "cpu", "cuda"], default="auto")
+    p.add_argument("--provider", choices=PROVIDER_CHOICES, default="auto")
     p.add_argument("--seconds", type=int, default=5)
     p.add_argument("--seed", type=int, default=0)
     p.set_defaults(func=benchmark)
@@ -196,7 +197,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("onnx_path", type=Path)
     p.add_argument("--manifest_path", type=Path, default=None)
     p.add_argument("--input_audio", type=Path, default=None, help="if omitted, uses synthetic noise")
-    p.add_argument("--provider", choices=["auto", "cpu", "cuda"], default="cpu")
+    p.add_argument("--provider", choices=PROVIDER_CHOICES, default="cpu")
     p.add_argument("--seconds", type=int, default=4)
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--trim", type=int, default=1200, help="edge samples to drop before scoring")

@@ -22,7 +22,10 @@ kaleido
 lightning
 gradio
 onnx
-onnxruntime
+# requirements.txt is the CPU/CoreML profile. Use the `cuda` project extra
+# instead for NVIDIA inference; never install both ORT distributions.
+onnxruntime>=1.24,<2; sys_platform != "darwin"
+onnxruntime==1.23.2; sys_platform == "darwin"
 requests
 silero-vad
 librosa
