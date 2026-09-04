@@ -4,6 +4,7 @@ import torch.nn as nn
 from .asr_feature import ASRFeatureLoss
 from .dist import DistHeadRegressionLoss
 from .identity import IdentityContrastiveLoss
+from .inherit import AnchorInheritanceLoss
 from .proximity import RelativeProximityLoss
 from .residual import ResidualReferenceLoss
 from .sdr import SDRLoss
@@ -17,6 +18,7 @@ from .vad import BackgroundVADHeadBCELoss, F1_loss, VADActivityLoss, VADHeadBCEL
 __all__ = [
     "AAMsoftmax",
     "ASRFeatureLoss",
+    "AnchorInheritanceLoss",
     "BackgroundVADHeadBCELoss",
     "DistHeadRegressionLoss",
     "F1_loss",

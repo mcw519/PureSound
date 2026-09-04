@@ -1,0 +1,19 @@
+P4  onset alignment on long rows   (n=60)
+==============================================================================
+provably speed-perturbed (row shorter than its bucket): 3/60
+  implied speed factors seen: [1.05]
+
+all long rows (n=60):
+  |loss_onset - label_onset|    max=   0  median=  0.0  >2 in 0/60
+  |label_onset - waveform_onset| max=   1  median=  0.0  >2 in 0/60
+
+speed-perturbed (n=3):
+  |loss_onset - label_onset|    max=   0  median=  0.0  >2 in 0/3
+  |label_onset - waveform_onset| max=   0  median=  0.0  >2 in 0/3
+
+------------------------------------------------------------------------------
+P4  worst |loss_onset - label_onset| on the gated subset: 0 frames (<= 2 required) -> PASS
+P4 VERDICT: PASS
+------------------------------------------------------------------------------
+
+report -> /tmp/claude-1001/-home-milowu-A4Audio-PureSound/c52f3b49-8e8f-4f9f-a5ca-862771bd494c/scratchpad/s0_preflight/p4/p4.json

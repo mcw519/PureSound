@@ -18,9 +18,24 @@ Three checks, all driven by the same config the training run uses:
    where the last channel renders the frame-level VAD ground truth as a 0.9/0.0 step
    signal that can be eyeballed against the clean waveform, plus a per-item table.
 
+3. Temporal shape, on the frame grid the labels live on (400 / 160 = 100 fps). Check 1
+   measures no temporal property at all, which is why the distribution the onset and
+   wrong-anchor rounds argue about was never on the record: when does the target
+   start, how long has an interferer been talking before it does, how long are the
+   target-free gaps, does the target ever re-enter after one, and is a silent target
+   labelled as absent. Method ported from
+   benchmarks/probes/v19c_diagnostics/training_data_audit/sample_rows.py.
+
+`--split train` samples the TRAINING loader, which is what every temporal claim about
+"the rows the model trains on" needs -- the default stays `valid`, so an existing
+invocation reads exactly as it did before.
+
 Usage (from repo root):
     uv run python egs/voice_isolate/scripts/check_training_data.py \
         egs/voice_isolate/config/train_dpcrn.yaml --n 64 --dump 8
+    uv run python egs/voice_isolate/scripts/check_training_data.py \
+        egs/voice_isolate/config/exp/train_dpcrn_v16_lengthmix.yaml \
+        --split train --n 600 --dump 0 --num-workers 8 --seed 7
 """
 
 from __future__ import annotations
@@ -28,6 +43,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import random
 import sys
 from pathlib import Path
 
@@ -149,12 +165,249 @@ def scalar(batch: dict, key: str, row: int) -> float | None:
     return float(x) if torch.isfinite(x) else None
 
 
-def collect(loader, n_items: int) -> tuple[list[dict], list[dict]]:
-    """Pull batches until n_items rows are seen; return (per-item rows, batches)."""
+# --------------------------------------------------------------------------- #
+# Check 3: temporal shape. Ported from
+# benchmarks/probes/v19c_diagnostics/training_data_audit/sample_rows.py so the
+# numbers a round quotes and the numbers this script prints are one method.
+# --------------------------------------------------------------------------- #
+
+SR = 16000
+FRAME = 400
+HOP = 160
+FPS = SR / HOP  # 100
+
+
+def frames_energy_db(wav: torch.Tensor) -> np.ndarray:
+    """Per-frame power in dB relative to the row's own peak frame, on the label
+    grid (frame 400, hop 160 -- the pipeline's EnergyVADLabeler)."""
+    x = wav.reshape(1, -1)
+    if x.shape[-1] < FRAME:
+        x = torch.nn.functional.pad(x, (0, FRAME - x.shape[-1]))
+    frames = x.unfold(-1, FRAME, HOP)
+    power = frames.square().mean(dim=-1).squeeze(0)
+    reference = power.max().clamp_min(1e-20)
+    return (10.0 * torch.log10(power.clamp_min(1e-30) / reference)).numpy()
+
+
+def runs_of_zero(mask: np.ndarray) -> list[tuple[int, int]]:
+    """[(start, end_exclusive)] for every run of zeros in a 0/1 mask."""
+    out, n, i = [], len(mask), 0
+    while i < n:
+        if mask[i] == 0:
+            j = i
+            while j < n and mask[j] == 0:
+                j += 1
+            out.append((i, j))
+            i = j
+        else:
+            i += 1
+    return out
+
+
+def describe_activity(mask: np.ndarray) -> dict:
+    """Onset / offset / gaps / re-entry of one 0/1 frame-activity mask.
+
+    ``longest_gap_s`` counts the leading and trailing silence too (that is the
+    "target-free gap" a suppression term sees); ``longest_interior_gap_s`` is the
+    one a re-entry has to cross, so re-entry is read off that.
+    """
+    active = np.flatnonzero(mask > 0)
+    out = {"active_frac": float(mask.mean()) if len(mask) else float("nan")}
+    if active.size == 0:
+        out.update(onset_s=None, offset_s=None, longest_gap_s=float(len(mask) / FPS),
+                   longest_interior_gap_s=0.0, reentry_after_5s=False, n_spans=0)
+        return out
+    zero_runs = runs_of_zero(mask)
+    longest = max((e - s for s, e in zero_runs), default=0)
+    interior = max((e - s for s, e in zero_runs if s > 0 and e < len(mask)), default=0)
+    edges = np.diff(np.concatenate(([0], (mask > 0).astype(int), [0])))
+    out.update(
+        onset_s=float(active[0] / FPS),
+        offset_s=float(active[-1] / FPS),
+        longest_gap_s=float(longest / FPS),
+        longest_interior_gap_s=float(interior / FPS),
+        reentry_after_5s=bool(interior >= 5 * FPS),
+        n_spans=int((edges == 1).sum()),
+    )
+    return out
+
+
+def temporal_rows(batch: dict) -> list[dict]:
+    """One temporal record per row of one batch, on the label frame grid."""
+    clean = batch["clean_speech"]
+    far = batch.get("far_target")
+    vad = batch.get("vad_target")
+    background_vad = batch.get("background_vad_target")
+    lengths = batch["length"].reshape(-1)
+    out = []
+    for r in range(clean.shape[0]):
+        n_samples = int(lengths[r].item())
+        n_frames = max(1, n_samples // HOP)
+        silent = bool(clean[r, :n_samples].abs().amax().item() == 0.0)
+
+        # target activity: the pipeline's own labels, plus a stricter -25 dB
+        # waveform detector as the control the audit reports beside them.
+        if silent:
+            target = np.zeros(n_frames)
+            target_db25 = target
+        else:
+            db = frames_energy_db(clean[r, :n_samples])
+            target = (db > -40.0).astype(float)
+            target_db25 = (db > -25.0).astype(float)
+        if vad is not None:
+            target = (vad[r].numpy()[:n_frames] > 0.5).astype(float)
+
+        # interferer activity: pipeline labels when present, else far_target energy
+        if far is not None and far[r].abs().amax().item() > 0.0:
+            interferer = (frames_energy_db(far[r, : min(n_samples, far.shape[-1])])
+                          > -40.0).astype(float)
+        else:
+            interferer = np.zeros(n_frames)
+        if background_vad is not None:
+            interferer = (background_vad[r].numpy()[:n_frames] > 0.5).astype(float)
+
+        m = min(len(target), len(target_db25), len(interferer))
+        target, target_db25, interferer = target[:m], target_db25[:m], interferer[:m]
+
+        record = {
+            "row_seconds": round(n_samples / SR, 3),
+            "n_frames": int(m),
+            "target_silent_waveform": silent,
+            "scalar_target_absent": scalar(batch, "target_absent", r),
+            "scalar_target_present": scalar(batch, "target_present", r),
+            "turn_taking": scalar(batch, "turn_taking", r),
+            "far_count": scalar(batch, "far_count", r),
+            "n_interferers": scalar(batch, "n_interferers", r),
+            "has_background_speech": scalar(batch, "has_background_speech", r),
+            "target": describe_activity(target),
+            "target_db25": describe_activity(target_db25),
+            "interferer": describe_activity(interferer),
+        }
+        onset = record["target"]["onset_s"]
+        if onset is None:
+            record["itf_before_onset_s"] = float(interferer.sum() / FPS)
+        else:
+            k = int(round(onset * FPS))
+            record["itf_before_onset_s"] = float(interferer[:k].sum() / FPS)
+        out.append(record)
+    return out
+
+
+def report_temporal(rows: list[dict], split: str) -> dict:
+    """The five temporal columns, overall and per length bucket."""
+
+    def share(predicate, subset=None) -> tuple[int, int]:
+        subset = rows if subset is None else subset
+        hit = sum(1 for r in subset if predicate(r))
+        return hit, len(subset)
+
+    def med(key, subset=None):
+        subset = rows if subset is None else subset
+        vals = [key(r) for r in subset if key(r) is not None]
+        return float(np.median(vals)) if vals else float("nan")
+
+    onset = lambda r: r["target"]["onset_s"]                       # noqa: E731
+    gap = lambda r: r["target"]["longest_gap_s"]                    # noqa: E731
+    interior = lambda r: r["target"]["longest_interior_gap_s"]      # noqa: E731
+    before = lambda r: r["itf_before_onset_s"]                      # noqa: E731
+
+    print("\n" + "=" * 72)
+    print(f"TEMPORAL SHAPE  (n={len(rows)} rows, split={split}, 100 fps label grid)")
+    print("=" * 72)
+    if not rows:
+        print("  (no rows)")
+        return {}
+
+    def pct(hit_total):
+        hit, total = hit_total
+        return f"{hit:5d}/{total:<5d} {100.0 * hit / max(total, 1):5.1f}%"
+
+    print(f"target onset median            : {med(onset):6.2f} s")
+    print(f"  onset within 0.5 s          : {pct(share(lambda r: (onset(r) or 0.0) <= 0.5))}")
+    print(f"  onset >= 1.0 s (>=100 frames): {pct(share(lambda r: (onset(r) or 0.0) >= 1.0))}")
+    print(f"interferer-before-onset median: {med(before):6.2f} s")
+    for threshold in (0.001, 0.5, 1.0, 2.0):
+        label = ">0 s" if threshold < 0.01 else f">={threshold:g} s"
+        print(f"  any interferer {label:>7s}       : {pct(share(lambda r, t=threshold: before(r) >= t))}")
+    print(f"longest target-free gap median: {med(gap):6.2f} s")
+    print(f"  gap >= 5 s                  : {pct(share(lambda r: gap(r) >= 5.0))}")
+    print(f"longest INTERIOR gap median   : {med(interior):6.2f} s")
+    print(f"  re-entry after >= 5 s       : {pct(share(lambda r: r['target']['reentry_after_5s']))}")
+
+    # target-absent provenance. The label bug this exposes: a row whose gated
+    # target is exactly zero can still carry target_present=1, so the waveform
+    # losses treat it as lone-far while ResidualReferenceLoss(target_present_only)
+    # counts it present.
+    prov = {
+        "silent_and_labelled_absent": share(
+            lambda r: r["target_silent_waveform"] and (r["scalar_target_absent"] or 0) > 0.5),
+        "silent_but_labelled_present": share(
+            lambda r: r["target_silent_waveform"] and (r["scalar_target_absent"] or 0) <= 0.5),
+        "not_silent_but_labelled_absent": share(
+            lambda r: not r["target_silent_waveform"] and (r["scalar_target_absent"] or 0) > 0.5),
+    }
+    print("\ntarget-absent provenance (waveform vs label):")
+    for name, hit_total in prov.items():
+        print(f"  {name:32s}: {pct(hit_total)}")
+
+    buckets = sorted({r["row_seconds"] for r in rows})
+    print(f"\nper length bucket ({len(buckets)} seen):")
+    print(f"{'sec':>7} {'n':>5} {'onset<=0.5s':>12} {'itf>=1s':>9} {'itf>=0.5s':>11} "
+          f"{'gap>=5s':>9} {'reentry':>8} {'silent':>7}")
+    per_bucket = {}
+    for seconds in buckets:
+        subset = [r for r in rows if r["row_seconds"] == seconds]
+        cells = {
+            "n": len(subset),
+            "onset_le_0.5s": share(lambda r: (onset(r) or 0.0) <= 0.5, subset)[0],
+            "itf_ge_1s": share(lambda r: before(r) >= 1.0, subset)[0],
+            "itf_ge_0.5s": share(lambda r: before(r) >= 0.5, subset)[0],
+            "gap_ge_5s": share(lambda r: gap(r) >= 5.0, subset)[0],
+            "reentry_5s": share(lambda r: r["target"]["reentry_after_5s"], subset)[0],
+            "target_silent": share(lambda r: r["target_silent_waveform"], subset)[0],
+        }
+        per_bucket[f"{seconds:g}"] = cells
+        print(f"{seconds:7.2f} {cells['n']:5d} {cells['onset_le_0.5s']:12d} "
+              f"{cells['itf_ge_1s']:9d} {cells['itf_ge_0.5s']:11d} "
+              f"{cells['gap_ge_5s']:9d} {cells['reentry_5s']:8d} "
+              f"{cells['target_silent']:7d}")
+
+    return {
+        "split": split,
+        "n_rows": len(rows),
+        "target_onset_s": summary([onset(r) for r in rows if onset(r) is not None]),
+        "itf_before_onset_s": summary([before(r) for r in rows]),
+        "longest_target_free_gap_s": summary([gap(r) for r in rows]),
+        "longest_interior_gap_s": summary([interior(r) for r in rows]),
+        "shares": {
+            "onset_le_0.5s": share(lambda r: (onset(r) or 0.0) <= 0.5),
+            "onset_ge_1.0s": share(lambda r: (onset(r) or 0.0) >= 1.0),
+            "itf_before_onset_gt_0s": share(lambda r: before(r) > 0.0),
+            "itf_before_onset_ge_0.5s": share(lambda r: before(r) >= 0.5),
+            "itf_before_onset_ge_1.0s": share(lambda r: before(r) >= 1.0),
+            "itf_before_onset_ge_2.0s": share(lambda r: before(r) >= 2.0),
+            "gap_ge_5s": share(lambda r: gap(r) >= 5.0),
+            "reentry_after_5s": share(lambda r: r["target"]["reentry_after_5s"]),
+        },
+        "target_absent_provenance": prov,
+        "per_length_bucket": per_bucket,
+    }
+
+
+def collect(loader, n_items: int) -> tuple[list[dict], list[dict], list[dict]]:
+    """Pull batches until n_items rows are seen.
+
+    Returns ``(separability rows, temporal rows, [first batch])``. Only the first
+    batch is retained: it is the one `dump_samples` writes, and holding every
+    batch of a 600-row train sample costs hundreds of MB of waveform for nothing.
+    """
     rows: list[dict] = []
+    temporal: list[dict] = []
     batches: list[dict] = []
     for batch in loader:
-        batches.append(batch)
+        if not batches:
+            batches.append(batch)
+        temporal.extend(temporal_rows(batch))
         for r in range(batch["clean_speech"].shape[0]):
             absent = bool(batch["clean_speech"][r].abs().amax().item() == 0)
             item = {
@@ -177,7 +430,7 @@ def collect(loader, n_items: int) -> tuple[list[dict], list[dict]]:
             rows.append(item)
         if len(rows) >= n_items:
             break
-    return rows[:n_items], batches
+    return rows[:n_items], temporal[:n_items], batches
 
 
 def report_separability(rows: list[dict]) -> dict:
@@ -290,6 +543,9 @@ def main() -> None:
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     p.add_argument("config_path")
     p.add_argument("--n", type=int, default=64, help="items sampled for the separability check")
+    p.add_argument("--split", choices=("train", "valid"), default="valid",
+                   help="which loader to sample; the default keeps every existing "
+                        "invocation reading exactly as it did")
     p.add_argument("--dump", type=int, default=8, help="sample wavs to dump (0 = none)")
     p.add_argument("--check-paths", type=int, default=200,
                    help="manifest audio paths to existence-check per split")
@@ -303,6 +559,12 @@ def main() -> None:
     os.chdir(RECIPE_DIR)
     torch.manual_seed(args.seed)
     np.random.seed(args.seed)
+    # The TRAIN sampler is unseeded (only validation gets per-item seeds), so its
+    # batch composition comes out of the process's own `random` -- seed it or
+    # `--split train` is not reproducible. Cannot change what `--split valid`
+    # prints: that sampler builds its own `random.Random(valid_seed)` and the
+    # synthesis is per-item seeded (task/ns.py: `random.seed(item_seed)`).
+    random.seed(args.seed)
 
     # *_rest absorbs recipe-tuple growth; the trailing blocks are forwarded so real
     # recording rows appear here too when the recipe enables them.
@@ -316,9 +578,12 @@ def main() -> None:
     )
 
     recipe = with_overrides(recipe, trainer={"num_workers": args.num_workers})
-    _train_dl, valid_dl = recipe_main.init_dataloader(recipe)
-    rows, batches = collect(valid_dl, args.n)
+    train_dl, valid_dl = recipe_main.init_dataloader(recipe)
+    loader = train_dl if args.split == "train" else valid_dl
+    rows, temporal, batches = collect(loader, args.n)
+    report["split"] = args.split
     report["separability"] = report_separability(rows)
+    report["temporal"] = report_temporal(temporal, args.split)
     if args.dump > 0 and batches:
         report["dump"] = dump_samples(batches[0], recipe.vad_label, args.dump, out_dir / "wavs")
 
