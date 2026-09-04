@@ -1,8 +1,13 @@
-"""Shared `--presence-gate` plumbing for the eval scripts.
+"""Shared `--presence-gate` / `--onset-guard` plumbing for the eval scripts.
 
 One place so every stage of run_full_benchmark.sh spells the operating
 point the same way, and so a stage that forgets the flag is obviously
 ungated rather than subtly differently gated.
+
+The two are independent inference-only stages and can be combined: the
+presence gain attenuates past the blend's ceiling, the onset guard hands
+the dry input back before any talker is confirmed. `SISO.forward` applies
+them in that order.
 """
 from __future__ import annotations
 def add_presence_gate_arg(parser):
@@ -48,3 +53,35 @@ def build_presence_gate(args):
     if from_head:
         return PresenceGate(**knobs)
     return PresenceGate.load(readout, **knobs)
+
+
+def add_onset_guard_arg(parser):
+    """`--onset-guard` plus the four knobs the sweep actually moved.
+
+    Nothing travels as a file here -- the guard reads only the input waveform,
+    so the flag is a switch and the operating point is the default measured on
+    the FIT set (`benchmarks/probes/onset_guard_sweep.py`,
+    `anchor_gate_README` §2). Omitted, every stage behaves exactly as before.
+    """
+    parser.add_argument("--onset-guard", action="store_true",
+                        help="inference-only onset protection: stay dry until a "
+                             "talker has been heard for --guard-t-arm seconds")
+    parser.add_argument("--guard-t-arm", type=float, default=1.0,
+                        help="continuous speech that confirms an anchor (s)")
+    parser.add_argument("--guard-t-forget", type=float, default=5.0,
+                        help="silence that drops the anchor so the next onset is "
+                             "protected again (s); 'inf' disables re-arming")
+    parser.add_argument("--guard-tau-dn", type=float, default=2.0,
+                        help="release time constant toward the model (s)")
+    parser.add_argument("--guard-margin-db", type=float, default=8.0,
+                        help="activity threshold above the tracked noise floor (dB)")
+    return parser
+
+
+def build_onset_guard(args):
+    """The `OnsetGuard` the flags describe, or None."""
+    if not bool(getattr(args, "onset_guard", False)):
+        return None
+    from puresound.system.onset_guard import OnsetGuard
+    return OnsetGuard(t_arm_s=args.guard_t_arm, t_forget_s=args.guard_t_forget,
+                      tau_dn_s=args.guard_tau_dn, margin_db=args.guard_margin_db)

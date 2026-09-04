@@ -25,6 +25,7 @@ from puresound.audio.io import AudioIO
 from puresound.nnet.masker import Masker
 
 from .base import BaseLightningModule, invoke_loss
+from .onset_guard import OnsetGuard
 from .postprocess import Postprocessor, resolve as resolve_postprocess
 from .presence_gate import PresenceGate
 
@@ -132,6 +133,7 @@ class EncDecMaskBase(BaseLightningModule):
         spec_floor: float = 0.0,
         postprocess: Optional[Postprocessor] = None,
         presence_gate: Optional[PresenceGate] = None,
+        onset_guard: Optional[OnsetGuard] = None,
     ):
         """Run enhancement.
 
@@ -149,6 +151,11 @@ class EncDecMaskBase(BaseLightningModule):
             presence_gate: a built `PresenceGate`, applied to the finished
                 waveform. Needs a backbone that stashes its bottleneck, which
                 this turns on for the duration of the call.
+            onset_guard: a built `OnsetGuard`, applied LAST -- after the blend
+                and after `presence_gate` -- because its job is to restore the
+                dry input whatever the earlier stages did to it. Reads only the
+                input waveform, so it needs nothing from the backbone. ``None``
+                (default) is bit-identical to not having it.
 
         Returns:
             Enhanced waveform clamped to ``[-1, 1]``.
@@ -225,14 +232,19 @@ class EncDecMaskBase(BaseLightningModule):
 
         enh = self._spec_to_wav(enh)
         enh = post.blend_waveform(enh, wav)
-        if presence_gate is None:
-            return enh
-        # After the blend, deliberately: the gate has to be able to attenuate
-        # past the ceiling the blend puts in, which is the whole reason it is a
-        # gain and not a deeper blend.
-        return presence_gate.apply(
-            enh, self.backbone.last_bottleneck, hop=self.encoder.hop_length
-        )
+        if presence_gate is not None:
+            # After the blend, deliberately: the gate has to be able to attenuate
+            # past the ceiling the blend puts in, which is the whole reason it is
+            # a gain and not a deeper blend.
+            enh = presence_gate.apply(
+                enh, self.backbone.last_bottleneck, hop=self.encoder.hop_length
+            )
+        if onset_guard is not None:
+            # Last of all, for the mirror-image reason: the guard has to be able
+            # to restore the whole dry input, and anything applied after it would
+            # put back the very attenuation it just undid.
+            enh = onset_guard.apply(enh, wav, hop=self.encoder.hop_length)
+        return enh
 
     def _spec_to_wav(self, enh: torch.Tensor) -> torch.Tensor:
         """iSTFT an enhanced [N,2,F,T] spectrum back to a clamped waveform.

@@ -160,3 +160,16 @@ the way back to the raw mix's 0.052: what the model stopped hearing, the gate le
   measured in far suppression (fit set −15 → −11 dB median; held-out 180d −19 → −12) and in
   insertions. The right operating point is a product choice between "hear too much" and
   "delete the user", and both ends are now on the same table.
+
+## 7. Productised: `OnsetGuard` (`puresound/system/onset_guard.py`), 2026-09-04
+
+The `pna` clause is now an inference option: `SISO.forward(..., onset_guard=OnsetGuard())`,
+`--onset-guard` on every eval script that takes `--presence-gate`. Operating point decided by
+`onset_guard_sweep.py` on the step-1 cache: causal floor tracker (2 s running minimum, ≤ 3 dB/s
+rise, +8 dB margin, 0.2 s hold, 0.1 s confirmation, no lookahead; 91–95 % frame agreement with the
+oracle detector, recall 1.0, zero false arming on 174 room-tone prefixes), `t_arm` 1.0 s, release
+2.0 s, `t_forget` 5.0 s (not resolvable from the data — set from the model's measured anchor
+half-life). Same choice is optimal on v8 and v16. Fit set v8: keep violations 26 → 13, suppress
+passes 40 → 37, median −15.2 → −11.8; held-out 180d 0 → 0 violations, 12/13 → 12/13, median
+−19.3 → −11.6. Guard vs the probe's strict implementation: max |Δgain| 5.6e-16. ORT runtime
+wiring is documented in the module docstring and not yet applied.

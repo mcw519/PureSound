@@ -79,7 +79,8 @@ from puresound.config import load_recipe
 from puresound.recipes import init_siso_model
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from _gate_flags import add_presence_gate_arg, build_presence_gate
+from _gate_flags import (add_presence_gate_arg, build_presence_gate,
+                         add_onset_guard_arg, build_onset_guard)
 
 SUPPRESS_FAIL_DB = -6.0     # suppress-span reduction shallower than this = leak
 SUPPRESS_PARTIAL_DB = 12.0  # residual this far above the floor = audible bystander
@@ -143,6 +144,7 @@ def main() -> None:
     parser.add_argument("--windows", default=None, help="windows.json (default: <cases-dir>/windows.json)")
     parser.add_argument("--device", default="cpu")
     add_presence_gate_arg(parser)
+    add_onset_guard_arg(parser)
     parser.add_argument("--dry-blend", type=float, default=1.0,
                         help="inference over-suppression relief: enh*b + mix*(1-b)")
     parser.add_argument("--spec-floor", type=float, default=0.0,
@@ -163,6 +165,7 @@ def main() -> None:
 
     model = load_model(args.config_path, args.ckpt, device)
     gate = build_presence_gate(args)
+    guard = build_onset_guard(args)
 
     header = ["clip", "role", "system", "keep_preserv_dB", "keep_out_dBFS",
               "supp_reduc_dB", "supp_out_dBFS", "residual_dB", "sir_out_dB", "headroom_dB", "verdict"]
@@ -183,7 +186,7 @@ def main() -> None:
             ours = model(raw_wav.to(device), dry_blend=args.dry_blend,
                          spec_floor=args.spec_floor,
                          presence_gate=None if (gate is not None and gate.head_driven)
-                         else gate).detach().cpu().view(1, -1).clamp(min=-1.0, max=1.0)
+                         else gate, onset_guard=guard).detach().cpu().view(1, -1).clamp(min=-1.0, max=1.0)
             logits = getattr(model.backbone, "last_vad_logits", None)
 
         systems = {"ours": ours}

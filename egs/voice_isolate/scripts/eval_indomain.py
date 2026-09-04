@@ -42,7 +42,8 @@ from puresound.audio.io import AudioIO  # noqa: E402
 from puresound.recipes import init_siso_model
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from _gate_flags import add_presence_gate_arg, build_presence_gate
+from _gate_flags import (add_presence_gate_arg, build_presence_gate,
+                         add_onset_guard_arg, build_onset_guard)
 from puresound.task.device_chain import DEVICE_CHAIN_SCALARS  # noqa: E402
 import egs.voice_isolate.main as M  # noqa: E402
 
@@ -160,6 +161,7 @@ def main():
     p.add_argument("config_path")
     p.add_argument("--ckpt", required=True)
     add_presence_gate_arg(p)
+    add_onset_guard_arg(p)
     p.add_argument("--n-batches", type=int, default=40)
     p.add_argument("--device", default="cpu")
     p.add_argument("--num-workers", type=int, default=3,
@@ -204,6 +206,7 @@ def main():
               f"(ok if only loss-fn buffers)")
     model.eval().to(args.device)
     gate = build_presence_gate(args)
+    guard = build_onset_guard(args)
     print(f"ckpt: {ckpt_path}", flush=True)
 
     sr = int(recipe.dataset.target_sample_rate or 16000)
@@ -221,7 +224,7 @@ def main():
                 break
             noisy = batch["noisy_speech"].to(args.device)
             clean = batch["clean_speech"].to(args.device)
-            enh = model(noisy, presence_gate=gate)
+            enh = model(noisy, presence_gate=gate, onset_guard=guard)
             B = clean.shape[0]
             n_total += B
             for r in range(B):

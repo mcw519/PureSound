@@ -42,7 +42,8 @@ from puresound.config import load_recipe
 from puresound.recipes import init_siso_model
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from _gate_flags import add_presence_gate_arg, build_presence_gate
+from _gate_flags import (add_presence_gate_arg, build_presence_gate,
+                         add_onset_guard_arg, build_onset_guard)
 
 DATASET_REPO = "ai-coustics/dawn_chorus_en"
 
@@ -92,10 +93,11 @@ def run_inference(
     dry_blend: float = 1.0,
     spec_floor: float = 0.0,
     presence_gate=None,
+    onset_guard=None,
 ) -> tuple[np.ndarray, np.ndarray | None]:
     x = torch.from_numpy(noisy.astype(np.float32)).view(1, -1).to(device)
     y = model(x, dry_blend=dry_blend, spec_floor=spec_floor,
-              presence_gate=presence_gate)
+              presence_gate=presence_gate, onset_guard=onset_guard)
     if isinstance(y, (list, tuple)):
         y = y[0]
     # The VAD head writes its frame logits onto the backbone as a side output of
@@ -330,6 +332,7 @@ def main():
                    choices=["auto", "none", "faster-whisper", "openai-whisper", "azure"])
     p.add_argument("--asr-model", default="small")
     add_presence_gate_arg(p)
+    add_onset_guard_arg(p)
     add_context_arg(p)
     p.add_argument("--dry-blend", type=float, default=1.0,
                    help="inference over-suppression relief: enh*b + mix*(1-b)")
@@ -353,6 +356,7 @@ def main():
 
     model = load_model(args.config_path, args.ckpt, args.device)
     gate = build_presence_gate(args)
+    guard = build_onset_guard(args)
     print(f"model loaded from {args.ckpt}")
 
     asr_name, transcribe = (None, None)
@@ -381,7 +385,8 @@ def main():
         enh, vad_prob = run_inference(model, model_in, args.device,
                                       dry_blend=args.dry_blend,
                                       spec_floor=args.spec_floor,
-                                      presence_gate=gate)
+                                      presence_gate=gate,
+                                      onset_guard=guard)
         enh = enh[offset:][:length]
         if len(enh) < length:
             enh = np.pad(enh, (0, length - len(enh)))
