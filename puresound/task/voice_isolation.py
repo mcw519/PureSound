@@ -14,11 +14,18 @@ from puresound.config.augmentation import (
     MixModeEntry,
     RealFarAugmentation,
     RealNearAugmentation,
+    SessionRowsConfig,
 )
 from puresound.task.ns import (
     NoiseSuppressionCollateFunc,
     NoiseSuppressionDataset,
     RowPlan,
+)
+from puresound.task.session_rows import (
+    SESSION_SCALAR_KEYS,
+    SessionRender,
+    SessionRowBuilder,
+    collate_session_labels,
 )
 
 
@@ -54,6 +61,9 @@ MIX_MODE_CODES = {
     "moderate": 3.0,
     "counter_level": 4.0,
     "distance_level": 5.0,
+    # A session row mixes its bystander bus with the same hard-SIR mechanics as
+    # 'legacy' but draws the level from its own low-tailed distribution.
+    "session": 6.0,
 }
 
 
@@ -66,6 +76,9 @@ class VoiceIsolationRowPlan(RowPlan):
     realnear_room: Optional[str] = None
     realnear_speaker: Optional[str] = None
     realnear_fg_metadata: Optional[dict] = None
+    #: A rendered conversation (see task/session_rows.py). None on every other
+    #: row type, which is what the hooks below branch on.
+    session: Optional[SessionRender] = None
 
 
 class VoiceIsolationDataset(NoiseSuppressionDataset):
@@ -101,15 +114,32 @@ class VoiceIsolationDataset(NoiseSuppressionDataset):
     stream, so plain noise-suppression recipes regenerate bit-identically.
     """
 
-    #: The two real-recording row types, on top of the noise-suppression set.
+    #: The two real-recording row types plus the session row, on top of the
+    #: noise-suppression set.
     AUGMENTATION_BLOCKS = {
         **NoiseSuppressionDataset.AUGMENTATION_BLOCKS,
         "augmentation_realfar_args": RealFarAugmentation,
         "augmentation_realnear_args": RealNearAugmentation,
+        "augmentation_session_rows_args": SessionRowsConfig,
     }
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        # Sessions label on the vad_target grid, so the builder is given the
+        # same frame/hop the label block declares -- and the dataset's own cheap
+        # labeler, which for the energy backend IS the one create_vad_target
+        # uses.
+        vad_cfg = self.vad_label_args
+        frame_length, hop_length = 400, 160
+        if vad_cfg is not None:
+            frame_length = int(vad_cfg.args.get("frame_length", vad_cfg.frame_length))
+            hop_length = int(vad_cfg.args.get("hop_length", vad_cfg.hop_length))
+        self.session_rows = SessionRowBuilder(
+            self.augmentation_session_rows_args,
+            vad_labeler=self.gating_vad_labeler,
+            frame_length=frame_length,
+            hop_length=hop_length,
+        )
         # The blocks themselves are set by the base from the registry; what is
         # task-specific is loading the manifests they name.
         self._realfar_pool = self._load_real_pool(self.augmentation_realfar_args)
@@ -245,6 +275,22 @@ class VoiceIsolationDataset(NoiseSuppressionDataset):
     ) -> Tuple[VoiceIsolationRowPlan, torch.Tensor]:
         plan = VoiceIsolationRowPlan()
 
+        # Session row? Decided before every other row type, and eligibility (row
+        # length) is tested before the probability draw, so a session-enabled
+        # recipe's SHORT length buckets draw exactly what they drew without the
+        # block. On a hit the row is rendered here in full -- one talker script,
+        # one or two bystanders, one room, one SIR -- and the hooks below only
+        # hand the pieces to the synthesis skeleton. The corpus utterance drawn
+        # upstream is discarded, as on a real-near row.
+        session = self.session_rows.maybe_build(self)
+        if session is not None:
+            plan.session = session
+            plan.skip_overlap_gating = True
+            plan.speed_perturb_companions = True
+            plan.force_speech_interferers = True
+            plan.skip_whole_mix_reverb = True
+            return plan, session.user_early
+
         # Real-NEAR keep row? Decide FIRST (guarded: an absent/disabled block
         # never touches the RNG stream). On these rows the foreground becomes a
         # genuine close-mic recording and the target is that recording itself.
@@ -299,6 +345,19 @@ class VoiceIsolationDataset(NoiseSuppressionDataset):
         return plan, target_speech
 
     def _prepare_foreground(self, target_speech, plan):
+        if plan.session is not None:
+            # Already rendered: the user's turns through one or two near channels
+            # of the room the session drew. Reporting source_level_reverb=True is
+            # what keeps the whole-mix RIR off the row and makes the noise stage
+            # colour its noise with the SAME room.
+            session = plan.session
+            return (
+                session.source_level_reverb,
+                session.room_scene,
+                session.user_metadata,
+                session.user_full,
+                session.user_early,
+            )
         if plan.use_realnear:
             # The real near recording already carries its full end-to-end
             # channel; no synthetic room is simulated on these rows.
@@ -308,6 +367,14 @@ class VoiceIsolationDataset(NoiseSuppressionDataset):
     def _sample_interferers(
         self, target_speaker, target_speech, room_scene, source_level_reverb, plan
     ):
+        if plan.session is not None:
+            # The bystanders the script gave a turn, already through their far
+            # (or user-matched) channels and already gated by that script.
+            return (
+                target_speech,
+                list(plan.session.bystanders),
+                [dict(entry) for entry in plan.session.bystander_metadata],
+            )
         if not plan.use_realfar:
             return super()._sample_interferers(
                 target_speaker, target_speech, room_scene, source_level_reverb, plan
@@ -337,6 +404,10 @@ class VoiceIsolationDataset(NoiseSuppressionDataset):
         # Real rows may carry their own turn-taking rate: their far-solo
         # stretches supply absolute-suppress supervision for real far voices
         # while the near foreground stays present elsewhere in the row.
+        if plan.session is not None:
+            # Never reached (the gating call is skipped on a scripted row); here
+            # so the answer is stated rather than inherited by accident.
+            return None
         if plan.use_realnear and self.augmentation_realnear_args is not None:
             return self.augmentation_realnear_args.turn_taking_prob
         if plan.use_realfar and self.augmentation_realfar_args is not None:
@@ -357,6 +428,11 @@ class VoiceIsolationDataset(NoiseSuppressionDataset):
         # plus jitter); the other rescale modes draw a mode-specific SIR range.
         # Real-far rows skip mix_mode -- the simulated-near vs real-recorded-far
         # level ratio is not physically meaningful -- and use the hard SIR draw.
+        if plan.session is not None:
+            # Same add_bg_noise mechanics as every other row type; the level
+            # comes from the session block's own low-tailed draw, and the forced
+            # capture floor goes on afterwards so a user gap is never silence.
+            return self.session_rows.mix(plan.session, fg_wav, interfered_speech)
         mm_cfg = (
             self.augmentation_speech_args.mix_mode
             if self.augmentation_speech_args
@@ -449,6 +525,29 @@ class VoiceIsolationDataset(NoiseSuppressionDataset):
         lo, hi = mode.jitter_db
         sir += float(torch.empty(1).uniform_(float(lo), float(hi)).item())
         return sir
+
+    def _emit_row_labels(
+        self,
+        sample: Dict,
+        plan: RowPlan,
+        *,
+        vad_reference: Optional[torch.Tensor],
+        background_speech_reference: Optional[torch.Tensor],
+    ) -> None:
+        """The session label contract, on every row of a session-enabled recipe.
+
+        Nothing is emitted when the block is off, so a recipe without it
+        collates -- and trains -- exactly as before.
+        """
+        if not self.session_rows.active:
+            return
+        self.session_rows.emit_labels(
+            sample,
+            plan,
+            dataset=self,
+            vad_reference=vad_reference,
+            background_speech_reference=background_speech_reference,
+        )
 
     def _emit_task_metadata(
         self,
@@ -576,10 +675,11 @@ class VoiceIsolationCollateFunc(NoiseSuppressionCollateFunc):
     def __call__(self, batch: Dict):
         out = super().__call__(batch)
 
-        for key in VOICE_ISOLATION_SCALAR_KEYS:
+        for key in VOICE_ISOLATION_SCALAR_KEYS + SESSION_SCALAR_KEYS:
             values = [b[key].view(-1) for b in batch if key in b]
             if values:
                 out[key] = torch.cat(values, dim=0)
+        collate_session_labels(batch, out)
 
         # Far-parent target waveform (P1): pad like the other waveforms so an
         # optional far decoder loss can read batch["far_target"].

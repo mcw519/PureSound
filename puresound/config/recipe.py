@@ -17,6 +17,7 @@ from .augmentation import (
     RealNearAugmentation,
     RowInitialAmbientAugmentation,
     ReverbAugmentation,
+    SessionRowsConfig,
     SimpleProbAugmentation,
     SourceRateAugmentation,
     SpeechAugmentation,
@@ -202,6 +203,37 @@ class VoiceIsolationRecipe(SisoRecipe):
     augmentation_realfar: RealFarAugmentation | None = None
     augmentation_realnear: RealNearAugmentation | None = None
     augmentation_row_initial_ambient: RowInitialAmbientAugmentation | None = None
+    augmentation_session_rows: SessionRowsConfig | None = None
+
+    @model_validator(mode="after")
+    def session_rows_preconditions(self):
+        """Two blocks a session row cannot survive, refused at config load.
+
+        ``is_target`` replaces the target with the mixture, which would make the
+        bystanders part of what the model must keep -- the opposite of the row's
+        purpose. ``augmentation_row_initial_ambient`` masks every speech
+        component out of the row's opening AFTER the script has been written, so
+        the turn spans would claim speech the mixture no longer has (and it is
+        negative on its own axis anyway: v17, cold-far +0.35 dB, p = 0.020).
+
+        The block carries the ``augmentation_`` prefix because that is what
+        ``augmentation_kwargs`` forwards to a dataset as ``<name>_args``; the
+        knob inside it is ``enabled``, the name the v20 design pre-registered.
+        """
+        block = self.augmentation_session_rows
+        if block is None or not block.enabled:
+            return self
+        speech = self.augmentation_speech
+        if speech is not None and speech.used and speech.is_target:
+            raise ValueError(
+                "session_rows needs augmentation_speech.is_target: False"
+            )
+        ambient = self.augmentation_row_initial_ambient
+        if ambient is not None and ambient.used:
+            raise ValueError(
+                "session_rows and augmentation_row_initial_ambient are exclusive"
+            )
+        return self
 
 
 class SpeakerEmbeddingRecipe(SisoRecipe):

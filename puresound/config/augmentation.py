@@ -508,6 +508,142 @@ class RowInitialAmbientAugmentation(StrictConfig):
         return self
 
 
+class SessionTurnShapeConfig(StrictConfig):
+    """How often each conversational shape is drawn on a session row.
+
+    Weights, not probabilities: they are normalised at draw time, so raising one
+    does not force the others to be edited. All four are non-zero by default --
+    the point of the block is that the four shapes coexist (v20 design §4.1).
+
+    * ``user_first`` -- U opens, then U and the bystanders alternate.
+    * ``bystander_first`` -- a bystander holds the floor for
+      ``bystander_open_seconds`` and U enters afterwards. This is the wrong-anchor
+      shape: 6.0% of v16 rows carry >=1 s of interferer before the user's first
+      frame (``v19c_diagnostics/training_data_audit``).
+    * ``user_gap`` -- U speaks, then ``user_gap_seconds`` of the row's own floor
+      (a bystander may talk inside it), then U returns. Re-entry after >=5 s is
+      0.3% of v16 rows; a long gap is NEVER labelled target-absent.
+    * ``overlap`` -- the same alternation with the turn boundaries overlapping
+      instead of separated, i.e. double talk (the KEEP guard case).
+    """
+
+    user_first: NonNegativeFloat = 0.25
+    bystander_first: NonNegativeFloat = 0.30
+    user_gap: NonNegativeFloat = 0.30
+    overlap: NonNegativeFloat = 0.15
+
+    @model_validator(mode="after")
+    def at_least_one_shape(self):
+        if self.user_first + self.bystander_first + self.user_gap + self.overlap <= 0:
+            raise ValueError("shape_probs must contain a positive weight")
+        return self
+
+
+class SessionRowsConfig(StrictConfig):
+    """``session_rows`` -- multi-turn conversational rows with per-turn identity.
+
+    A session row is one user U (near draw), one or two bystanders B (far draw)
+    and the row's own noise floor, arranged as a *script* of turns instead of two
+    continuously-talking sources. It exists because the training distribution is
+    what makes the current foreground decision cheap: the user's onset is inside
+    0.5 s on 90.7% of v16 rows, no row renders the same talker twice, and nothing
+    in the objective mentions time (`v20_self_enrolling_foreground_design.md` §2).
+
+    Contracts this block keeps, all of them recorded failures elsewhere:
+
+    * **One device-chain draw per row**, applied jointly to the mixture and the
+      target exactly as ``ns.py`` does for every other row type (review item 6).
+      Cross-*chain* material comes from cross-*row* pairs -- see ``pair_prob``.
+    * **The user's gap is never digital silence** and never target-absent. The
+      gap carries the row's own floor (``floor_dbfs_range`` guarantees one even
+      on the ~10% of rows where every noise source declines to fire), and the
+      row keeps ``target_present = 1`` throughout: raising the target-absent rate
+      cost Dawn deletion 0.286 (v19c not-to-do list).
+    * **Disabled costs nothing.** ``enabled: False`` (or ``prob: 0``) draws no
+      randomness at all, and a row shorter than ``min_seconds`` is checked before
+      the draw -- so the short length buckets of a recipe with this block on stay
+      bit-identical to the same recipe without it.
+    """
+
+    #: Named ``enabled`` rather than ``used`` because that is the name the v20
+    #: design pre-registered; ``used`` below is what the shared recipe plumbing
+    #: reads (``BaseRecipe.augmentation_kwargs``).
+    enabled: StrictBool = False
+    prob: Probability = 0.0
+    #: Sessions need room for several turns. Rows shorter than this are never
+    #: session rows, and the test is made BEFORE the probability draw.
+    min_seconds: float = Field(default=12.0, gt=0.0)
+    #: Cap on the scripted span. The remainder of a longer row is floor only.
+    #: Set above the longest length bucket to make it a no-op (the R1a default:
+    #: sessions are long rows inside the existing schedule, not a new bucket).
+    max_seconds: float = Field(default=60.0, gt=0.0)
+    n_bystanders: IntRange = (1, 2)
+    user_distance_range: FloatRange = (0.3, 1.0)
+    bystander_distance_range: FloatRange = (1.5, 4.0)
+    shape_probs: SessionTurnShapeConfig = SessionTurnShapeConfig()
+    user_turn_seconds: FloatRange = (1.5, 4.0)
+    bystander_turn_seconds: FloatRange = (2.0, 4.5)
+    bystander_open_seconds: FloatRange = (2.0, 8.0)
+    user_gap_seconds: FloatRange = (5.0, 20.0)
+    turn_gap_seconds: FloatRange = (0.2, 0.8)
+    overlap_seconds: FloatRange = (0.5, 3.0)
+    #: Boundary double-talk on the shapes that are not the ``overlap`` shape.
+    boundary_overlap_prob: Probability = 0.25
+    #: A bystander talking inside the user's gap -- the case where "the user is
+    #: away" and "nobody is near" have to stay distinguishable.
+    bystander_in_gap_prob: Probability = 0.7
+    min_turn_seconds: float = Field(default=0.5, gt=0.0)
+    max_turns: int = Field(default=16, gt=0)
+    #: The user moves: later turns run through a SECOND near-range channel of the
+    #: same room. An RIR change only -- the chain draw stays single (item 6).
+    rir_move_prob: Probability = 0.3
+    #: A bystander drawn in the user's own distance class, so proximity alone
+    #: cannot separate the roles (the near/far shortcut of review item 4).
+    distance_matched_bystander_prob: Probability = 0.2
+    #: SIR for the summed bystander bus, mixed by the same ``add_bg_noise`` the
+    #: other row types use. ``sir_low_tail_*`` is the heavier low tail: v16's
+    #: realised SIR median is +0.5 dB with p5 -8.1, so loud bystanders are rare.
+    sir_range: FloatRange = (-5.0, 10.0)
+    sir_low_tail_prob: Probability = 0.30
+    sir_low_tail_range: FloatRange = (-10.0, -5.0)
+    #: Absolute capture floor forced onto session rows, mirroring
+    #: ``augmentation_noise.absolute_floor`` semantics (level as drawn, upstream
+    #: of the device chain). Low by design: it is a guarantee against digital
+    #: silence in a gap, not a second noise source.
+    floor_dbfs_range: FloatRange = (-60.0, -45.0)
+    #: Raised-cosine gate width, in samples, same units as
+    #: ``overlap_control.fade_samples``; a hard turn edge is a click.
+    fade_samples: Annotated[int, Field(ge=0)] = 400
+    #: Cross-chain pairs: a paired row draws a slot and renders the material that
+    #: slot determines, so two rows carrying the same ``row_source_id`` are the
+    #: same source through two independent chain draws. ``pair_pool_size`` is the
+    #: number of distinct paired sources -- small means frequent pairs and
+    #: frequent repetition, large means the opposite.
+    pair_prob: Probability = 0.0
+    pair_pool_size: Annotated[int, Field(gt=0)] = 1024
+    pair_seed_base: Annotated[int, Field(ge=0)] = 20260905
+
+    @property
+    def used(self) -> bool:
+        """What ``BaseRecipe.augmentation_kwargs`` and the dataset registry read."""
+        return bool(self.enabled)
+
+    @model_validator(mode="after")
+    def session_contract(self):
+        if not self.enabled:
+            return self
+        if self.max_seconds < self.min_seconds:
+            raise ValueError("max_seconds must not be below min_seconds")
+        lo, hi = self.n_bystanders
+        if lo < 1 or lo > hi:
+            raise ValueError(f"n_bystanders must be 1 <= lo <= hi, got {(lo, hi)}")
+        if self.user_gap_seconds[0] < 1.0:
+            raise ValueError("user_gap_seconds must start at >= 1 s")
+        if self.min_turn_seconds >= self.user_turn_seconds[1]:
+            raise ValueError("min_turn_seconds must be below user_turn_seconds top")
+        return self
+
+
 class RealFarAugmentation(StrictConfig):
     used: StrictBool
     pool_manifest: str | None = None

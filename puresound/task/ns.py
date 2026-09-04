@@ -51,12 +51,24 @@ class RowPlan:
       consuming the speech-augmentation probability draw.
     * ``skip_whole_mix_reverb`` keeps the whole-mix RIR off rows whose channel
       must stay exactly as the foreground provided it.
+    * ``skip_overlap_gating`` is for a row type that wrote its own turn script:
+      re-gating it would overwrite that script (see ``task/session_rows.py``).
+    * ``speed_perturb_companions`` carries the speed change onto
+      ``background_speech_reference`` as well. Off by default, which is why that
+      snapshot is a PRE-speed one everywhere else -- a ~5% timing error a
+      row-level test tolerates and a per-frame label does not.
+    * ``speed_factor`` is written by the synthesis skeleton, not by the planner:
+      it is what a row type needs to map a pre-speed script onto the post-speed
+      label grid.
     """
 
     target_absent: bool = False
     force_interferer: bool = False
     force_speech_interferers: bool = False
     skip_whole_mix_reverb: bool = False
+    skip_overlap_gating: bool = False
+    speed_perturb_companions: bool = False
+    speed_factor: float = 1.0
 
 
 class NoiseSuppressionDataset(DynamicBaseDataset):
@@ -383,19 +395,25 @@ class NoiseSuppressionDataset(DynamicBaseDataset):
             )
             interferer_rir_metadata.extend(itf_meta)
 
-            gating = self.overlap_gating.apply(
-                target_speech,
-                interfered_speech,
-                sr=self.audio_sr,
-                target_mix=noisy_speech,
-                allow_turn_taking=not target_absent,
-                turn_taking_prob=self._turn_taking_override(plan),
-            )
-            target_speech = gating.target
-            noisy_speech = gating.target_mix
-            interfered_speech = gating.interferers
-            overlap_fraction = gating.overlap_fraction
-            turn_taking = gating.turn_taking
+            # A row type that arrived with its own turn script keeps it: this
+            # gating decides who talks when, and running it over a scripted row
+            # would silently replace that script (task/session_rows.py). The
+            # guard is a plan field, so every row type that does not set it
+            # draws exactly what it drew before.
+            if not plan.skip_overlap_gating:
+                gating = self.overlap_gating.apply(
+                    target_speech,
+                    interfered_speech,
+                    sr=self.audio_sr,
+                    target_mix=noisy_speech,
+                    allow_turn_taking=not target_absent,
+                    turn_taking_prob=self._turn_taking_override(plan),
+                )
+                target_speech = gating.target
+                noisy_speech = gating.target_mix
+                interfered_speech = gating.interferers
+                overlap_fraction = gating.overlap_fraction
+                turn_taking = gating.turn_taking
 
             far_count = len(interfered_speech)
             interfered_speech = (
@@ -508,6 +526,16 @@ class NoiseSuppressionDataset(DynamicBaseDataset):
                 speed=speed,
                 sr=self.audio_sr,
             )
+            # Recorded, not drawn again: a row type with per-frame labels has to
+            # map its pre-speed frame grid onto the post-speed one, and after the
+            # crop below the length ratio no longer recovers this factor.
+            plan.speed_factor = float(speed)
+            if plan.speed_perturb_companions and background_speech_reference is not None:
+                background_speech_reference, _ = self.augmentor.sox_speed_perturbed(
+                    wav=background_speech_reference,
+                    speed=speed,
+                    sr=self.audio_sr,
+                )
 
         # Reverb (whole-mix folder RIR; skipped when the row plan says the
         # channel must stay exactly as the foreground provided it)
@@ -663,7 +691,28 @@ class NoiseSuppressionDataset(DynamicBaseDataset):
             overlap_fraction=overlap_fraction,
             turn_taking=turn_taking,
         )
+        # Per-frame / per-turn labels a row type may add. Placed after the crop
+        # and the VAD block on purpose: the references handed over are the ones
+        # `vad_target` was computed from, so a label cannot land on a different
+        # grid than the one the losses read.
+        self._emit_row_labels(
+            sample,
+            plan,
+            vad_reference=vad_reference,
+            background_speech_reference=background_speech_reference,
+        )
         return sample
+
+    def _emit_row_labels(
+        self,
+        sample: Dict,
+        plan: RowPlan,
+        *,
+        vad_reference: Optional[torch.Tensor],
+        background_speech_reference: Optional[torch.Tensor],
+    ) -> None:
+        """Row-type frame labels. The generic row has none, so this is a no-op."""
+        return None
 
     def _emit_task_metadata(
         self,
