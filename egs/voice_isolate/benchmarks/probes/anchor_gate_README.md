@@ -96,7 +96,7 @@ The bystander-context penalty on the proxy (background − none, paired median) 
 (−0.115 → −0.050) and narrows on v16 (−0.138 → −0.106). Whether that is the +0.03 Dawn deletion
 of `reference_matrix_README` §5 coming back needs the ASR run (step 3).
 
-## 5. What this settles
+## 5. What steps 1–2 settle
 
 * **The state does carry the anchor's distance on the device chain**, readably enough for a
   supervisor (AUC 0.99 isolated, 0.7–0.8 in sessions). So layer 2 (teach the LSTM with
@@ -112,3 +112,51 @@ of `reference_matrix_README` §5 coming back needs the ASR run (step 3).
 * Step 3 (only if wanted): ASR on the gated Dawn outputs for the `pna`-only arm and the DRR
   arm, both checkpoints, `none` + `background` — four large-v3 runs, ~1 h — to turn §4's proxy
   into deletion numbers; then wire `AnchorGate` beside `PresenceGate` as an opt-in flag.
+
+## 6. Step 3 — real ASR on the gated Dawn outputs (`anchor_gate_asr.py`)
+
+faster-whisper large-v3, n = 450, both checkpoints, gated audio built from the step-1 cache with
+the step-2 gate (same functions), ungated re-transcribed in the same session (reproduces
+`reference_matrix_README` §5 within 0.002). Arms: `pna` = protect-when-no-anchor only (comparison
+disabled); `drr3` / `drr6` = DRR relative rule with 3 / 6 dB margin; all W_c 1 s, τ_dn 2 s.
+
+| v8 | none WER / sub / ins / del | background WER / sub / ins / del |
+|---|---|---|
+| raw mix | 0.183 / 0.048 / 0.052 / 0.084 | (same) |
+| ungated | 0.333 / 0.090 / 0.014 / 0.230 | 0.373 / 0.101 / 0.015 / 0.257 |
+| pna | 0.232 / 0.061 / 0.049 / 0.123 | 0.267 / 0.080 / 0.040 / 0.147 |
+| drr3 | **0.194** / 0.053 / 0.046 / **0.096** | **0.193** / 0.058 / 0.036 / **0.099** |
+| drr6 | 0.223 / 0.055 / 0.050 / 0.118 | 0.243 / 0.071 / 0.037 / 0.136 |
+
+| v16 | none | background |
+|---|---|---|
+| ungated | 0.297 / 0.077 / 0.013 / 0.207 | 0.335 / 0.085 / 0.015 / 0.235 |
+| pna | 0.217 / 0.059 / 0.047 / 0.111 | 0.246 / 0.076 / 0.037 / 0.133 |
+| drr3 | **0.188** / 0.051 / 0.044 / **0.094** | **0.196** / 0.057 / 0.040 / **0.099** |
+| drr6 | 0.210 / 0.055 / 0.046 / 0.108 | 0.233 / 0.068 / 0.038 / 0.127 |
+
+Paired per-utterance deletion, arm − ungated: every arm, both contexts, both checkpoints
+p < 1e-26 (e.g. v8 drr3 background: 297 utterances down / 32 up / 121 unchanged). Bystander
+penalty (background − none deletion): ungated +0.027 / +0.028, `pna` +0.025 / +0.022,
+`drr6` +0.018 / +0.018, **`drr3` +0.003 / +0.005 (p 0.30 / 0.34, closed)**.
+
+How often the gate is actually dry while the user speaks (v8, fraction of reference-active
+frames with g > 0.5, median): `pna` 0.20 (none) / 0.00 (background); `drr3` 0.39 / 0.48;
+`drr6` 0.25 / 0.00. The `pna` gain under `background` therefore comes from the 2 s release
+tail leaking a partial dry blend into the first seconds of the utterance, not from a fully
+open gate. In every gated arm the insertion rate returns from 0.014 to 0.036–0.050 — most of
+the way back to the raw mix's 0.052: what the model stopped hearing, the gate lets back in.
+
+### Reading, plainly
+
+* The model's Dawn deletion (0.23 → 0.10 with `drr3`) is mostly **onset deletion and
+  wrong-anchor deletion**, and an inference-side gate that refuses to attenuate until a near
+  talker has been confirmed removes most of it, on both checkpoints, with no retraining.
+* `drr3` reaches WER 0.19 — within 0.01 of not processing at all — by bypassing the model
+  ~40–50 % of the user's speaking time; it wins on deletion and gives back most of the
+  insertion reduction that is the product's purpose. `pna` keeps the model on 80–100 % of the
+  time and still halves the deletion, but leaves the bystander penalty untouched.
+* Neither arm is a version decision. The gate is a keep-side safety belt whose cost is
+  measured in far suppression (fit set −15 → −11 dB median; held-out 180d −19 → −12) and in
+  insertions. The right operating point is a product choice between "hear too much" and
+  "delete the user", and both ends are now on the same table.
