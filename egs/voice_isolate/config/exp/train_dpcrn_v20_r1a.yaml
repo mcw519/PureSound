@@ -1,4 +1,4 @@
-# voice_isolate -- EXPERIMENT v20 R1a (data side): session rows.
+# voice_isolate -- EXPERIMENT v20 R1a, CYCLE 1: session rows + relative proximity (identity OFF).
 #
 # v16 VERBATIM plus ONE new block, `augmentation_session_rows`, and the two
 # monitoring/bookkeeping lines named at the bottom of this header. Nothing else
@@ -537,12 +537,15 @@ loss_func:
   # pair_pool_size of order the paired rows per batch). consistency_weight is
   # left at 1.0 so that turning the pair rate up is a data change and not also
   # a loss change.
-  - type: IdentityContrastiveLoss
-    weighted: 0.1
-    args:
-      temperature: 0.1
-      momentum: 0.99          # stop-gradient EMA teacher, a copy of the head
-      min_turn_frames: 1      # the generator drops a turn with no exposed frame
+  # CYCLE 1 (2026-09-04): IdentityContrastiveLoss is OFF. P0 (benchmarks/probes/identity_probe)
+  # measured that the frozen bottleneck does not carry talker identity across channels
+  # (real pair AUC <= 0.59, one chain swap -> 0.012) while the frozen SV model scores
+  # 0.94-0.999; design §10 makes the SV embedding (or a head DISTILLED from it) the
+  # identity carrier. One axis per cycle: this run trains session rows + relative
+  # proximity only. Re-enable in distillation form once the SV teacher provider exists.
+  # - type: IdentityContrastiveLoss
+  #   weighted: 0.1
+  #   args: {temperature: 0.1, momentum: 0.99, min_turn_frames: 1}
 
   - type: RelativeProximityLoss
     weighted: 0.1
@@ -622,9 +625,9 @@ model:
       # is bit-identical to v16's, and with the blocks absent the backbone
       # forward has no extra parameters and no extra ops at all.
       identity_head:
-        enabled: True
-        dim: 64            # the width IdentityContrastiveLoss compares
-        kernel_t: 5        # 50 ms of causal context; the loss pools a whole turn
+        enabled: False     # CYCLE 1: OFF (design §10/§11 -- identity is supplied by the
+        dim: 64            #   frozen SV model or a distilled head in a later round, not
+        kernel_t: 5        #   learned from the bottleneck; P0 measured it is not there)
       proximity_head:
         enabled: True
         hidden: 64         # kernel_t is the identity head's, deliberately not a knob
@@ -632,4 +635,4 @@ model:
       # loss's EMA teacher needs (it runs its own copy of the head over the
       # features). A build-time flag, separate from the detached
       # `stash_bottleneck` probe the presence gate reads.
-      expose_bottleneck: True
+      expose_bottleneck: False   # CYCLE 1: only the identity loss needed it
