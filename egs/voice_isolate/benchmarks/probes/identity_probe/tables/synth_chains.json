@@ -1,0 +1,84 @@
+{
+ "chains": {
+  "A": {
+   "seed": 101,
+   "src": null,
+   "hpf": 100.0,
+   "floor_dbfs": -50.0
+  },
+  "B": {
+   "seed": 202,
+   "src": 8000,
+   "hpf": 300.0,
+   "floor_dbfs": -42.0
+  }
+ },
+ "rooms": {
+  "R1": {
+   "item": "wide_room_001516_000007",
+   "origin": "sim",
+   "rt60": 0.35,
+   "near": [
+    1,
+    0.493
+   ],
+   "far": [
+    2,
+    2.971
+   ]
+  },
+  "R2": {
+   "item": "wide_room_000264_000017",
+   "origin": "sim",
+   "rt60": 0.7,
+   "near": [
+    0,
+    0.54
+   ],
+   "far": [
+    3,
+    3.443
+   ]
+  },
+  "R3": {
+   "item": "real_ace_Office_1_0000",
+   "origin": "real",
+   "rt60": 0.332,
+   "near": [
+    0,
+    0.987
+   ],
+   "far": [
+    1,
+    2.68
+   ]
+  }
+ },
+ "realised_device_chain": {
+  "A": {
+   "src_applied": 0.0,
+   "iir_applied": 1.0,
+   "hpf_applied": 1.0,
+   "hpf_cutoff": 100.0,
+   "volume_applied": 0.0,
+   "volume_clipped": 0.0,
+   "compressor_applied": 0.0,
+   "codec_applied": 0.0,
+   "packet_loss_applied": 0.0,
+   "overload_rescaled": 0.0
+  },
+  "B": {
+   "src_applied": 1.0,
+   "src_target_sr": 8000.0,
+   "iir_applied": 1.0,
+   "hpf_applied": 1.0,
+   "hpf_cutoff": 300.0,
+   "volume_applied": 0.0,
+   "volume_clipped": 0.0,
+   "compressor_applied": 0.0,
+   "codec_applied": 0.0,
+   "packet_loss_applied": 0.0,
+   "overload_rescaled": 0.0
+  }
+ }
+}
