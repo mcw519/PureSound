@@ -336,3 +336,34 @@ pairs**, and costs 78 ms per 2 s window single-threaded on this host's CPU (≈ 
 What does not change: sessions as the training material, relative proximity as the write criterion,
 no-read-before-commit, the read as a zero-initialised residual branch in R2, every guard in §6, and
 the real-chain fork in R1a.
+
+## 11. Binding constraint: real-time is the only deployment target (2026-09-04, user)
+
+Everything in this programme is judged as a **causal, per-hop, CPU streaming** system or not at all.
+Concretely, and these override anything above that reads otherwise:
+
+1. **No component may exist offline-only.** Every state the model keeps (candidate / committed
+   slots, session statistics, timers, any identity carrier) is a streaming state with an export port
+   and a `state_from_tensors` slice, held through the look-ahead warm-up; every rule in §3.3 is
+   evaluated on past frames only. Offline-vs-streaming parity (G5) is a pass/kill gate for every
+   round from R1b on, not a release-time check.
+2. **Cost budget is part of the gate.** G5: RTF ≤ 1.1 × v16 **on the target device CPU**, measured
+   there, not on this server. The recurrent separator is ~0.8 M parameters; the record already shows
+   a 2.1–2.7 × CPU cost being "over budget" (MambaInter). Anything added has to fit inside the 10 %.
+3. **Identity carrier, in cost order.** (a) Default: a **distilled in-graph identity head** — the
+   `IdentityHead` (depthwise conv + linear on the 128-d pooled bottleneck, ~10 k parameters, negligible
+   at 100 fps) trained to predict the frozen SV embedding of the turn (SV as a frozen teacher at
+   training time only). (b) Fallback, opt-in: the SV model as a side session at ≤ 1 Hz on a 2 s window
+   over speech-only frames (78 ms single-threaded per call on this host ≈ 8 % of one core here; the
+   target CPU number decides). The SV model never runs per hop and never gates the mask per frame:
+   identity is read only at commit / replacement decisions, which are ≥ 1 s events by design, so a
+   1 Hz identity stream adds no latency to the audio path.
+4. **Normalisation must be causal.** P0's per-recording centring (the thing that lifts identity AUC
+   0.57 → 0.87 synthetically) is offline; the deployable form is a causal running mean over speech
+   frames with a warm-up hold, like the OnsetGuard floor tracker. Before R1b, re-run the P0 pair test
+   with causal EMA centring (τ ∈ {5, 10, 20} s) and report the AUC loss vs offline centring.
+5. **Latency.** The audio path keeps the existing algorithmic delay (`streaming_delay_frames`); the
+   memory read in R2 uses `M_{t-1}` (one hop late by construction); no new look-ahead anywhere.
+6. **Training mirrors streaming.** Session rows are trained with the same causal recurrence; if
+   state-carrying truncated segments are introduced later, the carried state must be exactly the
+   exported state set (no training-only state).
