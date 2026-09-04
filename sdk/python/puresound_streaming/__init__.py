@@ -1,5 +1,6 @@
 from .runtime import (
     PROCESSOR_REGISTRY,
+    OnsetGuard,
     PureSoundStreamingRuntime,
     StftFrameOrtProcessor,
     StreamingRuntimeConfig,
@@ -7,6 +8,7 @@ from .runtime import (
 
 __all__ = [
     "PROCESSOR_REGISTRY",
+    "OnsetGuard",
     "PureSoundStreamingRuntime",
     "StftFrameOrtProcessor",
     "StreamingRuntimeConfig",

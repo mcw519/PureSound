@@ -18,7 +18,6 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from puresound.streaming.base import StreamingOrt
 import torch
 import yaml
 
@@ -357,3 +356,131 @@ def test_exported_head_logits_track_torch_over_many_frames():
     warm = frame_model.warmup_frames
     late = np.abs(np.array(torch_logits[warm + 1:]) - np.array(ort_logits[warm + 1:])).max()
     assert late < 1e-3, f"drift after warm-up: {late}"
+
+
+# --------------------------------------------------------------------------- #
+# The onset guard: recorded at export, applied by the runtime
+# --------------------------------------------------------------------------- #
+
+
+def _guard_bait(seconds=6.0, sr=16000, seed=5):
+    """Modulated noise well over a floor: the guard arms on it and releases.
+
+    Constant broadband energy would NOT arm it -- the floor tracker absorbs a
+    stationary source by design -- so a fixture that is merely loud tests
+    nothing. Two bursts with a `t_forget_s`-long gap between them, so the stream
+    also re-protects.
+    """
+    rng = np.random.default_rng(seed)
+    n = int(seconds * sr)
+    t = np.arange(n) / sr
+    env = np.zeros(n)
+    for lo, hi in ((0.5, 2.0), (5.6, 6.0)):
+        span = slice(int(lo * sr), int(hi * sr))
+        env[span] = 0.5 * (1.0 + np.sin(2.0 * np.pi * 5.0 * t[span])) + 0.2
+    return ((rng.standard_normal(n) * 1e-3) * (1.0 + env * 10.0 ** (30 / 20))).astype(
+        np.float32
+    )
+
+
+def _stream(runtime, samples, chunk=1024):
+    runtime.reset()
+    parts = [
+        runtime.process_samples(samples[i : i + chunk])
+        for i in range(0, samples.size, chunk)
+    ]
+    parts.append(runtime.flush())
+    return np.concatenate(parts)
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize("recipe", ["train_dpcrn_wide_causal.yaml",
+                                    "train_dpcrn_wide_antisup.yaml"])
+def test_the_export_records_the_onset_guard_and_the_runtime_applies_it(
+    tmp_path, recipe
+):
+    """The guard is inference-only and no graph contains it, so it travels in the
+    manifest exactly as `dry_blend` does -- and the runtime has to reproduce the
+    offline arithmetic, not approximate it.
+
+    Both recipes, because the two differ in the one thing the guard's alignment
+    depends on: `train_dpcrn_wide_causal` exports 0 frames of algorithmic
+    latency and `train_dpcrn_wide_antisup` exports 3. At 0 the frame the guard
+    needs is supplied by the 512-sample analysis window alone (512//160 - 2 = 1
+    spare hop), so the exact gain still lands and NO latency is added -- the
+    alternative would have been to hold a hop back or refuse, and neither is
+    necessary at any shipped geometry.
+    """
+    import json
+
+    from puresound.system.onset_guard import OnsetGuard
+
+    config = _CFG / recipe
+    if not config.exists():
+        pytest.skip(f"{config} is not in this checkout")
+    torch.manual_seed(0)
+    frame_model = load_streaming_dpcrn_model(str(config))
+    checkpoint = tmp_path / "weights.ckpt"
+    torch.save({"state_dict": frame_model.system_model.state_dict()}, checkpoint)
+    onnx_path = tmp_path / "model.onnx"
+
+    guard = OnsetGuard()
+    manifest = export_streaming_dpcrn_onnx(
+        str(config), checkpoint, onnx_path,
+        postprocess=Postprocessor(dry_blend=0.9), onset_guard=guard,
+    )
+
+    recorded = manifest[OnsetGuard.MANIFEST_KEY]
+    assert OnsetGuard.from_manifest(recorded) == guard
+    # The note says what a deployment cannot derive from the knobs: that the
+    # graph does not contain it, and how the one-hop analysis lag is paid for.
+    assert "does NOT contain it" in recorded["note"]
+    assert "hop t+1" in recorded["note"]
+
+    delay = int(manifest["streaming_delay_frames"]) * int(manifest["hop_length"])
+    hop = int(manifest["hop_length"])
+    samples = _guard_bait()
+
+    on = StreamingOrt(onnx_path, provider="cpu")
+    assert on.onset_guard == guard
+    assert on.onset_guard_lookahead_hops >= 0
+
+    # (a) An absent section means no guard -- the documented convention, and what
+    # every export written before the guard existed carries.
+    bare_path = tmp_path / "bare.json"
+    bare = dict(json.loads(onnx_path.with_suffix(".json").read_text()))
+    bare.pop(OnsetGuard.MANIFEST_KEY)
+    bare_path.write_text(json.dumps(bare))
+    off = StreamingOrt(onnx_path, bare_path, provider="cpu")
+    assert off.onset_guard is None
+
+    # (c) ... and a request can refuse a recorded guard, landing exactly where
+    # its absence does.
+    refused = StreamingOrt(
+        onnx_path, provider="cpu", onset_guard_overrides={"enabled": False}
+    )
+    assert refused.onset_guard is None
+
+    guarded = _stream(on, samples)
+    unguarded = _stream(off, samples)
+    assert np.array_equal(_stream(refused, samples), unguarded)
+    assert not np.array_equal(guarded, unguarded), "the guard must do something"
+
+    # (b) The streamed guard IS the offline guard, on the same audio, aligned by
+    # the graph's own latency. Bit-identical: `OnsetGuard.apply` and the runtime
+    # drive the same `_advance` recursion over the same float32 blend, so
+    # anything short of equality would be a real difference and not rounding.
+    expected = guard.apply(
+        torch.from_numpy(unguarded[delay:]), torch.from_numpy(samples),
+        hop=hop, sr=float(manifest["sample_rate"]),
+    ).numpy()
+    assert np.array_equal(guarded[delay:], expected), float(
+        np.abs(guarded[delay:] - expected).max()
+    )
+    # Warm-up output has no input to restore and passes through, as the blend's
+    # does.
+    assert np.array_equal(guarded[:delay], unguarded[:delay])
+
+    # (d) The anchor is per-stream: a second stream through the same runtime must
+    # start protected again, or its first talker is handed straight to the model.
+    assert np.array_equal(_stream(on, samples), guarded)

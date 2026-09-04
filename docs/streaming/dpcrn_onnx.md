@@ -178,8 +178,75 @@ time (zero added latency, since the input is already available once the
 enhanced frame is). It is a deployment-time safety knob, unrelated to the
 look-ahead state described above.
 
+## Post-graph stage two: the onset guard (`onset_guard`)
+
+An export may carry a **second** post-graph section, written by
+`streaming_onnx.py export --onset-guard` and applied by the runtime for exactly
+the reason `dry_blend` is: the traced graph contains the model and nothing after
+it, so a deployment that only runs the graph is running a different system than
+the scorecard. **An absent `onset_guard` key means no guard** — the same
+convention `recommended_inference` follows.
+
+```json
+"onset_guard": {
+  "t_arm_s": 1.0, "t_forget_s": 5.0, "tau_up_s": 0.05, "tau_dn_s": 2.0,
+  "margin_db": 8.0, "floor_win_s": 2.0, "floor_rise_db_per_s": 3.0,
+  "init_s": 0.2, "hangover_s": 0.2, "min_run_s": 0.1, "snap": 0.001,
+  "note": "out = input, bit for bit, until a talker has been heard for 1 s ..."
+}
+```
+
+**What it does.** The streaming state treats whoever it heard last as the
+foreground, so the *first* second of the first talker — and the next near talker
+after a pause — gets attenuated as a foreground change. The guard blocks that
+one clause: until a talker has been heard for `t_arm_s` of sustained speech
+(`margin_db` above a tracked noise floor), the output is
+`g*input + (1 - g)*enhanced` with `g = 1`, i.e. the input bit for bit; then it
+releases toward the model with time constant `tau_dn_s`, and `t_forget_s` of
+floor re-arms it so the next onset is protected again. It is a keep-side safety
+belt whose price is suppression depth (fit-set far median −15.2 → −12.0 dB) and
+whose return is deletions (v8 keep violations 26 → 13, Dawn Chorus deletion
+0.230 → 0.123). Where to sit on that trade is a product choice — see
+`puresound/system/onset_guard.py` and
+`egs/voice_isolate/benchmarks/probes/anchor_gate_README.md`.
+
+**What it costs at runtime.** Per 10 ms hop: one 20 ms frame energy, a
+running-minimum floor over a deque, and one first-order integrator step. No
+FFT, no model state, no allocation, and nothing learned — it reads the input
+waveform only.
+
+**The one-hop lag rule.** Frame energy spans two hops (20 ms on the 10 ms grid),
+so the guard's frame `t` is only decided once dry hop `t + 1` has arrived, and
+output hop `m` needs the gain of input frame `m - streaming_delay_frames`. When
+output hop `m` is emitted the runtime has necessarily received
+`m*hop_length + win_length` samples, so every frame up to
+`m + win_length//hop_length - 2` is already decided; the gain applied is
+therefore the **exact** one the offline guard computes, with **no added
+latency**, whenever
+
+```
+streaming_delay_frames + win_length//hop_length - 2 >= 0
+```
+
+which the runtime exposes as `runtime.onset_guard_lookahead_hops`. At the shipped
+512/160 geometry that is 4 for the released look-ahead export and still 1 for a
+causal (`delay=[0,0,0]`) one — the analysis window alone covers the lag. Only a
+window shorter than two hops on a zero-latency graph comes up short, and that is
+refused with a `ValueError` rather than served a gain from the wrong frame.
+
+The guard is applied **after** the dry blend, on the same latency-aligned span,
+because it has to be able to restore the whole input rather than `dry_blend` of
+it — the order `SISO.forward` uses offline. A request can refuse a recorded
+guard (`StreamingOrt(..., onset_guard_overrides={"enabled": False})`, or
+`--no-onset-guard` on `infer` / `verify`) or replace individual knobs.
+`verify` applies the same guard to its offline reference, so
+`offline vs ORT streaming max abs diff` stays at the graph's own parity (~1e-6)
+rather than reporting the guard as an alignment error.
+
 The manifest-driven portable SDK (`sdk/python/puresound_streaming`,
-`processor: stft_frame_ort`) loads these exports directly.
+`processor: stft_frame_ort`) loads these exports directly, and carries a
+numpy-only transcription of the same recursion —
+`test/test_utils/test_sdk_postprocess.py` pins the two bit-identical.
 
 ## Gap: `vad_head` / `dist_head` are silently dropped
 

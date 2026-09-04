@@ -28,6 +28,7 @@ code, so it lives here.
 from __future__ import annotations
 
 import json
+import math
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -38,6 +39,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from puresound.system.onset_guard import OnsetGuard
 from puresound.system.postprocess import IDENTITY, Postprocessor
 from puresound.utils import load_hparam
 from puresound.inference.providers import normalize_provider, resolve_providers
@@ -225,6 +227,36 @@ def _postprocess_note(postprocess: Postprocessor, delay_frames: int, geometry) -
     )
 
 
+def _onset_guard_note(guard: OnsetGuard, delay_frames: int, geometry) -> str:
+    """Prose for the manifest, in the same register as `_postprocess_note`.
+
+    Says what it does, what it costs, that the graph does not contain it, and
+    how the one-hop analysis lag is paid for -- the three things a deployment
+    reading the sidecar cannot derive from the knobs.
+    """
+    hop = int(geometry["hop_length"])
+    win = int(geometry["win_length"])
+    slack = delay_frames + win // hop - 2
+    forget = ("never re-arms" if not math.isfinite(guard.t_forget_s)
+              else f"{guard.t_forget_s:g} s of floor protects the next onset again")
+    return (
+        f"out = input, bit for bit, until a talker has been heard for "
+        f"{guard.t_arm_s:g} s of sustained speech ({guard.margin_db:g} dB over the "
+        f"tracked noise floor); then the model's output is handed over with a "
+        f"{guard.tau_dn_s:g} s release, and {forget}. Reads the input waveform "
+        "only -- no model internals, nothing learned, and the exported graph does "
+        "NOT contain it, so a runtime that executes the graph alone is running a "
+        "different system. It costs suppression depth (fit-set far median "
+        "-15.2 -> -12.0 dB) and buys back keep violations (26 -> 13 on v8, Dawn "
+        "Chorus deletion 0.230 -> 0.123): a keep-side safety belt, priced in far "
+        "suppression. Frame energy spans two hops, so the guard's frame t is only "
+        f"decided once dry hop t+1 has arrived; at {delay_frames} frames of graph "
+        f"latency and a {win}/{hop}-sample analysis window the runtime already "
+        f"holds it ({slack} hop(s) of slack), so the gain applied to each output "
+        "hop is the exact one the offline guard computes and no latency is added."
+    )
+
+
 def export_streaming_onnx(
     variant: StreamingVariant,
     config_path: str | Path,
@@ -233,6 +265,7 @@ def export_streaming_onnx(
     manifest_path: str | Path | None = None,
     opset_version: int = 17,
     postprocess: Postprocessor = IDENTITY,
+    onset_guard: OnsetGuard | None = None,
 ) -> dict[str, Any]:
     """Trace the frame model to ONNX and write the manifest a runtime reads.
 
@@ -241,6 +274,10 @@ def export_streaming_onnx(
     different system than a benchmark at ``dry_blend 0.9``. Putting the setting
     in the manifest is what lets the runtime reproduce the benchmarked
     configuration instead of a shell flag having to be remembered twice.
+
+    ``onset_guard`` travels the same way and for the same reason. An ABSENT
+    ``OnsetGuard.MANIFEST_KEY`` means no guard -- the documented convention,
+    identical to ``Postprocessor``'s absent section meaning no relief.
     """
     import onnxruntime
 
@@ -332,6 +369,13 @@ def export_streaming_onnx(
             "note": _postprocess_note(postprocess, frame_model.streaming_delay, geometry),
         },
     }
+    if onset_guard is not None:
+        manifest[OnsetGuard.MANIFEST_KEY] = {
+            **onset_guard.as_manifest(),
+            "note": _onset_guard_note(
+                onset_guard, frame_model.streaming_delay, geometry
+            ),
+        }
     manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
     return manifest
 
@@ -344,6 +388,7 @@ class StreamingOrt:
         provider: str = "auto",
         collect_extras: bool = False,
         postprocess_overrides: Mapping[str, Any] | None = None,
+        onset_guard_overrides: Mapping[str, Any] | None = None,
         session: Any | None = None,
     ):
         self.onnx_path = Path(onnx_path)
@@ -415,6 +460,63 @@ class StreamingOrt:
         self.dry_delay = (
             int(self.manifest.get("streaming_delay_frames", 0)) * self.hop_length
         )
+        # Onset protection, from the manifest, for exactly the reason `dry_blend`
+        # is: the traced graph stops at the model. An absent key means no guard --
+        # the same documented convention as the postprocess section.
+        #
+        # Overrides mirror `postprocess_overrides`: request values replace the
+        # recorded ones. ``{"enabled": False}`` turns a recorded guard off;
+        # passing any knob turns it on (a caller who spells an operating point
+        # should not have to say "enabled" as well), and an explicit "enabled"
+        # always wins.
+        guard_spec = dict(self.manifest.get(OnsetGuard.MANIFEST_KEY) or {})
+        guard_enabled = bool(guard_spec)
+        if onset_guard_overrides:
+            overrides = dict(onset_guard_overrides)
+            known = {"enabled"} | set(OnsetGuard.__dataclass_fields__)
+            unknown = set(overrides) - known
+            if unknown:
+                raise ValueError(
+                    "unsupported onset_guard override(s): "
+                    + ", ".join(sorted(unknown))
+                )
+            enabled = overrides.pop("enabled", None)
+            if overrides:
+                guard_spec.update(overrides)
+                # The sidecar prose describes the recorded operating point; do
+                # not carry stale text past a request that replaced it.
+                guard_spec.pop("note", None)
+                guard_enabled = True
+            if enabled is not None:
+                guard_enabled = bool(enabled)
+        self.onset_guard = (
+            OnsetGuard.from_manifest(guard_spec) if guard_enabled else None
+        )
+        # The guard's frame t is only decided once dry hop t+1 has arrived (its
+        # frame energy spans two hops), and output hop m carries input frame
+        # ``m - streaming_delay_frames``. When output hop m is emitted the runtime
+        # has necessarily received ``m*hop + win_length`` samples, i.e.
+        # ``m + win_length//hop`` whole hops, so every frame up to
+        # ``m + win_length//hop - 2`` is already decided. The gain applied is
+        # therefore the EXACT one -- with no latency added -- as long as this is
+        # >= 0, which it is for every shipped geometry (3 + 512//160 - 2 = 4, and
+        # 0 + 512//160 - 2 = 1 for a causal export: the analysis window alone
+        # already supplies the hop the guard needs). A window shorter than two
+        # hops is the only case that cannot be served, and it is refused rather
+        # than served an unaligned gain.
+        self.onset_guard_lookahead_hops = (
+            self.dry_delay // self.hop_length + self.win_length // self.hop_length - 2
+        )
+        if self.onset_guard is not None and self.onset_guard_lookahead_hops < 0:
+            raise ValueError(
+                f"onset guard needs one hop of input look-ahead: at "
+                f"streaming_delay_frames="
+                f"{self.dry_delay // self.hop_length}, win_length="
+                f"{self.win_length} and hop_length={self.hop_length} the runtime "
+                f"is {-self.onset_guard_lookahead_hops} hop(s) short when an "
+                "output hop is emitted, so the gain would be unaligned. Export "
+                "with win_length >= 2*hop_length or a non-zero look-ahead delay."
+            )
         self.reset()
 
     @staticmethod
@@ -436,20 +538,133 @@ class StreamingOrt:
         self.dry_history = np.zeros(0, dtype=np.float32)
         self.dry_history_start = 0
         self.emitted = 0
+        # Onset guard: one fresh detector state per stream, so a second stream
+        # starts protected again rather than inheriting the last one's anchor.
+        self.guard_state = (
+            self.onset_guard.streaming_state(
+                hop=self.hop_length, sr=self.sample_rate
+            )
+            if self.onset_guard is not None
+            else None
+        )
+        self.guard_buffer = np.zeros(0, dtype=np.float32)
+        self.guard_gains: list[float] = []
+        self.guard_gain_start = 0
+        self.guard_hops_fed = 0
+        self.guard_flushed = False
 
     def _remember_dry(self, samples: np.ndarray) -> None:
-        if self.dry_blend >= 1.0:
+        """Keep the input the post-graph stages read back, and feed the guard.
+
+        Kept whenever EITHER stage needs it: the onset guard consumes the dry
+        stream even at ``dry_blend >= 1.0``, where the blend itself is a no-op.
+        """
+        if self.dry_blend >= 1.0 and self.onset_guard is None:
             return
         self.dry_history = np.concatenate([self.dry_history, samples])
+        if self.onset_guard is not None:
+            self._advance_guard(samples)
+
+    def _advance_guard(self, samples: np.ndarray) -> None:
+        """Feed whole hops of the DRY stream to the guard, in input order.
+
+        `OnsetGuard.step` returns frame ``t`` on the call that feeds hop
+        ``t + 1`` -- frame energy spans two hops -- so the first call's value
+        belongs to no frame and is dropped. What is left is one gain per input
+        frame, in frame order, which `_apply_guard` indexes by input sample.
+        """
+        hop = self.hop_length
+        self.guard_buffer = np.concatenate([self.guard_buffer, samples])
+        while self.guard_buffer.size >= hop:
+            chunk = self.guard_buffer[:hop]
+            self.guard_buffer = self.guard_buffer[hop:]
+            gain, self.guard_state = self.onset_guard.step(self.guard_state, chunk)
+            if self.guard_hops_fed:
+                self.guard_gains.append(float(gain))
+            self.guard_hops_fed += 1
+
+    def _flush_guard(self) -> None:
+        """Zero-pad the tail so the last frames get the gain offline computes.
+
+        `OnsetGuard.frame_gain` frames ``ceil(T/hop)`` frames over a signal
+        zero-padded to cover the last frame's 20 ms window. The streaming form
+        reproduces that exactly by feeding the final partial hop zero-padded plus
+        one whole hop of zeros -- the same padding the offline framing applies.
+        Idempotent; the stream is over once it has run, so start another with
+        `reset()` rather than by feeding more samples.
+        """
+        if self.onset_guard is None or self.guard_flushed:
+            return
+        self.guard_flushed = True
+        hop = self.hop_length
+        pad = (-self.guard_buffer.size) % hop
+        tail = np.concatenate(
+            [self.guard_buffer, np.zeros(pad + hop, dtype=np.float32)]
+        )
+        self.guard_buffer = np.zeros(0, dtype=np.float32)
+        self._advance_guard(tail)
+
+    def _apply_guard(
+        self,
+        out: np.ndarray,
+        reference: np.ndarray,
+        lo: int,
+        hi: int,
+        start: int,
+    ) -> None:
+        """``out = g*input + (1 - g)*out``, with the gain of the frame each INPUT
+        sample sits in.
+
+        ``lo``/``hi`` are absolute input sample indices and ``start`` the input
+        index that ``out[0]`` carries, so this is the same alignment the blend
+        above uses. Applying a hop's gain to the wrong hop of audio is the exact
+        mistake `_blend_dry`'s docstring warns about for the dry reference, and
+        the frame indices here are integers by construction: ``dry_delay`` is a
+        whole number of hops and the OLA emits exactly one hop per frame.
+        """
+        hop = self.hop_length
+        for frame in range(lo // hop, (hi - 1) // hop + 1):
+            i = frame - self.guard_gain_start
+            if not 0 <= i < len(self.guard_gains):
+                held = (
+                    f"{self.guard_gain_start}.."
+                    f"{self.guard_gain_start + len(self.guard_gains) - 1}"
+                )
+                raise RuntimeError(
+                    f"onset guard has no gain for input frame {frame} (holds "
+                    f"{held}). A frame is decided one hop after it starts, which "
+                    "the runtime's own look-ahead covers, so reaching here is a "
+                    "bug rather than a configuration."
+                )
+            g = np.float32(self.guard_gains[i])
+            a = max(lo, frame * hop)
+            b = min(hi, (frame + 1) * hop)
+            span = slice(a - start, b - start)
+            out[span] = g * reference[a - lo : b - lo] + (1.0 - g) * out[span]
+
+    def _forget_guard_gains(self) -> None:
+        """Drop the gains no future emit can ask for, so a long stream stays flat."""
+        if self.onset_guard is None:
+            return
+        oldest = (self.emitted - self.dry_delay) // self.hop_length
+        drop = max(0, min(oldest - self.guard_gain_start, len(self.guard_gains)))
+        if drop:
+            self.guard_gains = self.guard_gains[drop:]
+            self.guard_gain_start += drop
 
     def _blend_dry(self, enhanced: np.ndarray) -> np.ndarray:
         """Mix the untouched input back in, aligned to what the graph enhanced.
+
+        Two post-graph stages share one aligned span, in the order
+        `SISO.forward` applies them: ``dry_blend`` first, then the onset guard's
+        ``g*input + (1 - g)*out``. That order is the mechanism -- the guard has
+        to be able to restore the whole input, not ``dry_blend`` of it.
 
         Output samples with no corresponding input yet -- the first
         ``streaming_delay_frames`` worth, which is warm-up -- pass through
         unblended, because there is nothing to blend them with.
         """
-        if self.dry_blend >= 1.0 or enhanced.size == 0:
+        if enhanced.size == 0 or (self.dry_blend >= 1.0 and self.onset_guard is None):
             return enhanced
         start = self.emitted - self.dry_delay
         self.emitted += enhanced.size
@@ -462,14 +677,26 @@ class StreamingOrt:
             reference = self.dry_history[
                 lo - self.dry_history_start : hi - self.dry_history_start
             ]
-            out[span] = (
-                self.dry_blend * enhanced[span] + (1.0 - self.dry_blend) * reference
-            )
+            if self.dry_blend < 1.0:
+                # Clamped HERE and again below, because
+                # `Postprocessor.blend_waveform` clamps its own result and
+                # `OnsetGuard.apply` then clamps the guard's: two clamps, and the
+                # guard reads the first one's output. Idempotent when no guard
+                # follows -- the final clip covers the same samples.
+                out[span] = np.clip(
+                    self.dry_blend * enhanced[span]
+                    + (1.0 - self.dry_blend) * reference,
+                    -1.0,
+                    1.0,
+                )
+            if self.onset_guard is not None:
+                self._apply_guard(out, reference, lo, hi, start)
         np.clip(out, -1.0, 1.0, out=out)
         keep_from = max(0, self.emitted - self.dry_delay - self.dry_history_start)
         if keep_from > 0:
             self.dry_history = self.dry_history[keep_from:]
             self.dry_history_start += keep_from
+        self._forget_guard_gains()
         return out
 
     def run_frame(self, noisy_frame: np.ndarray) -> np.ndarray:
@@ -580,6 +807,9 @@ class StreamingOrt:
         frame_callback: Callable[[], None] | None = None,
         cancel_check: Callable[[], bool] | None = None,
     ) -> np.ndarray:
+        # No more input is coming, so the guard's last frames can be decided now
+        # (they need one hop past the end, which the offline framing zero-pads).
+        self._flush_guard()
         chunks = []
         while self.input_buffer.size > 0:
             self._check_cancelled(cancel_check)

@@ -23,10 +23,23 @@ import numpy as np
 REPO_ROOT = Path(__file__).resolve().parents[3]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
+if str(Path(__file__).resolve().parent) not in sys.path:
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+from _gate_flags import add_onset_guard_arg, build_onset_guard  # noqa: E402
 from puresound.inference import PROVIDER_CHOICES  # noqa: E402
 from puresound.streaming import StreamingDpcrnOrt, export_streaming_dpcrn_onnx  # noqa: E402
 from puresound.system.postprocess import Postprocessor  # noqa: E402
+
+
+#: Per-request refusal of a guard the manifest records. Spelled once because
+#: `infer` and `verify` have to refuse it the same way -- `verify`'s offline
+#: reference has to drop it too, or the comparison is between two systems.
+_GUARD_OFF = {"enabled": False}
+
+
+def _guard_overrides(args):
+    return _GUARD_OFF if getattr(args, "no_onset_guard", False) else None
 
 
 def export(args) -> None:
@@ -40,6 +53,9 @@ def export(args) -> None:
         # is 0.9 -- see egs/voice_isolate/README.md -- so an export at 1.0 ships
         # something the scorecards never measured.
         postprocess=Postprocessor(dry_blend=args.dry_blend),
+        # Same contract, different stage: recorded here, applied by the runtime,
+        # absent unless --onset-guard is passed.
+        onset_guard=build_onset_guard(args),
     )
     print(json.dumps(manifest, indent=2))
 
@@ -54,6 +70,7 @@ def infer(args) -> None:
         onnx_path=args.onnx_path,
         manifest_path=args.manifest_path,
         provider=args.provider,
+        onset_guard_overrides=_guard_overrides(args),
     )
     wav, sr = AudioIO.open(str(args.input_audio), target_lvl=None, resample_to=runtime.sample_rate)
     samples = wav.squeeze(0).detach().cpu().numpy().astype(np.float32)
@@ -67,6 +84,17 @@ def infer(args) -> None:
     print(f"input_sr: {sr}, output_sr: {runtime.sample_rate}, samples: {enhanced.shape[0]}")
     print(f"algorithmic latency: {runtime.manifest.get('streaming_delay_frames', 0)} frames "
           f"(~{runtime.manifest.get('streaming_delay_frames', 0) * runtime.hop_length / 16:.0f} ms)")
+    print(f"dry_blend: {runtime.dry_blend}")
+    print(f"onset_guard: {runtime.onset_guard}")
+    # Whole-clip level of the output against the input, which is where an onset
+    # guard is visible at all: it hands spans back untouched, so a run with it on
+    # sits closer to 0 dB than the same run without.
+    n = min(enhanced.shape[0], samples.shape[0])
+    span_db = 10.0 * np.log10(
+        (float(np.mean(enhanced[:n] ** 2)) + 1e-12)
+        / (float(np.mean(samples[:n] ** 2)) + 1e-12)
+    )
+    print(f"span level (output vs input, whole clip): {span_db:+.2f} dB")
 
 
 def benchmark(args) -> None:
@@ -113,6 +141,20 @@ def _align_sisdr(offline: np.ndarray, streaming: np.ndarray, max_lag: int, trim:
     return best
 
 
+def _aligned_max_abs(offline: np.ndarray, streaming: np.ndarray, lag: int, trim: int) -> float:
+    """Worst-case sample error at the lag SI-SDR chose.
+
+    SI-SDR is scale-invariant and averages; a post-graph stage applied to the
+    wrong span shows up here first, because it is a handful of samples that are
+    completely different rather than a whole signal that is slightly off.
+    """
+    x, y = (offline[lag:], streaming) if lag >= 0 else (offline, streaming[-lag:])
+    n = min(len(x), len(y))
+    if n <= 2 * trim:
+        return float("nan")
+    return float(np.abs(x[trim : n - trim] - y[trim : n - trim]).max())
+
+
 def verify(args) -> None:
     import torch
 
@@ -120,7 +162,12 @@ def verify(args) -> None:
 
     frame_model = load_streaming_dpcrn_model(args.config_path, args.checkpoint_path).eval()
     system_model = frame_model.system_model.eval()
-    runtime = StreamingDpcrnOrt(onnx_path=args.onnx_path, manifest_path=args.manifest_path, provider=args.provider)
+    runtime = StreamingDpcrnOrt(
+        onnx_path=args.onnx_path,
+        manifest_path=args.manifest_path,
+        provider=args.provider,
+        onset_guard_overrides=_guard_overrides(args),
+    )
 
     if args.input_audio is not None:
         from puresound.audio.io import AudioIO
@@ -131,13 +178,19 @@ def verify(args) -> None:
         rng = np.random.default_rng(args.seed)
         wav = torch.from_numpy((rng.standard_normal(args.seconds * runtime.sample_rate) * 0.2).astype(np.float32)).view(1, -1)
 
-    # The runtime applies the manifest's dry_blend after the graph, so the offline
-    # reference has to apply the same one -- otherwise this compares two different
-    # systems and reports the blend as an alignment error. It read -19 dB on an
-    # export that is bit-exact at 105 dB.
-    blend = float(runtime.manifest.get("recommended_inference", {}).get("dry_blend", 1.0))
+    # The runtime applies the manifest's dry_blend and onset guard after the
+    # graph, so the offline reference has to apply the same ones -- otherwise this
+    # compares two different systems and reports the difference as an alignment
+    # error. The blend alone read -19 dB on an export that is bit-exact at 105 dB.
+    blend = runtime.dry_blend
+    guard = runtime.onset_guard
     with torch.no_grad():
-        offline = system_model(wav, dry_blend=blend).squeeze().cpu().numpy()
+        offline = (
+            system_model(wav, dry_blend=blend, onset_guard=guard)
+            .squeeze()
+            .cpu()
+            .numpy()
+        )
 
     L = wav.shape[1]
     chunks = [runtime.process_samples(wav[0, i : i + 1024].numpy()) for i in range(0, L, 1024)]
@@ -147,10 +200,13 @@ def verify(args) -> None:
     delay_frames = int(runtime.manifest.get("streaming_delay_frames", 0))
     max_lag = max(1200, (delay_frames + 4) * runtime.hop_length)
     lag, sisdr = _align_sisdr(offline, streaming, max_lag=max_lag, trim=args.trim)
+    max_abs = _aligned_max_abs(offline, streaming, lag=lag, trim=args.trim)
     print(f"algorithmic latency: {delay_frames} frames (~{delay_frames * runtime.hop_length / 16:.0f} ms)")
     print(f"measured alignment lag: {lag} samples ({lag / runtime.sample_rate * 1000:.1f} ms)")
     print(f"offline reference dry_blend: {blend} (matched to the manifest)")
+    print(f"offline reference onset_guard: {guard}")
     print(f"offline vs ORT streaming SI-SDR (aligned + trimmed): {sisdr:.1f} dB")
+    print(f"offline vs ORT streaming max abs diff (aligned + trimmed): {max_abs:.3e}")
     print("PASS" if sisdr >= 40.0 else "LOW (check STFT/latency alignment)")
 
 
@@ -173,6 +229,10 @@ def build_parser() -> argparse.ArgumentParser:
         "(default 0.9, the released setting; 1.0 disables it). Caps suppression "
         "at 20*log10(1 - dry_blend) -- 0.9 means -20 dB.",
     )
+    # The same four knobs every eval stage spells, so an export and a scorecard
+    # can be the same operating point. Recorded in the manifest under
+    # `onset_guard`; omitted, the export carries no guard at all.
+    add_onset_guard_arg(p)
     p.set_defaults(func=export)
 
     p = sub.add_parser("infer", help="run streaming ONNX inference on an audio file")
@@ -181,6 +241,12 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("output_audio", type=Path)
     p.add_argument("--manifest_path", type=Path, default=None)
     p.add_argument("--provider", choices=PROVIDER_CHOICES, default="auto")
+    p.add_argument(
+        "--no-onset-guard",
+        dest="no_onset_guard",
+        action="store_true",
+        help="ignore the onset guard the manifest records (A/B against it)",
+    )
     p.set_defaults(func=infer)
 
     p = sub.add_parser("benchmark", help="benchmark streaming ONNX runtime")
@@ -201,6 +267,12 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--seconds", type=int, default=4)
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--trim", type=int, default=1200, help="edge samples to drop before scoring")
+    p.add_argument(
+        "--no-onset-guard",
+        dest="no_onset_guard",
+        action="store_true",
+        help="drop the manifest's onset guard from BOTH sides of the comparison",
+    )
     p.set_defaults(func=verify)
     return parser
 

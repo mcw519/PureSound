@@ -69,6 +69,14 @@ Exporter 也會寫出 `/path/to/model.json`。這份 manifest 包含：
 - 明確的 streaming 狀態 tensor 名稱與 shape
 - 偏好的 ONNX Runtime providers
 - DPARN 的 streaming delay（幾個 frame）
+- 由 RUNTIME 套用的 graph 後階段（因為 graph 只含模型本身、之後什麼都沒
+  有）：`recommended_inference`（`dry_blend`），以及——如果 export 時有給
+  ——`onset_guard`。這兩個 key 都由共用的 `StreamingOrt` 與 portable SDK
+  讀取，所以帶著它們的 DPARN manifest 行為一致；沒有那個 key 就等於該階段
+  關閉。這支 legacy exporter 本身不會寫出 `onset_guard`（寫的是
+  `export_streaming_dpcrn_onnx`）——機制、成本與那條「差一個 hop 的分析延
+  遲」規則只記錄一次，在
+  [dpcrn_onnx.zh-TW.md](dpcrn_onnx.zh-TW.md#graph-之後的第二個階段onset-guardonset_guard)。
 
 Export 過程中，PureSound 會拿 ONNX 的 frame 輸出跟 PyTorch 的 frame
 wrapper 輸出做比對。誤差超過容忍範圍就會讓 export 失敗。

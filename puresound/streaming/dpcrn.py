@@ -30,6 +30,7 @@ from puresound.nnet.masker import Masker
 # manifest unchanged. Re-exported under a DPCRN name for callers/CLIs.
 from puresound.streaming.base import (
     IDENTITY,
+    OnsetGuard,
     Postprocessor,
     StreamingFrameModelBase,
     StreamingOrt,
@@ -525,6 +526,7 @@ def export_streaming_dpcrn_onnx(
     manifest_path: str | Path | None = None,
     opset_version: int = 17,
     postprocess: Postprocessor = IDENTITY,
+    onset_guard: OnsetGuard | None = None,
 ) -> dict[str, Any]:
     return export_streaming_onnx(
         _VARIANT,
@@ -534,4 +536,5 @@ def export_streaming_dpcrn_onnx(
         manifest_path,
         opset_version,
         postprocess,
+        onset_guard,
     )

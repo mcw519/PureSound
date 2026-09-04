@@ -1,7 +1,9 @@
 import json
-from dataclasses import dataclass
+import math
+from collections import deque
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Protocol, Sequence
+from typing import List, Optional, Protocol, Sequence
 
 import numpy as np
 
@@ -16,6 +18,208 @@ _PROVIDER_ALIASES = {
 _CPU_PROVIDER = "CPUExecutionProvider"
 _CUDA_PROVIDER = "CUDAExecutionProvider"
 _COREML_PROVIDER = "CoreMLExecutionProvider"
+
+
+#: Knobs of `puresound.system.onset_guard.OnsetGuard`, spelled again because the
+#: SDK must not import puresound. `test_sdk_postprocess.py` pins the two copies.
+_ONSET_GUARD_KNOBS = (
+    "t_arm_s",
+    "t_forget_s",
+    "tau_up_s",
+    "tau_dn_s",
+    "margin_db",
+    "floor_win_s",
+    "floor_rise_db_per_s",
+    "init_s",
+    "hangover_s",
+    "min_run_s",
+    "snap",
+)
+
+
+@dataclass
+class OnsetGuardState:
+    """Per-stream detector state. Mutated in place by `OnsetGuard.step`."""
+
+    hop: int
+    fps: float
+    n_floor: int
+    n_init: int
+    n_hold: int
+    n_minr: int
+    n_arm: int
+    n_forget: Optional[int]
+    rise_per_frame: float
+    a_up: float
+    a_dn: float
+    prev_hop: Optional[np.ndarray] = None
+    frame: int = 0
+    init_buf: List[float] = field(default_factory=list)
+    win: deque = field(default_factory=deque)
+    floor_cur: float = 0.0
+    last_raw: int = -(1 << 30)
+    held_run: int = 0
+    run: int = 0
+    sil: int = 0
+    confirmed: bool = False
+    gain: float = 1.0
+    started: bool = False
+
+
+@dataclass(frozen=True)
+class OnsetGuard:
+    """numpy port of `puresound.system.onset_guard.OnsetGuard`'s streaming face.
+
+    Inference-only onset protection: the output is the input, bit for bit, until
+    a talker has been heard for ``t_arm_s`` of sustained speech; then the model's
+    output is handed over, and ``t_forget_s`` of floor protects the next onset
+    again. The exported graph does not contain it, so the runtime applies it --
+    the same division of labour as ``dry_blend``.
+
+    This is a DUPLICATE, deliberately: the SDK must not import puresound (see
+    `test_portable_streaming_sdk`), so `_advance` and `step` are transcribed with
+    the same names and the same order of operations as the module's, and
+    `test_sdk_postprocess.py` pins the two runtimes' output bit-identical. The
+    constructor coherence checks are the one thing NOT carried over -- a manifest
+    is written by a guard that already passed them -- but the priming shortcut's
+    exactness check is, because that one depends on the frame rate the runtime
+    picks rather than on the knobs alone.
+    """
+
+    t_arm_s: float = 1.0
+    t_forget_s: float = 5.0
+    tau_up_s: float = 0.05
+    tau_dn_s: float = 2.0
+    margin_db: float = 8.0
+    floor_win_s: float = 2.0
+    floor_rise_db_per_s: float = 3.0
+    init_s: float = 0.2
+    hangover_s: float = 0.2
+    min_run_s: float = 0.10
+    snap: float = 1e-3
+
+    @classmethod
+    def from_manifest(cls, spec: dict) -> "OnsetGuard":
+        return cls(**{k: float(v) for k, v in spec.items() if k in _ONSET_GUARD_KNOBS})
+
+    def streaming_state(self, *, hop: int = 160, sr: float = 16000.0) -> OnsetGuardState:
+        fps = float(sr) / float(hop)
+        n_arm = max(1, int(round(self.t_arm_s * fps)))
+        n_forget = (
+            None
+            if not math.isfinite(self.t_forget_s)
+            else max(1, int(round(self.t_forget_s * fps)))
+        )
+        # int(), not round(): this is the reference implementation's arithmetic.
+        n_hold = int(self.hangover_s * fps) + 1
+        n_minr = max(1, int(self.min_run_s * fps))
+        n_init = max(1, int(round(self.init_s * fps)))
+        if n_init + 2 > n_minr + n_arm:
+            raise ValueError(
+                f"at {fps:g} fps the initialisation window is {n_init} frames but "
+                f"the guard could arm by frame {n_minr + n_arm - 2}; the streaming "
+                "form's priming shortcut is only exact when it cannot."
+            )
+        return OnsetGuardState(
+            hop=int(hop),
+            fps=fps,
+            n_floor=max(1, int(round(self.floor_win_s * fps))),
+            n_init=n_init,
+            n_hold=n_hold,
+            n_minr=n_minr,
+            n_arm=n_arm,
+            n_forget=n_forget,
+            rise_per_frame=self.floor_rise_db_per_s / fps,
+            a_up=1.0 - math.exp(-1.0 / (self.tau_up_s * fps)),
+            a_dn=1.0 - math.exp(-1.0 / (self.tau_dn_s * fps)),
+        )
+
+    def _advance(self, st: OnsetGuardState, i: int, e_db: float) -> float:
+        """One frame of floor -> activity -> arming -> integrator. Returns the gain."""
+        # causal floor: running minimum over the last n_floor frames, allowed to
+        # climb at most rise_per_frame and to fall instantly.
+        win = st.win
+        while win and win[-1][1] >= e_db:
+            win.pop()
+        win.append((i, e_db))
+        if win[0][0] <= i - st.n_floor:
+            win.popleft()
+        c = win[0][1]
+        cur = st.floor_cur
+        st.floor_cur = c if c < cur else min(c, cur + st.rise_per_frame)
+
+        # activity, streaming form: hangover = hold, min-run = confirmation delay
+        if e_db > st.floor_cur + self.margin_db:
+            st.last_raw = i
+        held = (i - st.last_raw) <= st.n_hold - 1
+        st.held_run = st.held_run + 1 if held else 0
+        act = st.held_run >= st.n_minr
+
+        # arming / re-arming
+        if act:
+            st.run += 1
+            st.sil = 0
+            if not st.confirmed and st.run >= st.n_arm:
+                st.confirmed = True
+        else:
+            st.run = 0
+            st.sil += 1
+            if st.confirmed and st.n_forget is not None and st.sil >= st.n_forget:
+                st.confirmed = False
+        target = 0.0 if st.confirmed else 1.0
+
+        # first-order integrator toward the target, snapping to the endpoints
+        if not st.started:
+            st.gain = target
+            st.started = True
+        else:
+            g = st.gain
+            if abs(g - target) <= self.snap:
+                st.gain = target
+            else:
+                al = st.a_up if target > g else st.a_dn
+                g = target + (g - target) * (1.0 - al)
+                st.gain = target if abs(g - target) <= self.snap else g
+        st.frame = i + 1
+        return st.gain
+
+    def step(self, state: OnsetGuardState, dry_frame: np.ndarray):
+        """Consume one hop of the DRY stream, return ``(gain, state)``.
+
+        Call ``c`` (1-based) returns the gain for frame ``c - 2``: frame energy
+        spans 20 ms, so a frame is only complete once the following hop has
+        arrived. The first call primes that window and returns 1.0 (dry). The
+        state is mutated in place and returned for convenience, so the runtime's
+        feed loop reads the same as the in-repo one.
+        """
+        f = np.asarray(dry_frame, dtype=np.float64).reshape(-1)
+        if f.size != state.hop:
+            raise ValueError(
+                f"dry_frame must be exactly one hop of {state.hop} samples, got "
+                f"{f.size}; pad the final frame rather than feeding a short one"
+            )
+        if state.prev_hop is None:
+            state.prev_hop = f
+            return state.gain, state
+        pair = np.concatenate([state.prev_hop, f])
+        e_db = float(10.0 * np.log10(float((pair * pair).mean()) + 1e-12))
+        state.prev_hop = f
+
+        i = state.frame
+        if i < state.n_init - 1:
+            state.init_buf.append(e_db)
+            state.frame = i + 1
+            return 1.0, state
+        if i == state.n_init - 1:
+            state.init_buf.append(e_db)
+            buf = state.init_buf
+            state.floor_cur = float(min(buf))
+            g = 1.0
+            for j, v in enumerate(buf):
+                g = self._advance(state, j, v)
+            state.init_buf = []
+            return g, state
+        return self._advance(state, i, e_db), state
 
 
 class InferenceSessionLike(Protocol):
@@ -62,6 +266,9 @@ class StreamingRuntimeConfig:
     #: not the one the benchmarks measured.
     dry_blend: float = 1.0
     spec_floor: float = 0.0
+    #: Post-graph onset protection, from the manifest. ``None`` -- an absent
+    #: section -- means no guard, the same convention the blend follows.
+    onset_guard: Optional[dict] = None
 
     @classmethod
     def from_manifest(cls, manifest: dict) -> "StreamingRuntimeConfig":
@@ -83,10 +290,16 @@ class StreamingRuntimeConfig:
         dry_blend = float(postprocess.get("dry_blend", 1.0))
         if not 0.0 < dry_blend <= 1.0:
             raise ValueError(f"manifest dry_blend must be in (0, 1], got {dry_blend}")
+        # Onset protection travels under its own key for the same reason: the
+        # graph stops at the model. Absent means no guard. Spelled as a literal
+        # again -- `OnsetGuard.MANIFEST_KEY` is the other copy, and
+        # `test_sdk_postprocess.py` pins them together.
+        onset_guard = manifest.get("onset_guard") or None
         return cls(
             streaming_delay_frames=int(manifest.get("streaming_delay_frames", 0)),
             dry_blend=dry_blend,
             spec_floor=spec_floor,
+            onset_guard=dict(onset_guard) if onset_guard else None,
             model_type=str(manifest.get("model_type", "unknown")),
             processor=str(manifest.get("processor", "stft_frame_ort")),
             sample_rate=int(manifest["sample_rate"]),
@@ -122,6 +335,31 @@ class StftFrameOrtProcessor:
         # identity graph reconstructs the input at the same indices -- so this is
         # purely the graph's own look-ahead latency.
         self.dry_delay = config.streaming_delay_frames * self.hop_length
+        self.onset_guard = (
+            OnsetGuard.from_manifest(config.onset_guard)
+            if config.onset_guard
+            else None
+        )
+        # The guard's frame t is only decided once dry hop t+1 has arrived (its
+        # frame energy spans two hops), and output hop m carries input frame
+        # ``m - streaming_delay_frames``. When output hop m is emitted the
+        # runtime has necessarily received ``m*hop + win_length`` samples, i.e.
+        # ``m + win_length//hop`` whole hops, so every frame up to
+        # ``m + win_length//hop - 2`` is already decided -- the gain applied is
+        # the exact one, with no latency added, as long as this is >= 0. A window
+        # shorter than two hops on a zero-latency graph is the only case that
+        # cannot be served, and it is refused rather than served a wrong gain.
+        self.onset_guard_lookahead_hops = (
+            config.streaming_delay_frames + self.win_length // self.hop_length - 2
+        )
+        if self.onset_guard is not None and self.onset_guard_lookahead_hops < 0:
+            raise ValueError(
+                f"onset guard needs one hop of input look-ahead: at "
+                f"streaming_delay_frames={config.streaming_delay_frames}, "
+                f"win_length={self.win_length} and hop_length={self.hop_length} "
+                f"the runtime is {-self.onset_guard_lookahead_hops} hop(s) short "
+                "when an output hop is emitted, so the gain would be unaligned."
+            )
         self.reset()
 
     def reset(self, batch_size: int = 1) -> None:
@@ -139,6 +377,20 @@ class StftFrameOrtProcessor:
         self.dry_history = np.zeros(0, dtype=np.float32)
         self.dry_history_start = 0
         self.emitted = 0
+        # Onset guard: one fresh detector state per stream, so a second stream
+        # starts protected again rather than inheriting the last one's anchor.
+        self.guard_state = (
+            self.onset_guard.streaming_state(
+                hop=self.hop_length, sr=self.sample_rate
+            )
+            if self.onset_guard is not None
+            else None
+        )
+        self.guard_buffer = np.zeros(0, dtype=np.float32)
+        self.guard_gains: List[float] = []
+        self.guard_gain_start = 0
+        self.guard_hops_fed = 0
+        self.guard_flushed = False
 
     def run_frame(self, noisy_frame: np.ndarray) -> np.ndarray:
         noisy_frame = np.asarray(noisy_frame, dtype=np.float32)
@@ -165,6 +417,9 @@ class StftFrameOrtProcessor:
         return np.concatenate(chunks) if chunks else np.zeros(0, dtype=np.float32)
 
     def flush(self) -> np.ndarray:
+        # No more input is coming, so the guard's last frames can be decided now
+        # (they need one hop past the end, which the offline framing zero-pads).
+        self._flush_guard()
         chunks = []
         while self.input_buffer.size > 0:
             frame = np.zeros(self.win_length, dtype=np.float32)
@@ -191,9 +446,97 @@ class StftFrameOrtProcessor:
         return wav[: self.win_length] * self.window
 
     def _remember_dry(self, samples: np.ndarray) -> None:
-        if self.dry_blend >= 1.0:
+        """Keep the input the post-graph stages read back, and feed the guard.
+
+        Kept whenever EITHER stage needs it: the onset guard consumes the dry
+        stream even at ``dry_blend >= 1.0``, where the blend itself is a no-op.
+        """
+        if self.dry_blend >= 1.0 and self.onset_guard is None:
             return
         self.dry_history = np.concatenate([self.dry_history, samples])
+        if self.onset_guard is not None:
+            self._advance_guard(samples)
+
+    def _advance_guard(self, samples: np.ndarray) -> None:
+        """Feed whole hops of the DRY stream to the guard, in input order.
+
+        `OnsetGuard.step` returns frame ``t`` on the call that feeds hop
+        ``t + 1`` -- frame energy spans two hops -- so the first call's value
+        belongs to no frame and is dropped. What is left is one gain per input
+        frame, in frame order, which `_apply_guard` indexes by input sample.
+        """
+        hop = self.hop_length
+        self.guard_buffer = np.concatenate([self.guard_buffer, samples])
+        while self.guard_buffer.size >= hop:
+            chunk = self.guard_buffer[:hop]
+            self.guard_buffer = self.guard_buffer[hop:]
+            gain, self.guard_state = self.onset_guard.step(self.guard_state, chunk)
+            if self.guard_hops_fed:
+                self.guard_gains.append(float(gain))
+            self.guard_hops_fed += 1
+
+    def _flush_guard(self) -> None:
+        """Zero-pad the tail so the last frames get the gain offline computes.
+
+        The offline face frames ``ceil(T/hop)`` frames over a signal zero-padded
+        to cover the last frame's 20 ms window; the streaming form reproduces
+        that exactly by feeding the final partial hop zero-padded plus one whole
+        hop of zeros. Idempotent; the stream is over once it has run, so start
+        another with `reset()` rather than by feeding more samples.
+        """
+        if self.onset_guard is None or self.guard_flushed:
+            return
+        self.guard_flushed = True
+        hop = self.hop_length
+        pad = (-self.guard_buffer.size) % hop
+        tail = np.concatenate(
+            [self.guard_buffer, np.zeros(pad + hop, dtype=np.float32)]
+        )
+        self.guard_buffer = np.zeros(0, dtype=np.float32)
+        self._advance_guard(tail)
+
+    def _apply_guard(
+        self,
+        out: np.ndarray,
+        reference: np.ndarray,
+        lo: int,
+        hi: int,
+        start: int,
+    ) -> None:
+        """``out = g*input + (1 - g)*out``, with the gain of the frame each INPUT
+        sample sits in.
+
+        ``lo``/``hi`` are absolute input sample indices and ``start`` the input
+        index that ``out[0]`` carries, so this is the same alignment the blend
+        uses. Applying a hop's gain to the wrong hop of audio is the exact
+        mistake `_blend_dry`'s docstring warns about for the dry reference, and
+        the frame indices here are integers by construction: ``dry_delay`` is a
+        whole number of hops and the overlap-add emits one hop per frame.
+        """
+        hop = self.hop_length
+        for frame in range(lo // hop, (hi - 1) // hop + 1):
+            i = frame - self.guard_gain_start
+            if not 0 <= i < len(self.guard_gains):
+                raise RuntimeError(
+                    f"onset guard has no gain for input frame {frame}; a frame is "
+                    "decided one hop after it starts, which the runtime's own "
+                    "look-ahead covers, so reaching here is a bug."
+                )
+            g = np.float32(self.guard_gains[i])
+            a = max(lo, frame * hop)
+            b = min(hi, (frame + 1) * hop)
+            span = slice(a - start, b - start)
+            out[span] = g * reference[a - lo : b - lo] + (1.0 - g) * out[span]
+
+    def _forget_guard_gains(self) -> None:
+        """Drop the gains no future emit can ask for, so a long stream stays flat."""
+        if self.onset_guard is None:
+            return
+        oldest = (self.emitted - self.dry_delay) // self.hop_length
+        drop = max(0, min(oldest - self.guard_gain_start, len(self.guard_gains)))
+        if drop:
+            self.guard_gains = self.guard_gains[drop:]
+            self.guard_gain_start += drop
 
     def _blend_dry(self, enhanced: np.ndarray) -> np.ndarray:
         """Mix the untouched input back in, aligned to what the graph enhanced.
@@ -204,11 +547,15 @@ class StftFrameOrtProcessor:
         output at this index actually carries. Blending index-for-index would mix
         in a slice of the mixture 30 ms away from the speech it is relieving.
 
+        The onset guard then runs on the same aligned span, in that order --
+        blend first, guard last -- because the guard has to be able to restore
+        the whole input rather than ``dry_blend`` of it.
+
         Output samples with no corresponding input yet -- the first
         ``streaming_delay_frames`` worth, which is warm-up -- pass through
         unblended: there is nothing to blend them with.
         """
-        if self.dry_blend >= 1.0 or enhanced.size == 0:
+        if enhanced.size == 0 or (self.dry_blend >= 1.0 and self.onset_guard is None):
             return enhanced
         start = self.emitted - self.dry_delay
         self.emitted += enhanced.size
@@ -222,15 +569,26 @@ class StftFrameOrtProcessor:
         if hi > lo:
             span = slice(lo - start, hi - start)
             reference = self.dry_history[lo - self.dry_history_start : hi - self.dry_history_start]
-            out[span] = (
-                self.dry_blend * enhanced[span] + (1.0 - self.dry_blend) * reference
-            )
+            if self.dry_blend < 1.0:
+                # Clamped HERE and again below: the offline module clamps the
+                # blend's own result and then clamps the guard's, so the guard
+                # reads the first clamp's output. Idempotent when no guard
+                # follows -- the final clip covers the same samples.
+                out[span] = np.clip(
+                    self.dry_blend * enhanced[span]
+                    + (1.0 - self.dry_blend) * reference,
+                    -1.0,
+                    1.0,
+                )
+            if self.onset_guard is not None:
+                self._apply_guard(out, reference, lo, hi, start)
         np.clip(out, -1.0, 1.0, out=out)
         # Everything before the next emit's reference is dead weight.
         keep_from = max(0, self.emitted - self.dry_delay - self.dry_history_start)
         if keep_from > 0:
             self.dry_history = self.dry_history[keep_from:]
             self.dry_history_start += keep_from
+        self._forget_guard_gains()
         return out
 
     def _add_ola_frame(self, frame: np.ndarray) -> np.ndarray:

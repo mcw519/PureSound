@@ -72,6 +72,14 @@ The exporter also writes `/path/to/model.json`. The manifest contains:
 - explicit streaming state tensor names and shapes
 - preferred ONNX Runtime providers
 - DPARN streaming delay in frames
+- post-graph stages the RUNTIME applies, because the graph contains the model
+  and nothing after it: `recommended_inference` (`dry_blend`) and, if the
+  export was given one, `onset_guard`. Both keys are read by the shared
+  `StreamingOrt` and by the portable SDK, so a DPARN manifest carrying them
+  behaves the same way; an absent key means that stage is off. This legacy
+  exporter does not itself write `onset_guard` (`export_streaming_dpcrn_onnx`
+  does) — the mechanism, its cost, and the one-hop analysis-lag rule are
+  documented once, in [dpcrn_onnx.md](dpcrn_onnx.md#post-graph-stage-two-the-onset-guard-onset_guard).
 
 During export, PureSound compares the ONNX frame output with the PyTorch
 frame wrapper output. Export fails if they do not match within tolerance.
