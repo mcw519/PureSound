@@ -1,254 +1,286 @@
-# v20 design — a model that knows who the user is (self-enrolling foreground, trained in)
+# v20 design (rev 2) — a model that knows who the user is
 
-2026-09-05. Status: **design + theory, pre-registration of the programme**. Nothing here is trained yet.
-Companion records: `reference_matrix_README.md` (anchor mechanism on real recordings),
-`anchor_gate_README.md` (what an inference guard can and cannot do), `v19c_diagnosis.md` +
-`v19c_diagnostics/` (five measurements: onset profile, synthetic anchor probe, training-data audit,
-chain readability, objective landscape), `v19c_round_design.md` (the minimal loss-only round and the
-not-to-do list), `v19c_diagnostics/snr_strat/` (metric policy: paired, SNR-stratified, Dawn ASR-only).
+2026-09-05, revised after the Codex review of rev 1 (disposition: AMEND before implementation — accepted).
+Status: **design + theory + pre-registration of the programme**. Nothing here is trained. Rev 1's inline
+review comments are resolved in §0 and folded into the text; rev 1 is in git history (`e3fd1a1`).
 
-This document is about **training-side, capability-level change**. The OnsetGuard (`puresound/system/onset_guard.py`)
-is an inference safety belt and is out of scope except as a baseline the trained model must beat *with the guard off*.
+Companion records: `reference_matrix_README.md`, `anchor_gate_README.md`, `v19c_diagnosis.md` +
+`v19c_diagnostics/` (incl. `snr_strat/` metric policy), `v19c_round_design.md` (minimal loss-only round,
+not-to-do list). Scope: **training-side, capability-level change**. `OnsetGuard` is a baseline the trained
+model must beat with the guard off, and — see §3.3 — its commit logic is what the model has to internalise.
 
 ---
 
-## 1. The theory: what the current model actually computes
+## 0. Review log (Codex, 2026-09-04) and disposition
 
-Every measurement of the last three weeks fits one statement:
-
-> **The model has no representation of "the user". It has a recency template: whatever near-sounding
-> speech it heard in the last few seconds becomes the foreground, everything unlike it is attenuated,
-> and the template is forgotten within about ten seconds of quiet.**
-
-Evidence, all measured on both v8 (deploy default) and v16 ep19 (training mainline):
-
-| Property of the template | Real recordings (field set v3, Dawn) | Synthetic (moderate WER set, paired per utterance) | Source |
+| # | Review point | Disposition | Where |
 |---|---|---|---|
-| Forms after ~1 s of a talker, saturates at 2 s | 0.5 s ≈ 0, 1 s −13 dB, 2 s −19 dB | 0.25 s −0.5, 0.5 s −3.7, 1 s −12.6, 2 s −13.9 | `reference_matrix_README` §3; `v19c_diagnostics/anchor_synthetic` |
-| Forgotten across quiet | half at 5 s, gone at 10 s | half-life 4–5 s, ~90 % gone by 20 s | same |
-| Any same-chain talker will do; room tone, noise, cross-chain speech do not | floor null (Δ −0.04 / +0.03, p 0.08 / 0.76); the "ambience" that unlocked v17 was an unlabelled utterance | room-tone analogue −1.4/−0.6, bystander-only −0.1, far talker +0.9 (protective) | same |
-| Transfers to the next talker: a new near talker after somebody else's anchor is attenuated | device near clips 0 → 4–6 keep violations / 17 after a 2–3 s other-talker prefix | Δon1 −1.25 / −1.71 dB, p≈1e-25, 176/24 utterances; same-talker prefix null (+0.01) | same |
-| Is partly a channel signature, not only a voice | — | same talker, different room draw: −0.44 dB ≈ 30 % of the different-talker effect | `anchor_synthetic/TABLE_ident.md` |
-| Without any template the model passes everything through | cold-start lone far talker −1.1 / −1.7 dB (4/20 pass) | lone interferer −6.3 dB (already suppressed: synthetic cold start is easier) | `COLDSTART_V2.md`; `anchor_synthetic` |
-| The proximity cue survives to the bottleneck but the trained readout is chain-specific | device AUC 0.99, QVF 0.26 (inverted); a device-fitted probe on the same features reads QVF 0.79–0.83 | — | `anchor_gate_README` §1; `v19c_diagnostics/chain_readability` |
-| Under strong interferers the user is deleted globally | Dawn ASR deletion 0.21–0.23 (ASR is the only valid Dawn instrument) | g ≈ −5 dB at −5 dB SIR, −8/−9 at −10 dB, whole utterance | `snr_strat/README.md` |
+| 1 | Amend before implementation; run v19c pre-flight and an amended P0/R1 first | **Accepted** | §7 order |
+| 2 | Claims overstated: "any same-chain talker" → "near-like same-chain speech"; "correct minimiser" and "no knob on this architecture can…" are hypotheses, not impossibility results | **Accepted**; verified: far same-chain speech is weak/protective (real −2.75/−1.09 dB; synthetic +0.85/+1.65) | §1 |
+| 3 | Causal identifiability: candidate vs committed user, no-read-before-commit, and a rule for when proximity ordering changes after the user moves | **Accepted**; product contract written | §3.3 |
+| 4 | `L_id` positives are all near, negatives all far → a near/far scalar satisfies both losses; need speaker-disjoint counterfactual pairs, exclude overlap frames, stop-gradient targets, speaker-disjoint validation with EER/pair AUC | **Accepted** | §4.2 |
+| 5 | Session rows cut independent scenes per update (v16: 10.5 rows/batch, 19 GiB peaks); pre-register sessions/speakers per update; prefer state-carrying truncated segments; memory smoke test | **Accepted** | §4.1, §7 |
+| 6 | Render semantics: the device chain is applied once per row jointly to noisy and target (`ns.py:589`); a per-talker chain draw breaks mixture/target consistency; use emitted keys `foreground_distance`, `foreground_drr`, `nearest_interferer_distance` | **Accepted**; the "user moves" is an RIR change only; cross-chain identity comes from cross-row pairs | §4.1 |
+| 7 | No differentiable bottleneck provider: `last_bottleneck` is off by default and detached (`dpcrn.py:297`); provider table has no bottleneck entry; `DistHead` is utterance-global | **Accepted**; new graph-carrying provider + per-frame heads are R1a deliverables | §4.2, §7 |
+| 8 | Fatal first-talker write: with one talker `p≈p̄`, `w≈σ(b)`, a 2–8 s bystander opening fills the slot; separate candidate/committed slots, hard no-read-before-commit | **Accepted** | §3.3, §4.3 |
+| 9 | The existing FiLM is utterance-level, pre-inter-RNN, `scale*x+bias` (zero ≠ identity), not invoked in the streaming path; implement as a new zero-init causal residual branch after block 2 and prove step-0 identity | **Accepted**; verified in `dpcrn.py` / `streaming/dpcrn.py` | §4.3 |
+| 10 | Export scope understated: positional state packing, only VAD head triples registered; new states need ports, `state_from_tensors` slices, warm-up hold, parity/long-stream/RTF tests | **Accepted** | §4.3, G5 |
+| 11 | Gates: P3 not computable (`ident` self ≈ 0); P5 is a single-checkpoint cache, not a block; G4/G5 need numeric bands; use the strongest baselines (v8 sessions −11.78, v16+guard 7/148 & 0.111) at matched far suppression | **Accepted**; verified `TABLE_ident.md` self1/self3 = +0.02/+0.01 | §6 |
+| 12 | Revised order: v19c pre-flight → P0 (speaker-disjoint, balanced) → R1a (heads only, output bit-identical) → R1b (memory trained without read) → R2 (read) | **Accepted** | §7 |
+| 13 | (own re-examination, not in the review) Rev 1 under-weighted a *chain-robust proximity readout* as a capability in its own right; the "absolute died twice" lesson is about fixed thresholds on drifting readouts, not about a readout trained to be chain-invariant — and the features already carry the cue on QVF (device-fit probe 0.79–0.83) | **Added** as capability A | §3.1, §4.2(ii) |
 
-Two consequences follow and both were confirmed:
+---
 
-1. **Persistence and wrong-anchor deletion are one variable.** Because the template is a fading recency
-   state, anything that makes it last longer also lengthens the window in which the next talker is
-   deleted (`reference_matrix_README` §6.2; synthetic decay and Δon1 close on the same clock). No
-   knob on this architecture can buy memory without buying deletion.
-2. **An inference guard can only refuse to act.** "Do not attenuate until a talker has been heard for
-   1 s" halves keep violations and Dawn deletion, at −4 dB of far suppression and insertions back near
-   the raw mix (`anchor_gate_README` §6). It does not change what the model believes.
+## 1. Working hypothesis: what the current model computes
 
-## 2. Why the current training produces exactly this
+> **H1.** The model carries no representation of "the user". Its foreground decision is driven by a
+> **recency state**: near-like speech through the current chain in the last few seconds becomes the
+> foreground; unlike speech is attenuated; the state fades within ~5–10 s of quiet. **H2.** Under the
+> current training distribution and losses this state is a (not necessarily unique) low-cost solution;
+> nothing in the objective rewards a persistent, selectively updated identity.
 
-The training-data audit (`v19c_diagnostics/training_data_audit`, 1206 rows through the v16 pipeline):
+H1/H2 are falsifiable hypotheses about behaviour, not theorems about the architecture: the record rules
+out "a longer recency time constant" as a fix; it does not show the inter-LSTM could never learn a
+selectively written state under different supervision (that is precisely R1b's question).
 
-| Dimension | Value | What it teaches |
+Evidence, on v8 and v16 ep19:
+
+| Behaviour | Real recordings | Synthetic (paired per utterance) | Source |
+|---|---|---|---|
+| Forms after ~1 s of near-like speech, saturates at 2 s | 0.5 s ≈ 0, 1 s −13, 2 s −19 dB | 0.25 s −0.5, 0.5 s −3.7, 1 s −12.6, 2 s −13.9 | `reference_matrix_README` §3; `anchor_synthetic` |
+| Fades across quiet | half at 5 s, gone at 10 s | half-life 4–5 s | same |
+| Near-like same-chain speech arms it; **far** same-chain speech is weak or protective; room tone, noise, cross-chain speech do nothing | far speech −2.75 / −1.09; floor null (p 0.08 / 0.76) | far talker +0.85 / +1.65; room-tone analogue −1.4 / −0.6 | same |
+| Transfers to the next talker | device near clips 0 → 4–6 violations / 17 after a 2–3 s other-talker prefix | Δon1 −1.25 / −1.71 dB, p≈1e-25; same-talker prefix null | same |
+| Partly a channel signature | — | same talker, different room: −0.44 dB ≈ 30 % of the different-talker effect | `TABLE_ident.md` |
+| No state ⇒ passthrough | cold lone far talker −1.1 / −1.7 dB | lone interferer −6.3 dB (synthetic cold start is easier) | `COLDSTART_V2.md` |
+| Proximity cue present in features, chain-specific in the readout | device AUC 0.99, QVF 0.26; device-fitted probe reads QVF 0.79–0.83 | — | `chain_readability` |
+| Global deletion under loud bystanders | Dawn ASR deletion 0.21–0.23 | g ≈ −5 dB at −5 dB SIR, −8/−9 at −10 | `snr_strat` |
+
+Two corollaries, both measured: persistence and wrong-anchor deletion move on the same clock (any change
+that lengthens the state lengthens the next talker's deletion window); and an inference guard can only
+refuse to act (halves violations and deletion at −4 dB far suppression and raw-mix-level insertions).
+
+## 2. Why the training distribution makes this cheap
+
+`v19c_diagnostics/training_data_audit`, 1206 rows through the v16 pipeline: target onset median 0.00 s
+(90.7 % within 0.5 s); interferer speaks first ≥ 1 s in 6.0 % of rows; longest target-free gap median
+0.53 s, ≥ 5 s in 0.3 %; re-entry after ≥ 5 s in 0.3 %; no row renders the same talker twice; realised SIR
+median +0.5 dB (p5 −8.1); none of the seven losses weights time; nothing defines "user" beyond the row's
+`target`. Under this distribution "whoever is already talking, keyed on recent near-like sound" is a
+low-cost solution. To change the model, change what is cheap.
+
+## 3. Capabilities and the product contract
+
+### 3.1 Two capabilities, not one
+
+- **A. Chain-robust proximity.** A per-frame readout of "how near is the current talker relative to this
+  session's talkers", stable across capture chains (device, QVF-like production, codec). This is what a
+  cold-start decision on a lone far talker would have to rest on — no identity exists yet — and what the
+  commit rule (3.3) reads. Evidence it is trainable: the cue is in the bottleneck on QVF (0.79–0.83) while
+  the metres-regression head inverts it (0.26). Evidence that *absolute* forms fail: three deaths of fixed
+  thresholds/metres readouts. So: relative within the session, trained with cross-chain views, and never
+  acted on through a fixed dB margin.
+- **B. Persistent identity.** Once a user is committed, keep them through silence and their own movement,
+  do not hand the foreground to the next voice, and keep suppressing bystanders through and after gaps.
+
+A without B is QVF-like proximity focus with the wrong-anchor problem intact; B without A commits the
+first voice it hears. Rev 1 folded A into B; rev 2 keeps them separate because they have different
+instruments, different failure modes, and A can ship earlier.
+
+### 3.2 Requirements (guard off, no enrollment)
+
+| Req | Statement | Instrument (exists today unless marked) |
 |---|---|---|
-| Target's first onset | median 0.00 s; 90.7 % within 0.5 s; 6.6 % at ≥ 1 s | "the user is whoever is already talking at t = 0" |
-| Interferer speaks first for ≥ 1 s | 6.0 % of rows (turn-taking prob is 0.0; only real-recording overrides fire) | almost never has to decide *against* the first voice |
-| Longest target-free gap inside a row | median 0.53 s, p90 1.81 s; ≥ 5 s in 0.3 % | never has to hold an identity across silence |
-| Target re-entry after ≥ 5 s absence | 0.3 % (0.0 % of the 3 s bucket = half of all rows) | never has to *recognise* the user coming back |
-| Same talker rendered through two chains in one row | 0 % | free to key the template on the channel |
-| Realised SIR | median +0.5 dB, p25 −2.8, p5 −8.1 | the loud-bystander regime is a 5 % tail |
-| Loss terms weighting time or segments | none of 7 (SDR whole-row, MR-STFT/OverSup/ResidualRef means, DistHead global pool); ASRFeatureLoss's 6 s crop covers t = 0 with probability 0.000 on 12/30 s rows | a one-second mistake costs ~0.1 dB of a row mean |
-| Anything defining "user" beyond the row's `target` | nothing: no identity, no proximity target that is relative, no cross-time consistency | the cheapest solution — recency of the dominant near voice — is optimal |
+| R1 | Do not attenuate the user's first second after a bystander has been talking | synthetic Δon1 (paired); field anchored near clips; Dawn paired ASR deletion `--context background` |
+| R2 | Do not commit the first voice heard as the user when a nearer voice arrives later | same, plus a write-decision replay on the field/Dawn caches (R1b deliverable) |
+| R3 | Keep a committed user across 5–20 s of quiet, keep suppressing bystanders through the gap | synthetic gap-corrected decay; field sessions |
+| R4 | Key identity on voice + proximity, not on the channel draw | speaker-disjoint identity EER / pair AUC with clip-level CI (new, §6) |
+| R5 | Suppress a lone bystander once a user is committed; keep the user under a louder bystander | field sessions, cold-far `anchor` column; SNR sweep g_on at −10..−5 dB; moderate-set ASR |
+| R6 | Proximity readout ordering agrees across chains | readability AUC device *and* QVF, clip and session scope |
 
-With this distribution the recency template is not a bug the model has; it is the **correct minimiser**
-of the objective on the data. To get a different model, the thing that is optimal has to change.
+Not claimed: suppressing a lone far talker with no talker ever heard **unless** capability A reaches a
+pre-registered readability on real chains (R6) — then it becomes a product decision, not a model claim.
+The QVF cross-chain wall stays a chain problem.
 
-## 3. The capability to build
+### 3.3 The commitment contract (causal, no enrollment)
 
-Operational definition, used for labels, losses and gates: **the user is the near talker who persists
-across the session.** Near = highest direct-to-reverberant / shortest source distance *among the talkers
-in this session* (relative, never absolute metres). Persistent = the same voice across silences and
-across the user's own movement.
+A causal system cannot know that the first voice is a bystander until contrary evidence arrives. The
+model therefore keeps two slots and the separator may only *act* on one of them:
 
-The trained model must, with no enrollment and the guard off:
+| State | Written by | May condition the mask? | Leaves the state when |
+|---|---|---|---|
+| **candidate** | any sustained speech run (≥ 1 s) | **No** — output is the unconditioned separator (today's behaviour); the candidate only accumulates evidence | promoted to committed, or superseded by a nearer candidate |
+| **committed** | a candidate whose relative proximity `p − p̄_session` has stayed above the session's running statistics for ≥ `T_commit` (1–2 s of *its own* speech) with presence confirmed | **Yes** | demoted only by the replacement rule below |
 
-| Req | Statement | Instrument (exists today) |
-|---|---|---|
-| R1 | Not attenuate the user's first second after a bystander has been talking | synthetic Δon1 (paired), field anchored near clips, Dawn paired ASR deletion in `--context background` |
-| R2 | Not adopt the first voice it hears as the user when a nearer voice arrives later | same as R1 plus the bystander-first field clips |
-| R3 | Keep the user after 5–20 s of quiet and keep suppressing bystanders through and after the gap | synthetic decay curve (gap-corrected), sessions in the field block |
-| R4 | Key the user on voice + proximity, not on the channel draw | synthetic `ident` ladder (self / self-late / same-speaker-other-room / different-speaker) |
-| R5 | Suppress a lone bystander once a user has been established, and keep the user under a louder bystander | field sessions and cold-far `anchor` column; SNR sweep g_on at −5..−10 dB; moderate-set ASR |
+Rules, all future-independent:
+- **No read before commit.** Until a committed slot exists, the memory read is exactly zero. This is the
+  training-time form of the shipped guard's "do not delete before a talker is confirmed", and it protects
+  the later user's first second by construction rather than by a loss.
+- **Replacement (what wins when proximity and persistence disagree).** The committed user persists. A new
+  voice replaces them only if it reads nearer than the committed user's stored proximity by a margin that is
+  itself session-relative (a quantile of the session's own `p` spread, never a dB constant), sustains that
+  for ≥ `T_replace` (3 s), **and** the committed user has been silent for ≥ `T_replace`. During double talk
+  both are kept (the turn-taking KEEP guard). The user moving away (same voice, lower proximity) does *not*
+  demote them: identity similarity to the committed embedding blocks replacement by a nearer *stranger*
+  unless the stranger also satisfies the silence condition. This is a product decision and is recorded
+  here so it can be argued with, not discovered in a scorecard.
+- **Failure default.** If presence or proximity is unreadable on a chain (the v11 QVF inversion case), the
+  gate writes nothing and the model is the unconditioned separator; it never writes the loudest voice.
 
-Explicitly **not** claimed: suppressing a lone far talker at true cold start with no user ever heard (there
-is no evidence any talker-agnostic cue does this on our chain — `reference_matrix_README` §6.1), and the
-QVF cross-chain wall (chain/readout problem, `eq_probe_README` erratum, `chain_readability`).
+## 4. The three components (revised)
 
-## 4. The three components
+### 4.1 Data: sessions, with correct render semantics and a fixed diversity budget
 
-They are one design. §5 says why each fails alone.
+- **Session**: 30–60 s of material, **trained as state-carrying truncated segments** (e.g. 4 × 10 s or
+  2 × 15 s with the recurrent and memory states carried across segments inside the row), so the number of
+  *independent sessions and speakers per optimiser update* stays at v16's level (10.5 rows/batch is the
+  pre-registered budget, not audio-seconds alone). A 30 s / 60 s peak-memory smoke test (19.0–19.2 GiB
+  today on the 6/12 s buckets, 23 GB cards) precedes costing R1a.
+- **Talkers**: user U (near draw 0.3–1.0 m), 1–2 bystanders B (1.5–4 m), noise per the realism recipe; SIR
+  tail reaching −10 dB more often than today's 5 %.
+- **Turn shapes** (all four at non-trivial rates): U opens; **B opens 2–8 s, U enters**; **U speaks, 5–20 s
+  of true room floor (B allowed inside the gap), U returns**; overlap segments from the existing turn-taking
+  machinery.
+- **The user moves = an RIR change only.** One device-chain draw per session, applied jointly to `noisy`
+  and `target` exactly as `ns.py:589` does today. With p ≈ 0.3 U's later turns use a second near-range RIR of
+  the same room. Cross-*chain* identity pairs come from **cross-row** pairs (same speaker id in another row
+  of the batch / an embedding queue), never from a per-talker chain inside one row.
+- **Counterfactual rows for identity (speaker-disjoint by construction):** the same speaker serves as U in
+  some rows and as B in others; bystanders are drawn to match U's distance/level/RIR class in a fraction of
+  rows (so "near" alone cannot separate them); speaker ids are emitted per turn.
+- **Labels per frame**: `user_active`, `bystander_active` (energy VAD on the dry signals, the `vad_target`
+  grid), per-turn speaker id and role, and the pipeline's emitted scalars `foreground_distance`,
+  `foreground_drr`, `nearest_interferer_distance`. Overlap frames are flagged and **excluded from turn
+  pooling**.
+- **Never**: digital silence as filler (−5.9 / −19.2 dB suppress bias); labelling a long user gap as
+  target-absent (deletion explosion on record); relaxing suppression floors (v18); changing
+  `trainer.length_schedule` in the same round (v15 confound).
 
-### 4.1 Data: sessions, not clips
+### 4.2 Objectives: identity and proximity as relative, cross-time, speaker-disjoint targets
 
-Replace the 3–30 s "two people already talking" row with a **session row** (30–60 s; keep the length
-schedule's audio-seconds budget, i.e. fewer rows per batch — v16's header records the budget deliberately):
+Infrastructure (R1a): a **graph-carrying bottleneck provider** (`"bottleneck"` in `siso._loss_providers`,
+materialised only when a configured loss requests it), a per-frame **identity head** `g(z_t) → 64-d`
+(small causal conv + LN) and a per-frame **proximity head** `p(z_t) → scalar` on `LN(z_t)`, both training
+heads in the v11 pattern (inference output bit-identical until R2). Provider-contract and alignment tests
+accompany them.
 
-- **Talkers**: one user U (near: 0.3–1.0 m draw), 1–2 bystanders B (1.5–4 m draw), optional noise at
-  the realism recipe's levels. SIR drawn so the tail reaches −10 dB more often than today's 5 %.
-- **Turn structure** (drawn per row, all four shapes present at non-trivial rates):
-  (a) U opens; (b) **B opens for 2–8 s, U enters** (the wrong-anchor case); (c) **U speaks, 5–20 s of
-  true room floor, U returns** (persistence / re-entry) with B allowed to speak inside the gap;
-  (d) overlap segments (double talk) as today's turn-taking machinery produces.
-- **The user moves**: with probability ~0.3 the row re-renders U through a second draw of the same room
-  and device chain (different RIR from the same near range, different chain draw) at a turn boundary.
-  Same voice, different channel — the only way to make "channel ≠ identity" learnable.
-- **Labels per frame**: `user_active[t]` (from U's dry signal, the same energy VAD grid as `vad_target`),
-  `bystander_active[t]`, plus per-turn talker ids and the proximity scalars the pipeline already emits
-  (`fg_dist`, `itf_dist`, `fg_drr`).
-- **Never**: digital silence as filler (measured suppress bias −5.9/−19.2 dB), target-absent labelling of a
-  row that merely has a long user gap (the Dawn deletion explosion when lone-far rate rose), relaxing any
-  suppression floor (v18).
-
-This is not "raise `turn_taking_prob`" (v10's T2, which raised turn-taking keep violations 6 → 10): that
-changed dosage inside the old objective, which can only respond by suppressing more. Here the new shapes
-arrive together with objectives (4.2) that say *what* to keep.
-
-### 4.2 Objective: identity and proximity as relative, cross-time targets
-
-Two loss terms on top of the unchanged separation losses (no floor, no `inactive_mode`, no
-`OverSuppression` reweighting is touched — v18 stands):
-
-**(i) Foreground identity consistency** — on pooled bottleneck vectors. Let `z_t` be the bottleneck
-pooled over frequency (128-d, 100 fps; the vector `anchor_gate_sim` already reads). Define turn-level
-embeddings `e_k = LN(mean_{t∈turn k} z_t)` for each labelled turn (user turns and bystander turns).
-Supervised contrastive loss inside the row:
-
-```
-pos(k) = user turns other than k (including the user's re-rendered turns after the move)
-neg(k) = bystander turns in the same row
-L_id = mean over user turns k of  -log  Σ_pos exp(s(e_k,e_p)/τ) / (Σ_pos exp(s(e_k,e_p)/τ) + Σ_neg exp(s(e_k,e_n)/τ))
-```
-
-with `s` = cosine, `τ` = 0.1. Because positives include the same user through a different chain draw and
-negatives include bystanders through the *same* chain draw, the cheapest solution is no longer the
-channel. Rows without a bystander turn or without a second user turn contribute zero with a graph-carrying
-zero (the `dist.py:70–71` DDP idiom).
-
-**(ii) Relative proximity** — replace the absolute-metres regression of `DistHead` with a within-row
-ranking on the same pooled window: for each (user turn u, bystander turn b) pair,
-`L_prox = softplus(m − (p(e_u) − p(e_b)))`, `p` a linear readout on `LN(z)`, `m` = 1 (unitless: the head only
-has to order the talkers of *this* row). Chain-consistency view: the ordering must agree between the two
-chain draws of the same row (`|Δ(p_u − p_b)|` penalty). The metres regression stays as an auxiliary
-scalar only if the `dist_head` gates need it; it is not what the memory reads.
-
-Both terms live in `puresound/nnet/loss/` as new classes fed from `batch` (turn ids, `user_active`,
-`bystander_active`) through the existing provider table; they do not modify the separation terms.
-
-**Why relative.** Absolute thresholds and absolute-metre readouts died three times (chain offset,
-checkpoint drift, QVF inversion) and self-calibrated / relative judgements survived each time
-(`presence_selfcal_README` findings 1 and 4; `anchor_gate_README` §2). Within-row contrast is the
-training-time form of the same rule.
-
-### 4.3 Architecture: an explicit foreground memory with a proximity-gated write
-
-A slow state alongside the inter-time LSTM — the state the model currently fakes with recency:
+**(i) Identity.** Turn embeddings `e_k = mean_{t∈turn k, non-overlap} g(z_t)`, L2-normalised. Targets come
+from a **stop-gradient EMA teacher** of `g` (no collapse by co-adaptation). Supervised contrastive loss
+whose positives and negatives are chosen to break the near/far shortcut:
 
 ```
-inputs per frame t:  z_t (128-d pooled bottleneck),  w_t = write gate in [0,1]
-memory:              M_t = M_{t-1} + η · w_t · (LN(z_t) − M_{t-1}),   M_0 = 0,  η ≈ 0.02 (≈ 0.5 s time constant while writing)
-                     (no decay term: silence writes nothing and forgets nothing)
-read:                FiLM(γ_t, β_t) = MLP(M_{t-1}) applied to the bottleneck before the decoder (the existing
-                     dvec/FiLM path, `embedding_size=dvec_dim`, currently unused), γ zero-initialised, β zero-initialised
-write gate:          w_t = σ(a · (p(z_t) − p̄_t) + b) · user_presence_t
+pos(k): other turns of the same speaker id -- in this row (incl. after the RIR move) AND in other rows of
+        the batch / queue where that speaker was rendered through a different chain and possibly as B
+neg(k): other speakers -- including bystanders matched to U's distance class, and U-role turns of other
+        rows at U's own distance
+L_id = mean_k  -log  Σ_pos exp(cos(e_k, ē_p)/τ) / Σ_{pos∪neg} exp(cos(e_k, ē_·)/τ),   τ = 0.1
 ```
 
-where `p` is the relative-proximity readout of 4.2(ii), `p̄_t` a slow running mean of `p` over speech
-frames in the session (so the gate compares to *this session's* talkers, not to a constant),
-`user_presence_t` the per-frame near-presence logit (the v11 head, retrained here on `user_active`), and
-`a, b` learned. Two properties are enforced by construction:
+Validation is **speaker-disjoint**: EER and pair AUC of same-vs-different speaker at matched proximity, with
+clip/session-level bootstrap CI. Frame-pooled AUC alone is not accepted (item 4).
 
-- **The write is proximity-gated, not recency-gated.** A bystander who opens the session scores below the
-  session mean once the user has spoken and is written out; before the user has spoken the gate has
-  nothing to compare to and writes weakly. This is the mechanism that separates persistence from
-  wrong-anchor deletion — the thing the recency template cannot do.
-- **The read starts as the identity.** Zero-initialised FiLM ⇒ warm-start from v16 ep19 is bit-identical;
-  the memory earns influence only through gradient, on the session rows.
+**(ii) Relative proximity.** Within a row, for (user turn u, bystander turn b): `softplus(m − (p̄_u − p̄_b))`,
+`m` = 1 in the head's own units; **cross-chain consistency**: the same source material rendered in two rows
+through different chains must give the same ordering and a bounded `|Δ(p̄_u − p̄_b)|`. The utterance-level
+metres regression (`DistHead`) is kept only as an auxiliary; nothing downstream reads metres.
 
-Auxiliary losses on the memory, cheap and well-defined on synthetic rows: `L_mem = ‖LN(M_t) − e_U‖²`
-averaged over frames after the user's first turn (the memory should converge to the user's turn
-embedding and stay there through gaps and through the user's move), and a *negative* term keeping
-`M_t` away from bystander embeddings.
+Neither term touches a separation loss; both zero-contribute with a graph-carrying zero when a row lacks
+the needed turns (the `dist.py:70–71` idiom, DDP-safe).
 
-Streaming export: `M` is one more state tensor of size 128 plus the running mean scalar; the FiLM MLP is
-a few thousand parameters; CPU cost is negligible next to the LSTMs. It is exportable with the same
-manifest machinery as the head EMA states.
+### 4.3 Architecture: candidate/committed memory, read through a new zero-init residual branch
 
-## 5. Why each component fails alone (and what the record says)
+```
+per frame t (all causal):
+  z_t         pooled bottleneck (128-d);  q_t = teacher-free identity g(z_t);  p_t = proximity;  a_t = presence
+  session stats: running mean/quantiles of p over speech frames (the relative reference)
+  candidate:  C_t  <- EMA of q_t over the current sustained speech run (>= 1 s), with its proximity summary
+  commit:     when C's proximity summary exceeds the session reference by the session-relative margin for
+              T_commit of its own speech and presence is confirmed  ->  M <- C
+  replace:    per §3.3 (nearer by session-relative margin for T_replace AND committed silent for T_replace)
+  read:       x'_2 = x_2 + F(x_2, M)  after DPRNN block 2, F ends in a zero-initialised projection
+              (or a learned scalar alpha initialised at 0)  ->  step-0 output bit-identical to the warm start
+              M = 0 (no committed user)  ->  F(x_2, 0) is trained to be 0 (explicit penalty), i.e. no read
+```
+
+- The committed slot has **no decay**; silence writes nothing and forgets nothing. Replacement is the only
+  way out.
+- `L_mem` (R1b): after the user's first committed turn, `‖M − ē_U‖²` (teacher target) small; `M` far from
+  bystander embeddings; **precision of "the opening bystander is never committed"** and **coverage of the
+  first user second by no-read** are logged as validation metrics on synthetic sessions and replayed on the
+  field/Dawn caches (the write decision is a discrete event that can be audited without any ASR).
+- Streaming export (R2 deliverable, budgeted): new state ports for `M`, candidate `C`, session statistics,
+  commit/replace timers, and any head caches; explicit `state_from_tensors` slices; **all decay-free states
+  held during the look-ahead warm-up** so phantom frames are never integrated; tests: train-/infer-config
+  checkpoint pre-flight, offline-vs-streaming numerical parity beyond warm-up (≥ 400 frames, tolerance
+  stated), 5–10 min long-stream stability, ONNX state round-trip, RTF on the target CPU.
+
+## 5. Why each component fails alone
 
 | Alone | What happens | Recorded instance |
 |---|---|---|
-| 4.1 session rows only | The old objective can only answer "more bystander-first rows" by suppressing more → keep violations rise | v10 T2: turn-taking keep 6 → 10, moderate WER +0.024 |
-| 4.2 objectives only | Identity is learned but the mask has no slow state to read it from; the LSTM still forgets in ~5 s | v11 presence heads: 0.95 in-domain, never coupled; every actuator that used them failed or was inert |
-| 4.3 memory only (recency-written) | Longer memory = longer deletion window for the next talker | `reference_matrix_README` §6.2, confirmed synthetically; the FGMEM verdict |
-| 4.3 with an absolute write threshold | Dies on chain offset and checkpoint drift | `presence_selfcal_README` finding 4; `anchor_gate_README` §2 |
-| Any of them from scratch | The curriculum ladder is load-bearing | last-stage-only training −1.65 dB vs v8 −9.83 |
+| Session rows only | the old objective answers "more bystander-first rows" by suppressing more | v10 T2: turn-taking keep 6 → 10, moderate WER +0.024 |
+| Objectives only | identity is learned but nothing slow reads it; the inter-LSTM still fades in ~5 s | v11 heads 0.95 in-domain, never usable as an actuator |
+| Memory with a recency write | longer memory = longer deletion window | `reference_matrix_README` §6.2; synthetic decay/Δon1 share a clock |
+| Memory with an absolute write threshold | dies on chain offset / checkpoint drift | `presence_selfcal_README` F4; `anchor_gate_README` §2 |
+| Read before commit | the opening bystander becomes the anchor with more authority than today | review item 8 |
+| Any of them from scratch | the ladder is load-bearing | last stage alone −1.65 dB vs v8 −9.83 |
 
-## 6. Instruments and metric policy
+## 6. Instruments, baselines and gates
 
-Training-time (minutes, synthetic, paired within utterance so the noise term cancels — the policy set in
-`snr_strat/README.md`): `anchor_synthetic_probe.py` Δon1 / decay / `ident` ladder; readability AUC
-(`anchor_gate_sim.py readability`, device and QVF, clip and session scope); the SNR sweep
-(`onset_snr_sweep.py`) for global deletion at −10..−5 dB.
+Metric policy (`snr_strat/README.md`): paired within-utterance deltas, SNR-stratified; no cross-set
+absolute dB; Dawn is ASR-only; energy deltas labelled noise-confounded below +5 dB window SNR.
 
-Gates (5-checkpoint blocks, guard **off**, judged against v16 ep19 *and* v16 + `pna` guard):
+**Baselines every gate is read against** (strongest first): v8 block (sessions −11.78 dB), v16 ep19 block
+(−9.73 ± 1.41), v16 + `pna` guard (7/148 keep violations single-cache, Dawn deletion 0.111 / 0.133), v16 +
+`drr3` (0.094 / 0.099, at −11.0 far median), and the best free inference knob of the round. A candidate
+passes on keep/deletion **at matched far suppression** or not at all.
 
-| # | Metric | Instrument | Pass | Kill |
+| # | Metric | Instrument, n | Pass | Kill |
 |---|---|---|---|---|
-| P1 | Synthetic Δon1 other2/other3 | `anchor_synthetic_probe.py`, n = 200 | ≥ −0.4 dB, self3 within ±0.1 | worse than −1.0 |
-| P2 | Gap-corrected decay at 10 s / 20 s (lone bystander after a 3 s user anchor) | same | ≤ −6 / ≤ −4 dB (v16: −2.0 / −0.7) **with** P1 held | no gain, or P1 fails |
-| P3 | `ident` ladder: same-speaker-other-room ≥ 70 % of self | same | met | same-speaker-other-room below 50 % of self |
-| P4 | Dawn paired ASR deletion, `--context none` and `background`, large-v3 | `eval_dawn_chorus.py --context` | `background` ≤ 0.18 and gap to `none` ≤ 0.01; unguarded-vs-guarded gap shrinks ≥ 1/2 | deletion > v16's 0.207 / 0.235 |
-| P5 | Field keep violations, `anchor_gate_sim` fit split, guard off | `anchor_gate_cache.py` + `sweep` | ≤ 7 / 148 (the guarded arm's number) | > 13 |
-| G1 | Field sessions suppression block | `eval_field_block.py`, paired CI | within 1.5 dB of −9.73 | shallower than −7.5 |
-| G2 | Cold-far `none` / `anchor` (renamed from `ambient`) blocks | `eval_coldstart_v2.py` | not shallower by > 1.5 dB | > 2 dB |
-| G3 | Moderate-set WER delta (Azure), insertions | `eval_wer.py`, CI printed | CI upper ≤ +0.01; insertions ≤ 0.02 | CI lower > +0.01 |
-| G4 | Extreme-reverb WER, synthetic far-only, s2f keep curve | `run_full_benchmark.sh` stages 2/4/8, `eval_s2f_keep_probe.py` | no regression outside CI / band | any |
-| G5 | Streaming export parity + RTF | `streaming_onnx.py verify`, `benchmark` | bit-parity within 1e-6; RTF within budget | either |
+| P1 | Synthetic Δon1 other2/other3, self3 control | `anchor_synthetic_probe.py`, 200 utts, block median | ≥ −0.4 dB; self3 within ±0.1 | worse than −1.0, or self3 < −0.3 |
+| P2 | Gap-corrected decay at 10 / 20 s with P1 held | same | ≤ −6 / ≤ −4 dB (v16 −2.0 / −0.7) | no gain, or P1 fails |
+| P3 | Identity: speaker-disjoint EER and pair AUC at matched proximity, clip-level bootstrap CI | new probe (R1a deliverable) on synthetic held-out speakers and on DiPCo/AMI/NOTSOFAR pairs | EER ≤ 15 % synthetic, pair AUC ≥ 0.80 real, CI half-width ≤ 0.05 | EER ≥ 25 % or real AUC ≤ 0.65 |
+| P4 | Dawn paired ASR deletion, `--context none` and `background`, large-v3 | `eval_dawn_chorus.py --context`, n = 450, Wilcoxon | `background` ≤ 0.18; `background − none` ≤ 0.01; unguarded-vs-guarded gap shrinks ≥ 1/2 | deletion above v16 (0.207 / 0.235) |
+| P5 | Keep violations, guard off, **five caches** (block checkpoints) aggregated per span | `anchor_gate_cache.py field` × 5 + `anchor_gate_sim.py sweep --split fit`, two-proportion test | ≤ 7/148 block mean | > 13/148 |
+| P6 | Write-decision audit (R1b+): opening-bystander commit rate; first-user-second no-read coverage | replay on synthetic sessions + field/Dawn caches | commit rate ≤ 2 %; coverage ≥ 95 % | commit rate ≥ 10 % or coverage ≤ 80 % |
+| R6 | Proximity readability AUC, clip scope, bootstrap over clips (±0.14 today) | `anchor_gate_sim.py readability` on new head | device ≥ 0.95 kept; QVF ≥ 0.75 target, ≥ 0.50 minimal | QVF < 0.40 or device < 0.90 |
+| G1 | Field sessions suppression, block, paired CI | `eval_field_block.py` | CI lower edge ≥ −11.2 dB vs v8's −11.78 (matched), never shallower than −8.2 vs v16 | median shallower than −7.5 |
+| G2 | Cold-far `none` / `anchor` blocks | `eval_coldstart_v2.py` | not shallower than v16 by > 1.5 dB | > 2.0 dB |
+| G3 | Moderate-set WER delta (Azure) with CI; insertions | `eval_wer.py` | CI upper ≤ +0.01; insertions ≤ 0.020 | CI lower > +0.01 |
+| G4 | Extreme-reverb ΔWER; synthetic far-only; s2f keep curve | `run_full_benchmark.sh` 2/4/8; `eval_s2f_keep_probe.py` | ΔWER CI upper ≤ +0.01; far-only within 3 dB of v16; no s2f point > 0.8 dB below block, no new cliff | any exceeded |
+| G5 | Streaming parity and cost | `streaming_onnx.py verify/benchmark` | max abs diff ≤ 1e-5 beyond warm-up; long-stream drift ≤ 1e-4; RTF ≤ 1.1 × v16 on the target CPU | any exceeded |
 
-No cross-set absolute dB. Dawn SI-SDR is never quoted. BUT-OFFICE is a monitor only.
-
-## 7. Staged programme
+## 7. Staged programme (revised order)
 
 | Stage | Content | Cost | Kill / fork |
 |---|---|---|---|
-| **P0** prerequisite probe (no training) | On the paired corpora (DiPCo / AMI / NOTSOFAR sessions: two talkers per session, same talker across channels) and on synthetic same-talker-two-chain pairs, measure whether the frozen v16 bottleneck separates talker identity from channel: LOGO logistic/cosine AUC for same-talker-other-chain vs different-talker-same-chain | 1 day, CPU + one GPU pass | If identity is not separable at all (AUC < 0.6), 4.2(i) is the first thing to train and 4.3 waits; if separable (≥ 0.75), R1 and R2 can be merged |
-| **R1** data + objectives, architecture unchanged | Session-row generator (4.1) + `L_id`, `L_prox` (4.2) at small weights (0.1–0.25 each, ramped), warm-start v16 ep19, 20 epochs | ~1.5 GPU-days (+ ~10 % for the second chain view), 5 engineer-days | P1/P3 and readability must move; G1–G3 must hold. If P1 moves on synthetic and Dawn `background` deletion does not: real-chain wall → fork to real session rows (R2B in `v19c_round_design.md` §5) before R2 |
-| **R2** memory + FiLM | 4.3 on top of R1's checkpoint, zero-init, write gate reading R1's proximity head, `L_mem` | ~1.5 GPU-days, 7 engineer-days (module, scan, export ports, tests) | P2 (persistence) is the new requirement; P1 must not regress (the coupling test) |
-| **R3** consolidation | Re-run the affected ladder stages if R2 changed the operating point; full nine-gate + ASR blocks; release decision | 2–3 GPU-days | deploy only if it beats v16 + guard on keep at ≥ equal far suppression |
+| **S0** v19c pre-flight | does a loss-only onset hinge even fire on the rows the training set contains (`v19c_round_design.md` §3.3 P0–P4) | 2 GPU-h | sizes how much of R1a must come from data |
+| **P0** prerequisite probe | speaker-disjoint, chain/proximity-balanced identity probe on the frozen v16 bottleneck: DiPCo/AMI/NOTSOFAR pairs (same talker across channels, two talkers per session) and synthetic same-talker-two-chain pairs; pair AUC with CI | 1 day, CPU + 1 GPU pass | AUC < 0.60 ⇒ identity is not in the features: R1a's `L_id` is the first thing to train and R1b waits; ≥ 0.75 ⇒ proceed to R1a as planned (**not** merged with R2) |
+| **R1a** representation round | session rows (4.1) + bottleneck provider + identity & proximity heads + `L_id`, `L_prox` (4.2), small ramped weights; separator output **bit-identical at inference** (heads training-only); warm-start v16 ep19; 20 epochs | ~1.5 GPU-days + smoke tests; 6 engineer-days | P3, R6 and P1 must move; G1–G3 must hold (shared encoder changes). Synthetic moves, Dawn `background` deletion does not ⇒ real-chain wall ⇒ fork to real session rows (VOiCES/RealMAN/DiPCo/AMI/NOTSOFAR trainable; private recordings eval-only) before R1b |
+| **R1b** memory without read | candidate/committed slots and `L_mem`, read branch absent; audit the write decision on every real chain and on bystander-first / user-first / re-entry / overlap cases (P6) | ~1 GPU-day, 5 engineer-days | P6 fails ⇒ fix the commit rule, not the read |
+| **R2** read | zero-init residual branch after block 2 on R1b's checkpoint; export ports and tests | ~1.5 GPU-days, 7 engineer-days | P1 must not regress while P2 improves (the coupling test); G5 |
+| **R3** consolidation | affected ladder stages if the operating point moved; full nine gates + ASR blocks; release decision | 2–3 GPU-days | deploy only if it beats v8 and v16+guard on keep/deletion at matched far suppression |
 
-Every stage: one axis, 5-checkpoint block, paired tests, pre-registered thresholds written to the round's
-design file **before** launch. A stage that only matches the shipped guard at the guard's suppression
-price produced nothing (the v14 rule).
+Every stage: one axis, 5-checkpoint block, paired tests, thresholds committed before launch. A stage that
+only matches the shipped guard at the guard's suppression price produced nothing (v14 rule).
 
 ## 8. Risks named in advance
 
-1. **Real-chain transfer.** Every synthetic-only success so far stopped at the recording chain (RIR axis,
-   gate-only adaptation, v17). Identity and relative proximity are *less* chain-bound than absolute
-   distance, and the session objective is exactly what real paired corpora can also supply — the fork in
-   R1 is planned, not hoped away.
-2. **Write-gate failure on real recordings.** The v11 presence head inverted on the QVF chain. The gate
-   compares within the session (relative) and is trained with chain views; but if `user_presence` is
-   unreadable on a chain, the memory must default to *not writing* (passthrough), never to writing the
-   loudest voice.
-3. **Budget confound.** Session rows are long; keep audio-seconds per batch fixed and report rows/batch,
-   or the round re-imports v15's shortfall.
-4. **Deletion explosion.** Long user gaps must never be labelled target-absent; the separation losses see
-   `target` as before, only the new terms see turn structure.
-5. **Coupling regression.** R2 is judged on P1 *and* P2 together; a memory that improves persistence while
-   P1 regresses is the recency template with a longer time constant and is killed.
+1. **The first-talker ambiguity is irreducible without enrollment.** The model can only defer (no read
+   before commit) and revise; a product that wants the first voice suppressed at t = 0 needs capability A
+   to reach R6 on that chain — or enrollment.
+2. **Real-chain transfer.** Every synthetic-only success stopped at the chain. Identity and relative
+   proximity are less chain-bound than metres, and the session objective is what real paired corpora also
+   supply; the R1a fork is planned.
+3. **Write-gate failure on a chain** ⇒ default to no write (passthrough), never to the loudest voice.
+4. **Diversity/memory budget** ⇒ state-carrying segments, sessions-per-update pre-registered, smoke test
+   before costing.
+5. **Deletion explosion** ⇒ long gaps never target-absent; separation losses unchanged.
+6. **Coupling regression** ⇒ R2 judged on P1 and P2 together.
+7. **Head AUC is not permission to act** ⇒ the read arrives last and separately (v11 lesson).
 
-## 9. Relation to v19c
+## 9. Relation to v19c and to the guard
 
-`v19c` (`AnchorInheritanceLoss`, one hinge on the onset window of bystander-first rows) is a strict subset
-of 4.2 on today's data: it penalises inherited deletion without giving the model any state to prevent it.
-It remains the cheapest experiment that tells whether the *loss side* alone moves Δon1 on this
-distribution, and its pre-flight P0 (does the hinge fire on the rows the training set contains) is still
-worth running first — it costs 2 GPU-hours and its answer sizes how much of R1 must come from data.
+`v19c`'s hinge is a subset of 4.2 on today's data and its pre-flight is S0 here. The shipped `OnsetGuard`
+is the external form of §3.3's no-read-before-commit rule; the programme's success criterion is that the
+model reproduces that protection internally *and* keeps the far suppression the guard gives up.
