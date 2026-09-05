@@ -425,7 +425,7 @@ trainer:
   num_workers: 20
   num_gpus: 2
   find_unused_parameters: true
-  work_folder: exp/dpcrn_curriculum
+  work_folder: exp/dpcrn_curriculum_v0
 
 optimizer:
   type: AdamW
