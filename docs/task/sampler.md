@@ -4,8 +4,15 @@
 
 `torch.utils.data.Sampler`-style **batch** samplers used as a `DataLoader`'s
 `batch_sampler`: each `__iter__` yield is already a full batch's worth of
-`(speaker, sr[, item_seed])` keys, handed straight to the task dataset's
-`__getitem__` (see [task.ns](ns.md), [task.tse](tse.md), [task.sv](sv.md)).
+`(speaker, sr[, item_seed[, seconds[, epoch]]])` keys, handed straight to the
+task dataset's `__getitem__` (see [task.ns](ns.md), [task.tse](tse.md),
+[task.sv](sv.md)), which reads every shape through one parser
+(`DynamicBaseDataset.parse_item_key`).
+
+The key grows with what the run asked for, and only with that: a seed for
+deterministic regeneration, a row length when `trainer.length_schedule` mixes
+lengths, an epoch when the recipe carries a `curriculum`. A run that asks for
+none of them gets the two-element key it always did.
 
 ## Class: `SpeakerSampler`
 
@@ -31,6 +38,8 @@ SpeakerSampler(
     seed: Optional[int] = None,
     rank: Optional[int] = None,
     world_size: Optional[int] = None,
+    length_schedule: Optional[List[Tuple[float, int, float]]] = None,
+    emit_epoch: bool = False,
 )
 ```
 
@@ -67,10 +76,30 @@ SpeakerSampler(
   corpus_dict["target_sample_rate"] else True`), since a batch of mixed
   native sample rates cannot otherwise be stacked into one tensor.
 - `seed` -- enables **deterministic validation** (see below).
+- `length_schedule` -- `(seconds, n_spks, prob)` buckets. Each batch draws one,
+  so the model is supervised at several context lengths in one run; the batch
+  size travels with the length because activation memory does. The draw is
+  seeded by `(epoch, batch index)` only, never by rank: under DDP the ranks step
+  in lockstep, and two ranks running different row lengths in the same step
+  would average gradients over different batch sizes and stall on every sync.
+- `emit_epoch` -- append the epoch index to every key, which is how a recipe's
+  `curriculum` reaches a dataset copy living in a worker process. Off unless
+  something is actually scheduled, so an unscheduled run keeps its key shape --
+  and its RNG stream -- unchanged.
 - `rank` / `world_size` -- override the DDP rank/world size that would
   otherwise be read from `torch.distributed` (falls back to `(0, 1)` when
   distributed is not initialized). Mainly for tests and non-DDP callers that
   still want to reproduce a specific rank's seeded stream.
+
+### `set_epoch(epoch)`
+
+Which epoch the next pass is, told from outside. Counting passes internally is
+wrong on the one path that matters: a run resumed at epoch N would start the
+count at 0 again and silently replay the beginning of any epoch-dependent
+schedule. Lightning calls this on `dataloader.batch_sampler.sampler` before an
+epoch's iterator is consumed, including the resumed one -- the `sampler`
+property returns the sampler itself so that call lands. Without a caller the
+internal count applies, so a plain PyTorch loop is unaffected.
 
 ### Deterministic validation (seeded mode)
 

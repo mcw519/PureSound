@@ -65,7 +65,8 @@ There are two classes of retry, with different rules:
 
 ### 1.4 A seeded item must reseed all three streams
 
-When `__getitem__` receives a 3-tuple (carrying an `item_seed`):
+When an item key carries an `item_seed`, `DynamicBaseDataset.parse_item_key`
+reseeds all three streams for every task:
 
 ```python
 random.seed(item_seed)

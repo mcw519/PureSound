@@ -35,6 +35,7 @@ DynamicBaseDataset(
     vad_label_args: AugmentationArg = None,
     dataset_role: str = "train",
     pipeline_role: Optional[str] = None,
+    curriculum: AugmentationArg = None,
 )
 ```
 
@@ -66,6 +67,12 @@ default — there is **no `**kwargs`** catch-all. Every length is in
 - `dataset_role` (default `"train"`) – the actual dataset stage.
 - `pipeline_role` (defaults to `dataset_role`) – the source distribution used
   by stage-sensitive capabilities such as a pre-generated RIR bank.
+- `curriculum` – a validated
+  [`CurriculumConfig`](../configuration.md#curriculum-knobs-that-move-with-the-epoch),
+  or `None` for a dataset whose knobs are constants. Given one, the knobs it
+  names follow the epoch the sampler attaches to each item. Training datasets
+  get it; validation datasets do not, so validation loss stays comparable
+  across epochs.
 
 ### Initialization sequence
 
@@ -76,6 +83,50 @@ default — there is **no `**kwargs`** catch-all. Every length is in
 2. builds `self.total_spks` (sorted speaker-id list) and `self.spk2idx`
 3. `self.init_augmentor()` — builds `self.augmentor`
 4. `self.init_vad_labeler()` — builds `self.vad_labeler` / `self.gating_vad_labeler`
+5. `self.apply_curriculum_epoch(0)` — puts a schedule's first values in place, so
+   a row drawn before any epoch is announced still sees them
+
+---
+
+#### `parse_item_key(key) -> ItemKey`
+
+Reads one sampler key -- `(speaker, sample_rate)` plus, when the run asked for
+them, a per-item seed, this batch's row length and this epoch (see
+[task.sampler](../task/sampler.md)) -- and applies what every task shares, in
+this order:
+
+1. the row length for this item, which `sample_length` reads;
+2. this epoch's scheduled knobs, before
+3. the per-item seed, so every draw the seed governs already sees the values
+   the epoch asked for.
+
+Every dynamic dataset's `__getitem__` starts here. That is what keeps a key
+shape from becoming task-specific: a seeded validation pass, a mixed-length
+schedule and a curriculum work the same way for every task, instead of each
+`__getitem__` growing its own ladder of tuple arities.
+
+---
+
+#### `apply_curriculum_epoch(epoch)`
+
+Moves the scheduled knobs into place for `epoch`, and is a no-op once that epoch
+is in force. Rebuilds a few small config objects; never draws from the RNG, since
+a draw here would shift every subsequent draw in the row depending on which epoch
+it happened to be. A target it cannot apply is warned about rather than raised
+on: a recipe already refuses an unknown target at load time, and killing a
+DataLoader worker mid-epoch would hang DDP on the next all-reduce.
+
+---
+
+#### `rebind_augmentation_blocks()`
+
+Re-derives whatever was composed from an augmentation block. Blocks are read per
+row, but the components built *from* them -- a capture chain, a noise stage, a
+gating helper -- are composed once and hold a reference to the block they were
+given. A dataset that composes any of them re-composes them here, so a value that
+changes while the run is going reaches them too. Subclasses build their
+components in this method and call it from `__init__`, so construction and
+re-derivation cannot drift apart. Compose only: no RNG, no disk.
 
 ---
 

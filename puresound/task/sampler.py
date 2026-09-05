@@ -29,6 +29,7 @@ class SpeakerSampler:
         rank: Optional[int] = None,
         world_size: Optional[int] = None,
         length_schedule: Optional[List[Tuple[float, int, float]]] = None,
+        emit_epoch: bool = False,
     ):
         """
         Sample a batch of data for specific speaker number and per-speaker's utterance.
@@ -43,6 +44,11 @@ class SpeakerSampler:
             seed: If set, yields the same batches every epoch and attaches a per-item
                 seed to each entry, i.e. (spk, sr, item_seed) instead of (spk, sr), so
                 the dataset can regenerate identical samples (deterministic validation).
+            emit_epoch: Append this epoch's index to every entry, so a dataset in a
+                worker process can move its knobs with the epoch (a recipe's
+                `curriculum` block). Workers are re-created per epoch and hold their
+                own copy of the dataset, so the epoch has to travel with the item;
+                this is the same channel `length_schedule` uses for row length.
         """
         self.seed = seed
         self.rank = rank
@@ -55,7 +61,9 @@ class SpeakerSampler:
         # batch sizes and stall on every sync. Speaker choice stays rank-offset,
         # only the length is shared.
         self.length_schedule = list(length_schedule) if length_schedule else None
+        self.emit_epoch = bool(emit_epoch)
         self._epoch = -1
+        self._epoch_set_externally = False
         self.n_per = n_per
         self.data = data
         self.spk_pool = list(data.keys())
@@ -93,6 +101,31 @@ class SpeakerSampler:
     def __len__(self):
         return self.n_batch
 
+    def set_epoch(self, epoch: int) -> None:
+        """Which epoch the next pass is, told from outside.
+
+        Counting passes internally is wrong on the one path that matters:
+        a run resumed at epoch N starts the count at 0 again, and anything
+        derived from the epoch -- the length draw, a curriculum's knob values --
+        then silently replays the beginning of the schedule. Lightning calls this on
+        `dataloader.batch_sampler.sampler` before each epoch's iterator is
+        consumed (`_set_sampler_epoch`), including on the resumed one, which is
+        what `sampler` below exists to make reachable. Without a caller the
+        internal count still applies, so a plain PyTorch loop is unaffected.
+        """
+        self._epoch = int(epoch)
+        self._epoch_set_externally = True
+
+    @property
+    def sampler(self):
+        """Self, so Lightning's ``_set_sampler_epoch`` reaches ``set_epoch``.
+
+        It looks at ``dataloader.sampler`` and ``dataloader.batch_sampler.sampler``;
+        this class is the batch sampler, and a batch sampler that carries no inner
+        sampler would be skipped.
+        """
+        return self
+
     def __iter__(self):
         rank, world_size = _distributed_rank_world()
         if self.rank is not None:
@@ -105,7 +138,8 @@ class SpeakerSampler:
             rng = random.Random(random.getrandbits(63) + rank * 1_000_003)
         else:
             rng = random
-        self._epoch += 1
+        if not self._epoch_set_externally:
+            self._epoch += 1
         for batch_idx in range(self.n_batch):
             batch = []
             sr = None
@@ -149,14 +183,18 @@ class SpeakerSampler:
                 else:
                     batch += [(c, sr)] * self.n_per
 
-            if row_seconds is not None:
-                # 4-tuple = "this row is N seconds long". The seed slot stays in
-                # place (None when unseeded) so the arity alone says which shape
-                # this is; see NoiseSuppressionDataset.__getitem__.
+            if row_seconds is not None or self.emit_epoch:
+                # 4-tuple = "this row is N seconds long", 5-tuple adds "and it
+                # belongs to epoch N". Empty slots stay in place (None when
+                # unseeded, None when there is no length schedule) so the arity
+                # alone says which shape this is; see
+                # DynamicBaseDataset.parse_item_key, which reads every shape.
                 batch = [
                     (e[0], e[1], e[2] if len(e) == 3 else None, row_seconds)
                     for e in batch
                 ]
+            if self.emit_epoch:
+                batch = [e + (self._epoch,) for e in batch]
 
             # shuffling the sequence
             rng.shuffle(batch)

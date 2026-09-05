@@ -53,7 +53,8 @@ regime 而異**（[ch7](scene_construction.zh-TW.md) §3.2）。零重疊 regime
 
 ### 1.4 seeded item 必須重設三個流
 
-`__getitem__` 收到 3-tuple（帶 `item_seed`）時：
+item key 帶 `item_seed` 時，`DynamicBaseDataset.parse_item_key` 會為所有 task
+重設三個流：
 
 ```python
 random.seed(item_seed)

@@ -9,7 +9,8 @@ import torch
 from pydantic import BaseModel
 
 from puresound.audio.augmentation import AudioEffectAugmentor
-from puresound.config import delegated_kwargs
+from puresound.config import delegated_kwargs, with_overrides
+from puresound.config.curriculum import CurriculumConfig
 from puresound.config.augmentation import (
     ContinuousSpeedAugmentation,
     HighPassAugmentation,
@@ -51,6 +52,21 @@ def as_block(value: AugmentationArg, model: type[BlockModel]) -> BlockModel | No
     if isinstance(value, BaseModel):
         value = value.model_dump(mode="python")
     return model.model_validate(value)
+
+
+class ItemKey(NamedTuple):
+    """One row's identity, as a sampler describes it.
+
+    Everything past the speaker and its sample rate is optional and is present
+    only when the run asked for it: a seed makes the row reproducible, a length
+    comes from a mixed-length schedule, an epoch from a curriculum.
+    """
+
+    speaker: str
+    sample_rate: Optional[int]
+    seed: Optional[int] = None
+    seconds: Optional[float] = None
+    epoch: Optional[int] = None
 
 
 class ForegroundReverb(NamedTuple):
@@ -106,6 +122,7 @@ class DynamicBaseDataset(torch.utils.data.Dataset):
         audio_gain_normalized_to: Optional[int] = None,
         dataset_role: str = "train",
         pipeline_role: str | None = None,
+        curriculum: AugmentationArg = None,
         **augmentation: AugmentationArg,
     ):
         super().__init__()
@@ -149,6 +166,10 @@ class DynamicBaseDataset(torch.utils.data.Dataset):
         if self.pipeline_role not in {"train", "validation", "test"}:
             raise ValueError("pipeline_role must be train, validation, or test")
         self.vad_labeler = None
+        # Knobs that move with the epoch. The epoch itself arrives per item from
+        # the sampler, because this object is a copy living in a worker process.
+        self.curriculum = as_block(curriculum, CurriculumConfig)
+        self._curriculum_epoch: int | None = None
 
         self.init_necessary()
 
@@ -167,6 +188,114 @@ class DynamicBaseDataset(torch.utils.data.Dataset):
 
         self.init_augmentor()
         self.init_vad_labeler()
+        # Epoch 0's values, so a row drawn before any epoch is announced (a
+        # dump, an audit script, a plain PyTorch loop) still sees the schedule's
+        # starting point rather than the file's constants.
+        self.apply_curriculum_epoch(0)
+
+    def apply_curriculum_epoch(self, epoch: int) -> None:
+        """Move this epoch's scheduled knobs into place.
+
+        Called per item from ``__getitem__`` with the epoch the sampler attached,
+        and a no-op once that epoch is already in force -- the work is rebuilding
+        a few small config objects, not per-row cost. It must never draw from the
+        RNG: rows are seeded per item, and a draw here would shift every
+        subsequent draw in the row depending on which epoch it happened to be.
+
+        A worker warns rather than raises on a target it cannot apply. The
+        recipe already refused an unknown target at load time
+        (`BaseRecipe.curriculum_targets_exist`), so anything reaching here is a
+        dataset built by hand; killing a DataLoader worker mid-epoch would hang
+        DDP on the next all-reduce, which is a much worse way to learn about it.
+        """
+        curriculum = getattr(self, "curriculum", None)
+        if curriculum is None or not curriculum.used:
+            return
+        epoch = int(epoch)
+        if epoch == self._curriculum_epoch:
+            return
+
+        values = curriculum.resolve(epoch)
+        overrides = values.augmentation_overrides()
+        for block_name, fields in overrides.items():
+            attribute = f"{block_name}_args"
+            block = getattr(self, attribute, None)
+            if block is None:
+                logger.warning(
+                    "curriculum schedules %s, which this dataset does not have "
+                    "(disabled block?) -- skipped", block_name,
+                )
+                continue
+            setattr(self, attribute, with_overrides(block, **fields))
+        if overrides:
+            self.rebind_augmentation_blocks()
+
+        if values.bank_weights:
+            room_bank = getattr(self.augmentor, "room_bank", None)
+            setter = getattr(room_bank, "set_weights", None)
+            if setter is None:
+                logger.warning(
+                    "curriculum schedules bank weights but the room bank is not a "
+                    "union of banks -- skipped",
+                )
+            else:
+                setter(values.bank_weights)
+
+        self._curriculum_epoch = epoch
+
+    def rebind_augmentation_blocks(self) -> None:
+        """Re-derive whatever was composed from an augmentation block.
+
+        Blocks are read per row, but the components built *from* them -- a
+        capture chain, a noise stage, a gating helper -- are composed once and
+        keep a reference to the block they were given. A dataset that composes
+        any of them re-composes them here, so that a value which changes while
+        the run is going (a curriculum) reaches them too instead of being read
+        from a stale copy.
+
+        Compose only: this runs between rows, so it must not draw from the RNG
+        stream or load anything from disk. The base has nothing to re-derive.
+        """
+
+    def parse_item_key(self, key) -> "ItemKey":
+        """Normalise a sampler's item key and apply what every task shares.
+
+        Samplers hand a dataset a tuple that grows with what the run asked for:
+        ``(speaker, sample_rate)``, plus a per-item seed, plus this batch's row
+        length, plus this epoch (see ``puresound.task.sampler``). Parsing that in
+        one place is what lets a dataset gain those capabilities by calling this
+        rather than by growing its own ladder of tuple arities -- and keeps the
+        two shared side effects in one order:
+
+        1. the row length for this item, which ``sample_length`` reads,
+        2. this epoch's scheduled knobs, applied before
+        3. the per-item seed, so that every draw the seed governs already sees
+           the values the epoch asked for.
+        """
+        if not isinstance(key, (tuple, list)) or not 2 <= len(key) <= 5:
+            raise TypeError(
+                "an item key is (speaker, sample_rate[, seed[, seconds[, epoch]]]), "
+                f"got {key!r}"
+            )
+        speaker, sample_rate, *rest = key
+        seed, seconds, epoch = (list(rest) + [None, None, None])[:3]
+
+        self._row_length_override = (
+            int(self.audio_sr * float(seconds)) if seconds is not None else None
+        )
+        if epoch is not None:
+            self.apply_curriculum_epoch(epoch)
+        if seed is not None:
+            random.seed(seed)
+            np.random.seed(seed % (2**32))
+            torch.manual_seed(seed)
+        return ItemKey(
+            speaker=speaker,
+            sample_rate=int(sample_rate) if sample_rate is not None else None,
+            seed=seed,
+            seconds=seconds,
+            epoch=epoch,
+        )
 
     def init_vad_labeler(self):
         cfg = self.vad_label_args

@@ -4,9 +4,14 @@ English version: [`sampler.md`](sampler.md)
 
 以 `torch.utils.data.Sampler` 風格實作的**批次（batch）**sampler，作為
 `DataLoader` 的 `batch_sampler` 使用：每一次 `__iter__` 產出的就已經是一整個
-batch 份量的 `(speaker, sr[, item_seed])` keys，直接交給 task dataset 的
-`__getitem__`（見 [task.ns](ns.zh-TW.md)、[task.tse](tse.zh-TW.md)、
-[task.sv](sv.zh-TW.md)）。
+batch 份量的 `(speaker, sr[, item_seed[, seconds[, epoch]]])` keys，直接交給
+task dataset 的 `__getitem__`（見 [task.ns](ns.zh-TW.md)、
+[task.tse](tse.zh-TW.md)、[task.sv](sv.zh-TW.md)）；所有形狀都由同一個 parser
+讀取（`DynamicBaseDataset.parse_item_key`）。
+
+key 只會因為這次 run 有要求而變長：要位元級重現就帶 seed、
+`trainer.length_schedule` 混合長度時帶該列的秒數、recipe 帶 `curriculum` 時
+帶 epoch。三者都沒要求的 run，拿到的仍是原本的兩元素 key。
 
 ## Class: `SpeakerSampler`
 
@@ -31,6 +36,8 @@ SpeakerSampler(
     seed: Optional[int] = None,
     rank: Optional[int] = None,
     world_size: Optional[int] = None,
+    length_schedule: Optional[List[Tuple[float, int, float]]] = None,
+    emit_epoch: bool = False,
 )
 ```
 
@@ -65,9 +72,26 @@ SpeakerSampler(
   （`select_by_sr_first=False if corpus_dict["target_sample_rate"] else
   True`），因為原生取樣率不一致的 batch 沒辦法疊成同一個 tensor。
 - `seed` —— 開啟**deterministic validation**（見下文）。
+- `length_schedule` —— `(seconds, n_spks, prob)` 的長度桶。每個 batch 抽一個，
+  所以同一次 run 會在多個 context 長度上受監督；batch size 跟著長度走，因為
+  activation 記憶體跟著長度走。抽樣只由 `(epoch, batch index)` 決定、絕不看
+  rank：DDP 下各 rank 是同步前進的，同一步裡兩個 rank 跑不同列長會把不同
+  batch size 的梯度平均在一起，並在每次同步時卡住。
+- `emit_epoch` —— 在每個 key 後面附上 epoch 索引，這是 recipe 的 `curriculum`
+  抵達 worker process 中那份 dataset 複本的方式。只有真的有排程時才會打開，
+  所以沒有排程的 run，key 形狀與 RNG 串流都維持原樣。
 - `rank` / `world_size` —— 覆寫原本會從 `torch.distributed` 讀到的 DDP
   rank/world size（若 distributed 尚未初始化，會退回 `(0, 1)`）。主要用於
   測試，或是想重現特定 rank 的 seeded 串流、但本身不在 DDP 環境下的呼叫端。
+
+### `set_epoch(epoch)`
+
+由外部告知「接下來這一輪是第幾個 epoch」。自己在內部數輪次在唯一要緊的那條
+路徑上是錯的：從第 N 個 epoch 續訓時，內部計數會從 0 重新開始，任何依賴
+epoch 的排程都會無聲地重播開頭。Lightning 會在每個 epoch 的 iterator 被消費
+之前（含續訓的那個）對 `dataloader.batch_sampler.sampler` 呼叫這個方法——
+`sampler` property 回傳 sampler 自己，就是為了讓這個呼叫落得到。沒有呼叫端時
+仍沿用內部計數，所以純 PyTorch 迴圈不受影響。
 
 ### Deterministic validation（seeded 模式）
 

@@ -497,8 +497,16 @@ class UnionRoomBank:
         weights = [float(member.get("weight", 1.0)) for member in members]
         if any(weight <= 0 for weight in weights):
             raise ValueError("union room bank weights must be positive")
+        # Kept on the scale they were written on, so re-weighting one member
+        # (set_weights) does not have to reason about what normalisation did to
+        # the others: the same call gives the same pool whenever it is made.
+        self._weights = weights
+        self.weights = self._normalized(weights)
+
+    @staticmethod
+    def _normalized(weights: list[float]) -> list[float]:
         total = sum(weights)
-        self.weights = [weight / total for weight in weights]
+        return [weight / total for weight in weights]
 
     def __len__(self) -> int:
         return sum(len(bank) for bank in self._banks)
@@ -508,6 +516,35 @@ class UnionRoomBank:
             f"{name} w={weight:.2f} items={len(bank)}"
             for name, weight, bank in zip(self._names, self.weights, self._banks)
         )
+
+    @property
+    def member_names(self) -> list[str]:
+        return list(self._names)
+
+    def set_weights(self, weights: dict[str, float]) -> None:
+        """Re-weight some members, keeping the rest where they are.
+
+        A curriculum moves the room pool by moving these numbers between epochs
+        (`puresound.config.curriculum`), so this takes a partial mapping: naming
+        one member re-weights that one against the weights the others were
+        *constructed* with, and the whole set is renormalised afterwards exactly
+        as at construction. Weights are sampling probabilities, never item
+        counts. A weight of zero is allowed -- a member a schedule has not
+        reached yet, or has retired -- but every member cannot be zero at once.
+        """
+        updated = list(self._weights)
+        for name, weight in weights.items():
+            if name not in self._names:
+                raise ValueError(
+                    f"unknown union bank member {name!r}: " + ", ".join(self._names)
+                )
+            if weight < 0:
+                raise ValueError(f"union bank weight for {name!r} must not be negative")
+            updated[self._names.index(name)] = float(weight)
+        if sum(updated) <= 0:
+            raise ValueError("union bank weights cannot all be zero")
+        self._weights = updated
+        self.weights = self._normalized(updated)
 
     def sample_scene(self) -> dict:
         index = random.choices(range(len(self._banks)), weights=self.weights, k=1)[0]

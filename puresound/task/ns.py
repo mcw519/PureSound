@@ -3,7 +3,6 @@ from copy import deepcopy
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
 
-import numpy as np
 import torch
 from torch.nn.utils.rnn import pad_sequence
 
@@ -96,6 +95,16 @@ class NoiseSuppressionDataset(DynamicBaseDataset):
             raise ValueError(
                 "augmentation_speech.mix_mode needs dataset.task: voice_isolation"
             )
+        self.rebind_augmentation_blocks()
+
+    def rebind_augmentation_blocks(self) -> None:
+        """The three components this task composes from its blocks.
+
+        Construction and re-derivation share this one path, so a knob that moves
+        during a run (a curriculum) cannot leave one of them holding the value it
+        was built with.
+        """
+        super().rebind_augmentation_blocks()
         self.device_chain = device_chain_from_blocks(self.augmentor, self)
         self.noise_stage = NoiseStage(self.augmentor, self.augmentation_noise_args)
         self.overlap_gating = OverlapGating(
@@ -312,29 +321,13 @@ class NoiseSuppressionDataset(DynamicBaseDataset):
         )
         return noisy_speech[0], interfered_speech[0], "legacy", sir
 
-    def __getitem__(self, target_speaker: Tuple[str, int | None] | Tuple[str, int | None, int]):
-        # A 3-tuple carries a per-item seed from a seeded SpeakerSampler
-        # (deterministic validation): reseed every RNG the synthesis path uses
-        # (utterance pick / room sim / augmentation draws) so the same item
-        # regenerates bit-exact across epochs, runs and worker layouts.
-        # A 4-tuple additionally carries this batch's row length in seconds
-        # (trainer.length_schedule); its seed slot may be None.
-        self._row_length_override = None
-        if len(target_speaker) == 4:
-            target_speaker, batch_sr, item_seed, row_seconds = target_speaker
-            self._row_length_override = int(self.audio_sr * float(row_seconds))
-            if item_seed is not None:
-                random.seed(item_seed)
-                np.random.seed(item_seed % (2**32))
-                torch.manual_seed(item_seed)
-        elif len(target_speaker) == 3:
-            target_speaker, batch_sr, item_seed = target_speaker
-            random.seed(item_seed)
-            np.random.seed(item_seed % (2**32))
-            torch.manual_seed(item_seed)
-        else:
-            target_speaker, batch_sr = target_speaker
-        batch_sr = int(batch_sr) if batch_sr is not None else batch_sr
+    def __getitem__(self, target_speaker: Tuple):
+        # The key carries whatever the run asked the sampler for: a per-item seed
+        # (which reseeds every RNG this path uses, so the row regenerates
+        # bit-exact across epochs, runs and worker layouts), a row length, an
+        # epoch. All of it is unpacked and applied in one shared place.
+        key = self.parse_item_key(target_speaker)
+        target_speaker, batch_sr = key.speaker, key.sample_rate
         target_speech, self.ori_audio_sr, (_, _) = (
             self.choose_an_utterance_by_speaker_name(
                 target_speaker_name=target_speaker, select_channel=0, select_with_sr_as_key=batch_sr

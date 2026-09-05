@@ -93,10 +93,14 @@ def build_dataloaders(
     )
     select_by_sr_first = not corpus.target_sample_rate
 
+    # Train only: validation keeps the recipe's constants, so its loss stays
+    # comparable across epochs even while training's knobs are moving.
+    curriculum = recipe.curriculum if recipe.curriculum and recipe.curriculum.used else None
     train_dataset = dataset_cls(
         metafile_path=corpus.train_metafile,
         dataset_role="train",
         pipeline_role=corpus.train_pipeline_role,
+        curriculum=curriculum,
         **common,
     )
     train_sampler = SpeakerSampler(
@@ -109,6 +113,10 @@ def build_dataloaders(
         length_schedule=[(b.seconds, b.n_spk, b.prob) for b in trainer.length_schedule]
         if trainer.length_schedule
         else None,
+        # Only when something is actually scheduled: the epoch travels as an
+        # extra slot on every item, and a recipe without a curriculum keeps the
+        # item shape -- and the RNG stream -- it always had.
+        emit_epoch=curriculum is not None,
     )
     train_dataloader = torch.utils.data.DataLoader(
         dataset=train_dataset,
@@ -278,6 +286,18 @@ def run_training(
     ckpt_monitor = ModelCheckpoint(
         save_on_train_epoch_end=True, every_n_epochs=1, save_top_k=-1
     )
+    callbacks = [lr_monitor, ckpt_monitor]
+    if recipe.curriculum is not None and recipe.curriculum.used:
+        from puresound.system.curriculum import CurriculumCallback
+
+        logger.info(
+            "Curriculum: %d track(s), epoch 0 = %s",
+            len(recipe.curriculum.tracks),
+            recipe.curriculum.describe(0),
+        )
+        callbacks.append(
+            CurriculumCallback(recipe.curriculum, recipe.curriculum_loss_indices())
+        )
 
     # gradient_as_bucket_view=True makes DDP all-reduce read gradients in place from the
     # bucket, which removes the "grad strides do not match bucket view strides" warning
@@ -311,7 +331,7 @@ def run_training(
         limit_val_batches=recipe.trainer.valid_iter_per_epoch,
         use_distributed_sampler=False,
         default_root_dir=recipe.trainer.work_folder,
-        callbacks=[lr_monitor, ckpt_monitor],
+        callbacks=callbacks,
         profiler="simple",
         sync_batchnorm=True,
     )

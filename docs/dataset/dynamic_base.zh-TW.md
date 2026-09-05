@@ -35,6 +35,7 @@ DynamicBaseDataset(
     vad_label_args: AugmentationArg = None,
     dataset_role: str = "train",
     pipeline_role: Optional[str] = None,
+    curriculum: AugmentationArg = None,
 )
 ```
 
@@ -64,6 +65,11 @@ DynamicBaseDataset(
 - `dataset_role`（預設 `"train"`）– 真正的 dataset stage。
 - `pipeline_role`（預設等於 `dataset_role`）– 供 RIR bank 等 stage-sensitive
   capability 選擇資料來源分布。
+- `curriculum` – 已驗證的
+  [`CurriculumConfig`](../configuration.md#curriculum-knobs-that-move-with-the-epoch)，
+  或 `None`（旋鈕都是常數）。給了排程之後，被點名的旋鈕會跟著 sampler 附在
+  每個 item 上的 epoch 走。只有 training dataset 會拿到；validation dataset
+  不會，這樣 validation loss 仍可跨 epoch 比較。
 
 ### Initialization sequence
 
@@ -74,6 +80,43 @@ DynamicBaseDataset(
 2. 建立 `self.total_spks`（排序過的 speaker id 清單）與 `self.spk2idx`
 3. `self.init_augmentor()` —— 建立 `self.augmentor`
 4. `self.init_vad_labeler()` —— 建立 `self.vad_labeler` / `self.gating_vad_labeler`
+5. `self.apply_curriculum_epoch(0)` —— 先把排程的起始值就位，讓「還沒有人宣告
+   epoch」之前抽出來的列也看得到排程開頭，而不是檔案裡的常數
+
+---
+
+#### `parse_item_key(key) -> ItemKey`
+
+讀入一個 sampler key —— `(speaker, sample_rate)`，以及這次 run 有要求時才會
+出現的 per-item seed、該 batch 的列長、當前 epoch（見
+[task.sampler](../task/sampler.zh-TW.md））—— 並依序套用每個 task 共用的三件事：
+
+1. 這一列的長度，`sample_length` 會讀它；
+2. 這個 epoch 的排程旋鈕，接著才是
+3. per-item seed，讓 seed 管轄的每一次抽樣都已經看到該 epoch 要求的值。
+
+每個 dynamic dataset 的 `__getitem__` 都從這裡開始。這正是讓 key 形狀不會變成
+task-specific 的原因：seeded validation、混合列長、curriculum 對每個 task 的
+行為都一致，而不是每個 `__getitem__` 各自長出一套 tuple arity 階梯。
+
+---
+
+#### `apply_curriculum_epoch(epoch)`
+
+把該 epoch 的排程旋鈕就位；該 epoch 已生效時就是 no-op。它只重建幾個小的 config
+物件，且絕不動 RNG——在這裡抽一次會讓整列後續的抽樣依「當時是第幾個 epoch」而位移。
+遇到無法套用的目標只會 warning 不會 raise：recipe 在載入時就已拒絕未知目標，而在
+epoch 中途殺掉 DataLoader worker 會讓 DDP 卡在下一次 all-reduce。
+
+---
+
+#### `rebind_augmentation_blocks()`
+
+重新推導所有「由 augmentation block 組出來」的元件。block 是每列現讀的，但由它
+組成的元件——capture chain、noise stage、gating helper——只組一次，並持有當時拿到
+的那份 block。會組這些元件的 dataset 在這裡重組它們，讓 run 途中改變的值也能抵達。
+Subclass 把元件建構寫在這個方法裡並由 `__init__` 呼叫，構造與重推導就不會走岔。
+只做組裝：不動 RNG、不讀磁碟。
 
 ---
 

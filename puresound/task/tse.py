@@ -43,6 +43,11 @@ class TargetSpeakerExtractDataset(DynamicBaseDataset):
         super().__init__(*args, **kwargs)
         self.enroll_speech_args = enroll_config
         self.init_enroll_augmentor()
+        self.rebind_augmentation_blocks()
+
+    def rebind_augmentation_blocks(self) -> None:
+        """The capture chain, composed here and re-composed on a knob change."""
+        super().rebind_augmentation_blocks()
         self.device_chain = device_chain_from_blocks(self.augmentor, self)
 
     def init_enroll_augmentor(self):
@@ -205,9 +210,9 @@ class TargetSpeakerExtractDataset(DynamicBaseDataset):
 
         return enroll_speech
 
-    def __getitem__(self, target_speaker: Tuple[str, int | None]):
-        target_speaker, batch_sr = target_speaker
-        batch_sr = int(batch_sr) if batch_sr is not None else batch_sr
+    def __getitem__(self, target_speaker: Tuple):
+        key = self.parse_item_key(target_speaker)
+        target_speaker, batch_sr = key.speaker, key.sample_rate
 
         # Get enroll speech here
         enroll_speech = self.get_enroll_speech(

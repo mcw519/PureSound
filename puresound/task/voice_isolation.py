@@ -125,21 +125,6 @@ class VoiceIsolationDataset(NoiseSuppressionDataset):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        # Sessions label on the vad_target grid, so the builder is given the
-        # same frame/hop the label block declares -- and the dataset's own cheap
-        # labeler, which for the energy backend IS the one create_vad_target
-        # uses.
-        vad_cfg = self.vad_label_args
-        frame_length, hop_length = 400, 160
-        if vad_cfg is not None:
-            frame_length = int(vad_cfg.args.get("frame_length", vad_cfg.frame_length))
-            hop_length = int(vad_cfg.args.get("hop_length", vad_cfg.hop_length))
-        self.session_rows = SessionRowBuilder(
-            self.augmentation_session_rows_args,
-            vad_labeler=self.gating_vad_labeler,
-            frame_length=frame_length,
-            hop_length=hop_length,
-        )
         # The blocks themselves are set by the base from the registry; what is
         # task-specific is loading the manifests they name.
         self._realfar_pool = self._load_real_pool(self.augmentation_realfar_args)
@@ -152,6 +137,27 @@ class VoiceIsolationDataset(NoiseSuppressionDataset):
         self._realnear_index = (
             self._channel_index(self._realnear_pool)
             if getattr(self.augmentation_realnear_args, "stitch_to_length", False) else {})
+
+    def rebind_augmentation_blocks(self) -> None:
+        """Adds the session-row builder to what the base task re-derives.
+
+        Sessions label on the ``vad_target`` grid, so the builder is given the
+        same frame/hop the label block declares -- and the dataset's own cheap
+        labeler, which for the energy backend IS the one ``create_vad_target``
+        uses.
+        """
+        super().rebind_augmentation_blocks()
+        vad_cfg = self.vad_label_args
+        frame_length, hop_length = 400, 160
+        if vad_cfg is not None:
+            frame_length = int(vad_cfg.args.get("frame_length", vad_cfg.frame_length))
+            hop_length = int(vad_cfg.args.get("hop_length", vad_cfg.hop_length))
+        self.session_rows = SessionRowBuilder(
+            self.augmentation_session_rows_args,
+            vad_labeler=self.gating_vad_labeler,
+            frame_length=frame_length,
+            hop_length=hop_length,
+        )
 
     # ------------------------------------------------------------------ #
     # real-recording pools

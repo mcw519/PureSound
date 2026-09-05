@@ -36,8 +36,8 @@ class SpeakerEmbeddingDataset(DynamicBaseDataset):
         return len(self.total_spks)
 
     def __getitem__(self, target_speaker):
-        target_speaker, batch_sr = target_speaker
-        batch_sr = int(batch_sr) if batch_sr is not None else batch_sr
+        key = self.parse_item_key(target_speaker)
+        target_speaker, batch_sr = key.speaker, key.sample_rate
         target_speech, self.ori_audio_sr, (_, _) = (
             self.choose_an_utterance_by_speaker_name(
                 target_speaker_name=target_speaker,

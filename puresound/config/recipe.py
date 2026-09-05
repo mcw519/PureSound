@@ -27,6 +27,7 @@ from .augmentation import (
     CompressorAugmentation,
 )
 from .base import Probability, StrictConfig
+from .curriculum import CurriculumConfig, split_track_path
 
 
 TaskName = Literal[
@@ -72,13 +73,13 @@ class TrainerConfig(StrictConfig):
     find_unused_parameters: StrictBool = False
     # Mixed row lengths. Each TRAINING batch draws one bucket, so the model is
     # supervised at several context lengths instead of one. Why it exists: a row
-    # is scored as a whole, so the evidence-poor opening frames are weighted 1/N
-    # of the row -- train only at 30 s and short-context behaviour decays (v15
-    # measured 10 s suppression falling 4.18 -> 2.79 dB), train only at 6 s and
-    # it is merely tolerable. The batch size travels WITH the length because
-    # memory does: 3s x20 / 6s x12 / 12s x6 / 30s x2 all fit the same card.
-    # Validation always uses n_spk_per_batch / training_length_seconds, so valid
-    # loss stays comparable across epochs. None = single length, unchanged.
+    # is scored as a whole, so its evidence-poor opening frames carry 1/N of the
+    # loss -- train at one long length and behaviour on short context decays,
+    # train at one short length and long-context behaviour never develops. The
+    # batch size travels WITH the length because activation memory does, so
+    # every bucket fits the same card. Validation always uses n_spk_per_batch /
+    # training_length_seconds, so valid loss stays comparable across epochs.
+    # None = single length, unchanged.
     length_schedule: list[LengthBucket] | None = None
 
     @model_validator(mode="after")
@@ -129,6 +130,90 @@ class EnrollmentConfig(StrictConfig):
     add_volume: VolumeAugmentation
 
 
+def union_bank_member_names(reverb: ReverbAugmentation | None) -> list[str]:
+    """The names a union RIR bank's members are served under.
+
+    Mirrors ``AudioEffectAugmentor.init_room_bank``: a member without a ``name``
+    is served as ``bank<index>``, so a curriculum can address it either way and
+    the two sides cannot drift into different naming.
+    """
+    simulator = reverb.simulator if reverb is not None else None
+    bank = simulator.pregenerated if simulator is not None else None
+    members = bank.banks if bank is not None else None
+    if not members:
+        return []
+    return [
+        member.name if member.name else f"bank{index}"
+        for index, member in enumerate(members)
+    ]
+
+
+def _check_augmentation_target(recipe: "BaseRecipe", reference: str) -> None:
+    block_name, _, remainder = reference.partition(".")
+    block = getattr(recipe, block_name, None)
+    if block is None:
+        raise ValueError(
+            f"curriculum schedules {reference!r} but this recipe has no {block_name}"
+        )
+    if not block.used:
+        raise ValueError(
+            f"curriculum schedules {reference!r} but {block_name}.used is False. "
+            "Keep the block enabled and ramp its prob from 0 -- a disabled block "
+            "is skipped before its random draw, so switching it on mid-run moves "
+            "every draw after it."
+        )
+    cursor: Any = block
+    for field in remainder.split("."):
+        cursor = getattr(cursor, field, None)
+        if cursor is None:
+            raise ValueError(
+                f"curriculum schedules {reference!r} but {block_name} does not set "
+                f"{field!r}"
+            )
+
+
+def _check_bank_target(recipe: "BaseRecipe", reference: str) -> None:
+    names = union_bank_member_names(getattr(recipe, "augmentation_reverb", None))
+    if not names:
+        raise ValueError(
+            f"curriculum schedules bank weight {reference!r}, but this recipe's "
+            "reverb block has no `banks:` union to weight"
+        )
+    if reference not in names:
+        raise ValueError(
+            f"curriculum schedules bank weight {reference!r}, not a member of the "
+            "union: " + ", ".join(names)
+        )
+
+
+def _check_loss_target(recipe: "BaseRecipe", reference: str) -> None:
+    losses = getattr(recipe, "loss_func", None)
+    if not losses:
+        raise ValueError(
+            f"curriculum schedules loss {reference!r} but this recipe registers "
+            "no loss_func"
+        )
+    if reference.startswith("#"):
+        index = int(reference[1:])
+        if index >= len(losses):
+            raise ValueError(
+                f"curriculum schedules loss {reference!r} but only {len(losses)} "
+                "losses are registered"
+            )
+        return
+    matches = [index for index, loss in enumerate(losses) if loss.type == reference]
+    if not matches:
+        raise ValueError(
+            f"curriculum schedules loss {reference!r}, which this recipe does not "
+            "register: " + ", ".join(sorted({loss.type for loss in losses}))
+        )
+    if len(matches) > 1:
+        raise ValueError(
+            f"curriculum schedules loss {reference!r}, but this recipe registers it "
+            f"{len(matches)} times -- address one by index, e.g. '#{matches[0]}'"
+        )
+
+
 class BaseRecipe(StrictConfig):
     """Fields shared by every training recipe, independent of task."""
 
@@ -154,6 +239,33 @@ class BaseRecipe(StrictConfig):
     augmentation_compressor: CompressorAugmentation | None = None
     vad_label: VadLabelConfig | None = None
 
+    # Knobs that move with the epoch instead of staying where the file put them
+    # (puresound.config.curriculum). None: every knob is a constant.
+    curriculum: CurriculumConfig | None = None
+
+    @model_validator(mode="after")
+    def curriculum_targets_exist(self):
+        """Every track must name something this recipe actually has.
+
+        A curriculum that points at a disabled block, a bank member that is not
+        in the union, or a loss that is not registered would train perfectly
+        happily and change nothing -- the whole reason this block exists is to
+        stop the recipe and the run from disagreeing, so the mismatch is an
+        error at load time.
+        """
+        curriculum = self.curriculum
+        if curriculum is None or not curriculum.used:
+            return self
+        for track in curriculum.tracks:
+            kind, reference = split_track_path(track.path)
+            if kind == "aug":
+                _check_augmentation_target(self, reference)
+            elif kind == "bank":
+                _check_bank_target(self, reference)
+            else:
+                _check_loss_target(self, reference)
+        return self
+
     def augmentation_kwargs(self) -> dict[str, Any]:
         """The augmentation arguments a dataset constructor takes.
 
@@ -170,6 +282,30 @@ class BaseRecipe(StrictConfig):
                 block = None
             kwargs[f"{name}_args"] = block
         return kwargs
+
+    def curriculum_loss_indices(self) -> dict[str, int]:
+        """Loss reference -> position in ``loss_func``, for the applier.
+
+        Resolved here, once, off the same list the losses are built from: the
+        thing that applies a weight at runtime holds an index, never a name it
+        has to look up again against a different list.
+        """
+        curriculum = self.curriculum
+        losses = getattr(self, "loss_func", None) or []
+        if curriculum is None or not curriculum.used:
+            return {}
+        indices: dict[str, int] = {}
+        for track in curriculum.tracks:
+            kind, reference = split_track_path(track.path)
+            if kind != "loss":
+                continue
+            if reference.startswith("#"):
+                indices[reference] = int(reference[1:])
+            else:
+                indices[reference] = next(
+                    index for index, loss in enumerate(losses) if loss.type == reference
+                )
+        return indices
 
 
 class SisoRecipe(BaseRecipe):
@@ -213,12 +349,12 @@ class VoiceIsolationRecipe(SisoRecipe):
         bystanders part of what the model must keep -- the opposite of the row's
         purpose. ``augmentation_row_initial_ambient`` masks every speech
         component out of the row's opening AFTER the script has been written, so
-        the turn spans would claim speech the mixture no longer has (and it is
-        negative on its own axis anyway: v17, cold-far +0.35 dB, p = 0.020).
+        the turn spans would claim speech the mixture no longer has.
 
         The block carries the ``augmentation_`` prefix because that is what
-        ``augmentation_kwargs`` forwards to a dataset as ``<name>_args``; the
-        knob inside it is ``enabled``, the name the v20 design pre-registered.
+        ``augmentation_kwargs`` forwards to a dataset as ``<name>_args``, while
+        the knob inside it is spelled ``enabled``; ``SessionRowsConfig.used``
+        bridges the two for the shared plumbing.
         """
         block = self.augmentation_session_rows
         if block is None or not block.enabled:
