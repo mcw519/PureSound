@@ -9,12 +9,17 @@
 #
 # WHAT MOVES
 #
-#   epoch      0 ------------ 20 ------------ 40 ------------ 60 ---- 79
+#   epoch      0 ------------ 20 ------------ 40 ------------ 60 -------- 119
 #   rooms      easy-weighted  ->  widening    ->  full range + measured rooms
 #   deletion   OverSuppressionLoss 0 -> 3 (in by epoch 30)
 #   capture    media voice + mic high-pass in at epoch 20
 #   real rows  real far / real near pools in at epoch 30, full at 40
 #   proximity  DistHeadRegressionLoss 0 -> 0.3, arriving with the real rows
+#
+# Every track's last point is at epoch 60, and a track holds its value flat past
+# its last point. Epochs 60-119 therefore introduce nothing: they are budget for
+# the recipe the schedule ends on, and the cosine troughs inside them say whether
+# the run is still improving or has converged.
 #
 # The order is not arbitrary. Separation has to work at all before deletion
 # pressure means anything, so the anti-suppression term ramps in rather than
@@ -59,8 +64,9 @@
 # schedule while a restarted one would replay it from the beginning.
 #
 # The scheduler restarts every 20 epochs, so checkpoints are only comparable at
-# the cosine troughs (ep19/39/59/79). Those troughs also fall on the schedule's
-# phase boundaries, so a trough checkpoint is always one that finished a phase.
+# the cosine troughs (ep19/39/59/79/99/119). The first four fall on the
+# schedule's phase boundaries, so each of those is a checkpoint that finished a
+# phase; the last two measure budget at the final values.
 schema_version: 2
 purpose: train
 task: voice_isolation
@@ -402,9 +408,9 @@ curriculum:
 
 trainer:
   lightning_trainer_args:
-    # Four cosine cycles. Stops on a trough by itself so a benchmark can be
+    # Six cosine cycles. Stops on a trough by itself so a benchmark can be
     # chained after the training command; resume with --ckpt_path.
-    max_epochs: 80
+    max_epochs: 120
     gradient_clip_val: 5.
     accumulate_grad_batches: 2
     precision: bf16-mixed
