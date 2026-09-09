@@ -40,8 +40,13 @@ trough-to-trough trend only. Every other row reads fixed audio off disk.
 +0.04 dB, p=0.044, paired). **The cross-chain far clips moved for the first time** —
 `qvf_price_far1` −17.2 against −3.6, `qvf_price_far2` −30.1 against −18.5,
 `qvf_gym_session` −14.0 against −8.9 as block means. That wall had not moved for any
-version before this one. Caveat: n=6 in that group and the aggregate median delta is not
-significant, so it needs an independent replication before it counts as an axis.
+version before this one. **Replication on a second cross-chain corpus did not confirm a
+general effect**: on RealMAN (a capture chain absent from training, 200 utterances,
+`eval_far_suppression.py` with identical flags for both checkpoints) this model and the
+ladder are indistinguishable — >1 m median −7.37 vs −7.21, every distance bucket within
+0.6 dB, keep −0.67 vs −0.72. The QVF movement is therefore QVF-specific and unexplained at
+n=6, not a cross-chain axis. On VOiCES, whose far pool is in training, the ladder is
+deeper (−15.91 vs −10.04), consistent with the device-chain gap above.
 
 **What is still short** is far suppression on the device chain: field sessions −8.28
 against −11.78, cold-far with an ambient lead-in −3.58 against −14.51.
@@ -92,7 +97,7 @@ question from this one.
 `pretrained_ckpt/dpcrn_curriculum_v0.ckpt` (this run's ep99) is **not** a replacement
 for the deployment default: it gives up 3.5 dB of field-session suppression. It is the
 reproducible single-run baseline — one command, one config, no warm-start chain, ~70% of
-a lineage that took eight — plus the first movement on the cross-chain wall, and the
+a lineage that took eight — and the
 scheduling mechanism the next recipe line can write its phases with.
 
 ## Costs and caveats
