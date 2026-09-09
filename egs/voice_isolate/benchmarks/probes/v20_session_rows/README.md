@@ -1,4 +1,14 @@
-# v20 R1a, data side: session rows -- what was built and what it measures
+# v20 session rows -- data contracts and acceptance probes
+
+> **Fresh-baseline note (2026-09-05).** The historical R1a measurements below
+> describe the superseded draft and are retained as provenance. The executable
+> experiment is now the fresh v20 definition in
+> `config/exp/train_dpcrn_v20_r1a.yaml`: matched-distance and legacy source-pool
+> pairing are off, distances come from the RIR actually rendered for each turn,
+> and `paired_view` is an explicit second chain view used only by the generic
+> consistency dispatcher. Use `VALIDATION.md`, `audit_300_rows.py`, and
+> `no_update_memory_smoke.py` for the current acceptance protocol. No historical
+> R1a run is a baseline for this experiment.
 
 2026-09-04. Deliverable: the **data half** of stage R1a in
 `../v20_self_enrolling_foreground_design.md` (§4.1 is the mandate; review items
@@ -628,15 +638,15 @@ uv run python benchmarks/probes/v20_session_rows/aggregate_v20.py \
     --label v16 --label R1a --label "R1a 30s-only" \
     $S/v16_rows.jsonl $S/r1a_rows.jsonl $S/r1a_session30_rows.jsonl
 
-# byte identity and memory
+# byte identity and dry memory (the old memory_smoke.py fit loop is historical)
 uv run python benchmarks/probes/v20_session_rows/batch_identity.py \
     --batches 20 --num-workers 8 --seed 7
-for spec in "30 2" "12 6" "60 1"; do set -- $spec
-  uv run python benchmarks/probes/v20_session_rows/memory_smoke.py \
-      --seconds $1 --n-spk $2 --steps 30 --gpu 0
-done
-uv run python benchmarks/probes/v20_session_rows/memory_smoke.py \
-    --seconds 30 --n-spk 2 --steps 30 --gpu 0 --disable-session-rows
+uv run python benchmarks/probes/v20_session_rows/no_update_memory_smoke.py \
+    --config config/exp/train_dpcrn_v20_r1a.yaml --seconds 12 --n-spk 6 \
+    --steps 2 --gpu 0
+uv run python benchmarks/probes/v20_session_rows/no_update_memory_smoke.py \
+    --config config/exp/train_dpcrn_v20_r1a.yaml --seconds 30 --n-spk 2 \
+    --steps 2 --gpu 0
 
 # how often each new loss term is actually non-zero (§8.1)
 uv run python benchmarks/probes/v20_session_rows/loss_reach.py \
@@ -644,41 +654,32 @@ uv run python benchmarks/probes/v20_session_rows/loss_reach.py \
 
 # the checkpoint pre-flight (§11)
 uv run python scripts/preflight_ckpt_recipe.py \
+    --allow-missing-head vad_head --allow-missing-head proximity_head \
     --ckpt /work/any_exp_link/puresound_exp/dpcrn_v16_lengthmix/lightning_logs/\
 version_0/checkpoints/epoch=19-step=10000.ckpt \
     config/exp/train_dpcrn_v20_r1a.yaml config/exp/train_dpcrn_v16_lengthmix.yaml
 ```
 
-Training (warm start from v16 ep19; never from scratch -- the eight-stage ladder
-is load-bearing):
-
-```bash
-cd egs/voice_isolate
-uv run python main.py config/exp/train_dpcrn_v20_r1a.yaml --training \
-    --pretrained_ckpt_path /work/any_exp_link/puresound_exp/dpcrn_v16_lengthmix/\
-lightning_logs/version_0/checkpoints/epoch=19-step=10000.ckpt
-```
+Training is deliberately outside this acceptance document. The recipe is ready
+for a separately authorised run after the fixed artifacts, 300-row audit, and
+no-update memory smoke have been reviewed; none of the commands above invokes
+`main.py --training`.
 
 ---
 
 ## 10. What is NOT measured here, and what would break
 
 * **No model has seen these rows.** Every number above is a property of the
-  data, or of a loss called on the data with an untrained head. Whether a
-  session row teaches anything is R1a's training question, and the design's own
-  warning applies: v10's T2 answered "more bystander-first rows" by suppressing
-  more (turn-taking keep violations 6 -> 10, moderate WER +0.024). Session rows
-  *without* the identity/proximity objectives would be that experiment again,
-  which is why the recipe enables both (§11) rather than shipping the data axis
-  alone -- and why the data-axis-alone variant is documented as an ablation to
-  run deliberately, not as the default.
-* **The within-batch cross-chain pair rate is zero at these knobs** (§4.2). The
-  proximity consistency term must read a queue keyed on `row_source_id`.
+  data or of a loss called on an untrained head. Whether a session row teaches
+  anything is the separate training question; this document records contracts
+  and acceptance checks only.
+* **The current cross-chain pair is nested and explicit.** `paired_view` carries
+  provenance back to one primary row, so the generic dispatcher can count
+  effective pairs without a source-id queue or duplicated separation weight.
 * **The user's seat change is 0.15 m**, not a walk across the room (§4).
-* **A paired twin does not share its speed perturbation.** The source scope ends
-  before the noise stage, and the speed draw sits after it, so twins differ in
-  tempo as well as in chain and noise. Turn-pooled scalars tolerate that; a
-  frame-aligned comparison between twins would not.
+* **The current paired view shares the completed source.** Noise, speed, room,
+  timing, and mixture are fixed before the second chain draw. The auxiliary
+  waveform is nested and is not a second separation example.
 * **`echo_playback` is off in this recipe.** If it were enabled it would add an
   unlabelled talker to a session row -- the labels describe U and the scripted
   bystanders only.
@@ -692,15 +693,18 @@ lightning_logs/version_0/checkpoints/epoch=19-step=10000.ckpt
 
 ---
 
-## 11. The recipe now switches R1a's other half on -- and its pre-flight
+## 11. Historical draft pre-flight (superseded)
 
-`config/exp/train_dpcrn_v20_r1a.yaml` no longer carries commented placeholders.
-The heads and the two loss terms are enabled, with the argument names the loss
-modules actually take (the placeholders had guessed `exclude_overlap`,
-`teacher_momentum` and `cross_chain_weight`; the real signatures are
-`temperature` / `momentum` / `min_turn_frames` and `margin` /
-`consistency_weight` / `min_turn_frames`, and `extra="forbid"` on the head
-configs would have rejected the guessed key names too):
+The material in this section records the removed R1a draft. It is retained only
+to explain old measurements and must not be used to define the fresh v20 run;
+see the executable recipe header and §7.1 of the design for the current
+baseline. In particular, the current recipe leaves identity and bottleneck
+exposure off, enables only the proximity and presence heads, and uses the
+generic nested paired-view dispatcher.
+
+The removed draft had the following shape (shown for provenance only). Its
+argument names and preflight output are not the current executable definition;
+the current config is documented at the top of this file:
 
 ```yaml
 loss_func:

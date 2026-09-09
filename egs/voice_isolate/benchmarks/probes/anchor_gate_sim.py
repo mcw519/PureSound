@@ -399,7 +399,76 @@ def auc(pos: np.ndarray, neg: np.ndarray) -> float:
     return (rp - pos.size * (pos.size + 1) / 2.0) / (pos.size * neg.size)
 
 
+def sliding_proximity(values, act, windows):
+    """Average direct ProximityHead readouts over trailing active-frame windows.
+
+    No DistHead MLP, metres conversion, or absolute near threshold is involved.
+    """
+    n = min(len(values), len(act)); values, act = values[:n], act[:n]
+    ai = np.flatnonzero(act & np.isfinite(values)); out = {}
+    cs = np.r_[0., np.cumsum(values[ai], dtype=float)]
+    k = np.arange(1, len(ai)+1)
+    for window in windows:
+        width = max(1, round(window*FPS)); lo = np.maximum(0, k-width)
+        result = np.full(n, np.nan)
+        valid = k-lo >= min(C_MIN_FRAMES, width)
+        result[ai[valid]] = ((cs[k]-cs[lo]) / (k-lo))[valid]
+        out[window] = result
+    return out
+
+
+def cmd_proximity_readability(args):
+    cache, windows = Path(args.cache), [0.5, 1., 2.]
+    out = {"head": "proximity", "units": "raw scalar", "near_direction": "higher",
+           "windows": windows, "tags": {}}
+    for tag in args.tags:
+        pools, prefixes = {}, {}
+        for entry in read_index(cache, tag, "field"):
+            with np.load(entry['file']) as data:
+                if 'proximity' not in data:
+                    raise ValueError(f"cache lacks proximity; recache with --head proximity: {entry['file']}")
+                values, mix = data['proximity'], data['mix']
+                meta = json.loads(str(data['meta']))
+            floor = meta.get('floor_dbfs')
+            energy = frame_energy_db(mix, len(values))
+            if floor is None:
+                floor = float(np.percentile(energy, 10))
+            estimates = sliding_proximity(values, activity(energy, floor+ACTIVE_MARGIN_DB), windows)
+            chain = chain_of(group_of(entry['clip']))
+            scope = 'session' if entry['side'] == 'session' else 'clip'
+            offset = float(meta.get('offset_s', 0.))
+            for window, estimate in estimates.items():
+                if entry['condition'] == 'none' and entry['side'] != 'dt':
+                    for kind in ('keep', 'suppress'):
+                        mask = np.zeros(len(estimate), dtype=bool)
+                        for start, end in meta.get('spans', {}).get(kind, []):
+                            a, b = max(0, round((start+offset)*FPS)), min(len(mask), round((end+offset)*FPS))
+                            mask[a:b] = True
+                        valid = estimate[mask & np.isfinite(estimate)]
+                        pools.setdefault((chain, scope, window, kind), []).extend(valid.tolist())
+                elif offset > 0:
+                    valid = estimate[:round(offset*FPS)]; valid = valid[np.isfinite(valid)]
+                    if valid.size:
+                        prefixes.setdefault((chain, entry['condition'], window), []).append(float(np.median(valid)))
+        rows = []
+        for chain, scope, window in sorted({key[:3] for key in pools}):
+            keep = np.asarray(pools.get((chain, scope, window, 'keep'), []))
+            suppress = np.asarray(pools.get((chain, scope, window, 'suppress'), []))
+            rows.append(dict(chain=chain, scope=scope, W=window,
+                auc_proximity=auc(keep, suppress) if keep.size and suppress.size else None,
+                n_keep_frames=int(keep.size), n_supp_frames=int(suppress.size),
+                median_keep=float(np.median(keep)) if keep.size else None,
+                median_suppress=float(np.median(suppress)) if suppress.size else None))
+        out['tags'][tag] = {'auc': rows, 'prefix': [dict(chain=ch, condition=cond, W=w,
+            n=len(vals), median=float(np.median(vals)), p10=float(np.percentile(vals, 10)),
+            p90=float(np.percentile(vals, 90))) for (ch,cond,w),vals in sorted(prefixes.items())]}
+    Path(args.out).write_text(json.dumps(out, indent=2, allow_nan=False)+'\n')
+    print(json.dumps(out, indent=2, allow_nan=False))
+
+
 def cmd_readability(args):
+    if getattr(args, "head", "dist") == "proximity":
+        return cmd_proximity_readability(args)
     cache = Path(args.cache)
     windows = [0.5, 1.0, 2.0]
     out = {"windows": windows, "tags": {}}
@@ -716,6 +785,7 @@ def main():
     s.add_argument("--cache", required=True)
     s.add_argument("--tags", nargs="+", required=True)
     s.add_argument("--out", required=True)
+    s.add_argument("--head", choices=["dist", "proximity"], default="dist")
     s.set_defaults(fn=cmd_readability)
 
     s = sub.add_parser("sweep")

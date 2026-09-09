@@ -795,3 +795,70 @@ def test_the_pair_id_separates_the_length_buckets(corpus):
     short = int(_row(dataset, 10200, seconds=12.0)["row_source_id"])
     long_row = int(_row(dataset, 10201, seconds=20.0)["row_source_id"])
     assert short != long_row
+
+
+def test_turn_distance_tracks_each_rendered_seat_and_bystander(corpus, monkeypatch):
+    dataset = _dataset(corpus, _session(
+        rir_move_prob=1.0, user_turn_seconds=[1.5, 2.5],
+        distance_matched_bystander_prob=0.0, n_bystanders=[2, 2],
+    ), seconds=30.0)
+    user_distances, bystander_distances = [], []
+    user_apply = dataset.apply_source_level_target_reverb
+    bystander_apply = dataset.apply_source_level_interferer_reverb
+
+    def user(**kwargs):
+        result = user_apply(**kwargs)
+        user_distances.append(result.metadata['source_receiver_distance'])
+        return result
+
+    def bystander(**kwargs):
+        result = bystander_apply(**kwargs)
+        bystander_distances.append(result.metadata['source_receiver_distance'])
+        return result
+
+    monkeypatch.setattr(dataset, 'apply_source_level_target_reverb', user)
+    monkeypatch.setattr(dataset, 'apply_source_level_interferer_reverb', bystander)
+    row = _row(dataset, 16420, seconds=30.0)
+    actual = row['turn_distance']
+    user_turns = actual[row['turn_role'] == ROLE_USER]
+    assert len(user_distances) == 2
+    assert float(user_turns[0]) == pytest.approx(user_distances[0])
+    assert float(user_turns[-1]) == pytest.approx(user_distances[1])
+    assert torch.unique(user_turns).numel() == 2
+    # Each bystander has its own actual RIR, repeated on its later turns.
+    bystander_speakers = row['turn_speaker'][row['turn_role'] == ROLE_BYSTANDER]
+    seen = []
+    for speaker in bystander_speakers.tolist():
+        if speaker not in seen:
+            seen.append(speaker)
+    assert len(seen) == len(bystander_distances)
+    for speaker, distance in zip(seen, bystander_distances):
+        turns = actual[row['turn_speaker'] == speaker]
+        torch.testing.assert_close(turns, torch.full_like(turns, distance))
+
+
+def test_unknown_turn_distance_and_non_session_padding_stay_nan(corpus):
+    dataset = _dataset(corpus, _session(min_seconds=12.0), reverb=False)
+    session = _row(dataset, 16421)
+    plain = _row(dataset, 16422, seconds=6.0)
+    assert session['turn_distance'].numel() > 0
+    assert bool(torch.isnan(session['turn_distance']).all())
+    batch = VoiceIsolationCollateFunc()([session, plain])
+    assert batch['turn_distance'].shape == batch['turn_role'].shape
+    assert bool(torch.isnan(batch['turn_distance']).all())
+
+
+def test_user_gap_remains_row_present_but_frame_presence_is_zero(corpus):
+    dataset = _dataset(corpus, _session(
+        shape_probs={'user_first': 0.0, 'bystander_first': 0.0, 'user_gap': 1.0, 'overlap': 0.0},
+        user_gap_seconds=[5.0, 6.0],
+    ), reverb=False, seconds=30.0)
+    row = _row(dataset, 16423, seconds=30.0)
+    assert float(row['session_gap_seconds']) >= 5.0
+    assert float(row['target_present']) == 1.0
+    assert float(row['target_absent']) == 0.0
+    active = row['user_active']
+    hits = torch.nonzero(active > 0).flatten()
+    assert hits.numel() > 0
+    assert bool((active[hits[0]:hits[-1]] == 0).any())
+    assert torch.equal(active, row['vad_target'].reshape(-1))

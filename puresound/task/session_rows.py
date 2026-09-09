@@ -29,8 +29,9 @@ What this module deliberately does NOT do, each because the record forbids it:
   applied jointly to the mixture and the target, exactly as
   ``NoiseSuppressionDataset.__getitem__`` does for every other row type -- a
   per-talker chain would break the mixture/target consistency every loss here
-  assumes. Cross-*chain* views of one talker come from cross-*row* pairs
-  (``pair_prob``), never from inside a row.
+  assumes. Explicit ``paired_view_prob`` forks the finished mixture immediately
+  before the chain in ``ns.py``; each view gets one chain for the entire row.
+  Legacy ``pair_prob`` source-pool pairing remains for older recipes.
 * **It does not fill a gap with digital silence.** Silence as filler is worth
   -5.90 dB (v8) / -19.22 dB (v16) of suppression bias on the lone-interferer arm
   and -2.33 dB of keep-side onset deletion; ``floor_dbfs_range`` guarantees a
@@ -65,13 +66,17 @@ shorter than ``min_seconds`` all return before the probability draw, so a recipe
 with this block off -- or with it on, in its short length buckets -- regenerates
 bit-identically.
 
-**The source scope restores the streams it seeded.** A paired row renders the
+**Legacy source-pool pairing restores the streams it seeded.** A row renders the
 material its ``row_source_id`` determines and then hands the streams back
 untouched, so the noise draw and the device chain that follow are the row's own.
 Two rows carrying the same ``row_source_id`` are therefore the same source
 material through two independent chains, which is what a cross-chain consistency
 term needs. What a twin shares: room, talkers, utterance crops, script, SIR,
 floor level. What it does not: speed perturbation, the noise draw, the chain.
+New experiments use explicit paired views instead: source, room, timing, speed,
+noise and mixture are all identical, only the chain changes. Identical resulting
+noisy waveforms are excluded, and the second view collates under ``paired_view``
+without increasing the primary row count or separation supervision weight.
 """
 
 from __future__ import annotations
@@ -105,6 +110,7 @@ from puresound.task.overlap_gating import _Envelope
 #: ``turn_role``        long  [K_max]  1 user, 2 bystander, 0 pad
 #: ``turn_speaker``     long  [K_max]  global speaker index, -1 pad
 #: ``turn_chain``       long  [K_max]  this row's chain-draw id, 0 pad
+#: ``turn_distance``    float [K_max]  actual RIR distance in metres, NaN unknown/pad
 #: ``row_source_id``    long  [N]      paired-source identity, -1 = unpaired
 SESSION_LABEL_KEYS = (
     "user_active",
@@ -113,6 +119,7 @@ SESSION_LABEL_KEYS = (
     "turn_role",
     "turn_speaker",
     "turn_chain",
+    "turn_distance",
     "row_source_id",
 )
 
@@ -207,6 +214,8 @@ class Turn:
     talker: int
     start: int
     end: int
+    #: Metres from the RIR actually used for this turn; unknown stays NaN.
+    distance: float = float("nan")
 
 
 @dataclass
@@ -567,6 +576,11 @@ class SessionRowBuilder:
             envelope, length, sample_rate,
         )
 
+        for turn in script.turns:
+            if turn.role == ROLE_BYSTANDER and turn.talker <= len(bystander_metadata):
+                value = bystander_metadata[turn.talker - 1].get("source_receiver_distance")
+                turn.distance = float(value) if value is not None else float("nan")
+
         sir_db = self._draw_sir(dataset)
         floor_dbfs = _uniform(*config.floor_dbfs_range)
 
@@ -685,6 +699,11 @@ class SessionRowBuilder:
                 wet, dry, meta = reverbed.noisy, reverbed.clean, reverbed.metadata
             else:
                 wet, dry, meta = user_wav, user_wav, None
+            distance = (meta or {}).get("source_receiver_distance")
+            for index in turn_indices:
+                script.turns[index].distance = (
+                    float(distance) if distance is not None else float("nan")
+                )
             if metadata is None and meta is not None:
                 metadata = dict(meta)
             if meta is not None and meta.get("source_receiver_distance") is not None:
@@ -824,6 +843,7 @@ class SessionRowBuilder:
                     "turn_role": torch.zeros(0, dtype=torch.long),
                     "turn_speaker": torch.zeros(0, dtype=torch.long),
                     "turn_chain": torch.zeros(0, dtype=torch.long),
+                    "turn_distance": torch.zeros(0, dtype=torch.float32),
                     "row_source_id": torch.tensor(-1, dtype=torch.long),
                 }
             )
@@ -841,6 +861,9 @@ class SessionRowBuilder:
                 "turn_role": roles,
                 "turn_speaker": speakers,
                 "turn_chain": chains,
+                "turn_distance": torch.tensor(
+                    [turn.distance for turn in render.script.turns], dtype=torch.float32
+                ),
                 "row_source_id": torch.tensor(int(render.row_source_id), dtype=torch.long),
             }
         )
@@ -1014,6 +1037,7 @@ _LABEL_PADDING = {
     "turn_role": 0,
     "turn_speaker": -1,
     "turn_chain": 0,
+    "turn_distance": float("nan"),
 }
 
 
@@ -1036,4 +1060,7 @@ def collate_session_labels(batch: Sequence[Dict], out: Dict) -> Dict:
     ids = [item["row_source_id"].reshape(-1) for item in batch if "row_source_id" in item]
     if len(ids) == len(batch):
         out["row_source_id"] = torch.cat(ids, dim=0).long()
-    return out
+    # Compatibility for direct users of this label collator. The shared NS
+    # collator also supports auxiliary views without any session labels.
+    from puresound.task.paired_views import collate_paired_views
+    return collate_paired_views(batch, out)

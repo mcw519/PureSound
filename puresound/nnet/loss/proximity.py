@@ -1,46 +1,19 @@
-"""Relative-proximity loss on the per-frame `ProximityHead` (v20 R1a).
+"""Relative proximity supervised by rendered turn distances, not speaker roles.
 
-Two terms, neither of which ever names a distance:
+``turn_distance`` contains metres for each rendered turn, including user seat
+changes. Unknown distances are NaN. Only sufficiently separated user/bystander
+turns are compared; either role may be physically nearer. Missing distances
+never fall back to the assumption that the user is nearer.
 
-1. **Ordering.** Within a row, every (user turn u, bystander turn b) pair must
-   satisfy ``p̄_u - p̄_b >= m`` in the head's own units:
-   ``softplus(m - (p̄_u - p̄_b))``.
-2. **Cross-chain consistency.** Two rows rendered from the same source material
-   through *different* device chains must produce the same contrast:
-   ``|Δ(p̄_u - p̄_b)|``.
-
-Absolute readouts died three times in this repo (fixed dB thresholds and a
-metres regression, each on a chain offset or a checkpoint drift), which is why
-this loss supervises differences only and why nothing downstream reads the
-head's value. `DistHead`'s metres regression stays as an auxiliary.
-
-Batch contract (produced by the session-row generator; every key optional --
-rows without them make this loss a graph-carrying zero, so old recipes are
-unaffected). All on the 100 fps frame grid of ``vad_target`` (hop 160 at
-16 kHz):
-
-- ``user_active`` float [B, T] ∈ {0,1}; ``bystander_active`` float [B, T];
-  overlap = both 1.
-- ``turn_id`` long [B, T]: unique id (1..K) per contiguous single-talker turn,
-  0 = no turn / overlap.
-- ``turn_role`` long [B, K_max]: 1 = user, 2 = bystander, 0 = pad;
-  ``turn_speaker`` long [B, K_max]: global speaker id (−1 pad); ``turn_chain``
-  long [B, K_max]: id of the device-chain draw of the row (same for all turns of
-  a row).
-- ``row_source_id`` long [B]: the source material a row was rendered from, −1 =
-  none. Only rows that share a non-negative id and differ in ``turn_chain``
-  enter the consistency term.
-- existing keys: ``foreground_distance``, ``foreground_drr``,
-  ``nearest_interferer_distance``, ``n_interferers``, ``consistency_noise``,
-  ``vad_target``, ``background_vad_target``.
-
-Frame-grid alignment is `identity.align_turn_frames`, shared with the identity
-loss so "which grid do turns pool on" has one implementation: the label grid
-runs a frame longer than the head's (400-sample labeler window against the
-encoder's 512), and both are truncated to the common prefix.
+The baseline uses unbounded readouts and softplus(margin - signed gap).
+``scale_free=True`` is an explicit bounded-readout ablation, never an implicit
+change to an old recipe. Explicit second views are evaluated separately by
+``paired_consistency``: no duplicated ordering or separation example. Matched
+turn contrasts are compared individually so opposite errors cannot cancel.
 """
 
-from typing import Dict, List, Optional
+import math
+from typing import Dict, Optional
 
 import torch
 import torch.nn as nn
@@ -48,137 +21,158 @@ import torch.nn.functional as F
 
 from .identity import align_turn_frames, eligible_turns, pool_turn_means
 
-#: ``turn_role`` values in the batch contract.
-ROLE_PAD = 0
-ROLE_USER = 1
-ROLE_BYSTANDER = 2
-
 
 class RelativeProximityLoss(nn.Module):
-    """Margin on the user-minus-bystander proximity contrast, plus cross-chain
-    consistency of that contrast.
-
-    ``p̄_k`` is the mean of the head's per-frame scalar over turn ``k``'s
-    non-overlap frames, pooled exactly as the identity loss pools embeddings.
-
-    Args:
-        margin: ``m``, how far above a bystander's turn the user's must read.
-            In the head's own units -- the head is free to choose its scale, and
-            only ``m`` fixes what "clearly nearer" means relative to it.
-        consistency_weight: multiplier on term 2. ``0.0`` leaves the ordering
-            term alone, which is the ablation the round is designed to be able
-            to run.
-        min_turn_frames: turns shorter than this are ignored (a two-frame mean
-            is noise).
-
-    Zero-contribution rules, all graph-carrying (`dist.py`'s idiom, so DDP never
-    sees an unused head): a batch with no ``turn_id`` / ``turn_role``, no row
-    holding both a user turn and a bystander turn, and no cross-chain row pair
-    returns ``proximity.sum() * 0``.
-    """
+    """Ordering in head units; eligibility in metres. Bookkeeping is detached."""
 
     required_inputs = ("proximity", "batch")
+    paired_output = "proximity"
 
-    def __init__(
-        self,
-        margin: float = 1.0,
-        consistency_weight: float = 1.0,
-        min_turn_frames: int = 1,
-    ):
+    def __init__(self, margin: float = 1.0, consistency_weight: float = 1.0,
+                 min_turn_frames: int = 1, min_distance_gap_m: float = 0.25,
+                 scale_free: bool = False, temperature: float = 1.0,
+                 pair_selection: str = "cross_role"):
         super().__init__()
+        for name, value in (("margin", margin), ("temperature", temperature),
+                            ("min_distance_gap_m", min_distance_gap_m)):
+            if not math.isfinite(value) or value <= 0:
+                raise ValueError(f"{name} must be finite and positive")
+        if not math.isfinite(consistency_weight) or consistency_weight < 0:
+            raise ValueError("consistency_weight must be finite and non-negative")
+        if min_turn_frames < 1:
+            raise ValueError("min_turn_frames must be positive")
         self.margin = float(margin)
         self.consistency_weight = float(consistency_weight)
         self.min_turn_frames = int(min_turn_frames)
+        self.min_distance_gap_m = float(min_distance_gap_m)
+        self.scale_free = bool(scale_free)
+        self.temperature = float(temperature)
+        if pair_selection not in ("cross_role", "all"):
+            raise ValueError("pair_selection must be cross_role or all")
+        self.pair_selection = pair_selection
+        self.last_stats = {}
 
-    def forward(
-        self, proximity: Optional[torch.Tensor], batch: Dict
-    ) -> torch.Tensor:
-        if proximity is None:
-            raise ValueError(
-                "RelativeProximityLoss requires the backbone to expose "
-                "`last_proximity`; enable a proximity_head in the backbone config "
-                "(model.backbone.backbone_args.proximity_head)."
-            )
+    @property
+    def paired_weight(self):
+        return self.consistency_weight
 
-        zero = proximity.sum() * 0.0
-        turn_role = batch.get("turn_role")
-        if turn_role is None or batch.get("turn_id") is None:
-            return zero
-
-        device = proximity.device
-        turn_role = turn_role.to(device=device).long()
-        n_turns = int(turn_role.shape[1])
-        if n_turns == 0:
-            return zero
-
-        aligned = align_turn_frames([proximity.unsqueeze(-1)], batch, device)
-        if aligned is None:
-            return zero
-        (frames,), turn_id, exclude = aligned
-
-        means, counts = pool_turn_means(frames, turn_id, n_turns, exclude)
-        means = means.squeeze(-1)  # [B, K]
-        eligible = eligible_turns(counts, batch, device, self.min_turn_frames)
-
-        users = eligible & (turn_role == ROLE_USER)
-        bystanders = eligible & (turn_role == ROLE_BYSTANDER)
-        # One device-to-host transfer for the whole row loop rather than two per
-        # row: on a GPU each `bool(tensor)` is a synchronisation.
-        pairable = (users.any(dim=1) & bystanders.any(dim=1)).tolist()
-
-        ordering: List[torch.Tensor] = []
-        contrasts: Dict[int, torch.Tensor] = {}
-        for row, has_pair in enumerate(pairable):
-            if not has_pair:
-                continue
-            # [n_user, n_bystander] of p̄_u - p̄_b: every pair, because the
-            # ordering has to hold for the user's quiet turns too, not only for
-            # whichever pair happens to be easiest.
-            gaps = (
-                means[row][users[row]].unsqueeze(1)
-                - means[row][bystanders[row]].unsqueeze(0)
-            )
-            ordering.append(F.softplus(self.margin - gaps).reshape(-1))
-            contrasts[row] = gaps.mean()
-
-        consistency: List[torch.Tensor] = []
-        chains = self._row_chains(batch, eligible)
-        source_ids = batch.get("row_source_id")
-        if source_ids is not None and chains is not None and self.consistency_weight:
-            sources = source_ids.long().view(-1).tolist()
-            paired_rows = sorted(contrasts)
-            for i, left in enumerate(paired_rows):
-                for right in paired_rows[i + 1 :]:
-                    if sources[left] < 0 or sources[left] != sources[right]:
-                        continue
-                    if chains[left] == chains[right]:
-                        # Same chain: this pair says nothing about chain
-                        # robustness, and the ordering term already covers it.
-                        continue
-                    consistency.append(
-                        (contrasts[left] - contrasts[right]).abs().reshape(1)
-                    )
-
-        total = None
-        if ordering:
-            total = torch.cat(ordering).mean()
-        if consistency:
-            term = self.consistency_weight * torch.cat(consistency).mean()
-            total = term if total is None else total + term
-        return zero if total is None else total
-
-    @staticmethod
-    def _row_chains(batch: Dict, eligible: torch.Tensor) -> Optional[List[int]]:
-        """Device-chain id per row, read off the row's first eligible turn.
-
-        The contract says one chain draw per row (``ns.py`` applies the chain
-        once, jointly to mixture and target -- a per-talker draw would break
-        mixture/target consistency, v20 review item 6), so any eligible turn
-        answers for the row; the first is taken to keep it deterministic.
-        """
-        chain = batch.get("turn_chain")
-        if chain is None:
+    def _pairs(self, proximity: torch.Tensor, batch: Dict):
+        role, distance = batch.get("turn_role"), batch.get("turn_distance")
+        if role is None or distance is None or batch.get("turn_id") is None:
             return None
-        chain = chain.to(device=eligible.device).long()
-        first = torch.argmax(eligible.to(torch.int8), dim=1)  # 0 if none eligible
-        return chain.gather(1, first.unsqueeze(1)).squeeze(1).tolist()
+        if role.shape[1] == 0:
+            return None
+        if distance.shape != role.shape:
+            raise ValueError("turn_distance must have the same [B, K] shape as turn_role")
+        values = proximity.float()
+        if self.scale_free:
+            values = values.tanh()
+        aligned = align_turn_frames([values.unsqueeze(-1)], batch, proximity.device)
+        if aligned is None:
+            return None
+        (frames,), turn_id, exclude = aligned
+        means, counts = pool_turn_means(frames, turn_id, role.shape[1], exclude)
+        means = means.squeeze(-1)
+        role = role.to(proximity.device)
+        distance = distance.to(device=proximity.device, dtype=torch.float32)
+        eligible = eligible_turns(counts, batch, proximity.device, self.min_turn_frames)
+        eligible = eligible & torch.isfinite(distance) & (distance > 0)
+        delta = distance.unsqueeze(1) - distance.unsqueeze(2)  # d_right - d_left
+        mask = eligible.unsqueeze(2) & eligible.unsqueeze(1)
+        if self.pair_selection == "cross_role":
+            mask = mask & (role.unsqueeze(2) != role.unsqueeze(1))
+        # Count each unordered turn pair once; role numbers have no semantic
+        # meaning here beyond padding=0 and optional cross-role selection.
+        mask = mask & torch.ones_like(mask).triu(diagonal=1)
+        mask = mask & (delta.abs() >= self.min_distance_gap_m)
+        direction = torch.nan_to_num(delta).sign()
+        gaps = (means.unsqueeze(2) - means.unsqueeze(1)) * direction
+        return gaps, mask
+
+    def forward(self, proximity: Optional[torch.Tensor], batch: Dict) -> torch.Tensor:
+        if proximity is None:
+            raise ValueError("RelativeProximityLoss requires an enabled proximity_head")
+        zero = proximity.sum() * 0.0
+        self.last_stats = {key: zero.detach() for key in (
+            "ordering_pairs", "ordering_correct", "ordering_loss",
+            "within_batch_pairs", "consistency_loss",
+        )}
+        pairs = self._pairs(proximity, batch)
+        if pairs is None:
+            return zero
+        gaps, mask = pairs
+        selected = gaps[mask]
+        self.last_stats["ordering_pairs"] = mask.sum().detach()
+        self.last_stats["ordering_correct"] = (selected > 0).sum().detach()
+        ordering = zero
+        if selected.numel():
+            tau = self.temperature if self.scale_free else 1.0
+            ordering = (tau * F.softplus((self.margin - selected) / tau)).mean()
+        self.last_stats["ordering_loss"] = ordering.detach()
+
+        # Legacy explicitly collated source twins. The new recipe disables
+        # source-pool collisions and instead uses the additional paired view.
+        terms = []
+        sources, chains = batch.get("row_source_id"), batch.get("turn_chain")
+        if sources is not None and chains is not None and self.consistency_weight:
+            ids = sources.detach().cpu().tolist()
+            chains = chains.to(proximity.device)
+            for left in range(len(ids)):
+                for right in range(left + 1, len(ids)):
+                    if ids[left] < 0 or ids[left] != ids[right]:
+                        continue
+                    valid = mask[left] & mask[right]
+                    involved = valid.any(0) | valid.any(1)
+                    if not bool(valid.any()) or not bool((chains[left][involved] != chains[right][involved]).any()):
+                        continue
+                    terms.append((gaps[left][valid] - gaps[right][valid]).abs().mean())
+        consistency = torch.stack(terms).mean() if terms else zero
+        self.last_stats["within_batch_pairs"] = zero.detach().new_tensor(len(terms))
+        self.last_stats["consistency_loss"] = consistency.detach()
+        return ordering + self.consistency_weight * consistency
+
+    def paired_consistency(self, proximity: torch.Tensor, second: torch.Tensor,
+                           batch: Dict, view: Dict):
+        """Return (unweighted consistency, effective view pairs, turn pairs).
+
+        Inputs: original B-row readout, K-row auxiliary readout. Source indices
+        establish exact provenance, without random collisions or stale teachers.
+        """
+        zero = (proximity.sum() + second.sum()) * 0.0
+        indices = view["source_indices"].to(proximity.device).long()
+        if indices.numel() == 0:
+            return zero, 0, 0
+        if "row_source_id" not in batch or "row_source_id" not in view:
+            raise ValueError("paired proximity views require row_source_id provenance")
+        if second.shape[0] != indices.numel():
+            raise ValueError("paired readout and source_indices have different row counts")
+        if bool(((indices < 0) | (indices >= proximity.shape[0])).any()):
+            raise ValueError("paired source_indices are outside the primary batch")
+        labels = {key: value.index_select(0, indices.to(value.device))
+                  for key, value in batch.items()
+                  if torch.is_tensor(value) and value.ndim and value.shape[0] == proximity.shape[0]}
+        a = self._pairs(proximity.index_select(0, indices), labels)
+        b = self._pairs(second, labels)
+        if a is None or b is None:
+            return zero, 0, 0
+        gaps_a, mask_a = a
+        gaps_b, mask_b = b
+        terms, turn_pairs = [], 0
+        for row in range(indices.numel()):
+            source = labels["row_source_id"][row]
+            if source < 0 or source != view["row_source_id"][row]:
+                raise ValueError("paired view does not share the original row_source_id")
+            valid = mask_a[row] & mask_b[row]
+            involved = valid.any(0) | valid.any(1)
+            if not bool(valid.any()):
+                continue
+            # The paired collate may have fewer padded turns than the primary.
+            if "turn_chain" not in labels or "turn_chain" not in view:
+                raise ValueError("paired proximity views require turn_chain provenance")
+            other_chain = view["turn_chain"][row].to(proximity.device)
+            other_chain = F.pad(other_chain, (0, involved.numel() - other_chain.numel()))
+            if not bool((labels["turn_chain"][row][involved] != other_chain[involved]).any()):
+                continue
+            terms.append((gaps_a[row][valid] - gaps_b[row][valid]).abs().mean())
+            turn_pairs += int(valid.sum())
+        return (torch.stack(terms).mean() if terms else zero), len(terms), turn_pairs

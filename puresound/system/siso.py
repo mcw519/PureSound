@@ -73,6 +73,7 @@ class EncDecMaskBase(BaseLightningModule):
         train_vad_head_only: bool = False,
         gate_head_lr_factor: float = 1.0,
         channel_consistency: Optional[dict] = None,
+        paired_view_consistency: Optional[dict] = None,
         verbose: bool = False,
     ):
         super().__init__(verbose=verbose)
@@ -109,6 +110,10 @@ class EncDecMaskBase(BaseLightningModule):
             if channel_consistency and channel_consistency.get("enabled", False)
             else None
         )
+        from .paired_views import PairedViewConsistencyConfig
+
+        parsed_views = PairedViewConsistencyConfig.model_validate(paired_view_consistency or {})
+        self.paired_view_consistency = parsed_views if parsed_views.enabled else None
 
     def train(self, mode: bool = True):
         """Keep the frozen separator deterministic during gate-only training.
@@ -384,6 +389,13 @@ class EncDecMaskBase(BaseLightningModule):
             batch=batch,
         )
 
+        # Capture the primary head tensor before either auxiliary forward
+        # overwrites last_proximity. Loss terms for primary rows have already
+        # been computed; auxiliary targets never enter compute_loss.
+        pair_loss = self._paired_view_loss(batch, enhanced_speech)
+        if pair_loss is not None:
+            total_loss = total_loss + pair_loss
+
         # Channel-perturbation mask consistency (see __init__): the clean-view
         # mask is the (detached) teacher; the perturbed view learns to produce
         # the same mask despite the different "recording chain".
@@ -436,6 +448,13 @@ class EncDecMaskBase(BaseLightningModule):
                     )
         self.puresound_logging.update({"epoch_train_loss": total_loss.item()})
         return {"loss": total_loss}
+
+    def _paired_view_loss(self, batch, enhanced):
+        if self.paired_view_consistency is None:
+            return None
+        from .paired_views import paired_view_loss
+
+        return paired_view_loss(self, batch, enhanced, self.paired_view_consistency)
 
     def validation_step(self, batch, batch_idx):
         batch = self.ensure_vad_targets(batch)

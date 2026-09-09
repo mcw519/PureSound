@@ -41,6 +41,7 @@ def batch_of(rows, chains=None, source_ids=None, roles=ROLES, overlap=None) -> d
     out = {
         "turn_id": turn_id,
         "turn_role": torch.tensor([list(roles)] * n),
+        "turn_distance": torch.tensor([[0.5, 2.0, 0.5]] * n),
         "turn_speaker": torch.tensor([[1, 2, 1]] * n),
         "turn_chain": torch.tensor([[c] * K for c in chains]),
         "user_active": torch.zeros(n, T),

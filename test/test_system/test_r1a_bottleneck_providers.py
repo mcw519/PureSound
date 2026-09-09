@@ -305,6 +305,7 @@ def test_both_r1a_losses_run_through_compute_loss_on_a_session_batch():
     batch = {
         "turn_id": turn_id,
         "turn_role": torch.tensor([[1, 2, 1], [1, 2, 1]]),
+        "turn_distance": torch.tensor([[0.5, 2.0, 0.5], [0.5, 2.0, 0.5]]),
         # Speaker 11 is the user in both rows, rendered through two chains;
         # 22 and 33 are the bystanders, one per row.
         "turn_speaker": torch.tensor([[11, 22, 11], [11, 33, 11]]),

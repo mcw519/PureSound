@@ -301,12 +301,17 @@ def test_web_service_passes_bind_address_to_http_server(monkeypatch):
 def test_web_audio_inspector_assets_are_packaged():
     service = WebService()
     html = (service.static_dir / "index.html").read_text()
+    favicon = (service.static_dir / "favicon.svg").read_text()
     audio_view = (service.static_dir / "audio-view.js").read_text()
     audio_worker = (service.static_dir / "audio-worker.js").read_text()
     app = (service.static_dir / "app.js").read_text()
     styles = (service.static_dir / "styles.css").read_text()
 
     assert '<script src="/audio-view.js" defer></script>' in html
+    assert '<link rel="icon" type="image/svg+xml" href="/favicon.svg" />' in html
+    assert "waveform crossing through an open infinity loop" in favicon
+    assert "fc4c02" in favicon
+    assert '<img src="/favicon.svg" alt="" />' in html
     assert html.count('class="audio-inspector') == 4
     assert "SPECTROGRAM · 0–8 KHZ" in audio_view
     assert "SAFE_PEAK_DBFS = -1.5" in audio_view

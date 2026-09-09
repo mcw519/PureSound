@@ -59,7 +59,7 @@ button { cursor: pointer; }
 .sidebar-toggle { width: 25px; height: 25px; display: grid; place-items: center; padding: 0; margin-left: auto; color: rgba(255,255,255,.7); background: transparent; border: 1px solid var(--hairline-dark); border-radius: 3px; font-family: var(--mono); font-size: 18px; line-height: 1; }
 .sidebar-toggle:hover { color: var(--canvas); border-color: rgba(255,255,255,.45); }
 .brand-mark { display: grid; place-items: center; width: 30px; height: 30px; color: var(--mint); }
-.brand-mark svg { width: 30px; height: 30px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.5; }
+.brand-mark img { display: block; width: 30px; height: 30px; }
 .nav-stack { display: grid; gap: 6px; }
 .nav-link { border: 0; border-radius: var(--radius-sm); color: rgba(255,255,255,.68); background: transparent; padding: 11px 12px; display: flex; align-items: center; gap: 12px; text-align: left; font-size: 15px; transition: background .18s ease, color .18s ease; }
 .nav-link:hover { color: var(--canvas); background: rgba(255,255,255,.08); }
@@ -475,7 +475,7 @@ body.measurement-drawer-open { overflow: hidden; }
   .sidebar-collapsed .nav-link { justify-content: initial; padding-inline: 9px; }
   .brand { display: inline-flex; padding: 0; font-size: 18px; }
   .brand-mark { width: 25px; height: 25px; }
-  .brand-mark svg { width: 25px; height: 25px; }
+  .brand-mark img { width: 25px; height: 25px; }
   .nav-stack { display: inline-flex; gap: 2px; float: right; margin-top: 1px; }
   .nav-link { padding: 8px 9px; font-size: 12px; }
   .nav-link .nav-icon { display: none; }

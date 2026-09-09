@@ -20,6 +20,7 @@ from puresound.task.device_chain import (
     DEVICE_CHAIN_SCALARS,
     device_chain_from_blocks,
 )
+from puresound.task.paired_views import apply_chain_views, collate_paired_views
 from puresound.task.noise_stage import NoiseStage
 from puresound.task.overlap_gating import OverlapGating
 
@@ -607,8 +608,10 @@ class NoiseSuppressionDataset(DynamicBaseDataset):
         # volume), the converter, then digital transmission (codec, packet
         # loss). Order, linearity and RNG discipline are the chain's contract --
         # see puresound/task/device_chain.py.
-        chain = self.device_chain.apply(
-            noisy_speech, target_speech, sample_rate=self.audio_sr
+        chain, paired_chain = apply_chain_views(
+            self.device_chain, noisy_speech, target_speech,
+            sample_rate=self.audio_sr, sample_length=self.sample_length,
+            probability=self._auxiliary_chain_view_probability(plan),
         )
         noisy_speech, target_speech = chain.noisy, chain.target
 
@@ -694,7 +697,24 @@ class NoiseSuppressionDataset(DynamicBaseDataset):
             vad_reference=vad_reference,
             background_speech_reference=background_speech_reference,
         )
+        if paired_chain is not None:
+            source_id = torch.randint(0, 2**62, (), dtype=torch.long)
+            sample["row_source_id"] = source_id
+            sample["paired_view"] = {
+                "noisy_speech": paired_chain.noisy[..., :self.sample_length],
+                "clean_speech": paired_chain.target[..., :self.sample_length],
+                "row_source_id": source_id.clone(),
+            }
+            self._emit_auxiliary_chain_view_labels(sample, plan)
         return sample
+
+    def _auxiliary_chain_view_probability(self, plan: RowPlan) -> float:
+        """Task hook selecting rows for a second capture; default has no RNG cost."""
+        return 0.0
+
+    def _emit_auxiliary_chain_view_labels(self, sample: Dict, plan: RowPlan) -> None:
+        """Optional task provenance; source mapping is already set by the base."""
+        return None
 
     def _emit_row_labels(
         self,
@@ -822,4 +842,4 @@ class NoiseSuppressionCollateFunc:
         for key in RIR_PROVENANCE_KEYS:
             if any(key in item for item in batch):
                 out[key] = [item.get(key, "") for item in batch]
-        return out
+        return collate_paired_views(batch, out)

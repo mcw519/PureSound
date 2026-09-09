@@ -256,13 +256,34 @@ passes on keep/deletion **at matched far suppression** or not at all.
 |---|---|---|---|
 | **S0** v19c pre-flight | does a loss-only onset hinge even fire on the rows the training set contains (`v19c_round_design.md` §3.3 P0–P4) | 2 GPU-h | sizes how much of R1a must come from data |
 | **P0** prerequisite probe | speaker-disjoint, chain/proximity-balanced identity probe on the frozen v16 bottleneck: DiPCo/AMI/NOTSOFAR pairs (same talker across channels, two talkers per session) and synthetic same-talker-two-chain pairs; pair AUC with CI | 1 day, CPU + 1 GPU pass | AUC < 0.60 ⇒ identity is not in the features: R1a's `L_id` is the first thing to train and R1b waits; ≥ 0.75 ⇒ proceed to R1a as planned (**not** merged with R2) |
-| **R1a** representation round | session rows (4.1) + bottleneck provider + identity & proximity heads + `L_id`, `L_prox` (4.2), small ramped weights; separator output **bit-identical at inference** (heads training-only); warm-start v16 ep19; 20 epochs | ~1.5 GPU-days + smoke tests; 6 engineer-days | P3, R6 and P1 must move; G1–G3 must hold (shared encoder changes). Synthetic moves, Dawn `background` deletion does not ⇒ real-chain wall ⇒ fork to real session rows (VOiCES/RealMAN/DiPCo/AMI/NOTSOFAR trainable; private recordings eval-only) before R1b |
+| **R1a** representation round | fresh v20 session rows (4.1), actual per-turn RIR distances, a training-only proximity head/loss, frame-level presence head/loss, and explicit post-synthesis paired chain views; identity and onset-keep objectives stay off; separator output **bit-identical at inference** (heads training-only); warm-start v16 ep19; 20 epochs | implementation + CPU checks + a no-update GPU memory smoke; training is a separate authorised action | P1/R6 and the fixed 12/30 s acceptance set must move; G1–G3 must hold. A bounded/scale-free proximity ablation or `OnsetKeepLoss` is a later recipe, never silently mixed into this baseline |
 | **R1b** memory without read | candidate/committed slots and `L_mem`, read branch absent; audit the write decision on every real chain and on bystander-first / user-first / re-entry / overlap cases (P6) | ~1 GPU-day, 5 engineer-days | P6 fails ⇒ fix the commit rule, not the read |
 | **R2** read | zero-init residual branch after block 2 on R1b's checkpoint; export ports and tests | ~1.5 GPU-days, 7 engineer-days | P1 must not regress while P2 improves (the coupling test); G5 |
 | **R3** consolidation | affected ladder stages if the operating point moved; full nine gates + ASR blocks; release decision | 2–3 GPU-days | deploy only if it beats v8 and v16+guard on keep/deletion at matched far suppression |
 
 Every stage: one axis, 5-checkpoint block, paired tests, thresholds committed before launch. A stage that
 only matches the shipped guard at the guard's suppression price produced nothing (v14 rule).
+
+### 7.1 Executable v20 baseline amendment (2026-09-05)
+
+The previous R1a draft was removed before training. The current executable
+definition is `config/exp/train_dpcrn_v20_r1a.yaml`: `scale_free: false`,
+`distance_matched_bystander_prob: 0`, legacy `pair_prob: 0`, and
+`paired_view_prob: 0.5`. The second view is nested under `paired_view` and is
+consumed only by a generic SISO paired-consistency dispatcher; it never enters
+the ordinary separation or presence reduction. The loss compares actual rendered
+turn distances, excludes unknown/padded turns and gaps below 0.25 m, and does
+not assume that role 1 is physically nearer.
+
+`vad_target` is a frame grid supplied by the configured energy labeler. The
+session row's `target_present` is a separate scalar and remains one during a
+user's floor gap. Fixed speaker-disjoint 12 s/30 s tensors are materialized and
+replayed by `benchmarks/probes/v20_session_rows/session_validation.py`; the
+ordinary six-second validation is retained as a regression check. The
+no-update memory smoke and 300-row data audit are in the same directory.
+
+Nothing in this amendment starts a training run. `OnsetKeepLoss` remains
+archived/off, and no backbone or streaming export path is changed.
 
 ## 8. Risks named in advance
 

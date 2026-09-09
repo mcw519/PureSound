@@ -159,6 +159,20 @@ class VoiceIsolationDataset(NoiseSuppressionDataset):
             hop_length=hop_length,
         )
 
+    def _auxiliary_chain_view_probability(self, plan: RowPlan) -> float:
+        cfg = self.augmentation_session_rows_args
+        if (getattr(plan, "session", None) is None or cfg is None
+                or self.sample_length < round(cfg.paired_view_min_seconds * self.audio_sr)):
+            return 0.0
+        return float(cfg.paired_view_prob)
+
+    def _emit_auxiliary_chain_view_labels(self, sample: Dict, plan: RowPlan) -> None:
+        if "turn_chain" in sample:
+            chain_id = plan.session.chain_id % (2**31 - 1) + 1
+            sample["paired_view"]["turn_chain"] = torch.full_like(
+                sample["turn_chain"], chain_id
+            )
+
     # ------------------------------------------------------------------ #
     # real-recording pools
     # ------------------------------------------------------------------ #

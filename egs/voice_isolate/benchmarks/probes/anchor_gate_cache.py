@@ -46,14 +46,18 @@ SR = 16000
 FPS = 100.0
 
 
-def load_model(config_path: str, ckpt: str, device: torch.device):
+def load_model(config_path: str, ckpt: str, device: torch.device, head: str = "dist"):
     model = init_siso_model(load_recipe(config_path, expected_task="voice_isolation",
                                         expected_purpose="train").model)
     state = torch.load(ckpt, map_location="cpu")
+    if head == "proximity":
+        from puresound.evaluation.session_validation import require_checkpoint_heads
+        require_checkpoint_heads(model, state.get("state_dict", state), heads=("proximity_head",))
     model.reload_checkpoint(state.get("state_dict", state), load_loss_func=False)
     model = model.to(device).eval()
-    if getattr(model.backbone, "dist_head", None) is None:
-        raise SystemExit("config builds no dist_head -- pass the TRAINING config")
+    if getattr(model.backbone, f"{head}_head", None) is None:
+        raise SystemExit(f"config builds no {head}_head -- pass its TRAINING config")
+    model._anchor_cache_head = head
     model.backbone.stash_bottleneck = True
     return model
 
@@ -62,6 +66,9 @@ def save_head(model, out: Path) -> None:
     """The dist_head MLP weights, so step 2 can evaluate MLP(mean over a window of `feat`)
     exactly instead of averaging per-frame readouts."""
     out.mkdir(parents=True, exist_ok=True)
+    if getattr(model, "_anchor_cache_head", "dist") == "proximity":
+        (out / "proximity_head.json").write_text(json.dumps({"head": "proximity", "units": "raw scalar", "near_direction": "higher"}))
+        return
     torch.save({k: v.cpu() for k, v in model.backbone.dist_head.net.state_dict().items()},
                out / "dist_head_net.pt")
 
@@ -72,11 +79,17 @@ def run(model, x: torch.Tensor, device) -> dict:
     out = model(x.to(device)).detach().cpu().view(-1)
     bott = model.backbone.last_bottleneck            # [1, C, Fbins, T]
     feat = bott.mean(dim=2)[0]                       # [C, T] pooled over frequency
-    dist = model.backbone.dist_head.net(feat.transpose(0, 1))   # [T, 3] per-frame readout
     vad = getattr(model.backbone, "last_vad_logits", None)
     rec = {"enh": out.numpy().astype(np.float16),
-           "feat": feat.detach().cpu().numpy().astype(np.float16),
-           "dist": dist.detach().cpu().numpy().astype(np.float32)}
+           "feat": feat.detach().cpu().numpy().astype(np.float16)}
+    if getattr(model, "_anchor_cache_head", "dist") == "proximity":
+        proximity = getattr(model.backbone, "last_proximity", None)
+        if proximity is None:
+            raise ValueError("ProximityHead did not emit last_proximity")
+        rec["proximity"] = proximity.detach().cpu().reshape(-1).numpy().astype(np.float32)
+    else:
+        dist = model.backbone.dist_head.net(feat.transpose(0, 1))
+        rec["dist"] = dist.detach().cpu().numpy().astype(np.float32)
     if vad is not None:
         rec["vad_logit"] = vad.detach().cpu().reshape(-1).numpy().astype(np.float32)
     return rec
@@ -89,7 +102,7 @@ def save(path: Path, x: torch.Tensor, rec: dict, meta: dict) -> None:
 
 def cmd_field(args) -> None:
     device = torch.device(args.device)
-    model = load_model(args.config_path, args.ckpt, device)
+    model = load_model(args.config_path, args.ckpt, device, args.head)
     save_head(model, Path(args.out) / args.tag)
     windows = {k: v for k, v in json.loads((rm.CASES / "windows.json").read_text()).items()
                if not k.startswith("_")}
@@ -138,7 +151,7 @@ def cmd_dawn(args) -> None:
     from eval_dawn_chorus import DATASET_REPO, load_wav_bytes, context_input
 
     device = torch.device(args.device)
-    model = load_model(args.config_path, args.ckpt, device)
+    model = load_model(args.config_path, args.ckpt, device, args.head)
     save_head(model, Path(args.out) / args.tag)
     table = pq.read_table(hf_hub_download(DATASET_REPO, "eval.parquet", repo_type="dataset"))
     n = min(args.limit, table.num_rows) if args.limit else table.num_rows
@@ -176,6 +189,7 @@ def main():
         s = sub.add_parser(name)
         s.add_argument("config_path"); s.add_argument("--ckpt", required=True)
         s.add_argument("--tag", required=True); s.add_argument("--out", required=True)
+        s.add_argument("--head", choices=["dist", "proximity"], default="dist")
         s.add_argument("--device", default="cuda"); s.add_argument("--limit", type=int, default=None)
         s.set_defaults(fn=fn)
     args = ap.parse_args()

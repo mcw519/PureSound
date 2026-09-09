@@ -89,6 +89,23 @@ uv run python main.py config/exp/train_dpcrn_curriculum_expand.yaml --training \
 `--ckpt_path <ckpt>` instead of `--pretrained_ckpt_path` = true resume (restores optimizer/scheduler/epoch).
 Config details (shared design, eval-only variants, inference config): `config/README.md`.
 
+## Fresh v20 experiment (not a continuation of an old R1a run)
+
+The executable v20 baseline is [`config/exp/train_dpcrn_v20_r1a.yaml`](config/exp/train_dpcrn_v20_r1a.yaml).
+It keeps the separator objective and backbone path, adds session data labels,
+actual per-turn rendered distances, a training-only VAD/presence head, and an
+explicit second device-chain view for a generic consistency term. Matched
+distance and legacy source-pool pairing are disabled; the proximity baseline is
+explicitly unbounded (`scale_free: false`). The nested paired view is excluded
+from ordinary separation and VAD reductions.
+
+Before any authorised training, run the CPU checks in
+[`benchmarks/probes/v20_session_rows/VALIDATION.md`](benchmarks/probes/v20_session_rows/VALIDATION.md).
+The fixed 12/30-second acceptance materialization, 300-row data audit, and
+`no_update_memory_smoke.py` all write reviewable artifacts and do not call
+`Trainer.fit` or update model weights. The existing six-second validation stays
+as a regression check.
+
 ## Why weight-3.0 isn't an outright winner (the "domain split point")
 
 Escalating `OverSuppressionLoss` weight 1.0→2.0→3.0 monotonically reduced deletion (over-suppression)

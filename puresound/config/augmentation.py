@@ -553,7 +553,8 @@ class SessionRowsConfig(StrictConfig):
 
     * **One device-chain draw per row**, applied jointly to the mixture and the
       target exactly as ``ns.py`` does for every other row type (review item 6).
-      Cross-*chain* material comes from cross-*row* pairs -- see ``pair_prob``.
+      Explicit ``paired_view_prob`` applies an independent chain to the exact
+      same completed mixture, collated separately for consistency supervision.
     * **The user's gap is never digital silence** and never target-absent. The
       gap carries the row's own floor (``floor_dbfs_range`` guarantees one even
       on the ~10% of rows where every noise source declines to fire), and the
@@ -622,6 +623,10 @@ class SessionRowsConfig(StrictConfig):
     pair_prob: Probability = 0.0
     pair_pool_size: Annotated[int, Field(gt=0)] = 1024
     pair_seed_base: Annotated[int, Field(ge=0)] = 20260905
+    #: Explicit second chain view of this exact post-noise, post-speed mixture.
+    #: It is collated separately and only supervises chain consistency.
+    paired_view_prob: Probability = 0.0
+    paired_view_min_seconds: float = Field(default=12.0, gt=0.0)
 
     @property
     def used(self) -> bool:
@@ -632,6 +637,8 @@ class SessionRowsConfig(StrictConfig):
     def session_contract(self):
         if not self.enabled:
             return self
+        if self.paired_view_prob > 0 and self.pair_prob > 0:
+            raise ValueError("explicit paired views cannot use legacy finite-pool pairing")
         if self.max_seconds < self.min_seconds:
             raise ValueError("max_seconds must not be below min_seconds")
         lo, hi = self.n_bystanders
