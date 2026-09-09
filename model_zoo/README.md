@@ -1,7 +1,7 @@
 # PureSound Model Zoo
 
 `catalog.yaml` is the version-controlled registry for the ONNX artifacts that
-ship with this repository.  It contains nine logical models and ten artifacts;
+ship with this repository.  It contains ten logical models and eleven artifacts;
 weights stay in their existing `egs/` directories.  Every artifact has a
 processor contract, sidecar (where required), and SHA256 digest.
 

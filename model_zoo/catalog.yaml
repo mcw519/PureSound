@@ -226,6 +226,37 @@ models:
         processor: stft_frame_ort
         sha256: 8c23e4e653c34f5d0cbf99c6afdc83fa0ec231598062c0a3568cc5539aa94d59
 
+  - id: voice-isolate-dpcrn-curriculum-v0
+    display_name: Voice Isolation DPCRN curriculum v0
+    task: voice_isolation
+    lifecycle: reference
+    roles: [reference]
+    description: Single cold run whose phases are curriculum schedules; the reproducible baseline, not a deployment candidate. About 70% of the released lineage on the real-recording gates, better keep preservation, first movement on the cross-chain far clips.
+    inputs: [audio]
+    outputs: [audio]
+    audio: {sample_rate: 16000, channels: 1}
+    capabilities: {offline_file: true, realtime_streaming: true, auxiliary_heads: false}
+    preprocessing: {mono: true, resample: 16000}
+    postprocessing: {type: manifest_recommended}
+    recommended_inference: {dry_blend: 0.9}
+    parameters:
+      dry_blend: {type: float, default: 0.9, minimum: 0.1, maximum: 1.0}
+      onset_guard: {type: bool, default: false, description: "Keep the input untouched until a talker has been heard for t_arm_s of speech; fewer deleted words, less suppression in the first second."}
+      onset_guard_t_arm_s: {type: float, default: 1.0, minimum: 0.3, maximum: 5.0, description: "Sustained speech that confirms a talker and hands the output over to the model."}
+      onset_guard_t_forget_s: {type: float, default: 5.0, minimum: 1.0, maximum: 60.0, description: "Quiet this long drops the anchor, so the next onset is protected again."}
+      onset_guard_tau_dn_s: {type: float, default: 2.0, minimum: 0.1, maximum: 10.0, description: "Release time constant from the untouched input back to the model output."}
+      onset_guard_margin_db: {type: float, default: 8.0, minimum: 3.0, maximum: 20.0, description: "How far over the tracked noise floor a frame counts as speech."}
+    source_checkpoint: egs/voice_isolate/pretrained_ckpt/dpcrn_curriculum_v0.ckpt
+    source_config: egs/voice_isolate/config/infer_dpcrn.yaml
+    benchmark_references: [egs/voice_isolate/benchmarks/probes/curriculum_v0_VERDICT.md]
+    artifacts:
+      - format: onnx
+        variant: default
+        path: egs/voice_isolate/pretrained_ckpt/streaming/dpcrn_curriculum_v0.onnx
+        manifest: egs/voice_isolate/pretrained_ckpt/streaming/dpcrn_curriculum_v0.json
+        processor: stft_frame_ort
+        sha256: 715a18ba2296d1c8d2bc287aab3c4207a214f6f29d0997fffdb7ad26acd9e00b
+
   - id: speaker-verification-ps-spk-v1
     display_name: Speaker Verification PS-spk-v1
     task: speaker_embedding

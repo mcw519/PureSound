@@ -106,8 +106,8 @@ number above comes from a trough epoch.
 
 ## `streaming/` — per-frame ONNX exports
 
-`dpcrn_v6.{onnx,json}` through `dpcrn_v10.{onnx,json}`, built with
-`../scripts/streaming_onnx.py export`. All carry a **30 ms (3-frame) algorithmic latency** from
+`dpcrn_v6.{onnx,json}` through `dpcrn_v10.{onnx,json}`, plus `dpcrn_v16_ep19` and
+`dpcrn_curriculum_v0`, built with `../scripts/streaming_onnx.py export`. All carry a **30 ms (3-frame) algorithmic latency** from
 the look-ahead, handled by future-buffering baked into the graph as extra state
 (`puresound/streaming/dpcrn.py`), and all are verified against the offline model once aligned by
 that latency. `verify` defaults to a **white-noise** probe, which is a stress signal rather than

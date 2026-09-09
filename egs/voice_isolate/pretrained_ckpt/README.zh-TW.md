@@ -95,8 +95,8 @@ manifest 把這個值放在 `recommended_inference` 底下。
 
 ## `streaming/` —— 逐幀 ONNX 匯出
 
-`dpcrn_v6.{onnx,json}` 到 `dpcrn_v10.{onnx,json}`，用
-`../scripts/streaming_onnx.py export` 建置。全部都因 look-ahead 而帶有
+`dpcrn_v6.{onnx,json}` 到 `dpcrn_v10.{onnx,json}`，加上 `dpcrn_v16_ep19` 與
+`dpcrn_curriculum_v0`，用 `../scripts/streaming_onnx.py export` 建置。全部都因 look-ahead 而帶有
 **30 ms（3 幀）演算法延遲**，由烘進 graph 當成額外 state 的 future-buffering
 處理（`puresound/streaming/dpcrn.py`），而且全部都在對齊該延遲後與離線模型比對驗證過。
 `verify` 預設用**白噪音**探針，那是壓力訊號而非部署訊號——v6 88–105 dB、v7 63 dB、
