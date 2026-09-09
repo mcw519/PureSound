@@ -1,0 +1,16 @@
+compare fixedlen_ep95-99  vs  parent_ep95-99   (paired per clip on block means; delta = A - B)
+  sessions supp            n= 6    -2.40 vs   -8.28  delta med  +0.52  p=0.562
+  cold-far device none     n=14    -0.26 vs   -0.30  delta med  +0.03  p=0.001  **
+  cold-far device ambient  n= 6    -3.23 vs   -3.58  delta med  +2.31  p=0.312
+  cold-far qvf none        n= 6    -6.96 vs   -7.15  delta med  +0.05  p=0.844
+  keep near none           n=27    -0.23 vs   -0.22  delta med  +0.01  p=0.185
+  keep near ambient        n= 8    -0.13 vs   -0.13  delta med  -0.00  p=1.000
+  keep double-talk         n=11    -1.19 vs   -1.68  delta med  +0.19  p=0.001  **
+  sessions keep            n= 6    -0.71 vs   -1.03  delta med  +0.18  p=0.094
+  keep severity changes >= 1 dB (B -> A):
+    [qvf   ] qvf_gym_dt1                  -1.68 ->   -0.46  (+1.22)
+    [qvf   ] qvf_gym_dt2                  -3.12 ->   -1.19  (+1.93)
+    [qvf   ] qvf_price_dt1                -4.93 ->   -2.78  (+2.15)
+    [qvf   ] qvf_gym_near2                -5.47 ->   -3.25  (+2.22)
+    [qvf   ] qvf_keep_in_touch_dt1        -9.35 ->   -5.61  (+3.74)
+    [qvf   ] qvf_price_near1              -7.89 ->   -3.99  (+3.90)

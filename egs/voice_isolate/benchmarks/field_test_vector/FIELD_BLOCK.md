@@ -47,6 +47,7 @@ adjacent epochs. Most recorded single-point deltas were inside that band.
 | keep double-talk median / viol | −1.53 / 1 | **−1.11 / 1** | −1.65 / 3 | −1.86 / 3 |
 | sessions keep median | −0.73 | −0.77 | −1.04 | −0.85 |
 
+
 Paired verdicts (Wilcoxon on block means):
 * **v16 ep19 vs v8**: sessions **v8 deeper** (delta +2.18 dB, p=0.062, n=6); ambient cold-far
   v8 deeper (+2.91, p=0.062); cold-far `none` v16 better by 0.34 dB (p=0.049); double-talk
@@ -62,6 +63,29 @@ Paired verdicts (Wilcoxon on block means):
 Consequence: the deployment-default question (v16 ep19 vs v8) is NOT settled by the field
 set. It now hinges on the block-level Dawn deletion and the reverb-WER gates, neither of
 which has been run as a block.
+
+### 2026-09-09 — the scheduled single run and its two forks, dry_blend 1.0
+
+`dpcrn_curriculum_v0` is a cold single run whose phases are `curriculum` schedules
+(`benchmarks/probes/curriculum_v0_VERDICT.md`). The two forks resume from its epoch 60
+and change one axis each, so all three read at the same epoch (blocks are ep95–99).
+
+| | v8 block | curriculum_v0 ep99 | fork: easy views retired | fork: 6 s rows only |
+|---|---|---|---|---|
+| sessions supp median | **−11.78** | −8.28 | −5.95 | −2.40 |
+| cold-far device `ambient` | **−14.51** | −3.58 | −2.24 | −3.23 |
+| cold-far qvf `none` | −2.58 | **−7.15** | −7.06 | −6.96 |
+| keep near median (n=27) | −0.29 | **−0.22** | −0.27 | −0.23 |
+| keep double-talk median | −1.53 | −1.68 | −1.43 | **−1.19** |
+
+Paired (Wilcoxon on block means):
+* **curriculum_v0 vs v8**: keep near better by 0.04 dB (p=0.044) and cold-far device
+  worse (`none` +0.62, p=0.005; `ambient` +10.04, p=0.031). Sessions +2.51 does not
+  resolve at n=6 (p=0.312).
+* **both forks vs their parent**: every suppression column shallower, every keep column
+  equal or better. Retiring the easy room views costs 2.3 dB of session suppression;
+  training 6 s-only after a mixed-length phase costs 5.9 dB. Neither axis explains the
+  distance to v8 — they move the operating point conservative instead.
 
 ### Keep-side s2f guard (block of 5, all 38 keep clips) — no version tilts the curve
 
