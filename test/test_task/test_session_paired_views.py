@@ -161,3 +161,26 @@ def test_generic_disabled_pairing_preserves_rng_and_primary_inplace_result():
     assert paired is None
     assert torch.equal(expected.noisy, actual.noisy)
     assert torch.equal(state, torch.get_rng_state())
+
+
+def test_a_view_longer_than_its_primary_row_is_cropped_to_it(corpus, monkeypatch):
+    """A chain stage that resamples can hand back a few samples short, and the two
+    views draw their stages independently. The primary row is what the batch is
+    padded to, so a view that keeps more samples than its own row has nowhere to
+    go in the collate -- it must be cropped to the row it belongs to."""
+    ds = _dataset(corpus, _session(paired_view_prob=1.0), reverb=False)
+    calls = []
+
+    def apply(noisy, target, *, sample_rate):
+        calls.append(1)
+        if len(calls) % 2:  # the primary draw loses samples, the auxiliary does not
+            return ChainResult(noisy[..., :-7] * 0.5, target[..., :-7] * 0.5, {})
+        return ChainResult(noisy * 0.25, target * 0.25, {})
+
+    monkeypatch.setattr(ds.device_chain, 'apply', apply)
+    row = _row(ds, 15554)
+    pair = row['paired_view']
+    assert pair['noisy_speech'].shape[-1] == row['noisy_speech'].shape[-1]
+    assert pair['clean_speech'].shape[-1] == row['clean_speech'].shape[-1]
+    batch = VoiceIsolationCollateFunc()([row, row])
+    assert batch['paired_view']['noisy_speech'].shape[-1] == batch['noisy_speech'].shape[-1]

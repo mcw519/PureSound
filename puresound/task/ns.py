@@ -700,9 +700,15 @@ class NoiseSuppressionDataset(DynamicBaseDataset):
         if paired_chain is not None:
             source_id = torch.randint(0, 2**62, (), dtype=torch.long)
             sample["row_source_id"] = source_id
+            # Cropped to THIS row's primary length, not to sample_length: a
+            # chain stage that resamples can return a few samples short, and the
+            # two views draw their stages independently, so one may be shorter
+            # than the other. The collate pads a shorter view; a view longer
+            # than the primary batch has nowhere to go.
+            row_length = noisy_speech.shape[-1]
             sample["paired_view"] = {
-                "noisy_speech": paired_chain.noisy[..., :self.sample_length],
-                "clean_speech": paired_chain.target[..., :self.sample_length],
+                "noisy_speech": paired_chain.noisy[..., :row_length],
+                "clean_speech": paired_chain.target[..., :row_length],
                 "row_source_id": source_id.clone(),
             }
             self._emit_auxiliary_chain_view_labels(sample, plan)
