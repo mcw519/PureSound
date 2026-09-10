@@ -14,6 +14,7 @@ Use cases:
         - Speaker embedding
 """
 
+import logging
 from typing import Optional
 
 import numpy as np
@@ -28,6 +29,9 @@ from .base import BaseLightningModule, invoke_loss
 from .onset_guard import OnsetGuard
 from .postprocess import Postprocessor, resolve as resolve_postprocess
 from .presence_gate import PresenceGate
+
+
+logger = logging.getLogger(__name__)
 
 
 class EncDecMaskBase(BaseLightningModule):
@@ -277,18 +281,60 @@ class EncDecMaskBase(BaseLightningModule):
         n_orders = int(cc.get("eq_orders", 4))
         with torch.no_grad():
             n, t = wav.shape[0], wav.shape[-1]
-            spec = torch.fft.rfft(wav.view(n, -1), dim=-1)
-            n_bins = spec.shape[-1]
-            grid = torch.linspace(0.0, np.pi, n_bins, device=wav.device)
-            curve = torch.zeros(n, n_bins, device=wav.device)
+            grid = torch.linspace(0.0, np.pi, t // 2 + 1, device=wav.device)
+            curve = torch.zeros(n, grid.numel(), device=wav.device)
             for k in range(1, n_orders + 1):
                 amp = (torch.rand(n, 1, device=wav.device) * 2.0 - 1.0) * (eq_db / k)
                 curve = curve + amp * torch.cos(k * grid).unsqueeze(0)
             h = 10.0 ** (curve / 20.0)
-            out = torch.fft.irfft(spec * h, n=t, dim=-1)
+            out = self._filter_via_fft(wav.view(n, -1), h, t)
             g = (torch.rand(n, 1, device=wav.device) * 2.0 - 1.0) * gain_db
             out = out * 10.0 ** (g / 20.0)
             return out.clamp(-1.0, 1.0).view_as(wav)
+
+    #: How many times the FFT pair below has fallen back to the CPU. Read by
+    #: tests; a run whose log fills with the warning is one whose rows have
+    #: outgrown what the device can plan, not one with a flaky card.
+    _fft_fallbacks = 0
+
+    def _filter_via_fft(
+        self, wav: torch.Tensor, h: torch.Tensor, n_samples: int
+    ) -> torch.Tensor:
+        """Apply a real gain curve in the frequency domain, surviving a failed plan.
+
+        A device FFT allocates a plan sized by the transform, and a plan can fail
+        to allocate on a busy device -- for a batch shape it has not seen before,
+        or against a fragmented pool. That failure is transient and local: it says
+        nothing about this row, and losing a whole run to it wastes every epoch
+        before it. So the device is retried once with the caching allocator's
+        blocks released, and then the same arithmetic runs on the CPU, which
+        plans in host memory. The result is identical either way; only the
+        latency of that one step differs.
+        """
+        try:
+            return torch.fft.irfft(torch.fft.rfft(wav, dim=-1) * h, n=n_samples, dim=-1)
+        except RuntimeError:
+            pass
+        if wav.is_cuda:
+            torch.cuda.empty_cache()
+            try:
+                return torch.fft.irfft(
+                    torch.fft.rfft(wav, dim=-1) * h, n=n_samples, dim=-1
+                )
+            except RuntimeError:
+                pass
+        # Counted on this class, never on ``type(self)``: the number is about
+        # the device, so a subclass must not start its own tally.
+        EncDecMaskBase._fft_fallbacks += 1
+        logger.warning(
+            "channel-consistency FFT fell back to the CPU (%d so far) for a "
+            "%s batch: the device could not plan the transform.",
+            EncDecMaskBase._fft_fallbacks, tuple(wav.shape),
+        )
+        spec = torch.fft.rfft(wav.cpu().float(), dim=-1) * h.cpu().float()
+        return torch.fft.irfft(spec, n=n_samples, dim=-1).to(
+            device=wav.device, dtype=wav.dtype
+        )
 
     def compute_loss(
         self,

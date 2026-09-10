@@ -129,3 +129,56 @@ def test_end_to_end_tiny_dpcrn_training_step_runs():
     out = system.training_step(batch, 0)
     assert torch.isfinite(out["loss"])
     assert [a for a, k in system.logged if a[0] == "train_step_cons_loss"]
+
+
+# --------------------------------------------------------------------------- #
+# a failed FFT plan must not take the run with it
+# --------------------------------------------------------------------------- #
+
+
+def test_a_failed_fft_plan_falls_back_instead_of_raising(monkeypatch):
+    """A device FFT plan can fail to allocate on a busy device, and that failure
+    says nothing about the row it happened on. Losing a multi-day run to it is
+    the outcome worth engineering away: the arithmetic is retried, then run
+    where it can always be planned, and the caller never sees the difference."""
+    from puresound.system import siso
+
+    system = _wire(MaskEchoSystem(channel_consistency={"enabled": True, "prob": 1.0}))
+    wav = torch.randn(3, 4096).clamp(-1, 1)
+    gain = torch.ones(3, wav.shape[-1] // 2 + 1)
+    expected = torch.fft.irfft(torch.fft.rfft(wav, dim=-1) * gain, n=wav.shape[-1], dim=-1)
+
+    real_irfft, calls = torch.fft.irfft, {"n": 0}
+
+    def fail_once(*args, **kwargs):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise RuntimeError("cuFFT error: CUFFT_INTERNAL_ERROR")
+        return real_irfft(*args, **kwargs)
+
+    monkeypatch.setattr(torch.fft, "irfft", fail_once)
+    before = siso.EncDecMaskBase._fft_fallbacks
+    out = system._filter_via_fft(wav, gain, wav.shape[-1])
+
+    assert torch.allclose(out, expected, atol=1e-5), "the fallback must be the same filter"
+    assert out.dtype == wav.dtype and out.device == wav.device
+    assert siso.EncDecMaskBase._fft_fallbacks == before + 1, "the fallback is counted, and logged"
+
+
+def test_the_perturbation_survives_a_failing_device_fft(monkeypatch):
+    """The whole regulariser, not just the helper: one bad plan costs one step's
+    perturbation quality, never the step."""
+    real_irfft, calls = torch.fft.irfft, {"n": 0}
+
+    def fail_first_two(*args, **kwargs):
+        calls["n"] += 1
+        if calls["n"] <= 1:
+            raise RuntimeError("cuFFT error: CUFFT_INTERNAL_ERROR")
+        return real_irfft(*args, **kwargs)
+
+    monkeypatch.setattr(torch.fft, "irfft", fail_first_two)
+    system = _wire(MaskEchoSystem(channel_consistency={"enabled": True, "prob": 1.0}))
+    wav = torch.randn(2, 1, 4096).clamp(-1, 1)
+    out = system._random_channel_perturb(wav)
+    assert out.shape == wav.shape and torch.isfinite(out).all()
+    assert not torch.allclose(out, wav, atol=1e-4), "still a perturbation, not a passthrough"
