@@ -409,7 +409,7 @@ trainer:
     - {seconds: 12., n_spk: 6,  prob: 0.25}
     - {seconds: 30., n_spk: 2,  prob: 0.20}
   n_utt_per_speaker: 1
-  num_workers: 20
+  num_workers: 12          # host-side headroom for the session/paired-view rows
   num_gpus: 2
   find_unused_parameters: true
   work_folder: exp/dpcrn_curriculum_v1
