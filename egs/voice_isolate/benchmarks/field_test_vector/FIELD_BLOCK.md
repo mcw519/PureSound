@@ -87,15 +87,49 @@ Paired (Wilcoxon on block means):
   training 6 s-only after a mixed-length phase costs 5.9 dB. Neither axis explains the
   distance to v8 — they move the operating point conservative instead.
 
+### 2026-09-11 — `dpcrn_curriculum_v1`: conversational rows, a paired view, two per-frame heads
+
+The lineage's second scheduled run (`benchmarks/probes/curriculum_v1_VERDICT.md`), warm
+started from `curriculum_v0` ep99. Blocks are ep15–19 and ep35–39; ep39 is the shipped
+checkpoint. **This is the round where the device chain and the cross-chain clips stop
+agreeing**, so they are tabled apart.
+
+| device chain (the internal recordings) | v8 block | curriculum_v0 ep99 | **v1 ep39** | v1 ep19 |
+|---|---|---|---|---|
+| cold-far `none` (n=14) | −0.96 | −0.30 | **−7.07** | −5.02 |
+| cold-far `ambient` (n=6) | −14.51 | −3.58 | **−28.27** | −27.71 |
+| keep near median (n=24) | −0.19 | −0.16 | **−0.16** | −0.14 |
+| keep double-talk median (n=8) | −1.52 | −1.26 | −1.34 | −1.27 |
+| keep violations | 1 | 1 | 1 | 1 |
+
+| cross-chain (QVF clips) | v8 block | curriculum_v0 ep99 | **v1 ep39** | v1 ep19 |
+|---|---|---|---|---|
+| keep near median | **−0.74** | −1.12 | −1.69 | −2.09 |
+| keep violations / worst | 4 / −7.7 | 9 / −9.4 | 5 / **−32.8** | 9 / −12.6 |
+
+Paired (Wilcoxon on block means):
+* **v1 ep39 vs v8**: cold-far device `none` −6.23 dB (p=0.000) and `ambient` −13.05 dB
+  (p=0.031) — the largest movement any round has produced on the cold-start axis —
+  while device-chain keep is unchanged (+0.02 dB, p=0.055). Sessions −4.01 (p=0.094).
+* **v1 ep39 vs ep19**: a trade, not a ranking. ep19 holds the worst cross-chain keep
+  clip at −12.6 instead of −32.8 and is 2.6–5.9 dB deeper on the synthetic far-only
+  probes; ep39 is 1.94 dB deeper on device cold-far `none` (p=0.000) and better on every
+  ASR gate.
+
+The cross-chain regression is a per-recording calibration failure, not damaged speech:
+the collapsed clip keeps its harmonic contrast (27.1 → 27.7 dB) while losing 19.7 dB of
+level, and the model's own proximity readout places it between healthy near (+1.35) and
+true far (−3.00) at −0.59. See the verdict.
+
 ### Keep-side s2f guard (block of 5, all 38 keep clips) — no version tilts the curve
 
-| added-noise s2f | v8 block | v16 ep19 block | v17 block |
-|---|---|---|---|
-| native | −0.59 | −0.47 | −0.44 |
-| 20 dB | −0.65 | −0.60 | −0.60 |
-| 15 dB | −0.55 | −0.56 | −0.61 |
-| 12 dB | −0.70 | −0.65 | −0.73 |
-| 8 dB | −1.29 | −1.11 | −1.22 |
+| added-noise s2f | v8 block | v16 ep19 block | v17 block | curriculum_v1 ep35–39 |
+|---|---|---|---|---|
+| native | −0.59 | −0.47 | −0.44 | −0.57 |
+| 20 dB | −0.65 | −0.60 | −0.60 | −0.60 |
+| 15 dB | −0.55 | −0.56 | −0.61 | −0.75 |
+| 12 dB | −0.70 | −0.65 | −0.73 | −0.84 |
+| 8 dB | −1.29 | −1.11 | −1.22 | −1.26 |
 
 Paired: every level p > 0.1 for both v16-vs-v8 and v17-vs-v16 — the s2f keep tilt is a
 property of the model family, not of any round. The cliff clip is always

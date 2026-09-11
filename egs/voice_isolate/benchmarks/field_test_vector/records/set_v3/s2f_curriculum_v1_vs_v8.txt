@@ -1,0 +1,6 @@
+compare v1_ep35-39 vs v8_ep15-19  (delta = A - B, paired per clip)
+  s2f native n=38  -0.57 vs  -0.59  delta med  +0.01  p=0.129
+  s2f 20     n=38  -0.60 vs  -0.65  delta med  +0.01  p=0.335
+  s2f 15     n=38  -0.75 vs  -0.55  delta med  -0.00  p=0.785
+  s2f 12     n=38  -0.84 vs  -0.70  delta med  -0.01  p=0.473
+  s2f 8      n=38  -1.26 vs  -1.29  delta med  -0.04  p=0.059
