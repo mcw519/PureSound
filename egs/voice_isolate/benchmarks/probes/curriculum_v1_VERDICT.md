@@ -83,10 +83,11 @@ goes to −32.8 dB — the user, attenuated to inaudibility. Three probes say wh
    aggressiveness is not a general fragility, and the worst clip is one the ladder also
    collapses (−27.2 dB at 8 dB speech-to-floor).
 
-So the regression is a **per-recording calibration failure on a chain outside the
-deployment one**, not damaged speech and not a broader loss of keep. That matches what
-this repository already knows about cross-chain behaviour: each recording sits at its
-own offset, and absolute thresholds die across chains while self-calibrated ones live.
+So the regression is a **failure of the proximity judgement on a chain outside the
+deployment one**, not damaged speech and not a broader loss of keep. The natural next
+move — read that head through a self-calibrated rule, which is what has survived chain
+changes here before — was measured rather than assumed, and it does not hold. See the
+addendum at the end.
 
 ## ep19 versus ep39
 
@@ -117,11 +118,11 @@ two blocks are archived side by side so the trade can be re-read.
 
 ## What it did not achieve
 
-* The cross-chain keep failure is now **worse, not better** — and the same head that
-  explains it is the natural place to fix it. An absolute threshold on the readout will
-  not survive the chain change (the margin between a mis-read near clip and a true far
-  clip is 1.3–1.9 units); a self-calibrated, per-recording readout is what the evidence
-  supports.
+* The cross-chain keep failure is now **worse, not better**, and the readout that
+  explains it cannot be turned into the guard for it: the addendum measures three
+  self-calibrated rules and none separates the classes across recordings, because the
+  failing recording reads at its own floor and a single-class recording has nothing to
+  calibrate against. The gap is in the feature on that chain, not in the calibration.
 * The primary WER gate is still short of the released ladder (−0.156 against −0.171).
 * Whether the gain comes from the session rows, the paired view, or the proximity head
   is unattributed. All three arrived together, and separating them costs one fork each.
@@ -136,3 +137,49 @@ uv run python main.py config/exp/train_dpcrn_curriculum_v1.yaml --training \
 
 Resume an interruption with `--ckpt_path` on this run's own latest checkpoint, never
 with a fresh warm start: the curriculum reads the epoch from the trainer.
+
+## Addendum, same day: can the proximity readout be self-calibrated?
+
+The cost above is a readout that places a near talker on the far side, so the obvious
+next move was a self-calibrating readout — the thing this repository has repeatedly
+found to survive a chain change where an absolute threshold does not. It was measured
+before it was built (`proximity_selfcal.py`, block of 5, every field recording scored on
+its hand-labelled spans, `proximity_selfcal_ep35-39.json`).
+
+**Within a recording that contains both classes, the readout is strong.**
+
+| recording | near median | far median | AUC | near − own floor |
+|---|---|---|---|---|
+| 90D / 180D / 270D (device) | +1.67 / +1.63 / +1.69 | −3.33 / −3.34 / −3.35 | 0.98 / 0.99 / 0.99 | +3.02 / +2.13 / +1.83 |
+| QVF_plumbing | +1.91 | −2.73 | 0.99 | +3.55 |
+| QVF_price | +0.05 | −1.98 | 0.91 | +1.13 |
+| QVF_scenario3 | +1.87 | +0.71 | 0.83 | +2.22 |
+| QVF_gym | +0.60 | −1.57 | 0.80 | +2.03 |
+| QVF_keep_in_touch | **−1.13** | *no far span* | — | **−0.10** |
+
+**Across recordings, no normalisation separates the classes.**
+
+| readout | near range | far range | separated |
+|---|---|---|---|
+| raw | −1.13 … +1.91 | −3.35 … +1.45 | no |
+| minus the recording's own floor | −0.10 … +3.55 | −3.21 … +2.34 | no |
+| quantile inside the recording | 0.51 … 0.83 | 0.21 … 0.51 | no (they meet at 0.51) |
+
+Two findings kill the guard as proposed:
+
+1. **The failing recording reads at its own floor.** `QVF_keep_in_touch`'s near speech
+   sits 0.10 below its own room tone, where the device recordings' near speech sits 1.8
+   to 3.0 above theirs. There is no offset to subtract — the readout is not displaced,
+   it is wrong on that recording.
+2. **A single-class recording cannot calibrate itself.** The quantile readout separates
+   the classes cleanly wherever both are present (device near 0.70–0.78 against far
+   0.21–0.29) and is degenerate where only one is: `keep_in_touch` (near only),
+   `scenario1` (near only), `scenario2` (far only) and the `0D` sentinel all land at
+   q ≈ 0.51 *by construction*. The cold-start case — one talker, no contrast — is
+   exactly the case a self-calibrated rule cannot serve.
+
+So the readout is usable as a **mid-conversation safety net on the deployment chain**,
+where both classes appear and separability is 0.98–0.99, and it is not usable as the
+cold-start guard it was proposed for. The cross-chain failure is in the feature, not in
+the calibration: separability itself degrades from 0.98–0.99 on the device chain to
+0.80–0.91 on QVF. That is a training target, not a runtime one.
