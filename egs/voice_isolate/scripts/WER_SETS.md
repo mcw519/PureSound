@@ -1,11 +1,11 @@
 # WER benchmarks — four reverberation regimes
 
 Built entirely from public corpora, so the sets themselves are not tracked: 391 MB of
-derived mix/ref pairs that `../../scripts/build_wer_set.py` regenerates. What matters is
+derived mix/ref pairs that `build_wer_set.py` regenerates. What matters is
 that all four exist, because reverberation is the axis that separates the checkpoints and
 a single set hides the split.
 
-| set (under `../../data_report/`) | RIRs | reverberation | role |
+| set (under `../data_report/`) | RIRs | reverberation | role |
 |---|---|---|---|
 | `indomain_wer_set/` | synthetic, training bank | in-domain | sanity: does the model help where it was trained |
 | `wer_set_moderate_test/` | synthetic, held-out rooms | RT60 0.20–0.65, p50 0.44 | **the primary WER gate** |
@@ -44,8 +44,8 @@ channels; noise is DNS-5.
 
 ```bash
 uv run python egs/voice_isolate/scripts/build_wer_set.py \
-    --libritts-dir /data/audio/LibriTTS/test-clean \
-    --noise-dir /data/audio/dns-5/datasets_fullband_16k/noise_fullband \
+    --libritts-dir /path/to/audio/LibriTTS/test-clean \
+    --noise-dir /path/to/audio/dns-5/datasets_fullband_16k/noise_fullband \
     --rir-dir <PreGeneratedRoomBank folder> \
     --out-dir egs/voice_isolate/data_report/<set name>
 ```
