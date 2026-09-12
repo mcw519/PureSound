@@ -1,7 +1,10 @@
-# voice_isolate -- DPCRN. Pipeline stage 5/6: anti-suppression finetune, OverSuppressionLoss weight 3.0.
-# Warm-start from pretrained_ckpt/dpcrn_v4.ckpt (--pretrained_ckpt_path).
-# Pipeline position, warm-start lineage, and judged results: see ../README.md.
-# Full rationale and per-epoch history: see ../EXPERIMENT_LOG.md.
+# [E5] far-only probe on the UNSEEN boundary held-out bank (seed 1618) -- did boundary training generalize to unseen boundary-distance lone-far?
+# voice_isolate -- DPCRN. EVAL-ONLY far-only/noise-only LEAKAGE PROBE. DO NOT TRAIN with this config.
+# Same `model:` block as all pipeline stages 2-6 -- only difference is augmentation_target_absent
+# forced ON below, so it works as an eval-only overlay for ANY checkpoint in pretrained_ckpt/:
+#   uv run python scripts/eval_indomain.py config/eval/eval_targetabsent_probe.yaml \
+#     --ckpt pretrained_ckpt/<name>.ckpt --device cuda --n-batches 40 --by-bucket
+# Usage and results: see ../README.md and ../NEXT_STEPS.md ("far-only / noise-only 洩漏測試").
 # Recipe schema v2: `task` selects the model that validates this file
 # (puresound/config/recipe.py); `purpose` picks training vs model-only.
 schema_version: 2
@@ -66,14 +69,17 @@ augmentation_speech:
       # counter_level: near deliberately quieter -> forces a non-energy cue (hardest).
       - {name: counter_level, prob: 0.2, sir_range: [-10, 0]}
 
-# OFF (curriculum): target-absent silence injection. Turned OFF here -- it was the prime suspect for
-# the allrir_la ep19 over-suppression blow-up (Dawn deletion 0.286 / SI-SDRi -9.53). It teaches the
-# model to output SILENCE when foreground judged absent; on real (domain-gapped) audio it mis-fires and
-# silences true speech. We are fighting over-suppression, so keep OFF. Re-enable (small prob) only at a
-# late stage IF insertion/leakage (model leaks interferer when nobody is near) becomes the actual problem.
+# EVAL-ONLY PROBE (NOT for training): every model in the escalation chain (ep59/w1/w2/w3) was trained
+# with this OFF -- see FAILED_NOTE.md, training with target_absent ON caused a catastrophic over-suppression
+# blow-up (Dawn deletion 0.286 / SI-SDRi -9.53). This copy forces prob=1.0 so EVERY eval row has no near
+# speaker (foreground removed, force_interferer keeps a FAR speaker in the mix) -- the "far-only leakage"
+# test: what does a model that has NEVER seen this situation output when nobody is actually near?
+# eval_indomain.py --by-bucket reports this as "F-only (silent-target) suppression": median
+# power_reduction_db (more negative = better suppression) + false-near rate (reduction > -6dB = leak).
+# Use with any ep59/w1/w2/w3 checkpoint (identical model architecture across all four).
 augmentation_target_absent:
-  used: False
-  prob: 0.20
+  used: True
+  prob: 1.0
   force_interferer: True
 
 # OFF: runtime distance query. This is a fixed near-field task (keep the bank
@@ -81,7 +87,7 @@ augmentation_target_absent:
 augmentation_noise:
   used: True
   prob: 0.8
-  noise_folder: /data/audio/dns-5/datasets_fullband_16k/noise_fullband
+  noise_folder: /path/to/audio/dns-5/datasets_fullband_16k/noise_fullband
   snr_range:
     - 0
     - 20
@@ -105,9 +111,9 @@ augmentation_reverb:
     source_level: True
     pregenerated:
       used: True
-      # CURRICULUM STAGE 2 = EXPAND: RT60 0.20-0.65, near/far DRR gap >=3dB, 62361 items (superset of
+      # BOUNDARY HELD-OUT (unseen geometry, far 1.10-3.5m incl. the 0.95-2.05m boundary zone).
       # core, adds weak-contrast / more-reverberant rooms). Flat .wav/.json under <folder>/items/.
-      folder: /work/any_exp_link/puresound_exp/hybrid_rir_16k_levels/expand
+      folder: /path/to/puresound_exp/hybrid_rir_16k_boundary_heldout_levels/all
       near_labels: [near_0, near_1]
       far_labels: [far_0, far_1, far_2]
       drr_window_ms: 2.5
@@ -209,7 +215,7 @@ trainer:
   num_workers: 20
   num_gpus: 2
   find_unused_parameters: true
-  work_folder: exp/dpcrn_antisup_w3_0701
+  work_folder: exp/dpcrn_curriculum/expand
 
 optimizer:
   type: AdamW
@@ -262,19 +268,6 @@ loss_func:
       factor_sc: 0.5
       factor_mag: 0.5
 
-  # TIER-1 ANTI-SUPPRESSION: pure-magnitude one-sided loss = mean(ReLU(|T|^p - |E|^p)^2).
-  # Penalises enhanced magnitude falling BELOW target (deletion); the residual/over-estimation
-  # side is already covered by SD-SDR + STFT above, so this adds net asymmetric pressure toward
-  # preservation. `weighted` is the del<->sub knob (start 1.0; raw ~0.07). Added to fight the
-  # over-suppression Azure STT revealed (enh deletion 0.264 -> 0.444). Judge with a STRONG ASR.
-  - type: OverSuppressionLoss
-    weighted: 3.0
-    args:
-      p: 0.5
-      fft_size: 512
-      hop_size: 128
-      win_length: 512
-
   # Training-only background accounting: residual = noisy - enhanced is supervised
   # against consistency_noise (= noisy - clean). Deployment stays single-output.
   - type: ResidualReferenceLoss
@@ -284,7 +277,7 @@ loss_func:
       loss: l1
       target_present_only: True
 
-  # ASR-aware perceptual loss (TODO_NEXT_STAGE.md): match enhanced features to the clean
+  # ASR-aware perceptual loss: match enhanced features to the clean
   # target's features inside frozen 16k SSL encoders, penalising destroyed intelligibility
   # (counters real-domain over-suppression). DUAL-SSL = two stacked ASRFeatureLoss terms:
   #   term 1  HuBERT_BASE  -- kept exactly at the w1 best (l1 @1.0), the current strongest

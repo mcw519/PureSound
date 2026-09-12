@@ -2,18 +2,26 @@
 
 English version: [`README.md`](README.md)
 
-這裡只有兩個檔案是**預設值**：可直接拿來用的調校結果。`exp/` 底下的一切都是
-recipe 的歷史紀錄——較早的 pipeline 階段、消融實驗與僅供 eval 用的 fixture。
+這裡的每個設定檔都可以直接拿來用。
 
 | config | 用途 |
 |---|---|
-| `train_dpcrn.yaml` | 預設訓練 recipe（產出已發布的 `dpcrn_v8` checkpoint） |
+| `train_dpcrn.yaml` | **預設訓練 recipe。**單一 curriculum run 從零訓練，不需要 warm-start checkpoint。 |
+| `train_dpcrn_curriculum_v1.yaml` | 這條血統的第二步；從 `dpcrn_curriculum_v0.ckpt` warm-start，加入 session 列、成對擷取視角，以及逐幀 proximity／presence 頭。產出已發布的 `dpcrn_curriculum_v1`。 |
 | `infer_dpcrn.yaml` | 預設推論設定；可載入 `../pretrained_ckpt/` 底下任何一個 checkpoint |
+| `infer_dpcrn_heads.yaml` | 同上，用於會輸出 VAD 側頭的 checkpoint |
+| `eval/` | `../run_full_benchmark.sh` 驅動的評測設定 |
+
+第一次執行前，請先把語料與 RIR bank 路徑指到你自己的資料：
+[`../DATA_SETUP.zh-TW.md`](../DATA_SETUP.zh-TW.md)。
 
 ```bash
-# 訓練（從 repo root），從前一個發布版本 warm-start
-uv run python egs/voice_isolate/main.py egs/voice_isolate/config/train_dpcrn.yaml --training \
-    --pretrained_ckpt_path egs/voice_isolate/pretrained_ckpt/backup/dpcrn_v7.ckpt
+# 從零訓練（從 repo root）
+uv run python egs/voice_isolate/main.py egs/voice_isolate/config/train_dpcrn.yaml --training
+
+# 接著（選用）跑 curriculum 的第二步
+uv run python egs/voice_isolate/main.py egs/voice_isolate/config/train_dpcrn_curriculum_v1.yaml \
+    --training --pretrained_ckpt_path egs/voice_isolate/pretrained_ckpt/dpcrn_curriculum_v0.ckpt
 
 # 推論／demo
 uv run python egs/voice_isolate/scripts/demo.py \

@@ -1,75 +1,83 @@
-# voice_isolate -- EXPERIMENT v19c-INHERIT: one new loss term, nothing else.
+# voice_isolate -- DPCRN from scratch on the M6 path-events-m4 RIR bank.
 #
-# Pre-registered in benchmarks/probes/v19c_round_design.md (committed before launch);
-# the pre-flight that licenses the launch is benchmarks/probes/v19c_preflight/README.md.
+# Purpose: measure what the new renderer is worth. The default recipe warm-starts
+# from dpcrn_v7, which was trained on pyroomacoustics-era banks, so a warm start
+# would carry that renderer's statistics into the comparison. Training from
+# scratch is the only way to attribute a difference to the bank.
 #
-# THE SINGLE KNOB: one extra loss entry, `AnchorInheritanceLoss` at weighted 0.25
-# (total loss weight 7.0 -> 7.25). Everything else in this file is
-# config/exp/train_dpcrn_v16_lengthmix.yaml verbatim except:
-#   * max_epochs 40 -> 20  (one cosine cycle; ep19 is the trough that is judged)
-#   * work_folder          (exp/dpcrn_v19c_inherit)
-#   * model.lightning_module.module_args.verbose: True  (per-term loss curves --
-#     False in both shipped recipes, so the curves this round promises to read
-#     would otherwise not be emitted)
-# T_0 stays 20, so ep19 of this run is a cosine trough comparable to v16 ep19.
+# TWO changes from config/train_dpcrn.yaml. Everything else is byte-identical on
+# purpose -- the augmentation and loss stack is the deployed recipe, and changing
+# it at the same time as the bank would make the result unattributable.
 #
-# WHAT THE TERM SAYS. Over the user's onset window the gain achieved ON THE USER
-# must sit at least M dB above the gain the model applied to WHAT WAS THERE
-# BEFORE the user arrived:
+#   1. augmentation_reverb.simulator.pregenerated -> M6 release loader
+#      (recipe/split/usage_role instead of a flat folder).
+#   2. trainer.work_folder -> its own directory.
 #
-#   L = mean over eligible rows of relu( M - (Pbar_on - detach(Qbar_pre)) )
+# WHAT CHANGES ABOUT THE DATA, and what that costs:
 #
-# with P/Q the floored per-frame achieved gains on `clean_speech` and on
-# `consistency_noise` (see puresound/nnet/loss/inherit.py for the full
-# definition, the -30 dB floor and the eligibility rule). Only a DIFFERENCE
-# appears -- no absolute dB anywhere, because absolute calibrations died twice in
-# this repo and relative ones survived twice -- and the pre-onset term is
-# DETACHED, so the hinge cannot be satisfied by suppressing the bystander less.
+#   * High band is path-events-m4, not pyroomacoustics. Measured against 1465
+#     real RIRs, M4's octave decay shape sits 8x closer to real rooms; pyro's
+#     high-frequency reverberation runs ~2.2x long. This
+#     is the change being tested.
+#   * This bank is PURE SYNTHETIC. The previous bank
+#     (hybrid_rir_16k_realfar) merged in ~22% measured-RIR rooms whose near
+#     channels were real <1 m impulse responses, there to widen the keep-class
+#     channel manifold. That widening is gone here. augmentation_realnear
+#     (real <1 m recordings on the keep side, prob 0.15) still covers part of
+#     it, and it covers it more strongly than a measured RIR does, but this is a
+#     real reduction in keep-class channel diversity -- not a neutral swap.
+#     To restore it, ingest measured RIRs and switch recipe_id to
+#     mixed_calibrated_real (see egs/rir_generation/README.md).
+#   * Room split is now enforced by the manifest rather than by convention.
 #
-# THE FAILURE IT TARGETS is in-distribution and measured: after a 2-3 s prefix of
-# a different near talker, the user's own first second comes out 1.25 dB (v16
-# ep19) / 1.71 dB (v8) quieter than with no prefix, paired over 200 utterances,
-# p ~ 3e-24, 173/200 rows down, same-talker prefix null (+0.04 dB).
+# KNOWN BIASES IN THIS BANK:
+#   * low band decays 0.62-0.79x its own prediction (shared by both backends);
+#   * M4's decay-vs-frequency shape is slightly too flat (2000/500 Hz = 1.089
+#     against 0.656-0.898 measured);
+#   * HybridRIRConfig.rt60_range does not constrain the sampler, so realized
+#     scene RT60 spans 0.21-3.27 s with 17% above 0.8 s. Wider reverberation
+#     diversity than the config nominally requests -- probably useful here, but
+#     the distribution is not the one the generation command implies.
 #
-# ARM B: the same file with margin_db 6.0 instead of 10.0. Nothing else changes.
+# VALIDATION IS NOT ROOM-HELD-OUT. init_dataloader passes one
+# augmentation_reverb block to both the train and valid datasets, so validation
+# rooms come from `split: train`. Validation speech is speaker-disjoint (its own
+# metafile) but the rooms are not disjoint, so the valid curve measures speaker
+# and mixture generalization, NOT room generalization. Measure room
+# generalization in a separate eval run against `split: test` of this same
+# release -- that split exists and is disjoint by manifest.
 #
-# NO RAMP IS CONFIGURABLE. The design asked for 0 -> 0.25 over 2 epochs, but
-# `LossConfig` (puresound/config/recipe.py) is {type, weighted, args} and
-# `BaseLightningModule.reduce_losses` multiplies by a static float -- there is no
-# schedule hook on the loss list anywhere in the repo. The weight is therefore
-# constant at 0.25 from step 0. If a ramp is wanted it belongs in
-# `reduce_losses` (or a `ramp_epochs` arg inside the loss), and that is a change
-# to shipped code this round deliberately does not make.
+# Run from egs/voice_isolate (the data/ paths below are relative to it), with NO
+# --pretrained_ckpt_path -- that flag is what makes it a warm start:
+#   uv run python main.py test/fixtures/recipes/train_dpcrn_m6bank_scratch.yaml --training
 #
-# ZERO NEW PARAMETERS, so scripts/preflight_ckpt_recipe.py reports 0 missing /
-# 0 unexpected against the warm start, the streaming ONNX export is unchanged and
-# config/infer_dpcrn.yaml needs no edit.
-#
-# WARM START v16 ep19 (weights only, strict=False -- the cosine restarts):
-#   cd egs/voice_isolate
-#   uv run python main.py config/exp/train_dpcrn_v19c_inherit.yaml --training \
-#     --pretrained_ckpt_path /work/any_exp_link/puresound_exp/dpcrn_v16_lengthmix/\
-# lightning_logs/version_0/checkpoints/epoch=19-step=10000.ckpt
-#
-# Never re-run the eight-stage ladder from scratch: its last stage alone reaches
-# -1.65 dB real far suppression against v8's -9.83. No parameter is added, so the
-# ladder does not need re-running.
-#
-# -- below this line: v16 verbatim, with the three deltas listed above --
+# FIRST CHECKPOINT TO LOOK AT IS ep19, and look for passthrough. The loss stack
+# was tuned for a warm start: OverSuppressionLoss (weight 3.0) penalises
+# enhanced magnitude falling below target and never penalises leaving the
+# mixture untouched, so at from-scratch initialization "emit the input" is a
+# local optimum that costs nothing on that term. Passthrough shows up as
+# in-domain SI-SDRi near 0 dB with a healthy-looking total loss. If ep19 is
+# passthrough, lower OverSuppressionLoss.weighted rather than training longer.
+# The scheduler restarts every 20 epochs, so only the cosine troughs
+# (ep19/39/59/79/99) are comparable.
+# Recipe schema v2: `task` selects the model that validates this file
+# (puresound/config/recipe.py); `purpose` picks training vs model-only.
 schema_version: 2
 purpose: train
 task: voice_isolation
 
 dataset:
-  train_metafile: data/dns5-read.chapters.train.list
-  valid_metafile: data/dns5-read.chapters.dev.list
+  train_metafile: data/dns5-read.train.list
+  valid_metafile: data/dns5-read.dev.list
   test_folder: data/test
   proc_output_folder: proc
   target_sample_rate: 16000
   gain_normalized_to: -28
-  training_length_seconds: 6.   # validation length; training draws from length_schedule
+  training_length_seconds: 6.
   filter_min_utterance_length: 2 # 4.
   filter_min_utterance_per_speaker: 1
+  # See the header: room-held-out generalization is measured separately.
+  validation_pipeline_role: train
 
 # The first sampled speaker is the near-field foreground; the rest are far-field
 # interferers to suppress.
@@ -154,7 +162,6 @@ augmentation_realfar:
   # by scripts/build_real_recording_pool.py (the released model used ~150k VOiCES recordings,
   # 200 speakers, 4 rooms, 1.5-10.3 m, no competing distractor).
   pool_manifest: data/realfar_pool/voices.train.jsonl
-  stitch_to_length: True
   turn_taking_prob: 0.3   # far-solo stretches inside otherwise normal N+F rows
 
 # Real near-field KEEP rows. Foreground = a genuine <1 m recording (target = itself),
@@ -162,6 +169,8 @@ augmentation_realfar:
 # the standard noise chain on top. This puts real captured speech on the KEEP side of
 # the same kind of mixture whose far side is real: near and far then differ mainly in
 # distance, so capture-chain identity is useless as a cue.
+# Carries more of the keep-class diversity load here than in the default recipe,
+# because this bank has no measured-RIR near channels to widen it.
 augmentation_realnear:
   used: True
   prob: 0.15
@@ -169,12 +178,11 @@ augmentation_realnear:
                           # far-solo stretches with real near speech elsewhere in the
                           # clip, i.e. absolute contrast within one capture chain
   pool_manifest: data/realfar_pool/voices.near.train.jsonl
-  stitch_to_length: True
 
 augmentation_noise:
   used: True
   prob: 0.8
-  noise_folder: /data/audio/dns-5/datasets_fullband_16k/noise_fullband
+  noise_folder: /path/to/audio/dns-5/datasets_fullband_16k/noise_fullband
   snr_range:
     - 0
     - 20
@@ -214,10 +222,50 @@ augmentation_reverb:
     source_level: True
     pregenerated:
       used: True
-      # Merged bank: simulated rooms plus measured-RIR rooms (~22% here) whose near
-      # channels are all real <1 m impulse responses. The measured rooms widen the
-      # keep-class channel manifold beyond a single simulated near signature.
-      folder: /work/any_exp_link/puresound_exp/hybrid_rir_16k_realfar
+      # M6.4 release, read through the recipe rather than by scanning a folder:
+      # the manifest owns the train/validation/test assignment (room- and
+      # acoustic-space-disjoint), the split is checked against usage_role, and
+      # every sample carries release/variant/renderer provenance.
+      #
+      # bank_type is inferred as "release" from recipe_id; stated for clarity.
+      # require_production stays False on purpose -- the M6.6 certificate is
+      # blocked on human listening and downstream evidence, so demanding it here
+      # would refuse to load a bank that is otherwise fully audited.
+      #
+      # STARTUP COST -- read this before launching multi-GPU.
+      # A full release audit re-derives each variant's acoustic distribution AND
+      # byte-verifies every child-variant RIR against its parent's samples, so it
+      # reads and digests the entire release. Measured on this bank (39,560 items
+      # / 68 GB across two variants): audit_rir_bank_qc_release 277 s and
+      # compute_bank_distribution 124 s per variant, plus the lineage pass over
+      # both variants' audio -- over 30 minutes cold.
+      #
+      # The verdict is memoized beside the release in .m6_release_audit_cache.json,
+      # keyed by the digest of every artifact the release declares (its manifest,
+      # each variant's manifest/QC-summary/distribution, every recipe index), so a
+      # warm start costs seconds and tampering with any of them still misses.
+      # A hit trusts only the per-item reports and the RIR audio of an otherwise
+      # byte-identical release.
+      #
+      # Why it matters for DDP: Lightning's subprocess launcher re-executes this
+      # script for rank 1, so rank 1 rebuilds the bank from scratch *inside* the
+      # 30-minute rendezvous window that rank 0 opened when it reached
+      # trainer.fit. With a cold cache rank 1 overruns it and the run dies with
+      # "DistStoreError: ... 1/2 clients joined" while an orphaned rank 1 keeps
+      # initializing. Warm the cache once before launching on two GPUs -- a
+      # single-device run, or audit_m6_variant_release(folder) directly.
+      #
+      # audit: False is ON here: this exact release passed a full cold audit on
+      # 2026-08-07 (23.8 min, valid=True, verdict memoized beside the release).
+      # Flip it back to True (or delete the line) if the release is regenerated
+      # or copied to a machine where that verdict has not been re-established.
+      bank_type: release
+      folder: /path/to/puresound_exp/hybrid_rir_16k_m6_20260804/path-events-m4_release
+      recipe_id: synthetic_calibrated
+      split: train
+      usage_role: train
+      require_production: False
+      audit: False
       near_labels: [near_0, near_1]
       far_labels: [far_0, far_1, far_2]
       drr_window_ms: 2.5
@@ -308,31 +356,19 @@ vad_label:
 
 trainer:
   lightning_trainer_args:
-    # STOPS AT A COSINE TROUGH ON ITS OWN, so the benchmark can be chained after
-    # the training command instead of a watcher having to kill it -- the v15 round
-    # lost 42 h of GPU to a watcher that died mid-pause. Was 20 for the first
-    # cycle (ep19 beat v8 at every window; benchmarks/probes/v16 notes); 40 takes
-    # the second. Resume with --ckpt_path, never a fresh warm start.
-    max_epochs: 20
+    max_epochs: 100
     gradient_clip_val: 5.
     accumulate_grad_batches: 2
     precision: bf16-mixed
   train_iter_per_epoch: 1000
   valid_iter_per_epoch: 100
   valid_seed: 1234
-  n_spk_per_batch: 12          # validation batch; training uses the schedule
-  # THE ROUND KNOB. n_spk travels with seconds because memory does (measured peak:
-  # 3s x20 / 6s x12 19.2 / 12s x6 19.0 / 30s x2 16.9 GiB on a 22 GB card).
-  length_schedule:
-    - {seconds: 3.,  n_spk: 20, prob: 0.25}   # the cold-start regime
-    - {seconds: 6.,  n_spk: 12, prob: 0.30}   # what every version to date trained on
-    - {seconds: 12., n_spk: 6,  prob: 0.25}
-    - {seconds: 30., n_spk: 2,  prob: 0.20}   # where v8's anchor accumulation lives
+  n_spk_per_batch: 12
   n_utt_per_speaker: 1
   num_workers: 20
   num_gpus: 2
   find_unused_parameters: true
-  work_folder: exp/dpcrn_v19c_inherit
+  work_folder: exp/dpcrn_m6bank_scratch_20260804
 
 optimizer:
   type: AdamW
@@ -388,6 +424,11 @@ loss_func:
   # already covered by SD-SDR + STFT above, so this adds net asymmetric pressure toward
   # preservation. `weighted` trades deletions against substitutions. Judge its effect
   # with a strong ASR: weak recognizers hide over-suppression.
+  #
+  # FROM-SCRATCH CAVEAT: this term is blind to passthrough (leaving the mixture
+  # untouched never falls below target), and 3.0 was tuned for a warm start where
+  # the model already separates. Check ep19 for passthrough before trusting a
+  # long run; see the header.
   - type: OverSuppressionLoss
     weighted: 3.0
     args:
@@ -420,7 +461,6 @@ loss_func:
       bundle: HUBERT_BASE
       layers: [6, 9]
       loss: cosine
-      crop_seconds: 6.
 
   - type: ASRFeatureLoss          # noise/overlap-robust SSL features
     weighted: 1.0
@@ -428,7 +468,6 @@ loss_func:
       bundle: WAVLM_BASE_PLUS
       layers: [6, 9]
       loss: cosine
-      crop_seconds: 6.
 
   # Pairs with backbone.dist_head: push the bottleneck to encode physical proximity
   # (DRR / log-distance) rather than the capture-chain signature. NaN-masked, so
@@ -440,37 +479,10 @@ loss_func:
       min_dist: 0.1
       max_dist: 30.0
 
-  # THE ROUND'S ONE KNOB -- see the header. Onset-window, within-row
-  # no-anchor-inheritance hinge on the achieved foreground gain. Adds no
-  # provider and no parameter: consistency_noise, n_interferers and
-  # background_vad_target all arrive through `batch`.
-  #   margin_db 10.0 = arm A;  6.0 = arm B (the only difference between arms)
-  # Defaults left explicit because every one of them is a pre-registered choice:
-  # the 400/160 grid is vad_target's own, 50 onset frames is the 0.5 s window the
-  # wrong-anchor delta is quoted at, 100 frames of interferer-before-onset is the
-  # measured anchor knee (0.5 s prefixes reach only -3.67/-4.14 dB against 1 s's
-  # -12.61/-9.72), and the -30 dB floor stops the statistic from becoming a
-  # phase/anti-correlation tail detector.
-  - type: AnchorInheritanceLoss
-    weighted: 0.25
-    args:
-      margin_db: 10.0
-      frame_length: 400
-      hop_length: 160
-      onset_frames: 50
-      min_onset_frame: 100
-      min_pre_interferer_frames: 100
-      fallback_pre_interferer_frames: 50
-      pre_energy_window_db: 25.0
-      floor_db: -30.0
-
 model:
   lightning_module:
     type: EncDecMaskBase
     module_args:
-      # THE ROUND READS PER-TERM CURVES: verbose logs train_step_loss_{i} /
-      # valid_step_loss_{i}, which is how L_inherit is watched during the cycle.
-      verbose: True
       mask_type: complex   # DPCRN emits a complex ratio mask applied to the noisy STFT
       encoder_lr_factor: 0.1
       feats_lr_factor: 0.1

@@ -1,60 +1,88 @@
-# voice_isolate -- DPCRN near-field voice isolation, default training recipe.
+# voice_isolate -- DPCRN near-field voice isolation, single-run curriculum recipe.
 #
-# Task: keep the speaker within ~1 m of the microphone, suppress everything
-# further away (other voices, TV/loudspeaker voices, noise). Single channel, no
-# enrollment, so the only usable cue is proximity (direct-to-reverberant ratio
-# and level). Four ideas shape the recipe:
+# This is the default recipe: it trains from scratch in ONE run, so it needs no
+# warm-start checkpoint. The knobs that a chain of runs would otherwise change
+# BETWEEN runs are written here as
+# schedules (`curriculum`, see puresound/config/curriculum.py) and move while the
+# run trains. One run then expresses what a chain of warm-started runs expressed
+# before, and the schedule is part of the recipe rather than part of whoever
+# launched it.
 #
-#   1. REAL recordings on BOTH sides of the decision. Far interferers are
-#      finished loudspeaker->air->mic recordings (augmentation_realfar) and part
-#      of the keep rows are genuine close-mic recordings (augmentation_realnear).
-#      Trained on RIR-convolved speech alone, a model keys on the capture chain
-#      instead of on distance and then deletes real near speech.
-#   2. Absolute and relative decisions are both supervised. Turn-taking rows put
-#      multi-second far-solo stretches (target silent) in the same clip as near
-#      speech, so "a lone far voice is still a suppress target" is learned
-#      without removing keep examples.
-#   3. Deletion is fought explicitly: OverSuppressionLoss, dual-SSL ASR feature
-#      losses, a distance/DRR auxiliary head, and target-absent silence
-#      injection left OFF.
-#   4. Synthetic rows carry the signature of a real capture, not just of a room:
-#      the noise is convolved with the speech's own room, an absolute microphone
-#      floor is anchored to full scale, and part of the mixture takes its SIR
-#      from the scene geometry instead of a blind range. Measured against real
-#      recordings, synthesis without these reads as implausibly clean, and a
-#      model trained on it learns "clean means suppressible" instead of "far
-#      means suppressible".
+# WHAT MOVES
+#
+#   epoch      0 ------------ 20 ------------ 40 ------------ 60 -------- 119
+#   rooms      easy-weighted  ->  widening    ->  full range + measured rooms
+#   deletion   OverSuppressionLoss 0 -> 3 (in by epoch 30)
+#   capture    media voice + mic high-pass in at epoch 20
+#   real rows  real far / real near pools in at epoch 30, full at 40
+#   proximity  DistHeadRegressionLoss 0 -> 0.3, arriving with the real rows
+#
+# Every track's last point is at epoch 60, and a track holds its value flat past
+# its last point. Epochs 60-119 therefore introduce nothing: they are budget for
+# the recipe the schedule ends on, and the cosine troughs inside them say whether
+# the run is still improving or has converged.
+#
+# The order is not arbitrary. Separation has to work at all before deletion
+# pressure means anything, so the anti-suppression term ramps in rather than
+# fighting the signal losses from step one. Real recordings on both sides of the
+# decision are what stop the model keying on the capture chain instead of on
+# distance, but they are also the rows with the least supervision, so they arrive
+# once the synthetic decision is learned. The room pool widens throughout, which
+# is a sampling weight rather than a change of dataset: the three synthetic
+# members below are nested views of one pool (see `banks:`), so an early weight
+# on `core` oversamples easy rooms instead of hiding the rest.
+#
+# WHAT DOES NOT MOVE, AND WHY
+#
+# Anything built once cannot be scheduled. The model is constructed before
+# training starts, so `dist_head` and `channel_consistency` are on from epoch 0;
+# what ramps instead is the WEIGHT of the loss that reads the head, which is the
+# same thing from the optimiser's point of view. A block's `used` flag is never
+# scheduled either: synthesis skips a disabled block before its random draw, so
+# switching one on mid-run would shift every draw after it. Blocks that a
+# schedule introduces are therefore `used: True` with their probability at the
+# schedule's first value -- the draw happens from the first row, only its outcome
+# changes.
+#
+# Values under the blocks that a track owns are that track's epoch-0 value and
+# are marked `# curriculum`. Editing one of them alone does nothing: the schedule
+# writes it at the start of every epoch.
 #
 # Prerequisites (paths below are local -- point them at your own copies):
 #   * speech metafiles ...... dataset.train_metafile / valid_metafile
 #   * noise corpus .......... augmentation_noise.noise_folder
-#   * RIR bank .............. augmentation_reverb.simulator.pregenerated.folder
+#   * RIR bank views ........ augmentation_reverb.simulator.pregenerated.banks
 #                             (built by egs/rir_generation)
-#   * real recording pools .. scripts/build_real_recording_pool.py (far + near manifests)
+#   * real recording pools .. scripts/build_real_recording_pool.py (far + near)
 #
-# Run from the repository root, warm-starting from an existing separator:
-#   uv run python egs/voice_isolate/main.py egs/voice_isolate/config/train_dpcrn.yaml \
-#       --training \
-#       --pretrained_ckpt_path egs/voice_isolate/pretrained_ckpt/dpcrn_v7.ckpt
+# Run from the recipe directory (metafile paths are relative to it):
+#   cd egs/voice_isolate
+#   uv run python main.py config/train_dpcrn.yaml --training
 #
-# The scheduler restarts every 20 epochs, so checkpoints are only comparable
-# at the cosine troughs (ep19/ep39/...). Inference-side settings that ship with
-# the released checkpoint: ../pretrained_ckpt/README.md.
-# Recipe schema v2: `task` selects the model that validates this file
-# (puresound/config/recipe.py); `purpose` picks training vs model-only.
+# No `--pretrained_ckpt_path`: this recipe starts cold by design. Resume an
+# interrupted run with `--ckpt_path`, never with a fresh warm start -- the
+# curriculum reads the epoch from the trainer, so a resumed run continues its
+# schedule while a restarted one would replay it from the beginning.
+#
+# The scheduler restarts every 20 epochs, so checkpoints are only comparable at
+# the cosine troughs (ep19/39/59/79/99/119). The first four fall on the
+# schedule's phase boundaries, so each of those is a checkpoint that finished a
+# phase; the last two measure budget at the final values.
 schema_version: 2
 purpose: train
 task: voice_isolation
 
 dataset:
-  train_metafile: data/dns5-read.train.list
-  valid_metafile: data/dns5-read.dev.list
+  # The long-utterance metafile: the 30 s length bucket needs rows that exist at
+  # that length, and the shorter buckets crop from the same corpus.
+  train_metafile: data/dns5-read.chapters.train.list
+  valid_metafile: data/dns5-read.chapters.dev.list
   test_folder: data/test
   proc_output_folder: proc
   target_sample_rate: 16000
   gain_normalized_to: -28
-  training_length_seconds: 6.
-  filter_min_utterance_length: 2 # 4.
+  training_length_seconds: 6.   # validation length; training draws from length_schedule
+  filter_min_utterance_length: 2
   filter_min_utterance_per_speaker: 1
 
 # The first sampled speaker is the near-field foreground; the rest are far-field
@@ -69,13 +97,13 @@ augmentation_speech:
   snr_range:          # HARD SIR: foreground may be up to 10 dB QUIETER than the
     - -10             # interferer, so loudness alone cannot solve it and the
     - 10              # in-domain SI-SDRi metric stays sensitive (no passthrough rows).
-  media_voice:        # TV/loudspeaker-style band-limited interferer -- ON for the deployment
-    used: True        # recipe: the most common non-human interferer in real near-field rooms.
-    prob: 0.30
+  media_voice:        # TV/loudspeaker-style band-limited interferer: the most
+    used: True        # common non-human interferer in a real near-field room.
+    prob: 0.0         # curriculum
     hp_cutoff_range: [200, 400]
     lp_cutoff_range: [3500, 7000]
     compress_power_range: [0.6, 0.9]
-  echo_playback:      # device self-playback echo as residual interferer (OFF for now)
+  echo_playback:      # device self-playback echo as residual interferer (OFF)
     used: False
     prob: 0.20
     distance_range: [0.2, 1.0]
@@ -102,7 +130,7 @@ augmentation_speech:
       - {name: physical,      prob: 0.4, physical: True}
       # distance_level: the true level cue -- SIR from the inverse-distance
       # law on the scene's actual geometry (+jitter). A talker at 3 m really is
-      # ~15 dB quieter than one at 0.5 m; every other path here strips that.
+      # much quieter than one at 0.5 m; every other path here strips that.
       - {name: distance_level, prob: 0.2, distance_level: True, jitter_db: [-3, 3]}
       # moderate: mild rescale, keeps difficulty without routinely inverting levels.
       - {name: moderate,      prob: 0.25, sir_range: [-3, 6]}
@@ -112,53 +140,51 @@ augmentation_speech:
 
 # OFF: synthetic target-absent silence injection. It teaches the model to emit
 # SILENCE whenever it judges the foreground absent, which mis-fires on recordings
-# outside the training domain and deletes true speech. Enable (small prob) only if
-# leakage -- interferer passed through while nobody is near -- becomes the actual
-# problem. Real-recording rows get their absolute-suppress examples from
-# augmentation_realfar.lone_far_prob instead.
+# outside the training domain and deletes true speech. Real-recording rows get
+# their absolute-suppress examples from augmentation_realfar.lone_far_prob.
 augmentation_target_absent:
   used: False
   prob: 0.20
   force_interferer: True
 
 # Real far-field interferers: the far channel is a genuine loudspeaker->air->mic
-# recording drawn from the pool manifest and inserted WITHOUT RIR convolution, so it
-# carries the parts of a capture chain a convolution cannot reproduce (transducer
-# non-linearity, directivity, noise floor, level and spectral tilt). The near
-# foreground still uses the simulated near-field RIR above. On these rows the
-# interferer count comes from augmentation_speech.add_n_cases and the level from its
-# snr_range (hard SIR); 'physical' mix_mode is skipped, because the level ratio
+# recording drawn from the pool manifest and inserted WITHOUT RIR convolution, so
+# it carries the parts of a capture chain a convolution cannot reproduce
+# (transducer non-linearity, directivity, noise floor, level and spectral tilt).
+# The near foreground still uses the simulated near-field RIR above. On these rows
+# the interferer count comes from augmentation_speech.add_n_cases and the level
+# from its snr_range; 'physical' mix_mode is skipped, because the level ratio
 # between a simulated near channel and a real far recording is not physical.
 augmentation_realfar:
   used: True
-  prob: 0.20            # share of items whose interferers are real recordings
-  lone_far_prob: 0.15   # of those, the share with NO near speaker: target is silence,
-                        # the absolute "lone far voice = suppress" example. Raising it
-                        # deepens far suppression roughly linearly but also pushes
-                        # deletion up, so it is the main risk knob of this recipe.
-  # Far pool: real distant single-speaker recordings, one JSON object per line, built
-  # by scripts/build_real_recording_pool.py (the released model used ~150k VOiCES recordings,
-  # 200 speakers, 4 rooms, 1.5-10.3 m, no competing distractor).
+  prob: 0.0            # curriculum
+  lone_far_prob: 0.15   # of those rows, the share with NO near speaker: target is
+                        # silence, the absolute "lone far voice = suppress" example.
+                        # Deepens far suppression roughly linearly and pushes
+                        # deletion up with it -- the main risk knob of this recipe.
   pool_manifest: data/realfar_pool/voices.train.jsonl
+  stitch_to_length: True  # a 30 s row needs a pool entry that long
   turn_taking_prob: 0.3   # far-solo stretches inside otherwise normal N+F rows
 
-# Real near-field KEEP rows. Foreground = a genuine <1 m recording (target = itself),
-# interferers = draws from the far pool (same room preferred, speaker-disjoint), then
-# the standard noise chain on top. This puts real captured speech on the KEEP side of
-# the same kind of mixture whose far side is real: near and far then differ mainly in
-# distance, so capture-chain identity is useless as a cue.
+# Real near-field KEEP rows. Foreground = a genuine <1 m recording (target =
+# itself), interferers = draws from the far pool (same room preferred,
+# speaker-disjoint), then the standard noise chain on top. This puts real captured
+# speech on the KEEP side of the same kind of mixture whose far side is real: near
+# and far then differ mainly in distance, so capture-chain identity is useless as
+# a cue.
 augmentation_realnear:
   used: True
-  prob: 0.15
-  turn_taking_prob: 0.5   # half of these rows become conversational turns: multi-second
-                          # far-solo stretches with real near speech elsewhere in the
-                          # clip, i.e. absolute contrast within one capture chain
+  prob: 0.0            # curriculum
+  turn_taking_prob: 0.5   # half of these rows become conversational turns: far-solo
+                          # stretches with real near speech elsewhere in the clip,
+                          # i.e. absolute contrast within one capture chain
   pool_manifest: data/realfar_pool/voices.near.train.jsonl
+  stitch_to_length: True
 
 augmentation_noise:
   used: True
   prob: 0.8
-  noise_folder: /data/audio/dns-5/datasets_fullband_16k/noise_fullband
+  noise_folder: /path/to/audio/dns-5/datasets_fullband_16k/noise_fullband
   snr_range:
     - 0
     - 20
@@ -175,15 +201,13 @@ augmentation_noise:
     prob: 0.5
   # A capture floor anchored to digital full scale, not to the mixture: a
   # deployed mic's self-noise and room tone sit at a fixed level whoever is
-  # speaking. -55..-35 dBFS against -28 dBFS speech spans the -8..-21 dB
-  # speech-to-floor range measured on real recordings, plus a cleaner margin.
-  # Mixture only; inherits the device chain like capsule noise.
+  # speaking. Mixture only; inherits the device chain like capsule noise.
   absolute_floor:
     used: True
     prob: 0.5
     level_dbfs_range: [-55, -35]
 
-# Reverb from the pre-generated RIR bank (source-level: foreground = near channel,
+# Reverb from pre-generated RIR banks (source-level: foreground = near channel,
 # interferers = far channels of the SAME room).
 augmentation_reverb:
   used: True
@@ -198,14 +222,50 @@ augmentation_reverb:
     source_level: True
     pregenerated:
       used: True
-      # Merged bank: simulated rooms plus measured-RIR rooms (~22% here) whose near
-      # channels are all real <1 m impulse responses. The measured rooms widen the
-      # keep-class channel manifold beyond a single simulated near signature.
-      folder: /work/any_exp_link/puresound_exp/hybrid_rir_16k_realfar
-      near_labels: [near_0, near_1]
-      far_labels: [far_0, far_1, far_2]
-      drr_window_ms: 2.5
-      cache_size: 128
+      # Four members served as one pool; every scene routes back to the member
+      # that produced it. `weight` is a sampling probability, not an item share,
+      # and the curriculum moves these weights as the run proceeds.
+      #
+      # The first three are NESTED VIEWS of one generated pool, filtered by
+      # difficulty -- core's rooms are also in expand, and expand's are also in
+      # wide. Weighting them is therefore oversampling, not partitioning: an early
+      # weight on `core` makes easy rooms frequent without making the rest
+      # unreachable. `real` is the disjoint member: measured rooms whose near
+      # channels are genuine <1 m impulse responses, which widen the keep-class
+      # channel manifold beyond a single simulated near signature.
+      banks:
+        - name: core            # shortest RT60, widest near/far DRR separation
+          weight: 0.50          # curriculum
+          bank_type: room
+          folder: /path/to/puresound_exp/hybrid_rir_16k_levels/core
+          near_labels: [near_0, near_1]
+          far_labels: [far_0, far_1, far_2]
+          drr_window_ms: 2.5
+          cache_size: 64
+        - name: expand          # moderate RT60, narrower DRR separation
+          weight: 0.28          # curriculum
+          bank_type: room
+          folder: /path/to/puresound_exp/hybrid_rir_16k_levels/expand
+          near_labels: [near_0, near_1]
+          far_labels: [far_0, far_1, far_2]
+          drr_window_ms: 2.5
+          cache_size: 64
+        - name: wide            # every valid room the generator produced
+          weight: 0.15          # curriculum
+          bank_type: room
+          folder: /path/to/puresound_exp/hybrid_rir_16k_levels/wide
+          near_labels: [near_0, near_1]
+          far_labels: [far_0, far_1, far_2]
+          drr_window_ms: 2.5
+          cache_size: 64
+        - name: real            # measured rooms, real <1 m near responses
+          weight: 0.07          # curriculum
+          bank_type: room
+          folder: /path/to/puresound_exp/real_rir_16k_train_view
+          near_labels: [near_0, near_1]
+          far_labels: [far_0, far_1, far_2]
+          drr_window_ms: 2.5
+          cache_size: 64
 
 augmentation_speed:
   used: True
@@ -228,10 +288,10 @@ augmentation_src:        # random down/up-sample (bandwidth variation). The 1600
     - 0.2
     - 0.8
 
-# ON for the deployment recipe: real device mic front-ends commonly high-pass at 100-300 Hz.
+# Real device mic front-ends commonly high-pass at 100-300 Hz.
 augmentation_hpf:
   used: True
-  prob: 0.25
+  prob: 0.0              # curriculum
   cutoff:
     - 100
     - 200
@@ -290,21 +350,89 @@ vad_label:
     frame_length: 400
     hop_length: 160
 
+# The schedule. Every track names one knob and gives its value by epoch; `linear`
+# interpolates between points, `step` holds a value until the next point's epoch.
+# Outside the first and last point the value is held flat, so a run that goes past
+# epoch 60 keeps training at the values it ended on.
+curriculum:
+  used: True
+  tracks:
+    # --- the room pool widens ------------------------------------------------
+    # Weights are relative and renormalised, so these four lines are read
+    # together: early rows come mostly from the easy view, late rows from the
+    # full range plus the measured rooms.
+    - path: "bank:core"
+      points: [[0, 0.50], [20, 0.30], [40, 0.12], [60, 0.06]]
+    - path: "bank:expand"
+      points: [[0, 0.28], [20, 0.32], [40, 0.30], [60, 0.26]]
+    - path: "bank:wide"
+      points: [[0, 0.15], [20, 0.24], [40, 0.36], [60, 0.44]]
+    - path: "bank:real"
+      points: [[0, 0.07], [20, 0.14], [40, 0.22], [60, 0.24]]
+
+    # --- deletion pressure arrives once separation works ----------------------
+    # A one-sided magnitude penalty on falling BELOW the target. Applied from step
+    # one it competes with the signal losses while the model is still learning to
+    # separate at all; ramped in, it shapes a model that already can.
+    - path: "loss:OverSuppressionLoss"
+      interp: linear
+      points: [[0, 0.0], [10, 1.0], [30, 3.0]]
+
+    # --- capture realism ------------------------------------------------------
+    # Both are properties of the recording chain rather than of the task, so they
+    # enter after the clean decision is learned and before the real-recording rows
+    # that share those properties.
+    - path: "aug:augmentation_speech.media_voice.prob"
+      interp: step
+      points: [[0, 0.0], [20, 0.30]]
+    - path: "aug:augmentation_hpf.prob"
+      interp: step
+      points: [[0, 0.0], [20, 0.25]]
+
+    # --- real recordings on both sides of the decision ------------------------
+    # Introduced together and in proportion: real far rows without real near rows
+    # teach "real capture chain = suppress", which is the failure they exist to
+    # prevent. Half strength for one cycle, then full.
+    - path: "aug:augmentation_realfar.prob"
+      interp: step
+      points: [[0, 0.0], [30, 0.10], [40, 0.20]]
+    - path: "aug:augmentation_realnear.prob"
+      interp: step
+      points: [[0, 0.0], [30, 0.08], [40, 0.15]]
+
+    # --- proximity supervision ------------------------------------------------
+    # The head exists from epoch 0 (a model cannot grow one mid-run); its loss
+    # weight is what arrives, with the rows whose distances are real.
+    - path: "loss:DistHeadRegressionLoss"
+      interp: linear
+      points: [[0, 0.0], [30, 0.0], [40, 0.3]]
+
 trainer:
   lightning_trainer_args:
-    max_epochs: 100
+    # Six cosine cycles. Stops on a trough by itself so a benchmark can be
+    # chained after the training command; resume with --ckpt_path.
+    max_epochs: 120
     gradient_clip_val: 5.
     accumulate_grad_batches: 2
     precision: bf16-mixed
   train_iter_per_epoch: 1000
   valid_iter_per_epoch: 100
   valid_seed: 1234
-  n_spk_per_batch: 12
+  n_spk_per_batch: 12          # validation batch; training uses the schedule
+  # Mixed row lengths, drawn per batch. A row is scored as a whole, so training at
+  # one length only supervises the opening frames at 1/N of the loss; the batch
+  # size travels with the length so activation memory stays flat. Validation keeps
+  # n_spk_per_batch / training_length_seconds, so its loss stays comparable.
+  length_schedule:
+    - {seconds: 3.,  n_spk: 20, prob: 0.25}
+    - {seconds: 6.,  n_spk: 12, prob: 0.30}
+    - {seconds: 12., n_spk: 6,  prob: 0.25}
+    - {seconds: 30., n_spk: 2,  prob: 0.20}
   n_utt_per_speaker: 1
   num_workers: 20
   num_gpus: 2
   find_unused_parameters: true
-  work_folder: exp/dpcrn_train
+  work_folder: exp/dpcrn_curriculum
 
 optimizer:
   type: AdamW
@@ -356,12 +484,12 @@ loss_func:
       factor_mag: 0.5
 
   # ANTI-SUPPRESSION: pure-magnitude one-sided loss = mean(ReLU(|T|^p - |E|^p)^2).
-  # Penalises enhanced magnitude falling BELOW target (deletion); over-estimation is
-  # already covered by SD-SDR + STFT above, so this adds net asymmetric pressure toward
-  # preservation. `weighted` trades deletions against substitutions. Judge its effect
-  # with a strong ASR: weak recognizers hide over-suppression.
+  # Penalises enhanced magnitude falling BELOW target (deletion); over-estimation
+  # is already covered by SD-SDR + STFT above, so this adds net asymmetric
+  # pressure toward preservation. Its weight is scheduled (see `curriculum`);
+  # the value here is the epoch-0 one.
   - type: OverSuppressionLoss
-    weighted: 3.0
+    weighted: 0.0          # curriculum
     args:
       p: 0.5
       fft_size: 512
@@ -377,21 +505,23 @@ loss_func:
       loss: l1
       target_present_only: True
 
-  # ASR-aware perceptual loss: match enhanced features to the clean target's features
-  # inside frozen 16 kHz SSL encoders, which penalises destroyed intelligibility that
-  # signal losses alone do not see. Two encoders are stacked because they fail
-  # differently: HuBERT carries general phonetic content, while WavLM is pretrained
-  # with denoising and simulated overlapped speech and so reacts to the noise/overlap
-  # conditions where deletion appears.
-  # NOTE: both terms use `loss: cosine` on purpose. Cosine is scale-invariant, so the
-  # two encoders' different feature magnitudes do not fight and equal weights really
-  # mean equal influence; with `loss: l1` the weights would need rebalancing.
+  # ASR-aware perceptual loss: match enhanced features to the clean target's
+  # features inside frozen 16 kHz SSL encoders, which penalises destroyed
+  # intelligibility that signal losses alone do not see. Two encoders are stacked
+  # because they fail differently: HuBERT carries general phonetic content, while
+  # WavLM is pretrained with denoising and simulated overlapped speech and so
+  # reacts to the noise/overlap conditions where deletion appears.
+  # NOTE: both terms use `loss: cosine` on purpose. Cosine is scale-invariant, so
+  # the two encoders' different feature magnitudes do not fight and equal weights
+  # really mean equal influence. `crop_seconds` holds the SSL supervision constant
+  # across length buckets, so row length is the only thing the schedule varies.
   - type: ASRFeatureLoss          # general phonetic content
     weighted: 1.0
     args:
       bundle: HUBERT_BASE
       layers: [6, 9]
       loss: cosine
+      crop_seconds: 6.
 
   - type: ASRFeatureLoss          # noise/overlap-robust SSL features
     weighted: 1.0
@@ -399,12 +529,14 @@ loss_func:
       bundle: WAVLM_BASE_PLUS
       layers: [6, 9]
       loss: cosine
+      crop_seconds: 6.
 
-  # Pairs with backbone.dist_head: push the bottleneck to encode physical proximity
-  # (DRR / log-distance) rather than the capture-chain signature. NaN-masked, so
-  # simulated rows supervise all three targets and real rows only their distances.
+  # Pairs with backbone.dist_head: push the bottleneck to encode physical
+  # proximity (DRR / log-distance) rather than the capture-chain signature.
+  # NaN-masked, so simulated rows supervise all three targets and real rows only
+  # their distances. Scheduled: the value here is the epoch-0 one.
   - type: DistHeadRegressionLoss
-    weighted: 0.3
+    weighted: 0.0          # curriculum
     args:
       drr_scale: 10.0
       min_dist: 0.1
@@ -418,8 +550,8 @@ model:
       encoder_lr_factor: 0.1
       feats_lr_factor: 0.1
       backbone_lr_factor: 1.
-      # Whole-mix EQ/gain perturbation with a mask-consistency penalty: changing the
-      # recording chain must not change the keep/suppress decision.
+      # Whole-mix EQ/gain perturbation with a mask-consistency penalty: changing
+      # the recording chain must not change the keep/suppress decision.
       channel_consistency:
         enabled: True
         prob: 0.3
@@ -427,7 +559,7 @@ model:
         eq_db: 6.0
         gain_db: 4.0
         max_rows: 4       # sub-batch for the second forward (a full batch doubles
-                        # peak activation memory; a regularizer does not need it)
+                          # peak activation memory; a regularizer does not need it)
   encoder:
     type: ConvEncDec
     encoder_args:
@@ -466,9 +598,9 @@ model:
       delay: [1, 1, 1]      # 3-frame (~30 ms) look-ahead; inter-RNN stays unidirectional
       rnn_hidden: 96
       spectral_compress: False
-      # Utterance-level distance/DRR regression head off the bottleneck. Training-only:
-      # inference and the streaming export never read it. Labels are the scalars the
-      # dataset already emits, NaN-masked in DistHeadRegressionLoss.
+      # Utterance-level distance/DRR regression head off the bottleneck.
+      # Training-only: inference and the streaming export never read it. Labels
+      # are the scalars the dataset already emits, NaN-masked in the loss.
       dist_head:
         enabled: True
         hidden: 128

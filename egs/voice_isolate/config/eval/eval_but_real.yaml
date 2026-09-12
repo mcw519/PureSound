@@ -80,7 +80,7 @@ augmentation_target_absent:
 augmentation_noise:
   used: True
   prob: 0.8
-  noise_folder: /data/audio/dns-5/datasets_fullband_16k/noise_fullband
+  noise_folder: /path/to/audio/dns-5/datasets_fullband_16k/noise_fullband
   snr_range:
     - 0
     - 20
@@ -106,7 +106,7 @@ augmentation_reverb:
       used: True
       # CURRICULUM STAGE 2 = EXPAND: RT60 0.20-0.65, near/far DRR gap >=3dB, 62361 items (superset of
       # core, adds weak-contrast / more-reverberant rooms). Flat .wav/.json under <folder>/items/.
-      folder: /work/any_exp_link/puresound_exp/but_real_rir_16k
+      folder: /path/to/puresound_exp/but_real_rir_16k
       near_labels: [near_0, near_1]
       far_labels: [far_0, far_1, far_2]
       drr_window_ms: 2.5
@@ -268,7 +268,7 @@ loss_func:
       loss: l1
       target_present_only: True
 
-  # ASR-aware perceptual loss (TODO_NEXT_STAGE.md): match enhanced features to the clean
+  # ASR-aware perceptual loss: match enhanced features to the clean
   # target's features inside frozen 16k SSL encoders, penalising destroyed intelligibility
   # (counters real-domain over-suppression). DUAL-SSL = two stacked ASRFeatureLoss terms:
   #   term 1  HuBERT_BASE  -- kept exactly at the w1 best (l1 @1.0), the current strongest

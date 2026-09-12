@@ -1,54 +1,67 @@
-# voice_isolate -- DPCRN, real-end-to-end round v2c: the recipe that produced
-# dpcrn_v7. Superseded as the default by ../train_dpcrn.yaml (which adds the
-# measured-capture realism settings); kept so this stage stays reproducible.
+# voice_isolate -- EXPERIMENT v16: one model, four context lengths.
 #
-# Task: keep the speaker within ~1 m of the microphone, suppress everything
-# further away (other voices, TV/loudspeaker voices, noise). Single channel, no
-# enrollment, so the only usable cue is proximity (direct-to-reverberant ratio
-# and level). Three ideas shape the recipe:
+# WHAT THE PREVIOUS TWO ROUNDS MEASURED. Suppression on the field sessions is a
+# function of how much context the model is given, and every version so far was
+# trained at exactly one length:
 #
-#   1. REAL recordings on BOTH sides of the decision. Far interferers are
-#      finished loudspeaker->air->mic recordings (augmentation_realfar) and part
-#      of the keep rows are genuine close-mic recordings (augmentation_realnear).
-#      Trained on RIR-convolved speech alone, a model keys on the capture chain
-#      instead of on distance and then deletes real near speech.
-#   2. Absolute and relative decisions are both supervised. Turn-taking rows put
-#      multi-second far-solo stretches (target silent) in the same clip as near
-#      speech, so "a lone far voice is still a suppress target" is learned
-#      without removing keep examples.
-#   3. Deletion is fought explicitly: OverSuppressionLoss, dual-SSL ASR feature
-#      losses, a distance/DRR auxiliary head, and target-absent silence
-#      injection left OFF.
+#   v8 (6 s rows)    full -13.35 | 30s -6.32 | 10s -4.18 | 5s -2.71 | 3s -0.63
+#   v15 (30 s rows)  full -10.23 | 30s -5.69 | 10s -2.79 | 5s -2.49 | 3s -0.68
 #
-# Prerequisites (paths below are local -- point them at your own copies):
-#   * speech metafiles ...... dataset.train_metafile / valid_metafile
-#   * noise corpus .......... augmentation_noise.noise_folder
-#   * RIR bank .............. augmentation_reverb.simulator.pregenerated.folder
-#                             (built by egs/rir_generation)
-#   * real recording pools .. scripts/build_real_recording_pool.py (far + near manifests)
+# Training at 30 s raised the long end and LOWERED the short end -- v15 learned a
+# longer anchor, not a faster one. The mechanism is dilution: a row is scored as a
+# whole, so its evidence-poor opening frames carry 1/N of the loss, and N grew 5x.
 #
-# Run from the repository root, warm-starting from an existing separator:
-#   uv run python egs/voice_isolate/main.py egs/voice_isolate/config/train_dpcrn.yaml \
-#       --training \
-#       --pretrained_ckpt_path egs/voice_isolate/pretrained_ckpt/dpcrn_v6.ckpt
+# AND THE SHORT END IS THE COLD-START WALL. v8 on the field set's anchor-free
+# clips scores -0.33 dB median (0-1 of 14 ever pass). Its 3 s windows score
+# -0.63 / -1.39 / -1.94. "No anchor" and "no time to find the anchor" are the same
+# condition, and they meet at about 3-5 s. No version from v1 to v15 has ever been
+# trained to decide with less than 6 s of evidence.
 #
-# The scheduler does warm restarts every 20 epochs, so compare checkpoints only
-# at the cosine troughs (ep19/ep39/...). Inference-side settings that ship with
-# the released checkpoint: ../pretrained_ckpt/README.md.
-# Recipe schema v2: `task` selects the model that validates this file
-# (puresound/config/recipe.py); `purpose` picks training vs model-only.
+# THE ROUND KNOB: trainer.length_schedule. Each training batch draws one bucket,
+# batch size travelling with the length so memory stays flat:
+#
+#   3 s x20 (0.25) | 6 s x12 (0.30) | 12 s x6 (0.25) | 30 s x2 (0.20)
+#
+# That is 10,500 rows per 1000 iterations against the v8 recipe's 12,000 -- 88% of
+# its scene diversity, deliberately: v15 ran at 1/6 and could not be told apart
+# from a budget shortfall. The draw is seeded by (epoch, batch index) ONLY, never
+# by rank, so both DDP ranks run the same length in the same step.
+#
+# JUDGE ON THE WINDOW SWEEP AND THE COLD-FAR COLUMN, together:
+#   * the sweep must FLATTEN -- 10 s / 5 s / 3 s rise -- while the full-clip column
+#     stays at or above v8 (-13.35 / -9.87 / -12.21). Long end down = a worse v15.
+#   * field set cold-far (v8: 1 ok / 1 PARTIAL / 12 FAIL, median -0.33) is the
+#     hypothesis test. If the sweep flattens and cold-far does not move, cold start
+#     is NOT a short-context problem and comes off this axis for good.
+#   * HARD GUARD, both directions of the same risk: deciding on thin evidence is
+#     how a recipe learns to delete. Dawn deletion must not exceed v8's, and KEEP
+#     violations must not exceed 4. v10 bought cold start with 0.024 WER and 10
+#     keep violations; that trade is not on offer again.
+#
+# Corpus: the 31 s chapter metafile (scripts/build_chapter_corpus.py) -- short
+# buckets simply crop from it. Pool stitch_to_length stays on for the 30 s bucket
+# and is a no-op for the rest. ASRFeatureLoss crop_seconds 6 holds the SSL
+# supervision constant across buckets, so length is the only thing that varies.
+#
+# WARM START v8:
+#   cd egs/voice_isolate
+#   uv run python main.py test/fixtures/recipes/train_dpcrn_v16_lengthmix.yaml --training \
+#       --pretrained_ckpt_path pretrained_ckpt/dpcrn_v8.ckpt
+#
+# training_length_seconds below is the VALIDATION length (and the fallback when no
+# schedule is set); valid loss is comparable within this round only.
 schema_version: 2
 purpose: train
 task: voice_isolation
 
 dataset:
-  train_metafile: data/dns5-read.train.list
-  valid_metafile: data/dns5-read.dev.list
+  train_metafile: data/dns5-read.chapters.train.list
+  valid_metafile: data/dns5-read.chapters.dev.list
   test_folder: data/test
   proc_output_folder: proc
   target_sample_rate: 16000
   gain_normalized_to: -28
-  training_length_seconds: 6.
+  training_length_seconds: 6.   # validation length; training draws from length_schedule
   filter_min_utterance_length: 2 # 4.
   filter_min_utterance_per_speaker: 1
 
@@ -94,16 +107,16 @@ augmentation_speech:
     modes:            # sources are RMS-normalized and RIRs peak-normalized per channel,
                       # so 'physical' = "no extra rescale" (a near-0 dB ratio); the cues
                       # that survive are DRR / tail shape / tilt.
-      - {name: physical,      prob: 0.5, physical: True}
-      # distance_level (OFF, available): reinstates the level cue -- SIR from
-      # the inverse-distance law on the scene's actual geometry (+jitter). A
-      # talker at 3 m really is ~15 dB quieter than one at 0.5 m; every other
-      # path in this pipeline strips that information.
-      # - {name: distance_level, prob: 0.2, distance_level: True, jitter_db: [-3, 3]}
+      - {name: physical,      prob: 0.4, physical: True}
+      # distance_level: the true level cue -- SIR from the inverse-distance
+      # law on the scene's actual geometry (+jitter). A talker at 3 m really is
+      # ~15 dB quieter than one at 0.5 m; every other path here strips that.
+      - {name: distance_level, prob: 0.2, distance_level: True, jitter_db: [-3, 3]}
       # moderate: mild rescale, keeps difficulty without routinely inverting levels.
-      - {name: moderate,      prob: 0.3, sir_range: [-3, 6]}
-      # counter_level: near deliberately quieter -> forces a non-energy cue (hardest).
-      - {name: counter_level, prob: 0.2, sir_range: [-10, 0]}
+      - {name: moderate,      prob: 0.25, sir_range: [-3, 6]}
+      # counter_level: near deliberately quieter -> forces a non-energy cue
+      # (kept so level never becomes a trusted-alone shortcut).
+      - {name: counter_level, prob: 0.15, sir_range: [-10, 0]}
 
 # OFF: synthetic target-absent silence injection. It teaches the model to emit
 # SILENCE whenever it judges the foreground absent, which mis-fires on recordings
@@ -135,6 +148,7 @@ augmentation_realfar:
   # by scripts/build_real_recording_pool.py (the released model used ~150k VOiCES recordings,
   # 200 speakers, 4 rooms, 1.5-10.3 m, no competing distractor).
   pool_manifest: data/realfar_pool/voices.train.jsonl
+  stitch_to_length: True
   turn_taking_prob: 0.3   # far-solo stretches inside otherwise normal N+F rows
 
 # Real near-field KEEP rows. Foreground = a genuine <1 m recording (target = itself),
@@ -149,11 +163,12 @@ augmentation_realnear:
                           # far-solo stretches with real near speech elsewhere in the
                           # clip, i.e. absolute contrast within one capture chain
   pool_manifest: data/realfar_pool/voices.near.train.jsonl
+  stitch_to_length: True
 
 augmentation_noise:
   used: True
   prob: 0.8
-  noise_folder: /data/audio/dns-5/datasets_fullband_16k/noise_fullband
+  noise_folder: /path/to/audio/dns-5/datasets_fullband_16k/noise_fullband
   snr_range:
     - 0
     - 20
@@ -161,21 +176,20 @@ augmentation_noise:
   white_noise_snr_range:
     - 10
     - 30
-  # OFF (available, unjudged): convolve the noise with a channel of the SAME
-  # room as the speech, so the floor is spatially coherent with the mixture
-  # instead of arriving dry from nowhere. Motivated by the domain-gap
-  # measurement: the model suppresses clean-convolution far speech far harder
-  # than real recordings, and the difference is the recording's non-LTI
-  # signature -- the noise floor chief among it.
+  # Noise shares the speech's room, so the floor is spatially coherent with the
+  # mixture instead of arriving dry from nowhere. prob 0.5 keeps half the rows
+  # dry -- some real noise (hum, electrical) genuinely has no room, and the
+  # contrast preserves diversity.
   room_coloring:
-    used: False
+    used: True
     prob: 0.5
-  # OFF (available, unjudged): a capture floor anchored to digital full scale,
-  # not to the mixture -- a deployed mic's self-noise + room tone sit at a
-  # fixed level whoever is speaking. Real recordings measured -8..-21 dB
-  # floors (data_report/domain_gap_v7.jsonl); synthesis had none.
+  # A capture floor anchored to digital full scale, not to the mixture: a
+  # deployed mic's self-noise and room tone sit at a fixed level whoever is
+  # speaking. -55..-35 dBFS against -28 dBFS speech spans the -8..-21 dB
+  # speech-to-floor range measured on real recordings, plus a cleaner margin.
+  # Mixture only; inherits the device chain like capsule noise.
   absolute_floor:
-    used: False
+    used: True
     prob: 0.5
     level_dbfs_range: [-55, -35]
 
@@ -197,7 +211,7 @@ augmentation_reverb:
       # Merged bank: simulated rooms plus measured-RIR rooms (~22% here) whose near
       # channels are all real <1 m impulse responses. The measured rooms widen the
       # keep-class channel manifold beyond a single simulated near signature.
-      folder: /work/any_exp_link/puresound_exp/hybrid_rir_16k_realfar
+      folder: /path/to/puresound_exp/hybrid_rir_16k_realfar
       near_labels: [near_0, near_1]
       far_labels: [far_0, far_1, far_2]
       drr_window_ms: 2.5
@@ -288,19 +302,31 @@ vad_label:
 
 trainer:
   lightning_trainer_args:
-    max_epochs: 100
+    # STOPS AT A COSINE TROUGH ON ITS OWN, so the benchmark can be chained after
+    # the training command instead of a watcher having to kill it -- the v15 round
+    # lost 42 h of GPU to a watcher that died mid-pause. Was 20 for the first
+    # cycle (ep19 beat v8 at every window; v16 notes); 40 takes
+    # the second. Resume with --ckpt_path, never a fresh warm start.
+    max_epochs: 40
     gradient_clip_val: 5.
     accumulate_grad_batches: 2
     precision: bf16-mixed
   train_iter_per_epoch: 1000
   valid_iter_per_epoch: 100
   valid_seed: 1234
-  n_spk_per_batch: 12
+  n_spk_per_batch: 12          # validation batch; training uses the schedule
+  # THE ROUND KNOB. n_spk travels with seconds because memory does (measured peak:
+  # 3s x20 / 6s x12 19.2 / 12s x6 19.0 / 30s x2 16.9 GiB on a 22 GB card).
+  length_schedule:
+    - {seconds: 3.,  n_spk: 20, prob: 0.25}   # the cold-start regime
+    - {seconds: 6.,  n_spk: 12, prob: 0.30}   # what every version to date trained on
+    - {seconds: 12., n_spk: 6,  prob: 0.25}
+    - {seconds: 30., n_spk: 2,  prob: 0.20}   # where v8's anchor accumulation lives
   n_utt_per_speaker: 1
   num_workers: 20
   num_gpus: 2
   find_unused_parameters: true
-  work_folder: exp/dpcrn_train
+  work_folder: exp/dpcrn_v16_lengthmix
 
 optimizer:
   type: AdamW
@@ -388,6 +414,7 @@ loss_func:
       bundle: HUBERT_BASE
       layers: [6, 9]
       loss: cosine
+      crop_seconds: 6.
 
   - type: ASRFeatureLoss          # noise/overlap-robust SSL features
     weighted: 1.0
@@ -395,6 +422,7 @@ loss_func:
       bundle: WAVLM_BASE_PLUS
       layers: [6, 9]
       loss: cosine
+      crop_seconds: 6.
 
   # Pairs with backbone.dist_head: push the bottleneck to encode physical proximity
   # (DRR / log-distance) rather than the capture-chain signature. NaN-masked, so

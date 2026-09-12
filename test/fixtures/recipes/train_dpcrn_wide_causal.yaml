@@ -1,21 +1,7 @@
-# ROUND-2b = ROUND-2a with ONE knob: augmentation_realfar.lone_far_prob 0.05 -> 0.15.
-# Verdict driving this: EXPERIMENT_LOG 2026-07-22 (keep fixed, lone-far collapsed).
-# voice_isolate -- DPCRN. REAL-E2E ROUND-2a: fix round-1's keep collapse (Dawn deletion
-# 0.169 -> 0.446/0.500) whose root cause is channel-signature anchoring, refined by the
-# channel-gradient probe to "real end-to-end chain x mixture"-conditional deletion.
-# Diff vs round-1 (train_dpcrn_realE2E.yaml), every component an independent knob:
-#   1. augmentation_realnear      -- real <1m VOiCES keep rows (same-chain contrast)
-#   2. augmentation_realfar       -- prob 0.25->0.20, lone_far 0.08->0.05
-#   3. reverb bank -> hybrid_rir_16k_realfar merged view (22.4% real rooms whose near
-#      channels are measured real <1m RIRs -> keep-class channel manifold widened)
-#   4. backbone dist_head + DistHeadRegressionLoss -- physical proximity aux supervision
-#   5. lightning_module channel_consistency -- whole-mix EQ/gain perturbation, mask must
-#      not change ("the recording chain must not change the keep/kill decision")
-# Warm-start pretrained_ckpt/dpcrn_v6.ckpt (round-1 ckpts are shortcut-
-# polluted). Judge at ep19 trough. HARD gates: Dawn deletion <=0.20, BUT-OFFICE WER must
-# improve vs mix, turn-taking KEEP violations <=10, probe voices_near_e2e+noise back to
-# wide level (median AND p25); KEEP most of round-1's held-out far suppression (<=-7dB).
-# Full rationale/history: ../EXPERIMENT_LOG.md / ../NEXT_STEPS.md 2026-07-20.
+# voice_isolate -- DPCRN. UNUSED alternative: fully-causal variant of train_dpcrn_wide_antisup.yaml
+# (delay [1,1,1] -> [0,0,0]), kept only as a documented fallback -- NOT currently needed, since streaming
+# export solved look-ahead via future-buffering instead (see puresound/streaming/dpcrn.py). Never trained.
+# Rationale and status: see ../README.md and ../NEXT_STEPS.md.
 # Recipe schema v2: `task` selects the model that validates this file
 # (puresound/config/recipe.py); `purpose` picks training vs model-only.
 schema_version: 2
@@ -90,40 +76,10 @@ augmentation_target_absent:
   prob: 0.20
   force_interferer: True
 
-# REAL end-to-end far-field interferers (the real-e2e rung; see NEXT_STEPS 2026-07-20).
-# The far channel becomes a genuine loudspeaker->air->mic recording drawn from the pool
-# manifest -- dropped in WITHOUT RIR convolution -- because the RIR axis is closed (even
-# real measured RIRs did not transfer to real recordings, 2026-07-08). The near foreground
-# still uses the synthetic near-field RIR above. When a row is real-far the interferer count
-# comes from augmentation_speech.add_n_cases and the level from its snr_range (hard SIR);
-# 'physical' mix_mode is skipped (synthetic-near vs real-far level ratio is meaningless).
-augmentation_realfar:
-  used: True
-  prob: 0.20            # round-2a: 0.25 -> 0.20 (real-near rows below add real rows too)
-  lone_far_prob: 0.15   # ROUND-2b SINGLE KNOB (0.05 -> 0.15): round-2a fixed keep but real
-                        # lone-far collapsed to passthrough (-0.35 dB) -- absolute suppress
-                        # examples were only ~1% of items vs 15% anchored keep rows. ~3% of
-                        # items now teach "lone real voice = suppress". Everything else
-                        # identical to v2. Watch Dawn deletion (v2 was 0.213, gate 0.20).
-  # VOiCES train pool: 149,814 real distant recordings, 200 speakers, 4 rooms, 1.47-10.34m,
-  # distractor=none (clean lone far voice). Built by scripts/build_real_recording_pool.py.
-  pool_manifest: data/realfar_pool/voices.train.jsonl
-
-# ROUND-2a CORE: real near-field KEEP rows. Foreground = a genuine VOiCES <1m recording
-# (rm1 4 mics 0.74-0.96m + rm2 2 mics 0.74m; 15,498 recs / 200 speakers), target = itself,
-# interferers = real-far pool draws (same room preferred, speaker-disjoint), then the
-# standard noise chain on top -- putting real-chain speech on the KEEP side of exactly the
-# "real chain x mixture" condition the channel-gradient probe showed round-1 deletes. The
-# same-chain near/far contrast makes channel identity useless as a cue, forcing distance.
-augmentation_realnear:
-  used: True
-  prob: 0.15
-  pool_manifest: data/realfar_pool/voices.near.train.jsonl
-
 augmentation_noise:
   used: True
   prob: 0.8
-  noise_folder: /data/audio/dns-5/datasets_fullband_16k/noise_fullband
+  noise_folder: /path/to/audio/dns-5/datasets_fullband_16k/noise_fullband
   snr_range:
     - 0
     - 20
@@ -147,11 +103,9 @@ augmentation_reverb:
     source_level: True
     pregenerated:
       used: True
-      # ROUND-2a: the realfar-rung merged view = wide 95,344 synthetic rooms + 27,448 REAL
-      # measured-RIR rooms (22.4%; dEchorate/BRUDEX/SLR28/DIFFRIR, origin:real) whose near
-      # channels are ALL real <1m RIRs (0.27-1.00m) -- widens the keep-class channel
-      # manifold beyond the single synthetic near signature.
-      folder: /work/any_exp_link/puresound_exp/hybrid_rir_16k_realfar
+      # CURRICULUM STAGE 2 = EXPAND: RT60 0.20-0.65, near/far DRR gap >=3dB, 62361 items (superset of
+      # core, adds weak-contrast / more-reverberant rooms). Flat .wav/.json under <folder>/items/.
+      folder: /path/to/puresound_exp/hybrid_rir_16k_levels/wide
       near_labels: [near_0, near_1]
       far_labels: [far_0, far_1, far_2]
       drr_window_ms: 2.5
@@ -254,7 +208,7 @@ trainer:
   num_workers: 20
   num_gpus: 2
   find_unused_parameters: true
-  work_folder: exp/dpcrn_realE2E_v2b_0722
+  work_folder: exp/dpcrn_wide_causal_0703
 
 optimizer:
   type: AdamW
@@ -327,7 +281,7 @@ loss_func:
       loss: l1
       target_present_only: True
 
-  # ASR-aware perceptual loss (TODO_NEXT_STAGE.md): match enhanced features to the clean
+  # ASR-aware perceptual loss: match enhanced features to the clean
   # target's features inside frozen 16k SSL encoders, penalising destroyed intelligibility
   # (counters real-domain over-suppression). DUAL-SSL = two stacked ASRFeatureLoss terms:
   #   term 1  HuBERT_BASE  -- kept exactly at the w1 best (l1 @1.0), the current strongest
@@ -355,16 +309,6 @@ loss_func:
       layers: [6, 9]
       loss: cosine
 
-  # ROUND-2a component 4 (pairs with backbone dist_head): push the bottleneck to encode
-  # physical proximity (DRR / log-distance) instead of the channel signature. NaN-masked:
-  # synthetic rows supervise all three targets, real rows their distances only.
-  - type: DistHeadRegressionLoss
-    weighted: 0.3
-    args:
-      drr_scale: 10.0
-      min_dist: 0.1
-      max_dist: 30.0
-
 model:
   lightning_module:
     type: EncDecMaskBase
@@ -373,15 +317,6 @@ model:
       encoder_lr_factor: 0.1
       feats_lr_factor: 0.1
       backbone_lr_factor: 1.
-      # ROUND-2a component 5: whole-mix EQ/gain perturbation, mask consistency
-      # ("the recording chain must not change the keep/kill decision").
-      channel_consistency:
-        enabled: True
-        prob: 0.3
-        weight: 1.0
-        eq_db: 6.0
-        gain_db: 4.0
-        max_rows: 4       # sub-batch for the second forward (full batch OOMs 2xL4)
   encoder:
     type: ConvEncDec
     encoder_args:
@@ -417,12 +352,6 @@ model:
       kernel_f: [5, 3, 3]
       stride_f: [2, 2, 1]
       dilation_f: [1, 1, 1]
-      delay: [1, 1, 1]      # 3-frame (~30ms) look-ahead (was [0,0,0]); inter-RNN stays unidirectional
+      delay: [0, 0, 0]      # CAUSAL (was [1,1,1] look-ahead) -> per-frame streaming is bit-exact vs offline
       rnn_hidden: 96       # 1.5x DPRNN (was 64)
       spectral_compress: False
-      # ROUND-2a component 4: utterance-level distance/DRR regression head off the
-      # bottleneck (training-only; inference/streaming never read it). Labels are the
-      # dataset's free scalars, NaN-masked in DistHeadRegressionLoss.
-      dist_head:
-        enabled: True
-        hidden: 128

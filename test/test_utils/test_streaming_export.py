@@ -47,7 +47,7 @@ from puresound.streaming import (
 )
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
-_CFG = _REPO_ROOT / "egs/voice_isolate/config/exp"
+_CFG = _REPO_ROOT / "test/fixtures/recipes"
 
 VARIANTS = {
     # The lookahead recipe is the one that exercises `_extra_state_names`: its

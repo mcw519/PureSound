@@ -1,72 +1,47 @@
-# voice_isolate -- DPCRN near-field voice isolation, single-run curriculum recipe.
+# voice_isolate -- DPCRN, dpcrn_curriculum_v1: the single-run lineage, next step.
 #
-# Same task, corpus and model as ../train_dpcrn.yaml. What differs is that the
-# knobs which would otherwise be changed BETWEEN runs are written here as
-# schedules (`curriculum`, see puresound/config/curriculum.py) and move while the
-# run trains. One run then expresses what a chain of warm-started runs expressed
-# before, and the schedule is part of the recipe rather than part of whoever
-# launched it.
+# Warm-starts from `pretrained_ckpt/backup/dpcrn_curriculum_v0.ckpt` and keeps that
+# model's data recipe exactly where its schedule ended (the values below are
+# constants now: room pool, real-recording rows, capture realism, mixed row
+# lengths). What this step adds is one axis: multi-turn SESSION rows, with the
+# proximity-ordering and frame-presence supervision that reads them. The new
+# axis arrives on a schedule (`curriculum`), not as a switch: a warm-started
+# model handed a new row type and a new loss at full strength on step one spends
+# the top of its first cosine cycle absorbing the change instead of learning
+# from it.
 #
 # WHAT MOVES
 #
-#   epoch      0 ------------ 20 ------------ 40 ------------ 60 -------- 119
-#   rooms      easy-weighted  ->  widening    ->  full range + measured rooms
-#   deletion   OverSuppressionLoss 0 -> 3 (in by epoch 30)
-#   capture    media voice + mic high-pass in at epoch 20
-#   real rows  real far / real near pools in at epoch 30, full at 40
-#   proximity  DistHeadRegressionLoss 0 -> 0.3, arriving with the real rows
+#   epoch          0 ---- 4 ---- 8 ------ 12 ---------------------- 39
+#   session rows   0 ---------> 0.5   (share of eligible long rows)
+#   proximity      .    0 ------------> 0.1   (loss weight; waits for rows to exist)
 #
-# Every track's last point is at epoch 60, and a track holds its value flat past
-# its last point. Epochs 60-119 therefore introduce nothing: they are budget for
-# the recipe the schedule ends on, and the cosine troughs inside them say whether
-# the run is still improving or has converged.
-#
-# The order is not arbitrary. Separation has to work at all before deletion
-# pressure means anything, so the anti-suppression term ramps in rather than
-# fighting the signal losses from step one. Real recordings on both sides of the
-# decision are what stop the model keying on the capture chain instead of on
-# distance, but they are also the rows with the least supervision, so they arrive
-# once the synthetic decision is learned. The room pool widens throughout, which
-# is a sampling weight rather than a change of dataset: the three synthetic
-# members below are nested views of one pool (see `banks:`), so an early weight
-# on `core` oversamples easy rooms instead of hiding the rest.
+# Everything else is a constant. The frame-presence head and its loss are on
+# from epoch 0: the head is new, so it starts from init either way, and its
+# label (the energy VAD target) exists on every row, not only on session rows.
 #
 # WHAT DOES NOT MOVE, AND WHY
 #
-# Anything built once cannot be scheduled. The model is constructed before
-# training starts, so `dist_head` and `channel_consistency` are on from epoch 0;
-# what ramps instead is the WEIGHT of the loss that reads the head, which is the
-# same thing from the optimiser's point of view. A block's `used` flag is never
-# scheduled either: synthesis skips a disabled block before its random draw, so
-# switching one on mid-run would shift every draw after it. Blocks that a
-# schedule introduces are therefore `used: True` with their probability at the
-# schedule's first value -- the draw happens from the first row, only its outcome
-# changes.
+# A model cannot grow a head mid-run, so `proximity_head` and `vad_head` exist
+# from step one; the proximity head's WEIGHT is what ramps. The file's constants
+# are the schedule's FINAL values, so the validation set -- which reads the file
+# and never follows a schedule -- measures the distribution this run ends on.
 #
-# Values under the blocks that a track owns are that track's epoch-0 value and
-# are marked `# curriculum`. Editing one of them alone does nothing: the schedule
-# writes it at the start of every epoch.
+# Lineage: dpcrn_curriculum_v0 (cold, 120 epochs, `train_dpcrn_curriculum.yaml`)
+#   -> this. Judge against v0's own ep99 block with the same protocol
+#   (5-checkpoint field block, the nine-stage gate) plus the fixed 12 s / 30 s
+#   session artefacts (test/fixtures/v20_session_validation.py).
 #
-# Prerequisites (paths below are local -- point them at your own copies):
-#   * speech metafiles ...... dataset.train_metafile / valid_metafile
-#   * noise corpus .......... augmentation_noise.noise_folder
-#   * RIR bank views ........ augmentation_reverb.simulator.pregenerated.banks
-#                             (built by egs/rir_generation)
-#   * real recording pools .. scripts/build_real_recording_pool.py (far + near)
-#
-# Run from the recipe directory (metafile paths are relative to it):
+# Run from the recipe directory:
 #   cd egs/voice_isolate
-#   uv run python main.py config/exp/train_dpcrn_curriculum.yaml --training
+#   uv run python main.py config/train_dpcrn_curriculum_v1.yaml --training \
+#       --pretrained_ckpt_path pretrained_ckpt/backup/dpcrn_curriculum_v0.ckpt
 #
-# No `--pretrained_ckpt_path`: this recipe starts cold by design. Resume an
-# interrupted run with `--ckpt_path`, never with a fresh warm start -- the
-# curriculum reads the epoch from the trainer, so a resumed run continues its
-# schedule while a restarted one would replay it from the beginning.
+# --pretrained_ckpt_path, not --ckpt_path: the model gained parameters, so the
+# checkpoint loads non-strict and the optimiser starts fresh. Resume an
+# INTERRUPTION of this run with --ckpt_path on its own latest checkpoint.
 #
-# The scheduler restarts every 20 epochs, so checkpoints are only comparable at
-# the cosine troughs (ep19/39/59/79/99/119). The first four fall on the
-# schedule's phase boundaries, so each of those is a checkpoint that finished a
-# phase; the last two measure budget at the final values.
+# The scheduler restarts every 20 epochs; judge only at the troughs (ep19/39).
 schema_version: 2
 purpose: train
 task: voice_isolation
@@ -98,7 +73,7 @@ augmentation_speech:
     - 10              # in-domain SI-SDRi metric stays sensitive (no passthrough rows).
   media_voice:        # TV/loudspeaker-style band-limited interferer: the most
     used: True        # common non-human interferer in a real near-field room.
-    prob: 0.0         # curriculum
+    prob: 0.30
     hp_cutoff_range: [200, 400]
     lp_cutoff_range: [3500, 7000]
     compress_power_range: [0.6, 0.9]
@@ -156,7 +131,7 @@ augmentation_target_absent:
 # between a simulated near channel and a real far recording is not physical.
 augmentation_realfar:
   used: True
-  prob: 0.0            # curriculum
+  prob: 0.20
   lone_far_prob: 0.15   # of those rows, the share with NO near speaker: target is
                         # silence, the absolute "lone far voice = suppress" example.
                         # Deepens far suppression roughly linearly and pushes
@@ -173,17 +148,62 @@ augmentation_realfar:
 # a cue.
 augmentation_realnear:
   used: True
-  prob: 0.0            # curriculum
+  prob: 0.15
   turn_taking_prob: 0.5   # half of these rows become conversational turns: far-solo
                           # stretches with real near speech elsewhere in the clip,
                           # i.e. absolute contrast within one capture chain
   pool_manifest: data/realfar_pool/voices.near.train.jsonl
   stitch_to_length: True
 
+# Session rows: one user, one or two bystanders, a script of who talks when, and
+# the row's own floor in the gaps. See the header for the rates and
+# puresound/task/session_rows.py for the contracts (one chain draw per row; a
+# gap is floor, never digital silence; a long user gap is never target-absent).
+# Disabled, or on a row shorter than min_seconds, this block draws nothing.
+augmentation_session_rows:
+  enabled: True
+  prob: 0.5
+  min_seconds: 12.0        # the 12 s and 30 s buckets; short buckets untouched
+  max_seconds: 60.0        # no-op today -- the cap item 5 of the review asked for
+  n_bystanders: [1, 2]
+  user_distance_range: [0.3, 1.0]        # the bank's near pool
+  bystander_distance_range: [1.5, 4.0]   # the bank's far pool
+  shape_probs:
+    user_first: 0.25       # U opens, then they alternate
+    bystander_first: 0.30  # B holds the floor 2-8 s, U enters (wrong anchor)
+    user_gap: 0.30         # U speaks, 5-20 s of floor, U returns (persistence)
+    overlap: 0.15          # boundary double talk throughout (the KEEP guard)
+  user_turn_seconds: [1.5, 4.0]
+  bystander_turn_seconds: [2.0, 4.5]
+  bystander_open_seconds: [2.0, 8.0]
+  user_gap_seconds: [5.0, 20.0]
+  turn_gap_seconds: [0.2, 0.8]
+  overlap_seconds: [0.5, 3.0]
+  boundary_overlap_prob: 0.25
+  bystander_in_gap_prob: 0.7   # "the user stepped away" vs "nobody is near"
+  min_turn_seconds: 0.5
+  max_turns: 16
+  rir_move_prob: 0.3                     # U changes seat, same room, same chain
+  distance_matched_bystander_prob: 0.0   # labels use each rendered turn's RIR distance
+  # SIR for the bystander bus. The tail is a separate regime draw so its share
+  # is a knob: P(SIR <= -5 dB) = 0.30 here against 0.05 realised in v16.
+  sir_range: [-5.0, 10.0]
+  sir_low_tail_prob: 0.30
+  sir_low_tail_range: [-10.0, -5.0]
+  # The forced capture floor, mirroring augmentation_noise.absolute_floor's
+  # semantics (level as drawn, upstream of the device chain). Low on purpose: it
+  # is a guarantee against digital silence in a gap, not a second noise source.
+  floor_dbfs_range: [-60.0, -45.0]
+  fade_samples: 400
+  pair_prob: 0.0                         # legacy source-pool twins are disabled
+  pair_pool_size: 1024
+  paired_view_prob: 0.50                 # second chain view, consistency only
+  paired_view_min_seconds: 12.0
+
 augmentation_noise:
   used: True
   prob: 0.8
-  noise_folder: /data/audio/dns-5/datasets_fullband_16k/noise_fullband
+  noise_folder: /path/to/audio/dns-5/datasets_fullband_16k/noise_fullband
   snr_range:
     - 0
     - 20
@@ -222,8 +242,8 @@ augmentation_reverb:
     pregenerated:
       used: True
       # Four members served as one pool; every scene routes back to the member
-      # that produced it. `weight` is a sampling probability, not an item share,
-      # and the curriculum moves these weights as the run proceeds.
+      # that produced it. `weight` is a sampling probability, not an item share.
+      # These are the weights the parent run's schedule ended on, held fixed.
       #
       # The first three are NESTED VIEWS of one generated pool, filtered by
       # difficulty -- core's rooms are also in expand, and expand's are also in
@@ -234,33 +254,33 @@ augmentation_reverb:
       # channel manifold beyond a single simulated near signature.
       banks:
         - name: core            # shortest RT60, widest near/far DRR separation
-          weight: 0.50          # curriculum
+          weight: 0.06
           bank_type: room
-          folder: /work/any_exp_link/puresound_exp/hybrid_rir_16k_levels/core
+          folder: /path/to/puresound_exp/hybrid_rir_16k_levels/core
           near_labels: [near_0, near_1]
           far_labels: [far_0, far_1, far_2]
           drr_window_ms: 2.5
           cache_size: 64
         - name: expand          # moderate RT60, narrower DRR separation
-          weight: 0.28          # curriculum
+          weight: 0.26
           bank_type: room
-          folder: /work/any_exp_link/puresound_exp/hybrid_rir_16k_levels/expand
+          folder: /path/to/puresound_exp/hybrid_rir_16k_levels/expand
           near_labels: [near_0, near_1]
           far_labels: [far_0, far_1, far_2]
           drr_window_ms: 2.5
           cache_size: 64
         - name: wide            # every valid room the generator produced
-          weight: 0.15          # curriculum
+          weight: 0.44
           bank_type: room
-          folder: /work/any_exp_link/puresound_exp/hybrid_rir_16k_levels/wide
+          folder: /path/to/puresound_exp/hybrid_rir_16k_levels/wide
           near_labels: [near_0, near_1]
           far_labels: [far_0, far_1, far_2]
           drr_window_ms: 2.5
           cache_size: 64
         - name: real            # measured rooms, real <1 m near responses
-          weight: 0.07          # curriculum
+          weight: 0.24
           bank_type: room
-          folder: /work/any_exp_link/puresound_exp/real_rir_16k_train_view
+          folder: /path/to/puresound_exp/real_rir_16k_train_view
           near_labels: [near_0, near_1]
           far_labels: [far_0, far_1, far_2]
           drr_window_ms: 2.5
@@ -290,7 +310,7 @@ augmentation_src:        # random down/up-sample (bandwidth variation). The 1600
 # Real device mic front-ends commonly high-pass at 100-300 Hz.
 augmentation_hpf:
   used: True
-  prob: 0.0              # curriculum
+  prob: 0.25
   cutoff:
     - 100
     - 200
@@ -349,68 +369,29 @@ vad_label:
     frame_length: 400
     hop_length: 160
 
-# The schedule. Every track names one knob and gives its value by epoch; `linear`
-# interpolates between points, `step` holds a value until the next point's epoch.
-# Outside the first and last point the value is held flat, so a run that goes past
-# epoch 60 keeps training at the values it ended on.
+# The schedule. Every track names one knob and gives its value by epoch;
+# `linear` interpolates between points and a track holds flat past its last
+# point. The file's constants for these two knobs are their FINAL values.
 curriculum:
   used: True
   tracks:
-    # --- the room pool widens ------------------------------------------------
-    # Weights are relative and renormalised, so these four lines are read
-    # together: early rows come mostly from the easy view, late rows from the
-    # full range plus the measured rooms.
-    - path: "bank:core"
-      points: [[0, 0.50], [20, 0.30], [40, 0.12], [60, 0.06]]
-    - path: "bank:expand"
-      points: [[0, 0.28], [20, 0.32], [40, 0.30], [60, 0.26]]
-    - path: "bank:wide"
-      points: [[0, 0.15], [20, 0.24], [40, 0.36], [60, 0.44]]
-    - path: "bank:real"
-      points: [[0, 0.07], [20, 0.14], [40, 0.22], [60, 0.24]]
-
-    # --- deletion pressure arrives once separation works ----------------------
-    # A one-sided magnitude penalty on falling BELOW the target. Applied from step
-    # one it competes with the signal losses while the model is still learning to
-    # separate at all; ramped in, it shapes a model that already can.
-    - path: "loss:OverSuppressionLoss"
+    # Session rows enter over the first cycle's descent. The block is enabled
+    # with its probability at 0 from the first row -- the draw happens, only its
+    # outcome changes -- so no other random draw in the row moves when it does.
+    - path: "aug:augmentation_session_rows.prob"
       interp: linear
-      points: [[0, 0.0], [10, 1.0], [30, 3.0]]
-
-    # --- capture realism ------------------------------------------------------
-    # Both are properties of the recording chain rather than of the task, so they
-    # enter after the clean decision is learned and before the real-recording rows
-    # that share those properties.
-    - path: "aug:augmentation_speech.media_voice.prob"
-      interp: step
-      points: [[0, 0.0], [20, 0.30]]
-    - path: "aug:augmentation_hpf.prob"
-      interp: step
-      points: [[0, 0.0], [20, 0.25]]
-
-    # --- real recordings on both sides of the decision ------------------------
-    # Introduced together and in proportion: real far rows without real near rows
-    # teach "real capture chain = suppress", which is the failure they exist to
-    # prevent. Half strength for one cycle, then full.
-    - path: "aug:augmentation_realfar.prob"
-      interp: step
-      points: [[0, 0.0], [30, 0.10], [40, 0.20]]
-    - path: "aug:augmentation_realnear.prob"
-      interp: step
-      points: [[0, 0.0], [30, 0.08], [40, 0.15]]
-
-    # --- proximity supervision ------------------------------------------------
-    # The head exists from epoch 0 (a model cannot grow one mid-run); its loss
-    # weight is what arrives, with the rows whose distances are real.
-    - path: "loss:DistHeadRegressionLoss"
+      points: [[0, 0.0], [8, 0.5]]
+    # The ordering loss reads turn distances that only session rows carry, so it
+    # waits until there are rows to read and then follows them in.
+    - path: "loss:RelativeProximityLoss"
       interp: linear
-      points: [[0, 0.0], [30, 0.0], [40, 0.3]]
+      points: [[4, 0.0], [12, 0.1]]
 
 trainer:
   lightning_trainer_args:
-    # Six cosine cycles. Stops on a trough by itself so a benchmark can be
-    # chained after the training command; resume with --ckpt_path.
-    max_epochs: 120
+    # Two cosine cycles. Stops on a trough by itself so a benchmark can be
+    # chained after the training command.
+    max_epochs: 40
     gradient_clip_val: 5.
     accumulate_grad_batches: 2
     precision: bf16-mixed
@@ -428,10 +409,10 @@ trainer:
     - {seconds: 12., n_spk: 6,  prob: 0.25}
     - {seconds: 30., n_spk: 2,  prob: 0.20}
   n_utt_per_speaker: 1
-  num_workers: 20
+  num_workers: 12          # host-side headroom for the session/paired-view rows
   num_gpus: 2
   find_unused_parameters: true
-  work_folder: exp/dpcrn_curriculum_v0
+  work_folder: exp/dpcrn_curriculum_v1
 
 optimizer:
   type: AdamW
@@ -488,7 +469,7 @@ loss_func:
   # pressure toward preservation. Its weight is scheduled (see `curriculum`);
   # the value here is the epoch-0 one.
   - type: OverSuppressionLoss
-    weighted: 0.0          # curriculum
+    weighted: 3.0
     args:
       p: 0.5
       fft_size: 512
@@ -535,11 +516,37 @@ loss_func:
   # NaN-masked, so simulated rows supervise all three targets and real rows only
   # their distances. Scheduled: the value here is the epoch-0 one.
   - type: DistHeadRegressionLoss
-    weighted: 0.0          # curriculum
+    weighted: 0.3
     args:
       drr_scale: 10.0
       min_dist: 0.1
       max_dist: 30.0
+
+  # Session labels are optional on ordinary rows, so the losses return graph
+  # zeros there. The ordering term reads actual `turn_distance` values; the
+  # paired-view dispatcher below calls its explicit consistency method once per
+  # nested view and never repeats separation supervision.
+
+  - type: RelativeProximityLoss
+    weighted: 0.1
+    args:
+      margin: 1.0
+      consistency_weight: 1.0
+      min_turn_frames: 1
+      min_distance_gap_m: 0.25
+      scale_free: False
+      temperature: 1.0
+      pair_selection: cross_role
+
+  # Frame-level presence supervision. This consumes vad_target; target_present
+  # remains a row-level diagnostic and is intentionally not broadcast over time.
+  - type: VADHeadBCELoss
+    weighted: 0.1
+    args:
+      false_positive_weight: 1.0
+      false_negative_weight: 1.0
+      balance_per_batch: False
+  # ------------------------------------------------------------------ #
 
 model:
   lightning_module:
@@ -559,6 +566,11 @@ model:
         gain_db: 4.0
         max_rows: 4       # sub-batch for the second forward (a full batch doubles
                           # peak activation memory; a regularizer does not need it)
+      # A second capture-chain view of a session row, nested in the batch and
+      # read only by losses that declare a consistency method.
+      paired_view_consistency:
+        enabled: True
+        max_rows: 1
   encoder:
     type: ConvEncDec
     encoder_args:
@@ -603,3 +615,21 @@ model:
       dist_head:
         enabled: True
         hidden: 128
+      # Training-only side heads. The inference and streaming paths do not read
+      # these outputs, so the separator output contract remains unchanged.
+      identity_head:
+        enabled: False     # CYCLE 1: OFF (design §10/§11 -- identity is supplied by the
+        dim: 64            #   frozen SV model or a distilled head in a later round, not
+        kernel_t: 5        #   learned from the bottleneck; P0 measured it is not there)
+      proximity_head:
+        enabled: True
+        hidden: 64         # kernel_t is the identity head's, deliberately not a knob
+      vad_head:
+        enabled: True
+        hidden: 64
+        kernel_t: 5
+        ema_taus_s: null
+        frame_rate: 100.0
+      # No graph-carrying bottleneck is needed by this baseline; keep the
+      # inference probe detached and off during training.
+      expose_bottleneck: False

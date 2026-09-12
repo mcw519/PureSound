@@ -1,7 +1,17 @@
-# voice_isolate -- DPCRN. UNUSED alternative: fully-causal variant of train_dpcrn_wide_antisup.yaml
-# (delay [1,1,1] -> [0,0,0]), kept only as a documented fallback -- NOT currently needed, since streaming
-# export solved look-ahead via future-buffering instead (see puresound/streaming/dpcrn.py). Never trained.
-# Rationale and status: see ../README.md and ../NEXT_STEPS.md.
+# voice_isolate -- DPCRN. Phase-1 boundary experiment: robust near-field (<1m) isolation.
+# Warm-start from pretrained_ckpt/backup/dpcrn_v6.ckpt (--pretrained_ckpt_path).
+# Diffs vs train_dpcrn_wide_antisup.yaml (see ../NEXT_STEPS.md "2026-07-03" Phase 1):
+#   1. RIR bank -> phase1 merged view (wide 62k + boundary-distance fill 20k: far
+#      sources at 1.10-3.5 m filling the 0.95-2.05 m hole, unfiltered DRR gap, dry
+#      rooms included).
+#   2. overlap_control.turn_taking_prob 0.25: conversational alternating near/far
+#      turns with multi-second far-solo stretches (incl. row-initial) -- the regime
+#      where real far speech passed through untouched (QVF2.2 clip2/clip3).
+#   3. augmentation_target_absent ON at prob 0.10 (lone-far rows = suppress): the
+#      product keeps <1m only, so an isolated far voice must be silenced. Warm-start
+#      + low prob + OverSuppressionLoss/ResidualReference guard against the cold-start
+#      deletion blow-up documented in FAILED_NOTE §5. Judge gate: Dawn deletion must
+#      NOT rise at ep19.
 # Recipe schema v2: `task` selects the model that validates this file
 # (puresound/config/recipe.py); `purpose` picks training vs model-only.
 schema_version: 2
@@ -44,6 +54,17 @@ augmentation_speech:
     erle_db_range: [20, 35]
   overlap_control:    # spread the foreground/interferer temporal overlap across
     used: True        # no/mid/high regimes (else >80% overlap dominates training)
+    # Row-level conversational turn-taking (Phase 1): near and far alternate in
+    # long turns (far gets continuous multi-second solos, 50% row-initial) --
+    # the structure per-frame Bernoulli gating never produces and the regime
+    # where real far speech leaked straight through. Remaining 75% of rows use
+    # the per-interferer regimes below unchanged.
+    turn_taking_prob: 0.25
+    turn_near_seconds: [1.5, 3.0]
+    turn_far_seconds: [2.5, 5.0]   # long far solos; clip3's was 4.6 s
+    turn_gap_seconds: [0.0, 0.4]
+    turn_overlap_seconds: [0.0, 0.3]
+    far_first_prob: 0.5
     no_overlap_prob: 0.20
     high_overlap_prob: 0.35
     mid_overlap_range:
@@ -66,20 +87,26 @@ augmentation_speech:
       # counter_level: near deliberately quieter -> forces a non-energy cue (hardest).
       - {name: counter_level, prob: 0.2, sir_range: [-10, 0]}
 
-# OFF (curriculum): target-absent silence injection. Turned OFF here -- it was the prime suspect for
-# the allrir_la ep19 over-suppression blow-up (Dawn deletion 0.286 / SI-SDRi -9.53). It teaches the
-# model to output SILENCE when foreground judged absent; on real (domain-gapped) audio it mis-fires and
-# silences true speech. We are fighting over-suppression, so keep OFF. Re-enable (small prob) only at a
-# late stage IF insertion/leakage (model leaks interferer when nobody is near) becomes the actual problem.
+# ON at LOW prob (Phase 1): lone-far rows -- interferer-only mixture with a silence
+# target. The product decision (2026-07-03) is "user is always <1m": an isolated far
+# voice is a bystander/TV, never the user, and real clips showed it passing through
+# untouched (QVF2.2 clip2 -1.46 dB). This is exactly the "insertion/leakage became the
+# actual problem" condition the old OFF-comment reserved re-enabling for. The historical
+# blow-up (Dawn deletion 0.286, FAILED_NOTE §5) was COLD-start on the hardest RIR set
+# with many variables moving; here: warm-start from a healthy separator, prob 0.10,
+# OverSuppressionLoss w3 + ResidualReference(target_present_only) active. Judge gate:
+# Dawn deletion must NOT rise at the ep19 trough -- if it does, drop to 0.05 or OFF.
 augmentation_target_absent:
-  used: False
-  prob: 0.20
+  used: True
+  prob: 0.10
   force_interferer: True
 
+# OFF: runtime distance query. This is a fixed near-field task (keep the bank
+# near channel, suppress far); the scalar-query / FiLM mechanism is not used.
 augmentation_noise:
   used: True
   prob: 0.8
-  noise_folder: /data/audio/dns-5/datasets_fullband_16k/noise_fullband
+  noise_folder: /path/to/audio/dns-5/datasets_fullband_16k/noise_fullband
   snr_range:
     - 0
     - 20
@@ -103,9 +130,10 @@ augmentation_reverb:
     source_level: True
     pregenerated:
       used: True
-      # CURRICULUM STAGE 2 = EXPAND: RT60 0.20-0.65, near/far DRR gap >=3dB, 62361 items (superset of
-      # core, adds weak-contrast / more-reverberant rooms). Flat .wav/.json under <folder>/items/.
-      folder: /work/any_exp_link/puresound_exp/hybrid_rir_16k_levels/wide
+      # PHASE-1 MERGED VIEW (build_bank_view.py merge): wide (RT60 0.20-0.85, gap>=3, 62k)
+      # + boundary-distance fill (far 1.10-3.5 m, unfiltered DRR gap, 20k). Flat
+      # renamed symlinks (wide_*/bnd_*) under <folder>/items/.
+      folder: /path/to/puresound_exp/hybrid_rir_16k_phase1
       near_labels: [near_0, near_1]
       far_labels: [far_0, far_1, far_2]
       drr_window_ms: 2.5
@@ -208,7 +236,7 @@ trainer:
   num_workers: 20
   num_gpus: 2
   find_unused_parameters: true
-  work_folder: exp/dpcrn_wide_causal_0703
+  work_folder: exp/dpcrn_boundary_0703
 
 optimizer:
   type: AdamW
@@ -229,6 +257,8 @@ scheduler:
     T_mult: 1
     eta_min: 0.00001
 
+# OFF: counterfactual query-distance loss (only relevant to the abandoned
+# runtime-distance-query task).
 loss_func:
   - type: SDRLoss
     weighted: 1.
@@ -281,7 +311,7 @@ loss_func:
       loss: l1
       target_present_only: True
 
-  # ASR-aware perceptual loss (TODO_NEXT_STAGE.md): match enhanced features to the clean
+  # ASR-aware perceptual loss: match enhanced features to the clean
   # target's features inside frozen 16k SSL encoders, penalising destroyed intelligibility
   # (counters real-domain over-suppression). DUAL-SSL = two stacked ASRFeatureLoss terms:
   #   term 1  HuBERT_BASE  -- kept exactly at the w1 best (l1 @1.0), the current strongest
@@ -352,6 +382,6 @@ model:
       kernel_f: [5, 3, 3]
       stride_f: [2, 2, 1]
       dilation_f: [1, 1, 1]
-      delay: [0, 0, 0]      # CAUSAL (was [1,1,1] look-ahead) -> per-frame streaming is bit-exact vs offline
+      delay: [1, 1, 1]      # 3-frame (~30ms) look-ahead (was [0,0,0]); inter-RNN stays unidirectional
       rnn_hidden: 96       # 1.5x DPRNN (was 64)
       spectral_compress: False

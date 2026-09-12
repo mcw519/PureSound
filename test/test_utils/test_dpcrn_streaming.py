@@ -12,8 +12,8 @@ from puresound.streaming import (
 from puresound.utils import load_hparam
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
-CAUSAL_CONFIG = str(_REPO_ROOT / "egs/voice_isolate/config/exp/train_dpcrn_wide_causal.yaml")
-LOOKAHEAD_CONFIG = str(_REPO_ROOT / "egs/voice_isolate/config/exp/train_dpcrn_wide_antisup.yaml")
+CAUSAL_CONFIG = str(_REPO_ROOT / "test/fixtures/recipes/train_dpcrn_wide_causal.yaml")
+LOOKAHEAD_CONFIG = str(_REPO_ROOT / "test/fixtures/recipes/train_dpcrn_wide_antisup.yaml")
 
 
 def _archivable(relative: str) -> Path:
@@ -134,7 +134,7 @@ def test_dpcrn_streaming_matches_offline_for_mamba_inter():
     """inter_type=mamba: MambaInter.step() rides the (h, c) state ports, so the
     manifest layout is unchanged. Per-frame streaming must reproduce offline at
     the same bottleneck delay, warmup gate included."""
-    config = str(_REPO_ROOT / "egs/voice_isolate/config/exp/train_dpcrn_v13_mambainter.yaml")
+    config = str(_REPO_ROOT / "test/fixtures/recipes/train_dpcrn_v13_mambainter.yaml")
     model = load_streaming_dpcrn_model(config)
     assert model.is_lookahead and model.bottleneck_delay == 3
     d, rel = _offline_vs_streaming_rel(config)

@@ -2,18 +2,26 @@
 
 繁體中文版本：[`README.zh-TW.md`](README.zh-TW.md)
 
-Two files here are the **defaults**: the tuned settings to use as-is. Everything under
-`exp/` is the recipe history — earlier pipeline stages, ablations and eval-only fixtures.
+Everything here is meant to be run as-is.
 
 | config | use |
 |---|---|
-| `train_dpcrn.yaml` | default training recipe (produced the released `dpcrn_v8` checkpoint) |
+| `train_dpcrn.yaml` | **default training recipe.** One curriculum run from scratch — no warm-start checkpoint needed. |
+| `train_dpcrn_curriculum_v1.yaml` | the lineage's second step; warm-starts from `dpcrn_curriculum_v0.ckpt` and adds session rows, a paired capture view, and per-frame proximity/presence heads. Produced the released `dpcrn_curriculum_v1`. |
 | `infer_dpcrn.yaml` | default inference config; loads any checkpoint in `../pretrained_ckpt/` |
+| `infer_dpcrn_heads.yaml` | same, for a checkpoint that exports VAD side-heads |
+| `eval/` | the evaluation configs `../run_full_benchmark.sh` drives |
+
+Before the first run, point the corpus and RIR-bank paths at your own data:
+[`../DATA_SETUP.md`](../DATA_SETUP.md).
 
 ```bash
-# train (from repo root), warm-starting from the previous release
-uv run python egs/voice_isolate/main.py egs/voice_isolate/config/train_dpcrn.yaml --training \
-    --pretrained_ckpt_path egs/voice_isolate/pretrained_ckpt/backup/dpcrn_v7.ckpt
+# train from scratch (from repo root)
+uv run python egs/voice_isolate/main.py egs/voice_isolate/config/train_dpcrn.yaml --training
+
+# then, optionally, the second curriculum step
+uv run python egs/voice_isolate/main.py egs/voice_isolate/config/train_dpcrn_curriculum_v1.yaml \
+    --training --pretrained_ckpt_path egs/voice_isolate/pretrained_ckpt/dpcrn_curriculum_v0.ckpt
 
 # inference / demo
 uv run python egs/voice_isolate/scripts/demo.py \

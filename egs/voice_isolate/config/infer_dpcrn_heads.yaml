@@ -11,8 +11,7 @@
 # enhanced output is byte-identical to infer_dpcrn.yaml. What consumes them
 # decides what they mean.
 #
-# READ THIS BEFORE GATING ON THEM (benchmarks/probes/presence_head_v11_README.md,
-# and the four-actuator run):
+# READ THIS BEFORE GATING ON THEM (measured on the four-actuator run):
 #   * near head: 0.953 in-domain across RT60, 0.843 on a held-out device
 #     orientation -- but INVERTED (0.253) on the QVF publication chain, where its
 #     far span is the isolated bystander every version passes through.
