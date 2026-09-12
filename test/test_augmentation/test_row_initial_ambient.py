@@ -4,7 +4,6 @@ The two contracts: (1) inside the lead there is NO speech in noisy, clean, or th
 far reference -- only what the noise stage adds; (2) with the block absent or
 disabled, nothing changes, RNG stream included.
 """
-import numpy as np
 import pytest
 import torch
 

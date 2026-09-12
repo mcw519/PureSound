@@ -249,7 +249,7 @@ def test_impedance_tube_cli_writes_loadable_complex_measurement(tmp_path):
         encoding="utf-8",
     )
 
-    repo_root = Path(__file__).resolve().parents[1]
+    repo_root = Path(__file__).resolve().parents[2]
     subprocess.run(
         [
             sys.executable,

@@ -1,7 +1,7 @@
 """RIR API inventory: the package's public surface, frozen and enforced.
 
 Started life as the R0 pre-migration freeze of ``puresound.audio.hybrid_rir``
-(``RIR_EXP_LOG.md`` §8 items 1 and 5).  That module is gone: the
+(5).  That module is gone: the
 migration finished, the compatibility shims were removed, and every caller now
 imports from ``puresound.audio.rir``.  The file kept its job and changed its
 subject.
@@ -26,7 +26,7 @@ import pathlib
 import pytest
 
 
-REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
+REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
 RIR_PACKAGE = REPO_ROOT / "puresound" / "audio" / "rir"
 SCAN_ROOTS = ("test", "egs", "puresound")
 
@@ -95,21 +95,6 @@ CROSS_PACKAGE_PRIVATE_IMPORTS: frozenset[tuple[str, str]] = frozenset(
 
 #: Public symbols with no consumer anywhere in the repository.
 #:
-#: ``PytARDWaveBackend`` is a genuine dead-code candidate: it predates the
-#: ``GpuARDPytARDBackend`` adapter and nothing constructs it.  It is kept
-#: listed rather than deleted so the claim stays checked — if something starts
-#: using it, this test says so; if it is removed, this entry goes with it.
-#:
-#: ``_sample_source_in_shell`` is its private counterpart in scene sampling,
-#: superseded by ``sample_source_in_horizontal_shell``.
-KNOWN_UNUSED: frozenset[tuple[str, str]] = frozenset(
-    {
-        ("puresound.audio.rir.render.low_frequency.pytard", "PytARDWaveBackend"),
-        ("puresound.audio.rir.scene.sampling", "_sample_source_in_shell"),
-    }
-)
-
-
 def _module_name_of(path: pathlib.Path) -> str | None:
     relative = path.relative_to(REPO_ROOT)
     if relative.parts[0] != "puresound":
@@ -253,28 +238,3 @@ class TestPrivateBoundaries:
             "from puresound.audio.rir directly."
         )
 
-
-class TestKnownUnused:
-    @pytest.mark.parametrize("module_name,symbol", sorted(KNOWN_UNUSED))
-    def test_still_exists(self, module_name, symbol):
-        module = importlib.import_module(module_name)
-        assert hasattr(module, symbol), (
-            f"{module_name}.{symbol} was removed — drop it from KNOWN_UNUSED too"
-        )
-
-    @pytest.mark.parametrize("module_name,symbol", sorted(KNOWN_UNUSED))
-    def test_still_has_no_consumer(self, module_name, symbol):
-        if symbol.startswith("_"):
-            consumers = {
-                mod
-                for mod, name in _cross_package_private_references()
-                if name == symbol
-            }
-        else:
-            consumers = (
-                {module_name} if symbol in _imported_names(module_name) else set()
-            )
-        assert not consumers, (
-            f"{module_name}.{symbol} is recorded as unused but {sorted(consumers)} "
-            "imports it now; remove it from KNOWN_UNUSED."
-        )

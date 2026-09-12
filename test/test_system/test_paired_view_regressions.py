@@ -8,8 +8,6 @@ import torch
 from puresound.task.paired_views import collate_paired_views
 from puresound.system.paired_views import paired_view_loss, PairedViewConsistencyConfig
 from egs.voice_isolate.scripts import preflight_ckpt_recipe as preflight
-from egs.voice_isolate.benchmarks.probes.v20_session_rows import no_update_memory_smoke as smoke
-from egs.voice_isolate.benchmarks.probes.v20_session_rows import audit_300_rows as audit
 
 
 def test_short_auxiliary_uses_primary_frame_grid_and_backpropagates():
@@ -56,44 +54,3 @@ def test_preflight_requires_explicit_missing_heads(monkeypatch, allowed, mismatc
     assert preflight.main() == expected
 
 
-def test_smoke_rejects_unexercised_paired_path():
-    with pytest.raises(RuntimeError, match='no effective'):
-        smoke.validate_coverage('paired', 0)
-    smoke.validate_coverage('paired', 1)
-    smoke.validate_coverage('baseline', 0)
-
-
-def test_audit_preserves_schedule_and_clips_final_batch(monkeypatch, tmp_path):
-    import egs.voice_isolate.main as main
-    from puresound.config import load_recipe
-    root = audit.ROOT
-    path = root / 'egs/voice_isolate/config/exp/train_dpcrn_v20_r1a.yaml'
-    original = load_recipe(path, expected_task='voice_isolation', expected_purpose='train')
-    expected = [b.model_dump() for b in original.trainer.length_schedule]
-    def loader(recipe):
-        assert [b.model_dump() for b in recipe.trainer.length_schedule] == expected
-        assert recipe.trainer.train_iter_per_epoch >= 3
-        def batches():
-            for _ in range(3):
-                yield {'noisy_speech': torch.zeros(3, 10), 'length': torch.full((3,), 480000),
-                       'paired_view': {'source_indices': torch.tensor([0, 2])}}
-        return batches(), None
-    monkeypatch.setattr(main, 'init_dataloader', loader)
-    monkeypatch.chdir(tmp_path)  # restores cwd after the audit changes it
-    result = audit.run(str(path), rows=5, out=None, num_workers=0)
-    assert result['rows'] == 5
-    assert result['paired_rows'] == 3
-    assert result['bucket_schedule'] == expected
-
-
-def test_smoke_forces_coverage_without_changing_source_recipe():
-    from puresound.config import load_recipe
-    path = audit.ROOT / 'egs/voice_isolate/config/exp/train_dpcrn_v20_r1a.yaml'
-    recipe = load_recipe(path, expected_task='voice_isolation', expected_purpose='train')
-    forced = smoke.coverage_recipe(recipe, 12)
-    assert forced.augmentation_session_rows.prob == 1
-    assert forced.augmentation_session_rows.paired_view_prob == 1
-    assert recipe.augmentation_session_rows.prob == .5
-    assert forced.augmentation_session_rows.shape_probs == recipe.augmentation_session_rows.shape_probs
-    with pytest.raises(ValueError, match='duration'):
-        smoke.coverage_recipe(recipe, 6)

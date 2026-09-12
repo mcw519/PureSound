@@ -14,7 +14,7 @@ from puresound.utils import create_folder
 
 sys.path.insert(0, "./")
 
-TEST_CASE_DIR = Path(__file__).resolve().parent / "test_case"
+TEST_CASE_DIR = Path(__file__).resolve().parents[1] / "test_case"
 TEST_AUDIO_PATH = str(TEST_CASE_DIR / "1272-141231-0008.flac")
 OUT_TEST_FOLDER = str(TEST_CASE_DIR / "outputs")
 SAVE_TEST_AUDIO = True

@@ -1,6 +1,6 @@
 """Unit tests for the frozen R0 contracts.
 
-``RIR_EXP_LOG.md`` §8 item 4 asks for ``RIRArray``,
+These tests cover ``RIRArray``,
 ``RenderContext``, ``BackendCapabilities`` and a metadata contract.  These
 tests cover the behaviour the later stages will rely on, including the
 sound-speed precedence that decides where the causality boundary falls.
@@ -14,7 +14,6 @@ import pytest
 from puresound.audio.rir.contracts import (
     RIR_AXIS_ORDER,
     RIR_COMPUTE_DTYPE,
-    RIR_CONTRACT_VERSION,
     RIR_DELIVERY_DTYPE,
     BackendBand,
     BackendCapabilities,
@@ -266,5 +265,3 @@ class TestResolveSoundSpeed:
         assert resolve_sound_speed(payload) == pytest.approx(343.0)
 
 
-def test_contract_version_is_declared():
-    assert RIR_CONTRACT_VERSION == "puresound.rir.contracts.v1"

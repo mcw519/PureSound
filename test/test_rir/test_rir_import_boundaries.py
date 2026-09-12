@@ -1,6 +1,6 @@
 """R0 import boundaries: enforce the layering before code starts moving.
 
-``RIR_EXP_LOG.md`` §3.1 defines the dependency direction::
+The enforced dependency direction is::
 
     api / CLI adapter  ->  render, calibration, bank  ->  path_events, scene,
     metrics  ->  physics, contracts  ->  numpy / scipy
@@ -25,7 +25,7 @@ import sys
 import pytest
 
 
-REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
+REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
 RIR_PACKAGE = REPO_ROOT / "puresound" / "audio" / "rir"
 
 #: Layer rank per plan §3.1.  A module may import from its own rank or lower;

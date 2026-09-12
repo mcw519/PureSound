@@ -6,7 +6,7 @@ import torch
 from puresound.config import load_recipe
 from puresound.recipes import init_siso_model
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = Path(__file__).resolve().parents[2]
 
 NOISE_SUPPRESSION_CONFIGS = sorted(
     (REPO_ROOT / "egs" / "noise_suppression" / "config").glob("*.yaml")

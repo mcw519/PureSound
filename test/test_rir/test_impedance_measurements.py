@@ -195,7 +195,7 @@ def test_passive_multi_pole_fit_recovers_synthetic_complex_measurement(tmp_path)
 
 def test_direct_normalized_liner_measurements_fit_held_out_frequencies():
     measurement_dir = (
-        Path(__file__).resolve().parents[1]
+        Path(__file__).resolve().parents[2]
         / "egs"
         / "rir_generation"
         / "phases"

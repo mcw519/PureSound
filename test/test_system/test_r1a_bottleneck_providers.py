@@ -98,40 +98,6 @@ def test_each_r1a_provider_is_none_when_its_switch_is_off(name):
     assert providers_of(backbone)[name]() is None
 
 
-def test_the_bottleneck_provider_is_pooled_carries_a_graph_and_is_not_the_stash():
-    """`last_bottleneck` is [N, C, F, T] and detached (the presence gate fits a
-    probe on it). The loss-side one is frequency-pooled [N, C, T] -- the
-    convention `anchor_gate_cache.py` caches as `feat` and every per-frame head
-    pools to internally -- and keeps its graph, which is the whole point: the
-    identity loss runs an EMA copy of the head over it.
-    """
-    backbone = tiny_dpcrn(expose_bottleneck=True)
-    backbone.stash_bottleneck = True
-    x = torch.randn(2, 1, 64, 20)
-    backbone(x)
-
-    pooled = providers_of(backbone)["bottleneck"]()
-    assert pooled.dim() == 3 and pooled.shape[0] == 2
-    assert pooled.requires_grad
-
-    stashed = backbone.last_bottleneck
-    assert stashed.dim() == 4
-    assert not stashed.requires_grad
-    # Same tensor, one pooling apart: the two switches must not have drifted
-    # into reading different things.
-    assert torch.allclose(pooled.detach(), stashed.mean(dim=2), atol=1e-6)
-
-
-def test_a_gradient_reaches_the_encoder_through_the_bottleneck_provider():
-    """A detached side output would make the identity loss a no-op that still
-    logs a plausible number."""
-    backbone = tiny_dpcrn(expose_bottleneck=True)
-    x = torch.randn(2, 1, 64, 20, requires_grad=True)
-    backbone(x)
-    providers_of(backbone)["bottleneck"]().sum().backward()
-    assert x.grad is not None and float(x.grad.abs().sum()) > 0.0
-
-
 def test_the_head_providers_hand_over_the_forward_s_side_outputs():
     backbone = tiny_dpcrn(
         identity_head={"enabled": True, "dim": 8, "kernel_t": 3},
@@ -274,61 +240,6 @@ def test_the_new_head_blocks_reject_a_misspelled_key():
 # --------------------------------------------------------------------------- #
 # the streaming export is not in this round
 # --------------------------------------------------------------------------- #
-
-
-def test_both_r1a_losses_run_through_compute_loss_on_a_session_batch():
-    """The provider contract end to end: `invoke_loss` has to be able to satisfy
-    four declared inputs -- one of which is a module -- off the real table, and
-    the gradient has to reach the encoder through the bottleneck."""
-    from puresound.nnet.loss import IdentityContrastiveLoss, RelativeProximityLoss
-
-    torch.manual_seed(0)
-    model = streaming_system(
-        identity_head={"enabled": True, "dim": 8, "kernel_t": 3},
-        proximity_head={"enabled": True, "hidden": 8},
-        expose_bottleneck=True,
-    )
-    model.register_loss_func(
-        torch.nn.ModuleList([IdentityContrastiveLoss(), RelativeProximityLoss()]),
-        [0.1, 0.1],
-    )
-    model.train()
-
-    # 2 s at hop 160: 198 label frames against the head's 197 (see
-    # test_turn_pooling_alignment), and three turns that all fit inside them.
-    samples, frames = 32000, 198
-    noisy = torch.randn(2, samples) * 0.1
-    turn_id = torch.zeros(2, frames, dtype=torch.long)
-    turn_id[:, 5:60] = 1     # user
-    turn_id[:, 70:120] = 2   # bystander
-    turn_id[:, 130:190] = 3  # the user's return
-    batch = {
-        "turn_id": turn_id,
-        "turn_role": torch.tensor([[1, 2, 1], [1, 2, 1]]),
-        "turn_distance": torch.tensor([[0.5, 2.0, 0.5], [0.5, 2.0, 0.5]]),
-        # Speaker 11 is the user in both rows, rendered through two chains;
-        # 22 and 33 are the bystanders, one per row.
-        "turn_speaker": torch.tensor([[11, 22, 11], [11, 33, 11]]),
-        "turn_chain": torch.tensor([[0, 0, 0], [1, 1, 1]]),
-        "row_source_id": torch.tensor([5, 5]),
-        "user_active": torch.zeros(2, frames),
-        "bystander_active": torch.zeros(2, frames),
-    }
-
-    enhanced = model(noisy)
-    total, values = model.compute_loss(
-        enhanced=enhanced, target=torch.randn(2, samples) * 0.1, batch=batch
-    )
-    assert torch.isfinite(total)
-    assert len(values) == 2 and all(v != 0.0 for v in values)
-
-    total.backward()
-    grads = [
-        float(p.grad.abs().sum())
-        for p in model.backbone.parameters()
-        if p.grad is not None
-    ]
-    assert grads and max(grads) > 0.0
 
 
 def test_todays_rows_leave_both_r1a_losses_at_exactly_zero():

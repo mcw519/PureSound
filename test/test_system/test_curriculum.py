@@ -32,8 +32,11 @@ from puresound.task.sampler import SpeakerSampler
 from puresound.task.voice_isolation import VoiceIsolationDataset
 
 
-REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
-VOICE_ISOLATION = "egs/voice_isolate/config/train_dpcrn.yaml"
+REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
+#: A recipe with NO curriculum of its own: these tests attach curricula to a
+#: baseline and assert what the loader does with them, so the baseline must
+#: start clean. The shipped default recipe is itself a curriculum.
+VOICE_ISOLATION = "test/fixtures/recipes/train_dpcrn_v16_lengthmix.yaml"
 SR = 16000
 
 

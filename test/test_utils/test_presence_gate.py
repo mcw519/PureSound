@@ -111,7 +111,7 @@ def test_integrator_rises_faster_than_it_falls():
     cutting them off. A symmetric integrator must fail this."""
     g = gate(tau_up_s=0.05, tau_dn_s=1.0)
     up = g.trajectory(torch.ones(1, 20), 100.0)[0, -1] - g.b_init
-    dn = g.trajectory(torch.zeros(1, 20), 100.0)[0, -1] - g.b_init
+    g.trajectory(torch.zeros(1, 20), 100.0)
     assert up == 0.0                                      # already at 1.0
     g2 = gate(tau_up_s=0.05, tau_dn_s=1.0, b_init=0.5)
     rise = g2.trajectory(torch.ones(1, 10), 100.0)[0, -1] - 0.5

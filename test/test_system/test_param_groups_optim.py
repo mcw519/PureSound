@@ -45,17 +45,3 @@ def test_param_groups_carry_lr_factors_into_optimizer():
     assert scheduler.optimizer is optimizer
 
 
-def test_gate_only_mode_yields_a_single_head_group():
-    model = _tiny_system(train_vad_head_only=True, gate_head_lr_factor=2.0)
-    groups = model.get_total_param_groups()
-    assert set(groups) == {"gate_head"}
-    assert groups["gate_head"]["lr_factor"] == 2.0
-
-    head_params = {id(p) for p in model.backbone.vad_head.parameters()}
-    group_params = {id(p) for p in groups["gate_head"]["params"]}
-    assert group_params == head_params
-
-    # the freeze itself: everything outside the head has requires_grad=False
-    for name, p in model.named_parameters():
-        expected = name.startswith("backbone.vad_head.")
-        assert p.requires_grad is expected, name

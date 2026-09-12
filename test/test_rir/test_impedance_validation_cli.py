@@ -5,7 +5,7 @@ from pathlib import Path
 
 
 def test_impedance_validation_cli_writes_accepted_report(tmp_path):
-    repo_root = Path(__file__).resolve().parents[1]
+    repo_root = Path(__file__).resolve().parents[2]
     measurement_dir = (
         repo_root
         / "egs"

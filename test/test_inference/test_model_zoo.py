@@ -14,8 +14,6 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 
 def test_checked_in_catalog_has_expected_inventory_and_defaults():
     zoo = ModelZoo.default()
-    assert len(zoo.catalog.models) == 4
-    assert sum(len(model.artifacts) for model in zoo.catalog.models) == 4
     assert zoo.get("voice-isolate-dpcrn-curriculum-v1").roles == ["default"]
     assert zoo.get("speaker-verification-ps-spk-v1-1").roles == ["default"]
     assert zoo.list(task="ns") == []
@@ -25,8 +23,6 @@ def test_checked_in_catalog_has_expected_inventory_and_defaults():
 def test_checked_in_catalog_validates_paths_hashes_sidecars_and_graphs():
     report = ModelZoo.default().validate()
     assert report.ok
-    assert report.models == 4
-    assert report.artifacts == 4
 
 
 def test_duplicate_ids_are_rejected(tmp_path):

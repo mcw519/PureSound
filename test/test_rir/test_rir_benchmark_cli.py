@@ -9,7 +9,7 @@ import torch
 import torchaudio
 
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = REPO_ROOT / "egs" / "rir_generation" / "compare_bank_acoustics.py"
 MODAL_SCRIPT = (
     REPO_ROOT / "egs" / "rir_generation" / "compare_modal_acoustics.py"
