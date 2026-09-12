@@ -2,8 +2,7 @@
 
 Solves the nonlinear rectangular eigenproblem for passive rational wall
 admittances and renders the FDTD-calibrated modal residues against the
-free-field ``1/r`` convention.  Moved out of ``puresound.audio.rir.render.hybrid``
-in R2 of ``RIR_EXP_LOG.md``.
+free-field ``1/r`` convention.
 """
 
 from __future__ import annotations

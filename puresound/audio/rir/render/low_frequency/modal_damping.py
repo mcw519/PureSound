@@ -1,11 +1,8 @@
 """Per-mode damping derived from frequency-dependent surface materials.
 
-Shared by the pytARD and analytic modal backends.  Moved out of
-``puresound.audio.rir.render.hybrid`` in R2 of ``RIR_EXP_LOG.md``.
-
-Note the M2 status recorded in ``RIR_EXP_LOG.md``: the default
-surface-participation loss law has *not* passed its exit gate, so this module
-is infrastructure, not an accepted production model.
+Shared by the pytARD and analytic modal backends.
+The default surface-participation loss law has *not* passed its exit gate, so
+this module is infrastructure, not an accepted production model.
 """
 
 from __future__ import annotations

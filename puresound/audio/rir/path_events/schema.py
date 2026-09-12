@@ -1,8 +1,7 @@
 """PathEvent data contracts and their JSON round-trip.
 
 ``PathEvent`` keeps the physical delay separate from the complex pressure gain
-so propagation phase cannot be counted twice.  Moved out of
-``puresound.audio.rir.path_events`` in R3 of ``RIR_EXP_LOG.md``.
+so propagation phase cannot be counted twice.
 """
 
 from __future__ import annotations

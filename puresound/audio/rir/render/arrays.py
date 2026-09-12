@@ -1,8 +1,7 @@
 """Shared RIR array shaping for the render layer.
 
 Every backend and the crossover agree on ``[channels, samples]`` float64;
-these two helpers are what enforce it.  Moved out of
-``puresound.audio.rir.render.hybrid`` in R2 of ``RIR_EXP_LOG.md``.
+these two helpers are what enforce it.
 """
 
 from __future__ import annotations

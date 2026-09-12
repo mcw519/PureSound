@@ -2,8 +2,7 @@
 
 Abel-Huang normalized echo density plus the octave-band late-field analysis
 that truncates at the Lundeby intersection so measurement noise is not read as
-a physical diffuse tail.  Moved out of ``puresound.audio.rir.metrics`` in R4 of
-``RIR_EXP_LOG.md``.
+a physical diffuse tail.
 """
 
 from __future__ import annotations

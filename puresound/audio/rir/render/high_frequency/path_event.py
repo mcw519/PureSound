@@ -1,8 +1,7 @@
 """Coherent M3 PathEvent high-frequency backend.
 
 Renders ordered image-source path events with causal fractional delays and
-angle-aware boundary gains.  Moved out of ``puresound.audio.rir.render.hybrid`` in R2
-of ``RIR_EXP_LOG.md``.
+angle-aware boundary gains.
 """
 
 from __future__ import annotations

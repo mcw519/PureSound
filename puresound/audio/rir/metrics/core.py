@@ -1,8 +1,7 @@
 """Shared primitives for every RIR metric.
 
 Mono coercion, the geometric direct-sample convention, linear fits and the
-decay/noise-floor result types.  Moved out of ``puresound.audio.rir.metrics``
-in R4 of ``RIR_EXP_LOG.md``.
+decay/noise-floor result types.
 """
 
 from __future__ import annotations

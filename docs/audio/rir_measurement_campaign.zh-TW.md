@@ -1,272 +1,157 @@
-# M5 受控房間 RIR 量測與反演校準契約
+# RIR 量測與校正
 
-English version: `rir_measurement_campaign.md`
+English: [rir_measurement_campaign.md](rir_measurement_campaign.md)
 
-狀態：M5.1–M5.6 implementation 已完成；受控 measured／listening／downstream empirical exit 尚未就緒
+本文件定義 inverse calibration 可接受的實測房間資料。目標是擬合房間行為，
+避免把 transducer response、幾何誤差、clock delay 或資料洩漏誤認成材料參數。
+
 Schema：`puresound.rir_measurement_campaign.v1`
+
 Loss policy：`puresound.rir_calibration_loss.v1`
 
-## 1. 我們正在解什麼問題
+## 必要量測資產
 
-M1–M4 已經能從房間幾何、材料、環境、direct/early paths 與 multiband
-late field 合成可用 RIR。M5 的問題不再只是「能不能產生殘響」，而是：
+每組 source/receiver configuration 至少要有兩次 exponential sine sweep（ESS）
+錄音，並保留：
 
-> 給定少量但完整可追溯的真實房間量測，能否反推出 renderer 的物理參數，
-> 並讓未量測位置、甚至未見過的房間也比未校準模型更接近真實？
+- 原始 sweep recordings；
+- deconvolution 使用的 inverse filter；
+- background-noise recording；
+- deconvolution、harmonic separation 與 latency 設定；
+- 最終 RIR。
 
-形式上，量測 RIR 記為 (h^{\mathrm{meas}}_{r,s,m}(t))，其中 (r) 是實體
-房間、(s) 是 source pose、(m) 是 receiver。Renderer 為
+同一 capture 的資產必須使用相同 sample rate。重複量測用來估計 repeatability
+並排除不穩定資料，不只是為了取平均。
 
-\[
-\hat h(t)=F(\theta_{\mathrm{room}},\theta_{\mathrm{mat}},
-\theta_{\mathrm{dir}},\theta_{\mathrm{late}};
-g,s,m,e),
-\]
+## 房間紀錄
 
-其中 (g) 是幾何，(e) 是溫度、濕度與氣壓。M5 要找的是參數
+每個 measured room 都需要：
 
-\[
-\theta^*=\arg\min_\theta
-\sum_{(s,m)\in\mathcal T_r}
-\mathcal L\!\left(h^{\mathrm{meas}}_{r,s,m},F(\theta)\right),
-\]
+- 穩定的 `room_id` 與 room type；
+- 有文件說明的右手座標系；
+- geometry uncertainty；
+- dimensions，或附 SHA-256 的保留 mesh；
+- source 與 receiver poses；
+- 環境資料；
+- 保留資產的 hashes。
 
-然後只在沒有參與 fitting 的位置與房間上評估。若量測把喇叭、麥克風、
-幾何誤差、時鐘延遲與房間響應混在一起，最佳化即使收斂，也可能只是把
-裝置誤差錯認為牆面材料。因此 M5.1 先凍結「什麼資料才有資格進反演」。
+同一實體房間不能因 session 或位置不同而改名。
 
-## 2. 為何使用 repeated exponential sine sweep
+### Transducer 與 pose
 
-每個 source／receiver configuration 至少錄兩次 exponential sine sweep
-（ESS）。ESS 的瞬時頻率以指數方式由 (f_1) 掃到 (f_2)：
+Source 和 receiver 分開記錄 manufacturer、model、serial number、reference
+axis、calibration date、calibration response 與 provenance。
 
-\[
-x(t)=\sin\left[
-2\pi f_1\frac{T}{\ln(f_2/f_1)}
-\left(e^{t\ln(f_2/f_1)/T}-1\right)
-\right].
-\]
+Pose 包含 position、yaw/pitch/roll，以及位置和角度的不確定度。只有距離不足以
+識別反射幾何與 directivity。
 
-錄音 (y(t)) 與對應 inverse filter (x^{-1}(t)) 做反卷積：
+### 環境與同步
 
-\[
-\tilde h(t)=y(t)*x^{-1}(t).
-\]
+保存溫度、相對濕度與氣壓，因為它們會影響音速與空氣吸收。
 
-這條流程的價值是頻帶能量可控，而且裝置的 harmonic distortion 在反卷積
-後會與線性 impulse response 分離。方法源頭可參考 Farina 的
-[AES ESS 論文](https://angelofarina.it/Public/Papers/134-AES00.PDF)。本專案不只
-保存最後的 `rir.wav`，還強制保存：
+Multi-channel spatial measurement 必須 sample-synchronized，並代表同一次激發
+被多個 receivers 接收。若 channels 是不同 source positions，只能做獨立 mono
+metrics，不能計算 coherence 或 IACC。
 
-- 至少兩個 raw sweep recordings；
-- 播放 sweep 的 inverse filter；
-- 同一 configuration 的 background-noise recording；
-- deconvolution window、harmonic separation、latency correction 等設定；
-- 最終 deconvolved RIR。
+### 資產 identity
 
-重複量測不是為了把兩條 WAV 平均掉而已。它讓我們估計 repeatability、
-噪聲底、時變干擾與 clipping，並能拒絕「單次錄音恰好看起來合理」的資料。
+Asset path 必須相對於 campaign root，且不能包含 `..`。每個保留檔案都有
+SHA-256。Campaign audit 會檢查檔案存在、hash 正確，以及同一路徑是否被宣告成
+不同內容。
 
-## 3. 必須保存的物理證據
+## Data split
 
-### 3.1 實體房間與座標系
+Split 必須 room-disjoint：
 
-每個 `MeasuredRoom` 必須有穩定 `room_id`、房間類型、右手座標系說明、
-geometry uncertainty，以及下列至少一項：
+- `train`：校正位置與 deterministic position holdout；
+- `validation`：整個房間不得參與 fitting；
+- `test`：整個房間不得參與 fitting 與 model selection。
 
-- 可量測的長寬高；或
-- 有 SHA-256 的 coarse／detailed mesh asset。
+`deterministic_position_assignments()` 由 campaign、room 與 measurement ID
+推導 position holdout，因此重跑會得到相同 split。
 
-同一物理房間不得因換了一組 source position 就被重新命名，否則
-room-disjoint test 會洩漏。
+Train room 需要足夠的不同位置與方向，才能識別所選參數。同一 pose 的 repeated
+takes 能改善 uncertainty estimate，但不算新的 configuration。
 
-### 3.2 Source 與 receiver
+## 校正目標
 
-`CalibratedTransducer` 分開記錄 source／receiver 的 manufacturer、model、
-serial number、reference axis、校正日期、校正響應 asset 與 provenance。
-房間傳遞函數和 transducer response 不可以只靠一條合成 EQ 一起吸收掉。
-
-每個 pose 都包含：
-
-- `position_m = [x,y,z]`；
-- `orientation_ypr_deg = [yaw,pitch,roll]`；
-- position／orientation 的一個標準差不確定度。
-
-只有距離、沒有絕對位置或方向，不足以擬合牆面反射、directivity 或
-spatial coherence。
-
-### 3.3 環境與同步
-
-每筆 capture 保存 temperature、relative humidity 與 pressure，因為它們會
-改變 sound speed 與空氣吸收。多 receiver capture 必須 sample-synchronized；
-每個 WAV channel 必須代表同一 source excitation 到不同 receiver，而不是
-把多個 source positions 包成 channel。後者仍可比較 mono acoustic metrics，
-但不能拿來估 inter-channel coherence 或 IACC。
-
-### 3.4 不可變 asset 身分
-
-每個 retained asset 使用 campaign-relative safe path 與 SHA-256。Audit 會
-檢查檔案存在、hash 相符，而且同一路徑不能出現互相衝突的 hash。這使
-「metadata 沒變但 WAV 被重做」成為可偵測的錯誤。
-
-## 4. 資料切分不是 item-disjoint，而是 room-disjoint
-
-Schema 只允許 `train`、`validation`、`test` 三種 room split，而且每個
-`room_id` 只能被指派一次。對一個 train room，仍需保留未參與 fitting 的
-source／receiver positions，形成 position holdout；test room 則整間完全不
-參與 parameter fitting、loss weighting 或 early stopping。
-
-最少資料量先設為每個代表房間 12 筆，建議 12–30 個 configurations。這不是
-聲學上的神奇常數，而是第一個 operational gate：資料太少時，多組材料、
-scattering、directivity 與 late-field parameters 常能產生近似 RIR，反問題
-不可識別。M5.2 會先以 synthetic recovery 實際測哪些參數能被找回，再決定
-正式 campaign 是否要增加位置、方向或 receiver spacing。
-
-## 5. 多目標 calibration loss
-
-單一 waveform L1/L2 會被極小時間偏移支配；只比 RT60 又會忽略 early
-reflection、頻率 coloration 與空間結構。因此 reference loss 為：
-
-\[
-\mathcal L =
-w_{\mathrm{stft}}L_{\mathrm{stft}}+
-w_{\mathrm{edc}}L_{\mathrm{edc}}+
-w_{\mathrm{arr}}L_{\mathrm{arr}}+
-w_{\mathrm{oct}}L_{\mathrm{oct}}+
-w_{\mathrm{sp}}L_{\mathrm{sp}}+
-w_{\mathrm{causal}}R_{\mathrm{causal}}+
-w_{\mathrm{decay}}R_{\mathrm{decay}}.
-\]
-
-每一項都單獨輸出，不能只留下 total scalar。
-
-### 5.1 Multiresolution STFT
-
-在多個 FFT size 比較 spectral convergence 與 log-magnitude L1：
-
-\[
-L_{\mathrm{SC}}=
-\frac{\lVert|S|-|M|\rVert_F}{\lVert|M|\rVert_F},
-\qquad
-L_{\log}=\operatorname{mean}
-\left|\log(|S|+\epsilon)-\log(|M|+\epsilon)\right|.
-\]
-
-短窗對 early/transient 較敏感，長窗提供較細頻率解析度。這種多解析度
-spectral objective 也常見於 neural waveform generator；可參考
-[Parallel WaveGAN](https://arxiv.org/abs/1910.11480)。目前 NumPy/SciPy 版本是
-metric oracle，不是 autograd training loss。
-
-### 5.2 Direct-relative energy-decay curve
-
-先分別找出 measured／synthetic direct arrival，從 direct sample 對齊後做
-Schroeder backward integration：
-
-\[
-E(t)=\sum_{\tau=t}^{T}h^2(\tau),\qquad
-D(t)=10\log_{10}\frac{E(t)}{E(0)}.
-\]
-
-比較的是 decay curve RMSE，而不是只比一個線性斜率。因此雙斜率衰減、
-過強 early energy 或尾端 flattening 都不容易被單一 RT60 隱藏。
-
-### 5.3 Arrival timing
-
-每個 channel 比較 direct-arrival sample，換算成毫秒，並以明確 tolerance
-正規化。這一項保持絕對飛行時間；EDC 與 octave metrics 的 direct-relative
-對齊不會把幾何 timing error 消掉。
-
-### 5.4 Octave acoustic metrics
-
-在有效 125 Hz–4 kHz octave bands 比較 direct-relative band energy 與
-qualified T20。沒有足夠 decay range 的 T20 必須記成 unqualified，不能以
-零或預設 RT60 代替。
-
-### 5.5 Spatial coherence
-
-只有同步多 receiver capture 才可評估。在 late window 對每個 receiver pair
-比較 normalized complex cross spectrum：
-
-\[
-\Gamma_{ij}(f)=
-\frac{S_{ij}(f)}{\sqrt{S_{ii}(f)S_{jj}(f)}}.
-\]
-
-Mono 或 source-channel bank 會回報 `evaluable=false` 與原因，而不是得到
-看似完美的 spatial loss 0。
-
-### 5.6 物理 regularization
-
-`causality` 懲罰由幾何／measured physical-arrival bound 以前的 synthetic
-energy fraction。`decay_regularization` 則量 late-window energy 是否持續
-反常增長。兩者的功能是排除「metric 變近，但物理上創造 pre-echo 或不穩定
-尾場」的解。
-
-## 6. M5.1 已完成的實作
-
-（本節原為結果紀錄，已遷至 [`RIR_EXP_LOG.md`](../../RIR_EXP_LOG.md) 附錄。）
-
-## 9. 重現 M5.1–M5.6 implementation
-
-```bash
-PYTHONPATH=. .venv/bin/python \
-  egs/rir_generation/phases/m5_calibration/scripts/validate_m5_measurement_contract.py
-
-PYTHONPATH=. .venv/bin/python \
-  egs/rir_generation/phases/m5_calibration/scripts/validate_m5_synthetic_recovery.py
-
-PYTHONPATH=. .venv/bin/python \
-  egs/rir_generation/phases/m5_calibration/scripts/validate_m5_robust_recovery.py
-
-PYTHONPATH=. .venv/bin/python \
-  egs/rir_generation/phases/m5_calibration/scripts/validate_m5_m4_parameter_mapping.py
-
-PYTHONPATH=. .venv/bin/python \
-  egs/rir_generation/phases/m5_calibration/scripts/validate_m5_group_identifiability.py
-
-PYTHONPATH=. .venv/bin/python \
-  egs/rir_generation/phases/m5_calibration/scripts/validate_m5_measured_runner.py
-
-PYTHONPATH=. .venv/bin/python \
-  egs/rir_generation/phases/m5_calibration/scripts/validate_m5_spatial_calibration.py
-
-PYTHONPATH=. .venv/bin/python \
-  egs/rir_generation/phases/m5_calibration/scripts/validate_m5_constrained_residual.py
-
-PYTHONPATH=. .venv/bin/python \
-  egs/rir_generation/phases/m5_calibration/scripts/validate_m5_exit.py
-
-.venv/bin/pytest -q \
-  test/test_rir_measurement_campaign.py \
-  test/test_rir_calibration.py \
-  test/test_rir_inverse_calibration.py \
-  test/test_rir_m4_inverse_calibration.py \
-  test/test_rir_m5_pipeline.py \
-  test/test_rir_measured_calibration.py \
-  test/test_rir_constrained_residual.py \
-  test/test_m5_measurement_contract_validator.py \
-  test/test_m5_synthetic_recovery_validator.py \
-  test/test_m5_robust_recovery_validator.py \
-  test/test_m5_m4_parameter_mapping_validator.py \
-  test/test_m5_completion_validators.py
-```
-
-預期顯示：
+Reference report 合併多種互補項目：
 
 ```text
-M5.1 implementation exit: PASS
-controlled measurement readiness: OPEN
-M5.2 synthetic recovery: PASS
-M5.2b robust synthetic recovery: PASS
-M5.2c actual M4 parameter mapping: PASS
-M5.2d grouped material/path identifiability: PASS
-M5.3 runner implementation: PASS
-M5.3 measured inverse fit: BLOCKED ON CONTROLLED CAMPAIGN
-M5.4 synchronized spatial calibration implementation: PASS
-M5.5 constrained residual implementation: PASS
-M5 implementation exit: PASS
-M5 empirical/production exit: OPEN
+L = w_stft L_stft
+  + w_edc L_edc
+  + w_arr L_arr
+  + w_oct L_oct
+  + w_sp L_sp
+  + w_causal R_causal
+  + w_decay R_decay
 ```
 
-兩者並不矛盾：前者代表程式、schema 與 loss 已準備好；後者代表尚未取得
-符合契約的真實 campaign，因此 M5.3 measured-room fit 還不能宣稱完成。
+| 項目 | 檢查內容 |
+|---|---|
+| Multiresolution STFT | Early structure 與頻譜細節 |
+| Energy-decay curve | 對齊 direct arrival 後的 decay shape |
+| Arrival timing | Direct 與 early reflection timing |
+| Octave acoustics | 各頻帶 decay 與 level |
+| Spatial coherence | 同步 receivers 的關係 |
+| Causality regularization | 物理到達前的能量 |
+| Decay regularization | 不合理或不穩定的 tail |
+
+`analyze_rir_calibration_loss()` 會分別報告各項 loss 與 diagnostics。它是
+NumPy/SciPy reference metric，不是 autograd loss。
+
+非同步資料的 spatial term 應為 `not_applicable`，不能填成零後算作成功比較。
+
+## 校正流程
+
+1. Audit campaign contract 與保留資產。
+2. 固定 room 與 position assignments。
+3. 只 fitting 已啟用的 parameter groups。
+4. 用 synthetic fixtures 檢查 identifiability 與 recovery。
+5. 評估 train room 的 position holdout。
+6. 評估完整 validation 與 test rooms。
+7. Spatial parameters 只使用同步陣列資料。
+8. Physical fit 穩定後才加入 constrained residual model。
+
+Parameter group 應對應可觀察原因，例如 material、directivity、timing 與
+late-field behavior。若 campaign 無法分開識別兩組參數，應固定其中一組或補做
+更適合的量測。
+
+Residual correction 必須 bounded、causal 且可追溯，不得用來掩蓋錯誤幾何、
+asset audit failure 或 room leakage。
+
+## 執行工具
+
+從 template 開始：
+
+```text
+egs/rir_generation/phases/m5_calibration/config/
+  m5_measurement_campaign_template.json
+```
+
+執行 fitting：
+
+```bash
+python egs/rir_generation/phases/m5_calibration/scripts/fit_m5_measured_campaign.py --help
+```
+
+常用驗證入口：
+
+```bash
+python egs/rir_generation/phases/m5_calibration/scripts/validate_m5_measurement_contract.py
+python egs/rir_generation/phases/m5_calibration/scripts/validate_m5_measured_runner.py
+python egs/rir_generation/phases/m5_calibration/scripts/validate_m5_group_identifiability.py
+python egs/rir_generation/phases/m5_calibration/scripts/validate_m5_spatial_calibration.py
+python egs/rir_generation/phases/m5_calibration/scripts/validate_m5_constrained_residual.py
+python egs/rir_generation/phases/m5_calibration/scripts/validate_m5_exit.py
+```
+
+產生的 reports 預設是本機實驗輸出；只有 release evidence bundle 明確要求時
+才納入版控。
+
+## 解讀限制
+
+通過 schema 與 synthetic recovery 代表管線實作一致，不代表已證明 real-room
+generalization。Production evidence 仍需 controlled measurements、
+room-disjoint evaluation，以及適合該 release 的 listening 或 downstream-task
+結果。

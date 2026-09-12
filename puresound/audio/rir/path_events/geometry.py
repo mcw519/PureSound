@@ -1,8 +1,6 @@
 """Visibility, segment intersection, and shoebox image-source geometry.
 
 Pure geometry over scene objects and rooms; no gain spectra and no rendering.
-Moved out of ``puresound.audio.rir.path_events`` in R3 of
-``RIR_EXP_LOG.md``.
 """
 
 from __future__ import annotations

@@ -109,7 +109,7 @@ render backend and the low/high-band crossover use to agree on one
 `[channels, samples]` float64 array. It carries no receiver-array or spatial
 semantics of its own; it is plumbing that was moved out of
 `puresound.audio.rir.render.hybrid` during the R2 module split recorded in
-`RIR_EXP_LOG.md`.
+.
 
 ## Quick generation
 

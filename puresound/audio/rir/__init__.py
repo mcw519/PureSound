@@ -1,9 +1,6 @@
 """PureSound RIR domain package.
 
-This package is the destination of the modularization described in
-``RIR_EXP_LOG.md``.  It is being populated in stages; during the
-migration the existing flat ``puresound.audio.*`` modules remain the canonical
-implementations and keep working unchanged.
+Room impulse response generation, analysis and bank management.
 
 Where this sits relative to training
 ------------------------------------
@@ -36,13 +33,7 @@ Dependencies may only point downwards::
 
 ``contracts`` is the bottom layer: it must never import a renderer, a bank
 module, ``torch``/``torchaudio``, or touch the filesystem.  ``test/
-test_rir_r0_import_boundaries.py`` enforces this.
-
-Stage status
-------------
-
-- **R0 (current)** — contracts frozen, no algorithm code moved.
-- R1..R7 — see ``RIR_EXP_LOG.md``.
+test_rir_import_boundaries.py`` enforces this.
 """
 
 from puresound.audio.rir.contracts import (

@@ -30,5 +30,5 @@ against its per-octave targets.
 ## Caveat
 
 The FDN realizes whatever target it is given. Target quality is the caller's
-responsibility — see `RIR_EXP_LOG.md` §6.6 for the measured limits of
+responsibility — see for the measured limits of
 Sabine-derived targets.

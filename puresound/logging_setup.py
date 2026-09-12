@@ -24,7 +24,7 @@ same; a shell redirect that captured it before still captures it.
 
 Stdlib only, deliberately: ``puresound/__init__.py`` imports this module, and
 ``import puresound`` must not pull in torch --
-``test/test_rir_r0_import_boundaries.py`` runs the RIR schema/metrics modules in
+``test/test_rir/test_rir_import_boundaries.py`` runs the RIR schema/metrics modules in
 a subprocess and asserts torch never gets loaded.
 """
 

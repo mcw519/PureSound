@@ -29,4 +29,4 @@ octave 分別控制 RT60。這是 M4 backend 背後的晚場（late-field）引�
 ## Caveat（但書）
 
 FDN 只會忠實實現使用者給它的目標；目標值的品質是呼叫端自己的責任——
-Sabine 推導出的目標值有哪些已知的量測極限，見 `RIR_EXP_LOG.md` §6.6。
+Sabine 推導出的目標值有哪些已知的量測極限，見 。

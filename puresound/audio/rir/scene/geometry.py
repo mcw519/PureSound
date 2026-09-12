@@ -1,9 +1,8 @@
 """Pure polygon and shoebox geometry helpers.
 
 Layer 2 of the RIR package.  These functions take and return plain NumPy
-arrays: no scene objects, no configuration, no randomness.  Moved out of
-``puresound.audio.rir.render.hybrid`` in R1 of ``RIR_EXP_LOG.md``, where
-they are still re-exported under their original private names.
+arrays: no scene objects, no configuration, no randomness.  ``puresound.audio.rir.render.hybrid`` still re-exports them under their
+original private names.
 """
 
 from __future__ import annotations

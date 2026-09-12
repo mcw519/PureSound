@@ -20,7 +20,7 @@ Import rules
 
 This module may import only the standard library and NumPy.  It must not
 import ``torch``, ``torchaudio``, Pyroomacoustics, any renderer, any bank
-module, or touch the filesystem.  ``test/test_rir_r0_import_boundaries.py``
+module, or touch the filesystem.  ``test/test_rir/test_rir_import_boundaries.py``
 enforces this.
 """
 

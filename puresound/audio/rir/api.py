@@ -17,7 +17,7 @@ empty in both directions:
 
 What actually holds this package together is one layer below and is mechanical:
 ``contracts.py`` for the data contract, and the LAYER_RANK table in
-``test/test_rir_r0_import_boundaries.py``, which fails the build on a
+``test/test_rir/test_rir_import_boundaries.py``, which fails the build on a
 cross-layer import and keeps the schema/metrics modules importable without
 torch. Depend on those.
 

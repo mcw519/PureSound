@@ -1,8 +1,4 @@
-"""Time-domain metrics: DRR, clarity, Schroeder decay, and noise floor.
-
-Moved out of ``puresound.audio.rir.metrics`` in R4 of
-``RIR_EXP_LOG.md``.
-"""
+"""Time-domain metrics: DRR, clarity, Schroeder decay, and noise floor."""
 
 from __future__ import annotations
 
