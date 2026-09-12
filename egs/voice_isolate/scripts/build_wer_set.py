@@ -22,9 +22,9 @@ from scipy.signal import fftconvolve  # noqa: E402
 from puresound.audio.rir.bank.loader import PreGeneratedRoomBank
 
 # Default corpus locations -- overridable via CLI so the script is not pinned to one box.
-DEFAULT_LT = "/data/audio/LibriTTS/test-clean"          # transcribed foreground corpus
-DEFAULT_NOISE = "/data/audio/dns-5/datasets_fullband_16k/noise_fullband"
-DEFAULT_RIR = "/work/any_exp_link/puresound_exp/but_real_rir_16k"  # PreGeneratedRoomBank folder
+DEFAULT_LT = "/path/to/audio/LibriTTS/test-clean"          # transcribed foreground corpus
+DEFAULT_NOISE = "/path/to/audio/dns-5/datasets_fullband_16k/noise_fullband"
+DEFAULT_RIR = "/path/to/puresound_exp/but_real_rir_16k"  # PreGeneratedRoomBank folder
 SR = 16000
 
 def load16k(path, max_s=10.0, min_s=4.0):

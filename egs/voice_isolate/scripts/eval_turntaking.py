@@ -24,7 +24,7 @@ Usage (from repo root):
     uv run python egs/voice_isolate/scripts/eval_turntaking.py \
         egs/voice_isolate/config/infer_dpcrn.yaml \
         --ckpt egs/voice_isolate/pretrained_ckpt/dpcrn_v8.ckpt --dry-blend 0.9 \
-        --set-dir /data/audio/eval_noisy_data/turntaking_set_realrir --device cuda
+        --set-dir /path/to/audio/eval_noisy_data/turntaking_set_realrir --device cuda
 """
 from __future__ import annotations
 
@@ -192,7 +192,7 @@ def main() -> None:
         outs = {"ours": enh}
         if args.gate:
             if logits is None:
-                raise RuntimeError("--gate needs a backbone with vad_head enabled (see config/exp/train_dpcrn_gate.yaml)")
+                raise RuntimeError("--gate needs a backbone with vad_head enabled")
             logits = logits.detach().cpu()
             outs["gate_soft"] = (enh * gate_gain(logits, L, args.hop, None)).clamp(-1.0, 1.0)
             outs["gate_hard"] = (enh * gate_gain(logits, L, args.hop, args.gate_threshold)).clamp(-1.0, 1.0)

@@ -8,7 +8,7 @@ and a transcript. This script measures what the QVF2 deepdive measures:
 1. SI-SDR / SDR of raw mix vs enhanced output against the clean foreground.
    CAVEAT (2026-09-05): Dawn's ``speech`` is NOT waveform-consistent with ``mix``
    (median |corr| ~0.3 at best lag, polarity flips, lags up to thousands of
-   samples -- benchmarks/probes/v19c_diagnostics/snr_strat/README.md), so the
+   samples), so the
    SI-SDR numbers here are not a fidelity measure and must not be quoted as one;
    the raw mix itself scores ~-9 dB. ``speech`` is still usable to LOCATE speech
    activity. The WER breakdown below is the metric of record on this set.

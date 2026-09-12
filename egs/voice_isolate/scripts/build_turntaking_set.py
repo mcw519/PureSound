@@ -15,12 +15,12 @@ Scored by eval_turntaking.py.
 Usage (from repo root):
     # small listening dump
     uv run python egs/voice_isolate/scripts/build_turntaking_set.py \
-        egs/voice_isolate/config/exp/eval_indomain_phase1.yaml \
+        egs/voice_isolate/config/eval/eval_indomain_phase1.yaml \
         --out-dir data_report/turntaking_samples --n 6
     # frozen 100-item, ~10 s test set (use --rir-folder for a measured-RIR bank)
     uv run python egs/voice_isolate/scripts/build_turntaking_set.py \
-        egs/voice_isolate/config/exp/eval_indomain_phase1.yaml \
-        --out-dir /data/audio/eval_noisy_data/turntaking_set \
+        egs/voice_isolate/config/eval/eval_indomain_phase1.yaml \
+        --out-dir /path/to/audio/eval_noisy_data/turntaking_set \
         --n 100 --length-seconds 10 --seed 2026
 """
 from __future__ import annotations

@@ -16,7 +16,7 @@ Auto-adapts to query-conditioned vs fixed models: it passes whatever
 
 Usage (from anywhere; CPU by default so it never touches the training GPUs):
     uv run python egs/voice_isolate/scripts/eval_indomain.py \
-        egs/voice_isolate/config/exp/train_dpcrn_wide_antisup.yaml \
+        test/fixtures/recipes/train_dpcrn_wide_antisup.yaml \
         --ckpt <ckpt> --n-batches 40 --device cpu
 """
 from __future__ import annotations

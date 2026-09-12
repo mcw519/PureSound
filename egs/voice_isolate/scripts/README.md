@@ -67,7 +67,7 @@ uv run python egs/voice_isolate/scripts/build_wer_set.py --n-items 200 \
     --out data_report/but_wer_set --seed 1234
 
 # 3b. score a checkpoint (repeat per checkpoint)
-uv run python egs/voice_isolate/scripts/eval_wer.py config/exp/eval_but_real.yaml \
+uv run python egs/voice_isolate/scripts/eval_wer.py config/eval/eval_but_real.yaml \
     --ckpt egs/voice_isolate/pretrained_ckpt/dpcrn_v8.ckpt --dry-blend 0.9 \
     --set-dir data_report/but_wer_set --device cuda --asr faster-whisper --asr-model large-v3
 # Azure cloud STT (uv pip install azure-cognitiveservices-speech; SPEECH_KEY/SPEECH_REGION env):
@@ -111,8 +111,8 @@ uv run python egs/voice_isolate/scripts/eval_far_suppression.py \
 
 uv run python egs/voice_isolate/scripts/eval_keep_robustness.py \
     egs/voice_isolate/config/infer_dpcrn.yaml \
-    --ckpt v6=egs/voice_isolate/pretrained_ckpt/dpcrn_v6.ckpt \
-    --ckpt v7=egs/voice_isolate/pretrained_ckpt/dpcrn_v7.ckpt \
+    --ckpt v6=egs/voice_isolate/pretrained_ckpt/backup/dpcrn_v6.ckpt \
+    --ckpt v7=egs/voice_isolate/pretrained_ckpt/backup/dpcrn_v7.ckpt \
     --ckpt v8=egs/voice_isolate/pretrained_ckpt/dpcrn_v8.ckpt --device cuda
 
 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True \

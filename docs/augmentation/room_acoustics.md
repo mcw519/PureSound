@@ -40,8 +40,8 @@ and the linear frequency response of the microphone and loudspeaker.
 | Air turbulence, temperature gradients | Violates time-invariance | Negligible over indoor distances |
 
 Whether the gap between synthetic data and real recordings falls on the
-LTI-explainable side or the other is an experimental question; measurement
-records live in `egs/voice_isolate/benchmarks/`.
+LTI-explainable side or the other is an experimental question, answered by
+measurement records kept internally.
 
 ### 2. The time structure of an RIR
 
@@ -382,7 +382,7 @@ each with a zh-TW twin), grouped by reading purpose:
 | `rir_metrics` | Definitions and implementations of RT60, DRR, EDC and others |
 | `rir_attribution` | Energy attribution across direct/early/late |
 
-Known implementation pitfalls (details in `hybrid_rir` and `RIR_EXP_LOG.md`):
+Known implementation pitfalls (details in `hybrid_rir` and ):
 pytARD must run in its lossy mode, since the lossless or Unit settings halve
 the usable bandwidth ceiling; pyroomacoustics' RT60 convention and its fixed
 40-sample delay need aligning and compensating; the two frequency bands are

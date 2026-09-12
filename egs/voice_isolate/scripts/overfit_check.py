@@ -24,7 +24,7 @@ Usage (from anywhere):
         egs/voice_isolate/config/train_dpcrn.yaml --steps 800 --device cuda
 
     uv run python egs/voice_isolate/scripts/overfit_check.py \
-        egs/voice_isolate/config/exp/train_dpcrn_gate.yaml --gate \
+        <gate-recipe>.yaml --gate \
         --ckpt egs/voice_isolate/pretrained_ckpt/backup/dpcrn_v6.ckpt --device cpu --steps 50
 """
 from __future__ import annotations

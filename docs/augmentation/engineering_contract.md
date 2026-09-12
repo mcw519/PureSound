@@ -195,8 +195,7 @@ distribution changed and which checkpoints fall on which side of the line.
 ### 4.2 Where experimental records live
 
 Which break happened when, and which checkpoints belong to which distribution,
-are experimental records and are not in this handbook. They live in
-`egs/voice_isolate/benchmarks/`.
+are experimental records, not part of this handbook or of this release.
 
 ## 5. The test net
 
@@ -238,7 +237,7 @@ it fail, the author must explicitly decide whether this is an intended break
   the physical meaning of parameters, implementation contracts, and known
   pitfalls.
 * **Experimental conclusions, verdicts, and measurement numbers are not
-  recorded here**; they live in `egs/voice_isolate/benchmarks/`. Where a
+  recorded here**; they are kept internally. Where a
   technique's design motivation came from a measurement, cite the source (probe
   README, docstring, benchmarks path) without restating the numbers.
 * Code comments likewise carry no experimental traces (repo convention).

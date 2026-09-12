@@ -115,7 +115,7 @@ batch 靠著預測全 active 或全 silence 這種常數就能拿到獎勵（如
 註解提到,backbone 內部的 STFT framing 跟 label 的 framing 可能會差一個
 frame)。目前隨附的 `train_dpcrn.yaml` recipe 沒有用到它;會用到的是
 gated-bottleneck 實驗
-`egs/voice_isolate/config/exp/train_dpcrn_gate.yaml`,搭配
+gate-only 訓練 recipe,搭配
 `backbone_args.vad_head: {enabled: True, hidden: 128, kernel_t: 5}` 一起用。
 
 ## Class: `BackgroundVADHeadBCELoss`

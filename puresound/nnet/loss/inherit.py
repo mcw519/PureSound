@@ -1,7 +1,7 @@
 """Anchor-inheritance hinge: the next talker must not inherit the last one's gain.
 
-The failure this is written against is measured, not hypothesised
-(``egs/voice_isolate/benchmarks/probes/v19c_diagnosis.md``, arm ``utt``): after
+The failure this is written against is measured, not hypothesised (arm ``utt``):
+after
 2-3 s of a *different* near talker, the user's own first second comes out
 1.25 dB (v16 ep19) / 1.71 dB (v8) quieter than it does with no prefix at all,
 paired over 200 utterances, p ~ 3e-24, 173/200 rows down, with the same-talker
@@ -91,7 +91,7 @@ Zero new parameters, so a checkpoint pre-flight against the warm start must
 report 0 missing / 0 unexpected and the streaming export is untouched.
 
 ``row_scores`` is the same arithmetic with nothing reduced away: it is what the
-pre-flight (``benchmarks/probes/v19c_preflight/``) and any validation-time
+pre-flight and any validation-time
 monitor read, so the number that gates the round and the number that is trained
 come from one implementation.
 """

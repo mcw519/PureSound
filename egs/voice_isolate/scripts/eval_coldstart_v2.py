@@ -1,6 +1,6 @@
 """Cold-start protocol v2 -- the field cold-start instrument that can actually resolve.
 
-WHY THIS EXISTS (2026-08-31, benchmarks/probes/v17_round_design.md §2): scoring one
+WHY THIS EXISTS (2026-08-31): scoring one
 checkpoint on one zero-context cut of each clip cannot resolve version differences --
 across v16's own epochs 8-19 (no knob change) the cold-far median spans -0.35..-3.39 dB
 and single clips swing up to 19.9 dB. And a 3 s lead-in of the recording's own room tone
@@ -21,7 +21,6 @@ Compare: uv run python scripts/eval_coldstart_v2.py compare A.json B.json
 import argparse
 import hashlib
 import json
-import math
 import sys
 from pathlib import Path
 
@@ -62,7 +61,7 @@ def ambient_pads(windows: dict, clip: str) -> list:
     clip of the same group when one exists, else from the clip's own file -- always OUTSIDE
     every annotated span. Deterministic per (clip, draw): provenance beats variety here.
 
-    CAVEAT (2026-09-03, benchmarks/probes/reference_matrix_README.md): "un-annotated" is not
+    CAVEAT (2026-09-03): "un-annotated" is not
     "room tone". The 90D gap 98.4-107.0 s holds an unlabelled utterance at 101.4-103.9 s, and
     that utterance -- not the floor -- is what moves the cold-far numbers. Read this
     condition as "anchor, sometimes"; true floor is a null."""

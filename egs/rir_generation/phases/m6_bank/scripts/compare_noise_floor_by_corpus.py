@@ -45,7 +45,7 @@ if str(REPO_ROOT) not in sys.path:
 from puresound.audio.rir.metrics import estimate_noise_floor_lundeby
 
 DEFAULT_MEASURED = Path(
-    "/work/any_exp_link/puresound_exp/real_rir_16k_train_view/items"
+    "/path/to/puresound_exp/real_rir_16k_train_view/items"
 )
 
 #: Between-corpus spread above this many dB means the floor *level* is a chain

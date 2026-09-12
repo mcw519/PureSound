@@ -2,7 +2,7 @@
 
 WHY. The deployed model's real-recording suppression is a long-context effect:
 processing the field benchmark's 90D session in 10 s windows costs v8 9 dB against
-processing it whole (benchmarks/probes -- window sweep, 2026-08-26). Training never
+processing it whole (window sweep, 2026-08-26). Training never
 sees that context. Every row in `data/dns5-read.*.list` is a 10.3333 s DNS-5 segment,
 and `align_audio_list` ZERO-PADS anything shorter than the target length, so raising
 `training_length_seconds` past 10.33 buys silence, not context.
@@ -15,7 +15,7 @@ no crossfade needed.
 
     uv run python scripts/build_chapter_corpus.py \
         --metafile data/dns5-read.train.list \
-        --out-dir /work/any_exp_link/puresound_exp/dns5_read_16k_chapters \
+        --out-dir /path/to/puresound_exp/dns5_read_16k_chapters \
         --out-metafile data/dns5-read.chapters.train.list
 
 Idempotent: an existing output of the right length is reused. Chapters that are not a

@@ -9,7 +9,7 @@ models:
     task: voice_isolation
     lifecycle: released
     roles: [candidate]
-    description: The previous release default, kept as the conservative alternative -- shallower far-field suppression on the internal device chain, but no cross-chain keep regression.
+    description: The previous release default, kept as the conservative choice. It suppresses a distant talker less deeply than curriculum-v1, but it does not reduce the near talker on recordings made through capture hardware unlike its training data -- which is curriculum-v1's known weakness.
     inputs: [audio]
     outputs: [audio]
     audio: {sample_rate: 16000, channels: 1}
@@ -26,9 +26,7 @@ models:
       onset_guard_margin_db: {type: float, default: 8.0, minimum: 3.0, maximum: 20.0, description: "How far over the tracked noise floor a frame counts as speech."}
     source_checkpoint: egs/voice_isolate/pretrained_ckpt/dpcrn_v8.ckpt
     source_config: egs/voice_isolate/config/infer_dpcrn.yaml
-    benchmark_references:
-      - egs/voice_isolate/pretrained_ckpt/README.md
-      - egs/voice_isolate/benchmarks/README.md
+    benchmark_references: [egs/voice_isolate/pretrained_ckpt/README.md]
     artifacts:
       - format: onnx
         variant: default
@@ -42,7 +40,7 @@ models:
     task: voice_isolation
     lifecycle: released
     roles: [default]
-    description: The curriculum lineage's second step -- conversational session rows, a paired capture view, and per-frame proximity and presence heads, each brought in on a schedule. Far-field suppression on the internal device chain moves further than any previous version, cold-start included, at no cost to near-field keep on that chain; keep on the cross-chain reference clips regresses, worst case badly, which is this version's open defect.
+    description: The curriculum lineage's second step -- conversational session rows, a paired capture view, and per-frame proximity and presence heads, each brought in on a schedule. On recordings from the capture hardware it was tuned for, it suppresses a distant talker further than any previous version -- including from a cold start, with no near talker heard first -- and costs nothing on the near talker. Known weakness -- on recordings made through other capture hardware it can attenuate the near talker, badly in the worst case. Prefer dpcrn-v8 when the capture path is unknown.
     inputs: [audio]
     outputs: [audio]
     audio: {sample_rate: 16000, channels: 1}
@@ -59,7 +57,7 @@ models:
       onset_guard_margin_db: {type: float, default: 8.0, minimum: 3.0, maximum: 20.0, description: "How far over the tracked noise floor a frame counts as speech."}
     source_checkpoint: egs/voice_isolate/pretrained_ckpt/dpcrn_curriculum_v1.ckpt
     source_config: egs/voice_isolate/config/infer_dpcrn.yaml
-    benchmark_references: [egs/voice_isolate/benchmarks/probes/curriculum_v1_VERDICT.md]
+    benchmark_references: [egs/voice_isolate/pretrained_ckpt/README.md]
     artifacts:
       - format: onnx
         variant: default

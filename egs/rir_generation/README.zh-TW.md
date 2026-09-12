@@ -8,7 +8,7 @@ English version: [`README.md`](README.md)
 
 本 README 只寫**使用方式**。演算法與代碼的對應見
 [`docs/audio/rir_realism_algorithm.zh-TW.md`](../../docs/audio/rir_realism_algorithm.zh-TW.md)；
-實驗紀錄、審查結論與計畫見 [`RIR_EXP_LOG.md`](../../RIR_EXP_LOG.md)。
+實驗紀錄、審查結論與計畫保留於內部。
 
 > **一律用 `.venv/bin/python`**（或已安裝 `pyroomacoustics`/`rir_generator`
 > 且 numpy ABI 相符的環境）。用錯直譯器會產生看起來像程式 bug 的
@@ -46,13 +46,13 @@ M 是 roadmap 里程碑，不是品質分數：
 | M6 | 訓練 bank 契約、QC、release、評估、產線決策 |
 
 目前的合成 release 是 **candidate**：產線升級仍卡在真人聽測與下游證據
-（`RIR_EXP_LOG.md` §6）。
+。
 
 ## 生成推薦的 M6 candidate
 
 從 repo 根目錄執行。`--backend path-events-m4` 是預設值（此處顯式寫出
 只為清楚）；預設的選型依據是實測衰減形狀（八度衰減比 pyroomacoustics
-貼近實測 8 倍——`RIR_EXP_LOG.md` §6.6.6）。
+貼近實測 8 倍—）。
 
 ```bash
 PYTHONPATH=. .venv/bin/python \
@@ -132,7 +132,7 @@ PYTHONPATH=. .venv/bin/python \
 
 公開實測語料原樣過不了 M6 QC：其時間原點是直達音而非發聲時刻。
 ingest 把傳播延遲放回去、拒收找不到直達音的 channel，然後跑與合成
-bank 相同的 item QC（方法與驗證見 `RIR_EXP_LOG.md` §5）：
+bank 相同的 item QC：
 
 ```bash
 PYTHONPATH=. .venv/bin/python \
@@ -306,4 +306,3 @@ uv pip install cupy-cuda12x   # GPU 低頻帶，選配
 - [`docs/audio/rir_realism_algorithm.zh-TW.md`](../../docs/audio/rir_realism_algorithm.zh-TW.md) — 演算法 ↔ 代碼對應。
 - [`docs/audio/rir_bank_v2.zh-TW.md`](../../docs/audio/rir_bank_v2.zh-TW.md) — M6 契約與證據規則。
 - [`docs/audio/rir_bank.md`](../../docs/audio/rir_bank.md) — 訓練端 loader。
-- [`RIR_EXP_LOG.md`](../../RIR_EXP_LOG.md) — 實驗紀錄、審查結論、計畫。

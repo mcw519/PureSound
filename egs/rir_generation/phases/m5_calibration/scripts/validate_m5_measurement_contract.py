@@ -38,8 +38,8 @@ REPORT_DIR = PHASE_DIR / "reports"
 DEFAULT_REPORT = REPORT_DIR / "m5_measurement_contract_report.json"
 DEFAULT_TEMPLATE = CONFIG_DIR / "m5_measurement_campaign_template.json"
 DEFAULT_BANKS = {
-    "train_view": Path("/work/any_exp_link/puresound_exp/real_rir_16k_train_view"),
-    "heldout_view": Path("/work/any_exp_link/puresound_exp/real_rir_16k_heldout_view"),
+    "train_view": Path("/path/to/puresound_exp/real_rir_16k_train_view"),
+    "heldout_view": Path("/path/to/puresound_exp/real_rir_16k_heldout_view"),
 }
 ZERO_SHA256 = "0" * 64
 

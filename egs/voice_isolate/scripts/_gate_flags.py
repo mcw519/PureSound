@@ -13,8 +13,7 @@ from __future__ import annotations
 def add_presence_gate_arg(parser):
     """`--presence-gate <readout.npz>` plus its operating point.
 
-    The readout is fitted offline (see
-    egs/voice_isolate/benchmarks/probes/b_traj_README.md) and is not part of the
+    The readout is fitted offline and is not part of the
     checkpoint, so it travels as a file. Omitted, every stage behaves exactly as
     before.
     """
@@ -60,8 +59,7 @@ def add_onset_guard_arg(parser):
 
     Nothing travels as a file here -- the guard reads only the input waveform,
     so the flag is a switch and the operating point is the default measured on
-    the FIT set (`benchmarks/probes/onset_guard_sweep.py`,
-    `anchor_gate_README` §2). Omitted, every stage behaves exactly as before.
+    the FIT set. Omitted, every stage behaves exactly as before.
     """
     parser.add_argument("--onset-guard", action="store_true",
                         help="inference-only onset protection: stay dry until a "

@@ -26,7 +26,7 @@ Manifest line schema (one JSON object per line):
 
 Usage (from repo root):
     uv run python egs/voice_isolate/scripts/build_real_recording_pool.py \
-        --voices-root /work/any_exp_link/puresound_exp/real_e2e_corpora/voices/VOiCES_rebuilt \
+        --voices-root /path/to/puresound_exp/real_e2e_corpora/voices/VOiCES_rebuilt \
         --split train --min-distance 1.0 \
         --out egs/voice_isolate/data/realfar_pool/voices.train.jsonl
 

@@ -56,7 +56,7 @@ Usage (from repo root):
 
     # gate checkpoint: pass a config whose backbone has vad_head enabled
     uv run python egs/voice_isolate/scripts/eval_realcase.py \
-        egs/voice_isolate/config/exp/train_dpcrn_gate.yaml \
+        <gate-recipe>.yaml \
         --ckpt <gate ckpt> --gate --gate-threshold 0.5
 """
 
@@ -200,7 +200,7 @@ def main() -> None:
             ).clamp(-1.0, 1.0)
         if args.gate:
             if logits is None:
-                raise RuntimeError("--gate needs a backbone with vad_head enabled (see config/exp/train_dpcrn_gate.yaml)")
+                raise RuntimeError("--gate needs a backbone with vad_head enabled")
             logits = logits.detach().cpu()
             n = ours.shape[-1]
             systems["gate_soft"] = (ours * gate_gain(logits, n, args.hop, None)).clamp(-1.0, 1.0)

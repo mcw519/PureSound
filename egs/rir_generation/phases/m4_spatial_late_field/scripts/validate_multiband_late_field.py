@@ -8,7 +8,7 @@ monophonic multiband target and records the separate spatial input contract.
 
 Example:
   .venv/bin/python egs/rir_generation/phases/m4_spatial_late_field/scripts/validate_multiband_late_field.py \
-      measured=/work/any_exp_link/puresound_exp/real_rir_16k_train_view/items \
+      measured=/path/to/puresound_exp/real_rir_16k_train_view/items \
       m1=egs/rir_generation/exp/rir_realism/m1/rir_m1_probe100 m3=egs/rir_generation/exp/rir_realism/m3/rir_m3_late_baseline \
       --reference-tag measured --per-bank 50 --seed 20260731 \
       --json-output egs/rir_generation/phases/m4_spatial_late_field/reports/m4_multiband_late_field.json

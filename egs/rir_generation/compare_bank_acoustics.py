@@ -17,7 +17,7 @@ rooms) is visible as a table instead of an opinion.
 Usage:
   uv run python egs/rir_generation/compare_bank_acoustics.py \\
       synthetic=egs/rir_generation/exp/rir_realism/m1/hybrid_rir_16k_levels/wide \\
-      measured=/work/any_exp_link/puresound_exp/real_rir_16k_train_view/all --per-bank 300
+      measured=/path/to/puresound_exp/real_rir_16k_train_view/all --per-bank 300
 """
 from __future__ import annotations
 

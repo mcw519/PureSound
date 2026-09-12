@@ -46,7 +46,7 @@ def _parse_args() -> argparse.Namespace:
         "--measured-bank",
         type=Path,
         default=Path(
-            "/work/any_exp_link/puresound_exp/"
+            "/path/to/puresound_exp/"
             "real_rir_16k_heldout_view/items"
         ),
     )

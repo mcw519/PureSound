@@ -9,7 +9,7 @@ direct arrival, then analyzed with the same peak/Q estimator.
 Usage:
   uv run python egs/rir_generation/compare_modal_acoustics.py \
       synthetic=egs/rir_generation/exp/rir_realism/m1/hybrid_rir \\
-      measured=/work/any_exp_link/puresound_exp/real_rir_16k_train_view --per-bank 100
+      measured=/path/to/puresound_exp/real_rir_16k_train_view --per-bank 100
 """
 
 from __future__ import annotations

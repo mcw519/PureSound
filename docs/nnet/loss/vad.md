@@ -121,7 +121,7 @@ there is no class balance to speak of). Frame counts between `vad_logits` and
 `vad_target` are aligned by truncating to the shorter (a comment in the source
 notes the backbone's internal STFT framing and the label framing can differ
 by one frame). Not part of the shipped `train_dpcrn.yaml` recipe; used by the
-gated-bottleneck experiment `egs/voice_isolate/config/exp/train_dpcrn_gate.yaml`
+gated-bottleneck experiment recipe
 together with `backbone_args.vad_head: {enabled: True, hidden: 128, kernel_t: 5}`.
 
 ## Class: `BackgroundVADHeadBCELoss`

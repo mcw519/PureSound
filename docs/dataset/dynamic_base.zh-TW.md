@@ -89,7 +89,7 @@ DynamicBaseDataset(
 
 讀入一個 sampler key —— `(speaker, sample_rate)`，以及這次 run 有要求時才會
 出現的 per-item seed、該 batch 的列長、當前 epoch（見
-[task.sampler](../task/sampler.zh-TW.md））—— 並依序套用每個 task 共用的三件事：
+[task.sampler](../task/sampler.zh-TW.md)）—— 並依序套用每個 task 共用的三件事：
 
 1. 這一列的長度，`sample_length` 會讀它；
 2. 這個 epoch 的排程旋鈕，接著才是

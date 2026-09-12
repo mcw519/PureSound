@@ -6,7 +6,7 @@
 # actually separating?" metric) -- then prints a PASS / MARGINAL / FAIL verdict.
 #
 # Usage:
-#   bash scripts/check_training_run.sh config/exp/train_dpcrn_wide_antisup.yaml [device] [n_batches] [ckpt]
+#   bash scripts/check_training_run.sh test/fixtures/recipes/train_dpcrn_wide_antisup.yaml [device] [n_batches] [ckpt]
 #     device     : cuda (default) | cpu
 #     n_batches  : in-domain eval batches (default 40)
 #     ckpt       : explicit checkpoint path (default = latest in the run's work_folder)

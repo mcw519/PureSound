@@ -35,7 +35,7 @@ ratio) 對比**。目標效果 = ai-coustics Voice Focus 2.0。
 RIR、只練 gate 的 VAD head、分離器＋gate 聯訓）都能把 RIR-convolution 這個域學得
 任意好，卻不會遷移到真實錄音；而且在那個域裡把遠場壓制推得更狠，會讓真實聲學的
 deletion 爆掉（reverberant-office WER 0.663 對 0.529）。這些 rung 都已結案；
-`config/exp/` 保留了它們的 recipe。
+這些路線已結案。
 
 `dpcrn_v6.ckpt` 原本是 fallback（沒有 runtime 旋鈕、對遠場壓制最保守），同樣已封存。各版本的
 細節、結果與部署說明見 `pretrained_ckpt/README.md`。
@@ -49,28 +49,29 @@ epoch 會被 LR 擾動。
 
 | # | 階段 | config | warm-start 來源 | 判準 ckpt | 主要結果 |
 |---|---|---|---|---|---|
-| 1 | curriculum core（RT60 0.20–0.45，DRR gap≥6dB） | `config/exp/train_dpcrn_curriculum_core.yaml` | cold | `dpcrn_v1.ckpt` | in-domain SI-SDRi 中位數 **+6.98**（ep19 +5.47 → ep39 +6.98） |
-| 2 | curriculum expand（RT60 ≤0.65，gap≥3dB） | `config/exp/train_dpcrn_curriculum_expand.yaml` | stage 1 ep39 | `dpcrn_v2.ckpt` | in-domain **+7.99**（ep19 +7.40→ep39 +7.75→ep59 +7.99）；BUT real-RIR **+5.46**；第一次非中性的 real-WER 勝出：BUT enh **0.777 < mix 0.796** |
-| 3 | anti-suppression weight 1.0（`OverSuppressionLoss`） | `config/exp/train_dpcrn_antisup_w1.yaml` | stage 2 ep59 | `dpcrn_v3.ckpt` | in-domain **+8.21**；large-v3 BUT deletion **0.308→0.291**（方向確認，幅度不大） |
-| 4 | anti-suppression weight 2.0 | `config/exp/train_dpcrn_antisup_w2.yaml` | stage 3 ep19 | `dpcrn_v4.ckpt` | in-domain **+8.32**；BUT deletion **→0.276**；兩個域中最穩健 |
-| 5 | anti-suppression weight 3.0 | `config/exp/train_dpcrn_antisup_w3.yaml` | stage 4 ep19 | `dpcrn_v5.ckpt` | in-domain **+8.45**；**部署級殘響上表現最佳**（moderate enh 0.372，全體最佳）但**極端 OOD 上表現最差**（BUT enh 0.692，比 w2 的 0.676 還退步）——「domain split point」 |
-| 6 | wide-domain 部署（RIR 0.20–0.85 + media_voice/hpf 真實化） | `config/exp/train_dpcrn_wide_antisup.yaml` | stage 5 ep19 | `dpcrn_v6.ckpt` **(fallback)** | held-out unseen-room **+8.06**（歷來最佳）；部署 hard-gate 通過（moderate enh 0.373 ≈ w3）；BUT 仍未突破（0.680，目標是 <0.676）——5 項判準過 4 項 |
-| 7 | 決策兩端都用真實錄音 + turn-taking + distance 輔助 head + channel consistency | `config/exp/train_dpcrn_realE2E_v2c.yaml` | stage 6 ep19 | `dpcrn_v7.ckpt` | held-out 真實遠場 **−9.45 dB，依距離分級**；keep 側持平（−0.11）；**Dawn WER 0.174 < 0.184 raw**，deletion 0.088；reverberant-office WER −0.024 vs mix；in-domain +8.18——需要 `dry_blend 0.9` |
-| 8 | 合成中的量測式擷取真實化（room-colored 噪音、絕對 dBFS 底噪、幾何驅動的 SIR） | `config/train_dpcrn.yaml` | stage 7 ep19 | `dpcrn_v8.ckpt` **(現行預設)** | 真實遠場 **−15.91 dB**，優於第 7 階段在同一批檔案上的 −13.72（排除洩漏子集為 −17.74 對 −15.68）；補平 2–3 m 凹陷（−4.50 → −16.61）使分級單調；keep 側持平（0.00），最差個案 −5.45 → −1.06；**Dawn WER 0.180 < 0.184 raw**，deletion 0.094；reverberant-office WER −0.024 vs mix；in-domain +7.99——代價是極端殘響下 WER +0.020；需要 `dry_blend 0.9` |
-| 9 | DRR 對比，接著冷啟動課程（訓練列以真實遠場獨白開場、沒有近場錨） | `config/exp/train_dpcrn_drrcontrast.yaml`、`config/exp/train_dpcrn_coldstart.yaml` | stage 8 ep19 | `dpcrn_v9.ckpt`、`dpcrn_v10.ckpt` | **兩者都沒有取代 stage 8。** v9 是 ASR 閘最優點：reverberant-office WER −0.050 vs mix（v8 的兩倍）、Dawn 0.172 / deletion 0.086、極端殘響中性——代價是真實遠場壓制淺 3.5 dB。v10 是唯一推動「機器閒置冷啟動」的版本（10 個孤立遠場 clip 中 5 個跨過 −6 dB，v8 只有 1 個），但為此在部署殘響範圍的 WER 上付出代價（配對比 v8 差 0.024，區間不跨過 0），且 turn-taking KEEP 違規 6 → 10。田野 benchmark：[`benchmarks/field_test_vector/`](benchmarks/field_test_vector/RESULTS.md) |
+| 1 | curriculum core（RT60 0.20–0.45，DRR gap≥6dB） | internal | cold | `dpcrn_v1.ckpt` | in-domain SI-SDRi 中位數 **+6.98**（ep19 +5.47 → ep39 +6.98） |
+| 2 | curriculum expand（RT60 ≤0.65，gap≥3dB） | internal | stage 1 ep39 | `dpcrn_v2.ckpt` | in-domain **+7.99**（ep19 +7.40→ep39 +7.75→ep59 +7.99）；BUT real-RIR **+5.46**；第一次非中性的 real-WER 勝出：BUT enh **0.777 < mix 0.796** |
+| 3 | anti-suppression weight 1.0（`OverSuppressionLoss`） | internal | stage 2 ep59 | `dpcrn_v3.ckpt` | in-domain **+8.21**；large-v3 BUT deletion **0.308→0.291**（方向確認，幅度不大） |
+| 4 | anti-suppression weight 2.0 | internal | stage 3 ep19 | `dpcrn_v4.ckpt` | in-domain **+8.32**；BUT deletion **→0.276**；兩個域中最穩健 |
+| 5 | anti-suppression weight 3.0 | internal | stage 4 ep19 | `dpcrn_v5.ckpt` | in-domain **+8.45**；**部署級殘響上表現最佳**（moderate enh 0.372，全體最佳）但**極端 OOD 上表現最差**（BUT enh 0.692，比 w2 的 0.676 還退步）——「domain split point」 |
+| 6 | wide-domain 部署（RIR 0.20–0.85 + media_voice/hpf 真實化） | `test/fixtures/recipes/train_dpcrn_wide_antisup.yaml` | stage 5 ep19 | `dpcrn_v6.ckpt` **(fallback)** | held-out unseen-room **+8.06**（歷來最佳）；部署 hard-gate 通過（moderate enh 0.373 ≈ w3）；BUT 仍未突破（0.680，目標是 <0.676）——5 項判準過 4 項 |
+| 7 | 決策兩端都用真實錄音 + turn-taking + distance 輔助 head + channel consistency | internal | stage 6 ep19 | `dpcrn_v7.ckpt` | held-out 真實遠場 **−9.45 dB，依距離分級**；keep 側持平（−0.11）；**Dawn WER 0.174 < 0.184 raw**，deletion 0.088；reverberant-office WER −0.024 vs mix；in-domain +8.18——需要 `dry_blend 0.9` |
+| 8 | 合成中的量測式擷取真實化（room-colored 噪音、絕對 dBFS 底噪、幾何驅動的 SIR） | internal | stage 7 ep19 | `dpcrn_v8.ckpt` | 真實遠場 **−15.91 dB**，優於第 7 階段在同一批檔案上的 −13.72（排除洩漏子集為 −17.74 對 −15.68）；補平 2–3 m 凹陷（−4.50 → −16.61）使分級單調；keep 側持平（0.00），最差個案 −5.45 → −1.06；**Dawn WER 0.180 < 0.184 raw**，deletion 0.094；reverberant-office WER −0.024 vs mix；in-domain +7.99——代價是極端殘響下 WER +0.020；需要 `dry_blend 0.9` |
+| 9 | DRR 對比，接著冷啟動課程（訓練列以真實遠場獨白開場、沒有近場錨） | internal | stage 8 ep19 | `dpcrn_v9.ckpt`、`dpcrn_v10.ckpt` | **兩者都沒有取代 stage 8。** v9 是 ASR 閘最優點：reverberant-office WER −0.050 vs mix（v8 的兩倍）、Dawn 0.172 / deletion 0.086、極端殘響中性——代價是真實遠場壓制淺 3.5 dB。v10 是唯一推動「機器閒置冷啟動」的版本（10 個孤立遠場 clip 中 5 個跨過 −6 dB，v8 只有 1 個），但為此在部署殘響範圍的 WER 上付出代價（配對比 v8 差 0.024，區間不跨過 0），且 turn-taking KEEP 違規 6 → 10。|
+
+第一次執行前，請先把 recipe 裡的語料與 RIR bank 路徑指到你自己的資料：
+[`DATA_SETUP.zh-TW.md`](DATA_SETUP.zh-TW.md)。
 
 執行方式：**從本目錄執行**——config 裡的 metafile 與 work folder 路徑都是相對於它的：
 ```bash
 cd egs/voice_isolate
 
-# 預設 recipe，從前一個版本 warm-start
-uv run python main.py config/train_dpcrn.yaml --training \
-    --pretrained_ckpt_path pretrained_ckpt/backup/dpcrn_v7.ckpt
+# 預設 recipe：單一 curriculum run 從零訓練，不需要 warm start
+uv run python main.py config/train_dpcrn.yaml --training
 
-# 重現較早的階段
-uv run python main.py config/exp/train_dpcrn_curriculum_core.yaml --training
-uv run python main.py config/exp/train_dpcrn_curriculum_expand.yaml --training \
-    --pretrained_ckpt_path pretrained_ckpt/dpcrn_v1.ckpt
+# 選用的第二步，從第一步 warm-start
+uv run python main.py config/train_dpcrn_curriculum_v1.yaml --training \
+    --pretrained_ckpt_path pretrained_ckpt/dpcrn_curriculum_v0.ckpt
 ```
 用 `--ckpt_path <ckpt>` 取代 `--pretrained_ckpt_path` = 真正的 resume（還原
 optimizer/scheduler/epoch）。
@@ -119,17 +120,17 @@ RIR curriculum、且 `target_absent: OFF` 的原因。已被取代且無法執�
 - **主要判準（synthetic、in-domain）：** `scripts/eval_indomain.py --by-bucket`
   （或 `check_training_run.sh`）。以 early-reverb target 為基準算 SI-SDRi；要看
   困難的 bucket（counter_level / 1N+0F / overlap），不要只看 aggregate。
-- **真實聲學、部署級殘響（rt60 0.44）：** `config/exp/eval_but_real.yaml` 的
+- **真實聲學、部署級殘響（rt60 0.44）：** `config/eval/eval_but_real.yaml` 的
   姊妹集合，建在中等 RT60 上——WER **0.723→0.487（−32%）**，do-no-harm 已確認。
   這是產品實際部署的域。
 - **真實聲學、極端 OOD（BUT real-RIR，rt60 1.15–1.84）：** `scripts/build_wer_set.py`
   （建一次）→ `scripts/eval_wer.py`（SI-SDRi + 對照真實 LibriTTS 逐字稿的
-  WER），config 為 `config/exp/eval_but_real.yaml`。刻意設得比訓練域更難；用來
+  WER），config 為 `config/eval/eval_but_real.yaml`。刻意設得比訓練域更難；用來
   追蹤過度抑制在多大程度上是 OOD-殘響現象（結果是——見上文）。
-- **未見房間泛化：** `config/exp/eval_heldout.yaml`（seed-2026、與 expand 同難度
+- **未見房間泛化：** internal（seed-2026、與 expand 同難度
   分布的獨立房間 bank）。每個階段 seen→unseen 的落差都持續很小（≤0.4 dB）——
   代表模型是靠 DRR／幾何泛化，不是背房間。
-- **洩漏探針（far-only/noise-only）：** `config/exp/eval_targetabsent_probe.yaml`
+- **洩漏探針（far-only/noise-only）：** `config/eval/eval_targetabsent_probe.yaml`
   ——強制每一列都 target-absent；檢查模型不會洩漏／幻覺出一個近場語者。所有
   pipeline checkpoint 都通過（power reduction ≤ −24.8 dB，false-near ≤3%），
   而且從未針對這個情境訓練過。

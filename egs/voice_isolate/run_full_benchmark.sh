@@ -4,8 +4,8 @@
 #   bash run_full_benchmark.sh <ckpt> <tag> [device] [dry_blend] [presence_readout]
 # dry_blend is the released inference knob (1.0 = off); pass 0.9 to benchmark a
 # checkpoint the way it is deployed.
-# presence_readout turns on the inference-only near-presence gain (EXPERIMENTAL,
-# see benchmarks/probes/b_traj_README.md). Omitted, every stage is unchanged. Its
+# presence_readout turns on the inference-only near-presence gain (EXPERIMENTAL).
+# Omitted, every stage is unchanged. Its
 # operating point comes from the readout's sibling .json; GATE_EXTRA in the
 # environment appends per-run overrides (--gate-b-hi 0.75, ...).
 # Results (one log per stage) land in $OUT; a compact summary is printed at the end.
@@ -27,17 +27,17 @@ fi
 # matching set from the training recipe, and stage 0 refuses to run if any of them
 # would silently drop trained weights:
 #   CFG_DIR=$(mktemp -d); uv run python scripts/make_arch_eval_configs.py \
-#     --from config/exp/train_dpcrn_v14_mambaparallel.yaml --out-dir "$CFG_DIR"
+#     --from <your-recipe>.yaml --out-dir "$CFG_DIR"
 #   CFG_INFER=$CFG_DIR/infer_dpcrn.yaml CFG_INDOMAIN=$CFG_DIR/eval_indomain_phase1.yaml \
 #   CFG_PROBE=$CFG_DIR/eval_targetabsent_probe.yaml CFG_PROBE_HIGH=$CFG_DIR/eval_targetabsent_probe_high.yaml \
 #   CFG_PROBE_BND=$CFG_DIR/eval_targetabsent_probe_boundary.yaml CFG_WER=$CFG_DIR/eval_but_real.yaml \
 #   bash run_full_benchmark.sh <ckpt> <tag>
 CFG_INFER="${CFG_INFER:-config/infer_dpcrn.yaml}"
-CFG_INDOMAIN="${CFG_INDOMAIN:-config/exp/eval_indomain_phase1.yaml}"
-CFG_PROBE="${CFG_PROBE:-config/exp/eval_targetabsent_probe.yaml}"
-CFG_PROBE_HIGH="${CFG_PROBE_HIGH:-config/exp/eval_targetabsent_probe_high.yaml}"
-CFG_PROBE_BND="${CFG_PROBE_BND:-config/exp/eval_targetabsent_probe_boundary.yaml}"
-CFG_WER="${CFG_WER:-config/exp/eval_but_real.yaml}"
+CFG_INDOMAIN="${CFG_INDOMAIN:-config/eval/eval_indomain_phase1.yaml}"
+CFG_PROBE="${CFG_PROBE:-config/eval/eval_targetabsent_probe.yaml}"
+CFG_PROBE_HIGH="${CFG_PROBE_HIGH:-config/eval/eval_targetabsent_probe_high.yaml}"
+CFG_PROBE_BND="${CFG_PROBE_BND:-config/eval/eval_targetabsent_probe_boundary.yaml}"
+CFG_WER="${CFG_WER:-config/eval/eval_but_real.yaml}"
 
 SD="${BENCH_SD:-${TMPDIR:-/tmp}}"
 OUT="$SD/bench_$TAG"; mkdir -p "$OUT"
@@ -47,7 +47,7 @@ OUT="$SD/bench_$TAG"; mkdir -p "$OUT"
 # puresound's device chain, so their numbers only compare against records made
 # on the same chain -- 9c56e02 (2026-08-18) made the analogue path linear and
 # changed ~9% of rows. Stages 1, 6, 7 and 8 read fixed audio off disk and are
-# unaffected. See benchmarks/README.md.
+# unaffected.
 CHAIN="$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
 [ -z "$(git status --porcelain -- ../../puresound 2>/dev/null)" ] || CHAIN="$CHAIN+dirty"
 ASR=faster-whisper; ASR_MODEL=large-v3   # strong ASR reveals over-suppression whisper-small hides
@@ -110,7 +110,7 @@ uv run python scripts/eval_dawn_chorus.py "$CFG_INFER" \
 # resolution matches the differences between our checkpoints -- models capture ~40% of its
 # headroom, so a version difference lands outside the bootstrap interval. BUT-OFFICE below
 # is kept as a monitor, not a gate: at n=200 nothing we have is distinguishable from
-# doing nothing on it (see benchmarks/wer_sets/README.md).
+# doing nothing on it (see scripts/WER_SETS.md).
 say "7a/9 moderate-reverb WER (PRIMARY deployment gate, RT60 0.20-0.65; $ASR/$ASR_MODEL)"
 uv run python scripts/eval_wer.py "$CFG_WER" \
   --ckpt "$CKPT" --set-dir data_report/wer_set_moderate_test --device "$DEV" \
@@ -129,7 +129,7 @@ uv run python scripts/eval_wer.py "$CFG_WER" \
 # real-RIR turn-taking keep/suppress scorecard (far-solo suppression specialty).
 # Frozen set dumped with the BUT office real-RIR bank; regenerate via:
 #   scripts/build_turntaking_set.py ... --rir-folder exp/but_real_rir_16k_office
-TT_SET="${TT_SET:-/data/audio/eval_noisy_data/turntaking_set_realrir}"
+TT_SET="${TT_SET:-/path/to/audio/eval_noisy_data/turntaking_set_realrir}"
 say "9/9 real-RIR turn-taking scorecard (KEEP near / SUPPRESS far-solo; $TT_SET)"
 uv run python scripts/eval_turntaking.py "$CFG_INFER" \
   --ckpt "$CKPT" --set-dir "$TT_SET" --device "$DEV" \

@@ -23,8 +23,7 @@ Three checks, all driven by the same config the training run uses:
    wrong-anchor rounds argue about was never on the record: when does the target
    start, how long has an interferer been talking before it does, how long are the
    target-free gaps, does the target ever re-enter after one, and is a silent target
-   labelled as absent. Method ported from
-   benchmarks/probes/v19c_diagnostics/training_data_audit/sample_rows.py.
+   labelled as absent.
 
 `--split train` samples the TRAINING loader, which is what every temporal claim about
 "the rows the model trains on" needs -- the default stays `valid`, so an existing
@@ -34,7 +33,7 @@ Usage (from repo root):
     uv run python egs/voice_isolate/scripts/check_training_data.py \
         egs/voice_isolate/config/train_dpcrn.yaml --n 64 --dump 8
     uv run python egs/voice_isolate/scripts/check_training_data.py \
-        egs/voice_isolate/config/exp/train_dpcrn_v16_lengthmix.yaml \
+        test/fixtures/recipes/train_dpcrn_v16_lengthmix.yaml \
         --split train --n 600 --dump 0 --num-workers 8 --seed 7
 """
 
@@ -166,9 +165,8 @@ def scalar(batch: dict, key: str, row: int) -> float | None:
 
 
 # --------------------------------------------------------------------------- #
-# Check 3: temporal shape. Ported from
-# benchmarks/probes/v19c_diagnostics/training_data_audit/sample_rows.py so the
-# numbers a round quotes and the numbers this script prints are one method.
+# Check 3: temporal shape. One method, so the numbers a round quotes and the
+# numbers this script prints cannot drift apart.
 # --------------------------------------------------------------------------- #
 
 SR = 16000

@@ -282,8 +282,7 @@ waveshaper 沒有逐源分解。它是「房間裡那台電視喇叭」的正確
 
 這個 stage 存在的動機是：發佈與會議鏈普遍施加壓縮，而包絡結構是近/遠讀出的
 成分之一（波峰因數的改變，§1），讓訓練分佈涵蓋「被壓縮過的世界」是資料層
-的處理方式。動機的量測出處見 `CompressorAugmentation` docstring 與
-`egs/voice_isolate/benchmarks/`。
+的處理方式。動機的量測出處見 `CompressorAugmentation` docstring。
 
 ## 工程面
 

@@ -93,8 +93,8 @@ performs (`test_dpcrn_streaming_matches_offline_for_lookahead_model` asserts
 the best-matching delay equals `model.bottleneck_delay` exactly).
 
 Two ready-to-use recipes if you want to inspect either shape directly:
-`egs/voice_isolate/config/exp/train_dpcrn_wide_causal.yaml` (`delay=[0,0,0]`)
-and `egs/voice_isolate/config/exp/train_dpcrn_wide_antisup.yaml`
+`test/fixtures/recipes/train_dpcrn_wide_causal.yaml` (`delay=[0,0,0]`)
+and `test/fixtures/recipes/train_dpcrn_wide_antisup.yaml`
 (`delay=[1,1,1]`, look-ahead) — the same two configs the streaming test
 suite itself loads.
 
@@ -207,8 +207,7 @@ floor re-arms it so the next onset is protected again. It is a keep-side safety
 belt whose price is suppression depth (fit-set far median −15.2 → −12.0 dB) and
 whose return is deletions (v8 keep violations 26 → 13, Dawn Chorus deletion
 0.230 → 0.123). Where to sit on that trade is a product choice — see
-`puresound/system/onset_guard.py` and
-`egs/voice_isolate/benchmarks/probes/anchor_gate_README.md`.
+`puresound/system/onset_guard.py`.
 
 **What it costs at runtime.** Per 10 ms hop: one 20 ms frame energy, a
 running-minimum floor over a deque, and one first-order integrator step. No

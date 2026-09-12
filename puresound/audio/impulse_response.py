@@ -140,8 +140,7 @@ def smear_direct_arrival(
 ) -> torch.Tensor:
     """Scramble the structure just after the direct arrival, keeping everything else.
 
-    Where the cue lives was measured window by window
-    (`egs/voice_isolate/benchmarks/probes/dist_cue_anatomy_README.md`):
+    Where the cue lives was measured window by window:
     noise-replacing the first 2.5 ms keeps 45% of the near/far separation against
     60-62% for the early reflections or the late tail, a 5 ms smear leaves 1%,
     and splitting the window from first principles puts it in the fine TIMING --

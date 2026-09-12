@@ -34,7 +34,7 @@ y[n] = (h * x)[n] = Σ_k h[k] · x[n − k]
 | 空氣紊流、溫度梯度 | 違反非時變 | 對室內短距離可忽略 |
 
 合成資料與真實錄音的差距落在「LTI 可解釋」與「不可解釋」的哪一側，是實驗
-問題，量測紀錄見 `egs/voice_isolate/benchmarks/`。
+問題，量測紀錄保留於內部。
 
 ### 2. RIR 的時間結構
 
@@ -313,7 +313,7 @@ RIR 生成的深入內容已有專門文件（皆在 `docs/audio/`，含 zh-TW �
 | `rir_metrics` | RT60、DRR、EDC 等度量的定義與實作 |
 | `rir_attribution` | direct/early/late 的能量歸因方法 |
 
-已知的實作陷阱（詳見 `hybrid_rir` 與 `RIR_EXP_LOG.md`）：pytARD 必須使用
+已知的實作陷阱（詳見 `hybrid_rir` 與 ）：pytARD 必須使用
 有損模式，無損或 Unit 設定會讓可用頻寬上限砍半；pyroomacoustics 的 RT60
 定義慣例與固定 40-sample 延遲需要對齊補償；兩段頻帶的拼接使用
 Linkwitz–Riley crossover 以保證相加後振幅平坦。

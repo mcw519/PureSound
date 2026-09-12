@@ -7,7 +7,7 @@ mix transcripts are cached (model-independent) so re-runs only transcribe enhanc
 
 Usage (ASR backend is switchable via --asr):
     # local whisper (default): faster-whisper > openai-whisper
-    uv run python scripts/eval_wer.py config/exp/train_dpcrn_curriculum_expand.yaml \
+    uv run python scripts/eval_wer.py config/train_dpcrn.yaml \
         --ckpt <ckpt> --set-dir data_report/but_wer_set --device cuda --asr-model small
     # stronger local recognizer (lowers the reverb floor; GPU recommended)
     ... --asr faster-whisper --asr-model large-v3
@@ -133,7 +133,7 @@ def main():
     # Per-utterance edit counts, so the enh-vs-mix difference can be given an interval
     # instead of a bare point estimate. A 200-utterance set at WER ~0.55 resolves about
     # +-0.03; quoting a 0.02 "win" from it without the interval is reading noise (this
-    # bit the v8/v9/v10 comparison -- see benchmarks/wer_sets/README.md).
+    # bit the v8/v9/v10 comparison -- see WER_SETS.md).
     def _counts(refs_, hyps_):
         rt = jiwer.Compose([jiwer.ReduceToListOfListOfWords()])
         out=[]

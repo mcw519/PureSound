@@ -18,7 +18,7 @@ This is a SYNTHETIC in-domain smoke test (pipeline validation), not evidence of
 transfer to end-to-end real recordings.
 
 Usage (from the recipe dir egs/voice_isolate):
-    uv run python scripts/eval_gate.py config/exp/train_dpcrn_gate.yaml \
+    uv run python scripts/eval_gate.py <gate-recipe>.yaml \
         --ckpt exp/dpcrn_gate_synth/lightning_logs/version_0/checkpoints/epoch=1-step=500.ckpt \
         --device cuda --n-batches 40
 """

@@ -91,15 +91,15 @@ def main() -> None:
     parser.add_argument("--ckpt", action="append", required=True,
                         help="tag=path; repeatable")
     parser.add_argument("--clean-metafile", default=str(RECIPE_DIR / "data/dns5-read.dev.list"))
-    parser.add_argument("--syn-bank", default="/work/any_exp_link/puresound_exp/hybrid_rir_16k_levels/wide")
+    parser.add_argument("--syn-bank", default="/path/to/puresound_exp/hybrid_rir_16k_levels/wide")
     parser.add_argument("--real-rir-manifest",
-                        default="/work/any_exp_link/puresound_exp/real_rir_corpora/manifests_split/near_pool.train.jsonl")
+                        default="/path/to/puresound_exp/real_rir_corpora/manifests_split/near_pool.train.jsonl")
     parser.add_argument("--voices-near-pool",
                         default=str(RECIPE_DIR / "data/realfar_pool/voices.near.heldout.jsonl"))
     parser.add_argument("--n-clean", type=int, default=30)
     parser.add_argument("--n-voices", type=int, default=40)
     parser.add_argument("--noise-folder",
-                        default="/data/audio/dns-5/datasets_fullband_16k/noise_fullband")
+                        default="/path/to/audio/dns-5/datasets_fullband_16k/noise_fullband")
     parser.add_argument("--noise-snr", type=float, default=10.0,
                         help="SNR for the +noise ladder variants. Keeping "
                         "isolated near speech tends to be channel-robust, while "

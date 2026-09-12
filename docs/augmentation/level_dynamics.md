@@ -338,8 +338,7 @@ The motivation for this stage: publication and conferencing chains compress
 routinely, and envelope structure is one component of near/far readout (through
 the crest factor, §1), so covering "a compressed world" in the training
 distribution is the data-layer way to address it. Sources for the measurements
-behind that motivation are cited in the `CompressorAugmentation` docstring and
-in `egs/voice_isolate/benchmarks/`.
+behind that motivation are cited in the `CompressorAugmentation` docstring.
 
 ## Engineering
 

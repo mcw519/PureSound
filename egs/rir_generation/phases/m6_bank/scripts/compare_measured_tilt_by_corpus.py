@@ -38,7 +38,7 @@ if str(REPO_ROOT) not in sys.path:
 from puresound.audio.rir.metrics import spectral_tilt_db_per_octave
 
 DEFAULT_ROOT = Path(
-    "/work/any_exp_link/puresound_exp/real_rir_16k_train_view/items"
+    "/path/to/puresound_exp/real_rir_16k_train_view/items"
 )
 
 #: Between-corpus spread above this many dB/oct means the corpora are measuring

@@ -478,7 +478,7 @@ class TargetAbsentAugmentation(StrictConfig):
 class RowInitialAmbientAugmentation(StrictConfig):
     """Open a row with scene sound only -- no speech -- for the first 1-4 s.
 
-    Why (benchmarks/probes/v17_round_design.md §2b, COLDSTART_V2.md): the model
+    Why: the model
     self-calibrates against the ROOM. 3 s of real ambience ahead of a cold-start
     clip moves suppression from -1.2 to -16.1 dB; every training row to date has
     speech from the first frames, so that calibration was never a trained skill.

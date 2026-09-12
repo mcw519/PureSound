@@ -120,9 +120,7 @@ reflection coefficient).
 | Spectral tilt | Air absorption plus surface HF absorption | Kept (limited by ISM assumptions) |
 
 Which cues the model actually reads, and with what weight, is an experimental
-question outside the scope of this document. The measurement definitions and
-results of the window-ablation probe are in
-`egs/voice_isolate/benchmarks/probes/dist_cue_anatomy_README.md`.
+question outside the scope of this document.
 
 ### 2. Why manipulate cues at all
 

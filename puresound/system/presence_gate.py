@@ -8,8 +8,7 @@ two are separate because they are limited by different things.
 clips the mask attenuates the bystander by 0.39 dB, so that ceiling sits 20 dB
 below where the signal actually is and is not what limits anything. Measured:
 driving `dry_blend` from a presence estimate moves those clips by a median of
-0.03 dB. A gain moves them by 9.6 dB. See
-`egs/voice_isolate/benchmarks/probes/b_traj_README.md`.
+0.03 dB. A gain moves them by 9.6 dB.
 
 **The quantity.** One continuous state, not a regime:
 
@@ -58,8 +57,7 @@ class PresenceGate:
       an untrained checkpoint can offer;
     * a **trained presence head**'s logits, passed to ``apply(logits=...)``. A
       head measured 0.953 in-domain across RT60 and 0.843 on an unseen device
-      orientation where the readout it replaces sat at 0.529
-      (``benchmarks/probes/presence_head_v11_README.md``), so this is the better
+      orientation where the readout it replaces sat at 0.529, so this is the better
       estimator when a checkpoint has one.
 
     Args:

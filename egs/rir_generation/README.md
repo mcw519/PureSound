@@ -9,8 +9,7 @@ per-item QC, and release packaging in one command.
 
 This README covers **usage**. How each algorithm maps to the code is in
 [`docs/audio/rir_realism_algorithm.md`](../../docs/audio/rir_realism_algorithm.md);
-experiment records, review findings, and plans are in
-[`RIR_EXP_LOG.md`](../../RIR_EXP_LOG.md).
+experiment records, review findings and plans are kept internally.
 
 > **Always run with `.venv/bin/python`** (or an environment with
 > `pyroomacoustics`/`rir_generator` installed and matching numpy ABI). A wrong
@@ -50,15 +49,14 @@ M labels are roadmap milestones, not quality scores:
 | M6 | Training-bank contract, QC, release, evaluation, production decision |
 
 The current synthetic release is a **candidate**: production promotion is
-still gated on human listening and downstream evidence
-(`RIR_EXP_LOG.md` §6).
+still gated on human listening and downstream evidence.
 
 ## Generate the recommended M6 candidate
 
 Run from the repository root. `--backend path-events-m4` is the default and is
 shown explicitly only for clarity; the default was chosen on measured decay
 shape (its octave decay sits 8× closer to measured rooms than
-pyroomacoustics — `RIR_EXP_LOG.md` §6.6.6).
+pyroomacoustics ).
 
 ```bash
 PYTHONPATH=. .venv/bin/python \
@@ -143,8 +141,7 @@ fresh runs with the same arguments produce identical `manifest_sha256`.
 Published measured corpora fail M6 QC as-is because their time origin is the
 direct arrival, not the emission instant. The ingest re-inserts the
 propagation delay, rejects channels whose direct path cannot be located, and
-runs the same item QC as synthetic banks
-(`RIR_EXP_LOG.md` §5 for the method and validation):
+runs the same item QC as synthetic banks:
 
 ```bash
 PYTHONPATH=. .venv/bin/python \
@@ -326,4 +323,3 @@ uv pip install cupy-cuda12x   # GPU low band, optional
 - [`docs/audio/rir_realism_algorithm.md`](../../docs/audio/rir_realism_algorithm.md) — algorithm ↔ code map.
 - [`docs/audio/rir_bank_v2.md`](../../docs/audio/rir_bank_v2.md) — M6 contract and evidence rules.
 - [`docs/audio/rir_bank.md`](../../docs/audio/rir_bank.md) — training-side loaders.
-- [`RIR_EXP_LOG.md`](../../RIR_EXP_LOG.md) — experiment records, review findings, plans.

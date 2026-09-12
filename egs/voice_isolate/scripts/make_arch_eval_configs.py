@@ -12,7 +12,7 @@ be benchmarked without hand-editing six files. Only the knobs move; everything
 else in each eval recipe (its dataset, bank, augmentation) is untouched.
 
     uv run python scripts/make_arch_eval_configs.py \
-        --from config/exp/train_dpcrn_v14_mambaparallel.yaml --out-dir /tmp/cfg_v14
+        --from config/train_dpcrn.yaml --out-dir /tmp/cfg_new
 
 Pair it with preflight_ckpt_recipe.py, which proves the result actually loads
 the checkpoint whole.
@@ -25,11 +25,11 @@ import sys
 # The recipes run_full_benchmark.sh passes to its stages.
 BENCH_CONFIGS = (
     "config/infer_dpcrn.yaml",                          # 1 field, 6 dawn, 9 turn-taking
-    "config/exp/eval_indomain_phase1.yaml",             # 2
-    "config/exp/eval_targetabsent_probe.yaml",          # 3
-    "config/exp/eval_targetabsent_probe_high.yaml",     # 4
-    "config/exp/eval_targetabsent_probe_boundary.yaml", # 5
-    "config/exp/eval_but_real.yaml",                    # 7a, 7b, 8
+    "config/eval/eval_indomain_phase1.yaml",             # 2
+    "config/eval/eval_targetabsent_probe.yaml",          # 3
+    "config/eval/eval_targetabsent_probe_high.yaml",     # 4
+    "config/eval/eval_targetabsent_probe_boundary.yaml", # 5
+    "config/eval/eval_but_real.yaml",                    # 7a, 7b, 8
 )
 
 # backbone_args entries that describe the ARCHITECTURE rather than the data.

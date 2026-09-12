@@ -85,9 +85,9 @@ frame——對已發佈的 checkpoint 而言是 `3` 個 frame（hop 160 下約
 搜出來最匹配的 delay 剛好等於 `model.bottleneck_delay`）。
 
 如果想直接檢視這兩種形態，repo 裡有兩份現成可用的 recipe：
-`egs/voice_isolate/config/exp/train_dpcrn_wide_causal.yaml`
+`test/fixtures/recipes/train_dpcrn_wide_causal.yaml`
 （`delay=[0,0,0]`）與
-`egs/voice_isolate/config/exp/train_dpcrn_wide_antisup.yaml`
+`test/fixtures/recipes/train_dpcrn_wide_antisup.yaml`
 （`delay=[1,1,1]`，look-ahead）——streaming 測試套件自己載入的也正是這
 兩份 config。
 
@@ -194,8 +194,7 @@ Export 可以再帶**第二個** graph 後階段的區塊，由
 偏 keep 側的安全帶，代價付在壓制深度（fit set 遠場中位數 −15.2 → −12.0
 dB），換回來的是刪除率（v8 keep 違規 26 → 13、Dawn Chorus deletion
 0.230 → 0.123）。要坐在這條 trade-off 的哪一點是產品決策——詳見
-`puresound/system/onset_guard.py` 與
-`egs/voice_isolate/benchmarks/probes/anchor_gate_README.md`。
+`puresound/system/onset_guard.py`。
 
 **執行期成本。** 每個 10 ms hop：一次 20 ms frame 能量、一個用 deque 維護
 的 running-minimum 噪音底、一步一階積分器。沒有 FFT、沒有模型狀態、沒有配

@@ -1,218 +1,134 @@
 # PureSound
 
-PureSound is a speech processing toolkit based on PyTorch and PyTorch Lightning.
-It provides reusable audio utilities, model components, and training recipes for:
+PureSound is a PyTorch toolkit for speech enhancement, voice isolation, speaker
+verification, and room impulse response (RIR) generation.
 
-- Noise Suppression (NS)
-- Near-field Voice Isolation
-- Speaker Embedding / Speaker Verification (SV)
-- Target Speaker Extraction (TSE, legacy)
-- Room Impulse Response (RIR) generation for training-data augmentation
+Traditional Chinese: [README.zh-TW.md](README.zh-TW.md)
 
-繁體中文版本：[`README.zh-TW.md`](README.zh-TW.md)
+## What is included
 
-## Highlights
+- Training recipes for noise suppression, voice isolation, and speaker embeddings
+- Released ONNX models for voice isolation and speaker verification
+- A command-line interface and local web UI for inference
+- A small Python SDK for embedding ONNX inference in another project
+- Audio DSP, augmentation, metrics, and RIR generation tools
+- Config-driven PyTorch Lightning training
 
-- Modular design: `audio`, `dataset`, `nnet`, `system`, and `task`
-- Config-driven training and inference (YAML)
-- A model library that keeps every backbone config-reachable (DPCRN, DPARN, DPRNN, SkiM, Conv-TasNet, TF-GridNet, ECAPA-TDNN), even when only some are used by an active recipe
-- Streaming **DPCRN** ONNX Runtime deployment for real-time voice-isolate inference (the released deployment path; DPARN streaming is kept as a legacy alternative)
-- A standalone `sdk/python` runtime for embedding streaming inference in another project without the full training package
-- A public RIR generation pipeline (`egs/rir_generation`) for near/far augmentation training data
-- Built-in objective and subjective metrics (for example: PESQ, STOI, SDR-related tools)
+The target-speaker-extraction recipe is kept for compatibility but is no longer
+actively developed.
 
 ## Requirements
 
-- Python 3.12+
-- A working PyTorch environment compatible with your platform
+- Python 3.12 or newer
+- [uv](https://docs.astral.sh/uv/) for the recommended setup
 
-## Installation
+## Install
 
-### Option 1: Use uv (recommended for development)
+Clone the repository, then choose one ONNX Runtime backend:
 
 ```bash
 git clone <project-url>
 cd PureSound
+
+# CPU ONNX Runtime, or CoreML on macOS
 uv sync --locked --group dev --extra cpu
+
+# NVIDIA CUDA ONNX Runtime
+uv sync --locked --group dev --extra cuda
 ```
 
-Linux uses the pinned PyTorch CUDA 12.4 wheels; macOS uses the standard platform
-wheels so PyTorch MPS remains installable.
+Do not install the `cpu` and `cuda` extras together. The `asr` extra uses the
+CPU ONNX Runtime package and cannot be combined with `cuda`.
 
-ONNX Runtime uses mutually exclusive extras because its CPU and GPU
-distributions provide the same Python package. Choose exactly one runtime:
-
-```bash
-uv sync --locked --group dev --extra cpu   # CPU or macOS CoreML
-uv sync --locked --group dev --extra cuda  # NVIDIA CUDA 12.x
-```
-
-Do not enable both extras. The portable SDK follows the same `cpu`/`cuda`
-selection. Verify the active wheel before running an inference:
-
-`faster-whisper` is available through `--extra asr` for CPU/CoreML
-environments. It cannot be combined with `--extra cuda` because its package
-metadata requires the CPU ONNX Runtime distribution.
+To install with pip instead:
 
 ```bash
-python -c "import onnxruntime as ort; print(ort.__version__); print(ort.get_available_providers())"
-# or
-puresound providers
-```
-
-`CUDAExecutionProvider` must be listed for CUDA inference.  A CUDA-enabled
-PyTorch wheel alone does not add CUDA support to ONNX Runtime; the NVIDIA
-driver, CUDA, and cuDNN libraries must also be loadable by the process.
-
-On macOS, install the normal `onnxruntime` wheel.  Official macOS wheels can
-expose `CoreMLExecutionProvider`, which uses Apple's GPU/Neural Engine when the
-model operators are supported.  ONNX Runtime has no native
-`MPSExecutionProvider`; PureSound accepts `--provider mps` as an alias for
-CoreML (`--provider coreml` is the explicit spelling).  `auto` selects CUDA,
-then CoreML, then CPU.  PyTorch-only advanced paths may use PyTorch's separate
-MPS backend when `torch.backends.mps.is_available()` is true.
-
-### Option 2: Use pip
-
-```bash
-git clone <project-url>
-cd PureSound
-python -m pip install -U pip
 python -m pip install -r requirements.txt
 python -m pip install -e . --no-deps
 ```
 
-`requirements.txt` mirrors the runtime dependencies and includes the PyTorch CUDA 12.4 wheel index for `pip`.
+## Run inference
 
-## Quick Validation
-
-Run the test suite:
+List the released models and available execution providers:
 
 ```bash
-uv run pytest
+uv run puresound models list
+uv run puresound providers
 ```
 
-Or with pip environment:
+### Voice isolation
+
+Input audio is converted to mono and resampled to 16 kHz when needed.
 
 ```bash
-pytest
-```
-
-## Web Inference Workspace
-
-The local Model Zoo and unified ONNX runtime are also available through a
-small dependency-light browser workspace. It uses the same named-input
-processors as the CLI and Gradio compatibility demos:
-
-```bash
-puresound web
-# open http://127.0.0.1:7860
-```
-
-Use `puresound web --ip 0.0.0.0 --port 8080` to control the bind address and
-port when serving on a trusted network.
-
-See [`docs/web.md`](docs/web.md) for the API contract and upload format.
-
-## Quick Start Recipes
-
-The `egs` folder contains runnable examples.
-
-### 1) Noise Suppression
-
-```bash
-cd egs/noise_suppression
-
-# Prepare training/validation manifests
-uv run python prepare_metafile.py --help
-
-# Train
-uv run python main.py --training True config/dpcrn.yaml
-
-# Inference
-uv run python main.py --inference True --ckpt_path /path/to/model.ckpt config/dpcrn.yaml
-```
-
-More detail (the shared `dataset.task` switch between noise-suppression and voice-isolation training, DDP/precision flags, VAD labeling): `egs/noise_suppression/README.md`.
-
-### 2) Speaker Embedding / Verification
-
-```bash
-cd egs/speaker_embedding
-
-# Prepare metadata
-uv run python prepare_metafile.py --help
-
-# Train
-uv run python main.py --training True conf/PS-spk-v1.yaml
-
-# Inference (extract embeddings)
-uv run python main.py --inference True --ckpt_path /path/to/model.ckpt conf/PS-spk-v1.yaml
-```
-
-More speaker embedding details and pretrained checkpoints are documented in:
-
-- `egs/speaker_embedding/README.md`
-
-### 3) Target Speaker Extraction (legacy)
-
-Frozen legacy recipe: no new features, no rewrites. Kept working for reference only.
-
-```bash
-cd egs/target_speaker_extraction
-
-# Prepare metadata
-uv run python prepare_metafile.py --help
-
-# Train
-uv run python main.py --training True config/default_config.yaml
-
-# Inference
-uv run python main.py --inference True --ckpt_path /path/to/model.ckpt config/default_config.yaml
-```
-
-### 4) Voice Isolate Streaming ONNX
-
-Train or fine-tune the 16 kHz DPCRN voice-isolate recipe, then export a
-feature-frame ONNX model. Example using the `egs/voice_isolate` recipe and its
-current default checkpoint:
-
-```bash
-uv run python egs/voice_isolate/scripts/streaming_onnx.py export \
-  egs/voice_isolate/config/infer_dpcrn.yaml \
-  egs/voice_isolate/pretrained_ckpt/dpcrn_v8.ckpt \
-  /path/to/model.onnx
-```
-
-Run streaming ONNX inference:
-
-```bash
-uv run python egs/voice_isolate/scripts/streaming_onnx.py infer \
-  /path/to/model.onnx \
-  input.wav \
-  output.wav \
+uv run puresound infer voice-isolate-dpcrn-v8 \
+  --input audio=input.wav \
+  --output audio=output.wav \
   --provider auto
 ```
 
-`dpcrn_v8` ships with its runtime dry/wet blend baked into the exported graph
-(`out = 0.9 * enhanced + 0.1 * input`), so no extra post-processing is needed at
-inference time. Full pipeline history, per-version results, and deployment
-notes: `egs/voice_isolate/README.md`. The (legacy) DPARN streaming path is
-documented separately in `docs/streaming/dparn_onnx.md`.
+Two voice-isolation models are included:
 
-For deployment in another project without the full PureSound training package,
-install or copy the portable runtime in `sdk/python`. It only requires NumPy,
-ONNX Runtime, `model.onnx`, and `model.json`.
+- `voice-isolate-dpcrn-v8`: safer when the recording device is unknown
+- `voice-isolate-dpcrn-curriculum-v1`: stronger far-voice suppression on its
+  target capture setup
 
-### 5) RIR Generation (training-data augmentation)
+See [the checkpoint notes](egs/voice_isolate/pretrained_ckpt/README.md) for the
+trade-offs.
 
-Generate the recommended M6 training bank (deterministic generation + per-item
-QC + release packaging in one command):
+### Speaker verification
 
 ```bash
-PYTHONPATH=. .venv/bin/python \
-  egs/rir_generation/generate_m6_bank.py \
-  --output-dir egs/rir_generation/exp/rir_realism/m6/training_pilot \
+uv run puresound infer speaker-verification-ps-spk-v1-1 \
+  --input enrollment=enrollment.wav \
+  --input test=test.wav \
+  --output enrollment_embedding=enrollment.npy \
+  --output test_embedding=test.npy \
+  --provider auto
+```
+
+The command prints the cosine similarity and pass/fail verdict.
+
+### Web UI
+
+```bash
+uv run puresound web
+```
+
+Open <http://127.0.0.1:7860>. The UI provides voice isolation, speaker
+verification, model inspection, and audio measurements. It has no built-in
+authentication; do not expose it to an untrusted network.
+
+API details are in [docs/web.md](docs/web.md).
+
+## Train a model
+
+Runnable recipes live under `egs/`. Update the dataset and output paths in a
+recipe before training.
+
+| Task | Start here |
+| --- | --- |
+| Noise suppression | [egs/noise_suppression/README.md](egs/noise_suppression/README.md) |
+| Voice isolation | [egs/voice_isolate/README.md](egs/voice_isolate/README.md) |
+| Speaker embedding | [egs/speaker_embedding/README.md](egs/speaker_embedding/README.md) |
+| Target speaker extraction | [egs/target_speaker_extraction/README.md](egs/target_speaker_extraction/README.md) |
+
+For example, to train the default voice-isolation recipe from scratch:
+
+```bash
+uv run python egs/voice_isolate/main.py \
+  egs/voice_isolate/config/train_dpcrn.yaml \
+  --training
+```
+
+## Generate RIR training data
+
+The public RIR pipeline creates deterministic room banks with per-item quality
+checks:
+
+```bash
+PYTHONPATH=. .venv/bin/python egs/rir_generation/generate_m6_bank.py \
+  --output-dir /path/to/rir-bank \
   --backend path-events-m4 \
   --n-rooms 1000 \
   --rir-per-room 4 \
@@ -221,177 +137,54 @@ PYTHONPATH=. .venv/bin/python \
   --sample-rate 16000
 ```
 
-Always run with `.venv/bin/python` (or an environment with `pyroomacoustics`/
-`rir_generator` installed and a matching numpy ABI) — a mismatched interpreter
-produces collection errors that look like code bugs but are not. Full usage
-and the algorithm-to-code reference: `egs/rir_generation/README.md` and
-`docs/audio/index.md`.
+See [egs/rir_generation/README.md](egs/rir_generation/README.md) for backends,
+output formats, and optional dependencies.
 
-## Repository Structure
+## Portable ONNX runtime
 
-```text
-PureSound/
-├── puresound/                 # Core library
-│   ├── audio/                 # Audio I/O, DSP, augmentation, RIR generation (audio/rir/)
-│   ├── dataset/                # Dataset base classes and parsers
-│   ├── nnet/                   # Model architectures and building blocks
-│   ├── streaming/               # Streaming inference and ONNX Runtime utilities
-│   ├── system/                 # Lightning training systems
-│   ├── task/                   # Task-specific dataset logic
-│   ├── third_party/             # Vendored third-party research code (pytARD)
-│   ├── metrics.py               # Evaluation metrics
-│   ├── recipes.py               # Model/loss initialization helpers
-│   └── utils.py                 # General utilities
-├── egs/                        # End-to-end recipes and configs
-├── docs/                       # API and module documentation
-├── sdk/                        # Portable inference SDKs for external projects
-└── test/                       # Unit tests
+[`sdk/python`](sdk/python) contains the standalone inference runtime. It only
+needs NumPy, ONNX Runtime, an ONNX model, and its JSON manifest. Use it when the
+full training package is not required.
+
+## Development
+
+Run the standard checks:
+
+```bash
+uv run python test/run_repo_checks.py --suite standard
 ```
 
-## Documentation
+Run the full suite before a release:
 
-- Main docs entry: `docs/index.md`
-- Audio modules (incl. RIR generation): `docs/audio/index.md`
-- Neural network modules: `docs/nnet/index.md`
-- System modules: `docs/system/index.md`
-- Streaming runtimes: `docs/streaming/index.md`
+```bash
+uv run python test/run_repo_checks.py
+```
 
-Every document under `docs/`, `egs/`, and the package-level `README.md`s ships
-in both English (`name.md`) and Traditional Chinese (`name.zh-TW.md`).
-
-## Build Package
+Build the package:
 
 ```bash
 ./build_puresound.sh
 ```
 
-This script runs:
+## Repository layout
 
-- `uv sync --locked --group dev --extra cpu`
-- `uv build`
-
-## Notes
-
-- Some recipe scripts use boolean CLI flags in the form `--training True` or `--inference True`.
-- Please adjust dataset paths and output folders in each YAML config before training.
-
-## Troubleshooting
-
-### 1) `ModuleNotFoundError: No module named 'puresound'`
-
-Cause:
-- The package is not installed in your active environment.
-
-Fix:
-
-```bash
-uv sync --locked --group dev --extra cpu
-# or
-python -m pip install -r requirements.txt
-python -m pip install -e . --no-deps
+```text
+puresound/   Python package
+egs/         Training, evaluation, and RIR recipes
+docs/        Technical documentation
+model_zoo/   Released-model catalog
+sdk/python/  Standalone ONNX runtime
+test/        Tests and public test fixtures
 ```
 
-### 2) `OSError` or backend errors from `torchaudio`
+## Documentation
 
-Cause:
-- PyTorch / torchaudio binary mismatch, or missing runtime codec/backend support.
+- [Documentation index](docs/index.md)
+- [Configuration](docs/configuration.md)
+- [Audio and RIR](docs/audio/index.md)
+- [Data augmentation](docs/augmentation/index.md)
+- [Streaming inference](docs/streaming/index.md)
+- [Neural networks](docs/nnet/index.md)
+- [Training systems](docs/system/index.md)
 
-Fix:
-
-```bash
-python -c "import torch, torchaudio; print(torch.__version__, torchaudio.__version__)"
-```
-
-Make sure `torch` and `torchaudio` are installed from compatible channels/versions.
-For the repository-managed `uv` flow, they are pinned to the PyTorch CUDA 12.4 wheel index and should be installed with the checked-in lock file.
-
-### 3) CUDA not available (`torch.cuda.is_available() == False`)
-
-Cause:
-- CPU-only environment, unsupported CUDA runtime, or mismatched PyTorch build.
-
-Fix:
-
-```bash
-python -c "import torch; print(torch.cuda.is_available(), torch.version.cuda)"
-```
-
-If CUDA is required, reinstall a CUDA-enabled PyTorch build matching your system.
-This repository's reusable `uv` setup targets CUDA 12.4.
-
-For ONNX inference, check ONNX Runtime separately:
-
-```bash
-python -c "import onnxruntime as ort; print(ort.get_available_providers())"
-```
-
-If `CUDAExecutionProvider` is missing, the CPU wheel is still installed (or
-the GPU wheel cannot load its CUDA/cuDNN dependencies). Replace the wheel as
-shown in the installation section and restart the web service. The API and UI
-report the provider actually selected; an explicit CUDA request falls back to
-CPU when the provider is unavailable.
-
-On macOS, look for `CoreMLExecutionProvider` instead. Select `coreml` or the
-`mps` alias; `MPSExecutionProvider` is not an ONNX Runtime provider.
-
-### 4) Recipe starts but cannot find data files
-
-Cause:
-- Dataset paths in YAML are not updated for local machine.
-
-Fix:
-- Edit each recipe config in `egs/*/config` or `egs/speaker_embedding/conf`.
-- Run `prepare_metafile.py` first to generate manifests.
-
-### 5) RIR generation: collection errors or validator failures that look like code bugs
-
-Cause:
-- Running `egs/rir_generation` scripts with a Python interpreter that lacks
-  `pyroomacoustics`/`rir_generator`, or whose numpy ABI doesn't match.
-
-Fix:
-- Always invoke RIR generation scripts with `.venv/bin/python` (or an
-  equivalent environment with those packages installed).
-
-## Minimal Demo
-
-### Demo A: Basic import smoke test
-
-```bash
-python - <<'PY'
-from puresound.audio.io import AudioIO
-from puresound.metrics import Metrics
-
-print("PureSound import OK")
-print("AudioIO:", AudioIO)
-print("Metrics:", Metrics)
-PY
-```
-
-### Demo B: Save and reload a 1-second silent waveform
-
-```bash
-python - <<'PY'
-import os
-import torch
-from puresound.audio.io import AudioIO
-
-sr = 16000
-wav = torch.zeros(sr)
-out_dir = "./tmp_demo"
-os.makedirs(out_dir, exist_ok=True)
-out_path = os.path.join(out_dir, "silence.wav")
-
-AudioIO.save(wav=wav, f_path=out_path, sr=sr)
-rwav, rsr = AudioIO.open(out_path)
-print("Saved:", out_path)
-print("Loaded shape:", tuple(rwav.shape), "sr:", rsr)
-PY
-```
-
-### Demo C: Run speaker verification web demo (requires ONNX model)
-
-```bash
-cd egs/speaker_embedding
-uv run python demo.py --address 0.0.0.0 --port 7860 pretrained/PS-spk-v1.onnx
-```
+Most documentation is available in English and Traditional Chinese.

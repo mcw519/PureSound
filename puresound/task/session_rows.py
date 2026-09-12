@@ -3,8 +3,7 @@
 Every other row type in this pipeline is a *scene*: a near talker and one or two
 far talkers, both talking from the first frame, mixed at one level, labelled by
 one waveform. That is what makes today's foreground decision cheap. Measured on
-1206 rows of the shipped v16 recipe
-(``benchmarks/probes/v19c_diagnostics/training_data_audit``): the target's onset
+1206 rows of the shipped v16 recipe: the target's onset
 is inside 0.5 s on 90.7% of rows, an interferer holds the floor for >=1 s before
 it on 6.0%, the longest target-free gap is 0.53 s at the median and >=5 s on
 0.3%, and **no row renders the same talker twice**. Nothing in the objective

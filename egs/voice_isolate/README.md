@@ -53,7 +53,7 @@ supervision**, not more or better RIRs. Every simulated far-field rung tried bef
 distances, measured RIRs in training, gate-only VAD head, joint separator+gate) learns the
 RIR-convolution domain arbitrarily well and does not transfer to real recordings, and pushing
 far-suppression harder inside that domain blows up real-acoustic deletion (reverberant-office WER
-0.663 vs 0.529). Those rungs are closed; `config/exp/` keeps their recipes.
+0.663 vs 0.529). Those rungs are closed.
 
 `dpcrn_v6.ckpt` was the fallback (no runtime knob, most conservative on far-field suppression);
 it is archived too. Per-version detail, results, and which versions are still shipped:
@@ -67,36 +67,36 @@ look-ahead `delay=[1,1,1]`) — only the RIR bank, augmentation, and loss weight
 
 | # | stage | config | warm-start from | judged ckpt | headline result |
 |---|---|---|---|---|---|
-| 1 | curriculum core (RT60 0.20–0.45, DRR gap≥6dB) | `config/exp/train_dpcrn_curriculum_core.yaml` | cold | `dpcrn_v1.ckpt` | in-domain SI-SDRi median **+6.98** (ep19 +5.47 → ep39 +6.98) |
-| 2 | curriculum expand (RT60 ≤0.65, gap≥3dB) | `config/exp/train_dpcrn_curriculum_expand.yaml` | stage 1 ep39 | `dpcrn_v2.ckpt` | in-domain **+7.99** (ep19 +7.40→ep39 +7.75→ep59 +7.99); BUT real-RIR **+5.46**; first non-neutral real-WER win: BUT enh **0.777 < mix 0.796** |
-| 3 | anti-suppression weight 1.0 (`OverSuppressionLoss`) | `config/exp/train_dpcrn_antisup_w1.yaml` | stage 2 ep59 | `dpcrn_v3.ckpt` | in-domain **+8.21**; large-v3 BUT deletion **0.308→0.291** (direction confirmed, modest) |
-| 4 | anti-suppression weight 2.0 | `config/exp/train_dpcrn_antisup_w2.yaml` | stage 3 ep19 | `dpcrn_v4.ckpt` | in-domain **+8.32**; BUT deletion **→0.276**; safest across both domains |
-| 5 | anti-suppression weight 3.0 | `config/exp/train_dpcrn_antisup_w3.yaml` | stage 4 ep19 | `dpcrn_v5.ckpt` | in-domain **+8.45**; **best in deployment reverb** (moderate enh 0.372, best of all) but **worst in extreme OOD** (BUT enh 0.692, regressed vs w2's 0.676) — "domain split point" |
-| 6 | wide-domain deployment (RIR 0.20–0.85 + media_voice/hpf realism) | `config/exp/train_dpcrn_wide_antisup.yaml` | stage 5 ep19 | `dpcrn_v6.ckpt` **(fallback)** | held-out unseen-room **+8.06** (best ever); deployment hard-gate passed (moderate enh 0.373 ≈ w3); BUT still not beaten (0.680, target was <0.676) — 4/5 judge gates passed |
-| 7 | real recordings on both sides + turn-taking + distance aux head + channel consistency | `config/exp/train_dpcrn_realE2E_v2c.yaml` | stage 6 ep19 | `dpcrn_v7.ckpt` | held-out real far-field **−9.45 dB, distance-graded**; keep flat (−0.11); **Dawn WER 0.174 < 0.184 raw**, deletion 0.088; reverberant-office WER −0.024 vs mix; in-domain +8.18 — needs `dry_blend 0.9` |
-| 8 | measured-capture realism in synthesis (room-colored noise, absolute dBFS floor, geometry-driven SIR) | `config/train_dpcrn.yaml` | stage 7 ep19 | `dpcrn_v8.ckpt` **(current default)** | real far-field **−15.91 dB** vs stage 7's −13.72 on identical files (leakage-free subset −17.74 vs −15.68); 2–3 m dip filled (−4.50 → −16.61) so grading is monotone; keep flat (0.00), worst case −5.45 → −1.06; **Dawn WER 0.180 < 0.184 raw**, deletion 0.094; reverberant-office WER −0.024 vs mix; in-domain +7.99 — costs +0.020 WER in extreme reverb; needs `dry_blend 0.9` |
-| 9 | DRR contrast, then a cold-start curriculum (rows opening on real far-field solo with no near anchor) | `config/exp/train_dpcrn_drrcontrast.yaml`, `config/exp/train_dpcrn_coldstart.yaml` | stage 8 ep19 | `dpcrn_v9.ckpt`, `dpcrn_v10.ckpt` | **neither displaces stage 8.** v9 is the ASR-gate optimum: reverberant-office WER −0.050 vs mix (double v8's), Dawn 0.172 / deletion 0.086, extreme-reverb neutral — at 3.5 dB shallower real far-field suppression. v10 is the only version that moves bot-idle cold start (5/10 isolated far clips clear −6 dB vs v8's 1) but pays for it in WER on the deployment reverberation range (0.024 worse than v8, paired, CI clear of zero) and raises turn-taking KEEP violations 6 → 10. Field benchmark: [`benchmarks/field_test_vector/`](benchmarks/field_test_vector/RESULTS.md) |
+| 1 | curriculum core (RT60 0.20–0.45, DRR gap≥6dB) | internal | cold | `dpcrn_v1.ckpt` | in-domain SI-SDRi median **+6.98** (ep19 +5.47 → ep39 +6.98) |
+| 2 | curriculum expand (RT60 ≤0.65, gap≥3dB) | internal | stage 1 ep39 | `dpcrn_v2.ckpt` | in-domain **+7.99** (ep19 +7.40→ep39 +7.75→ep59 +7.99); BUT real-RIR **+5.46**; first non-neutral real-WER win: BUT enh **0.777 < mix 0.796** |
+| 3 | anti-suppression weight 1.0 (`OverSuppressionLoss`) | internal | stage 2 ep59 | `dpcrn_v3.ckpt` | in-domain **+8.21**; large-v3 BUT deletion **0.308→0.291** (direction confirmed, modest) |
+| 4 | anti-suppression weight 2.0 | internal | stage 3 ep19 | `dpcrn_v4.ckpt` | in-domain **+8.32**; BUT deletion **→0.276**; safest across both domains |
+| 5 | anti-suppression weight 3.0 | internal | stage 4 ep19 | `dpcrn_v5.ckpt` | in-domain **+8.45**; **best in deployment reverb** (moderate enh 0.372, best of all) but **worst in extreme OOD** (BUT enh 0.692, regressed vs w2's 0.676) — "domain split point" |
+| 6 | wide-domain deployment (RIR 0.20–0.85 + media_voice/hpf realism) | `test/fixtures/recipes/train_dpcrn_wide_antisup.yaml` | stage 5 ep19 | `dpcrn_v6.ckpt` **(fallback)** | held-out unseen-room **+8.06** (best ever); deployment hard-gate passed (moderate enh 0.373 ≈ w3); BUT still not beaten (0.680, target was <0.676) — 4/5 judge gates passed |
+| 7 | real recordings on both sides + turn-taking + distance aux head + channel consistency | internal | stage 6 ep19 | `dpcrn_v7.ckpt` | held-out real far-field **−9.45 dB, distance-graded**; keep flat (−0.11); **Dawn WER 0.174 < 0.184 raw**, deletion 0.088; reverberant-office WER −0.024 vs mix; in-domain +8.18 — needs `dry_blend 0.9` |
+| 8 | measured-capture realism in synthesis (room-colored noise, absolute dBFS floor, geometry-driven SIR) | internal | stage 7 ep19 | `dpcrn_v8.ckpt` | real far-field **−15.91 dB** vs stage 7's −13.72 on identical files (leakage-free subset −17.74 vs −15.68); 2–3 m dip filled (−4.50 → −16.61) so grading is monotone; keep flat (0.00), worst case −5.45 → −1.06; **Dawn WER 0.180 < 0.184 raw**, deletion 0.094; reverberant-office WER −0.024 vs mix; in-domain +7.99 — costs +0.020 WER in extreme reverb; needs `dry_blend 0.9` |
+| 9 | DRR contrast, then a cold-start curriculum (rows opening on real far-field solo with no near anchor) | internal, internal | stage 8 ep19 | `dpcrn_v9.ckpt`, `dpcrn_v10.ckpt` | **neither displaces stage 8.** v9 is the ASR-gate optimum: reverberant-office WER −0.050 vs mix (double v8's), Dawn 0.172 / deletion 0.086, extreme-reverb neutral — at 3.5 dB shallower real far-field suppression. v10 is the only version that moves bot-idle cold start (5/10 isolated far clips clear −6 dB vs v8's 1) but pays for it in WER on the deployment reverberation range (0.024 worse than v8, paired, CI clear of zero) and raises turn-taking KEEP violations 6 → 10. |
+
+Before the first run, point the recipe's corpus and RIR-bank paths at your own data:
+[`DATA_SETUP.md`](DATA_SETUP.md).
 
 Run **from this directory** — the configs' metafile and work-folder paths are relative to it:
 ```bash
 cd egs/voice_isolate
 
-# default recipe, warm-started from the previous release
-# (stage 8 warm-started from v7, now under pretrained_ckpt/backup/)
-uv run python main.py config/train_dpcrn.yaml --training \
-    --pretrained_ckpt_path pretrained_ckpt/backup/dpcrn_v7.ckpt
+# default recipe: one curriculum run from scratch, no warm start needed
+uv run python main.py config/train_dpcrn.yaml --training
 
-# reproducing an earlier stage
-uv run python main.py config/exp/train_dpcrn_curriculum_core.yaml --training
-uv run python main.py config/exp/train_dpcrn_curriculum_expand.yaml --training \
-    --pretrained_ckpt_path pretrained_ckpt/dpcrn_v1.ckpt
+# optional second step, warm-started from the first
+uv run python main.py config/train_dpcrn_curriculum_v1.yaml --training \
+    --pretrained_ckpt_path pretrained_ckpt/dpcrn_curriculum_v0.ckpt
 ```
 `--ckpt_path <ckpt>` instead of `--pretrained_ckpt_path` = true resume (restores optimizer/scheduler/epoch).
 Config details (shared design, eval-only variants, inference config): `config/README.md`.
 
 ## Fresh v20 experiment (not a continuation of an old R1a run)
 
-The executable v20 baseline is [`config/exp/train_dpcrn_v20_r1a.yaml`](config/exp/train_dpcrn_v20_r1a.yaml).
+The executable v20 baseline is [`train_dpcrn_v20_r1a.yaml`](../../test/fixtures/recipes/train_dpcrn_v20_r1a.yaml), kept as a test fixture.
 It keeps the separator objective and backbone path, adds session data labels,
 actual per-turn rendered distances, a training-only VAD/presence head, and an
 explicit second device-chain view for a generic consistency term. Matched
@@ -104,12 +104,9 @@ distance and legacy source-pool pairing are disabled; the proximity baseline is
 explicitly unbounded (`scale_free: false`). The nested paired view is excluded
 from ordinary separation and VAD reductions.
 
-Before any authorised training, run the CPU checks in
-[`benchmarks/probes/v20_session_rows/VALIDATION.md`](benchmarks/probes/v20_session_rows/VALIDATION.md).
-The fixed 12/30-second acceptance materialization, 300-row data audit, and
-`no_update_memory_smoke.py` all write reviewable artifacts and do not call
-`Trainer.fit` or update model weights. The existing six-second validation stays
-as a regression check.
+Session-row collation and the paired view are covered by
+`test/test_task/test_session_rows.py` and `test/test_task/test_session_paired_views.py`.
+The existing six-second validation stays as a regression check.
 
 ## Why weight-3.0 isn't an outright winner (the "domain split point")
 
@@ -152,17 +149,17 @@ Tools + usage: `scripts/README.md`.
 - **Primary (synthetic, in-domain):** `scripts/eval_indomain.py --by-bucket` (or `check_training_run.sh`).
   SI-SDRi vs the early-reverb target; read the hard buckets (counter_level / 1N+0F / overlap), not the
   aggregate.
-- **Real acoustics, deployment-reverb (rt60 0.44):** `config/exp/eval_but_real.yaml`'s sibling set built at
+- **Real acoustics, deployment-reverb (rt60 0.44):** `config/eval/eval_but_real.yaml`'s sibling set built at
   a moderate RT60 — WER **0.723→0.487 (−32%)**, do-no-harm confirmed. This is the domain the product
   actually ships into.
 - **Real acoustics, extreme OOD (BUT real-RIR, rt60 1.15–1.84):** `scripts/build_wer_set.py` (build
   once) → `scripts/eval_wer.py` (SI-SDRi + WER vs real LibriTTS transcripts), config
-  `config/exp/eval_but_real.yaml`. Deliberately harder than training; tracks how far over-suppression is an
+  `config/eval/eval_but_real.yaml`. Deliberately harder than training; tracks how far over-suppression is an
   OOD-reverb phenomenon (it is — see above).
-- **Unseen-room generalization:** `config/exp/eval_heldout.yaml` (seed-2026 disjoint room bank, same
+- **Unseen-room generalization:** internal (seed-2026 disjoint room bank, same
   difficulty distribution as expand). seen→unseen drop is consistently small (≤0.4 dB) across every
   stage — the model generalizes on DRR/geometry, not memorized rooms.
-- **Leakage probe (far-only/noise-only):** `config/exp/eval_targetabsent_probe.yaml` — forces every row
+- **Leakage probe (far-only/noise-only):** `config/eval/eval_targetabsent_probe.yaml` — forces every row
   target-absent; checks the model doesn't leak/hallucinate a near speaker. All pipeline checkpoints
   pass (power reduction ≤ −24.8 dB, false-near ≤3%) without ever training on this scenario.
 - **Synthetic-vs-real domain-gap decomposition:** `scripts/eval_domain_gap.py` — on matched VOiCES
