@@ -75,7 +75,7 @@ index 上限與模態數上限。
 
 ## Exact damped recurrence（精確阻尼遞迴）
 
-Vendored 的 pytARD adapter 早已將房間對角化成彼此獨立的模態。M2 把原本
+pytARD adapter 早已將房間對角化成彼此獨立的模態。M2 把原本
 無阻尼的 homogeneous 遞迴式，換成以下方程式的精確取樣極點（pole）解：
 
 ```text

@@ -1,10 +1,8 @@
 """pytARD low-frequency wave backends (CPU and CuPy).
 
-Wraps the vendored pytARD solver: an exact sampled modal recurrence, the
+Wraps the optional pytARD solver: an exact sampled modal recurrence, the
 Green-delta excitation, level calibration and the optional broadband RT60
-envelope.  Moved out of ``puresound.audio.rir.render.hybrid`` in R2 of
-``RIR_EXP_LOG.md``.
-
+envelope.
 pytARD and CuPy are imported lazily so this module stays importable without
 them.
 """
@@ -44,18 +42,40 @@ def _nullcontext():
     yield
 
 
-def _default_pytard_root() -> Path:
-    """Locate the vendored pytARD checkout under the ``puresound`` package.
+PYTARD_ROOT_ENV = "PURESOUND_PYTARD_ROOT"
+PYTARD_UPSTREAM_URL = "https://github.com/gpuard/pytARD.git"
 
-    Anchored on the package rather than on ``__file__`` parent counting: this
-    module moved from ``puresound/audio/`` to
-    ``puresound/audio/rir/render/low_frequency/`` in R2, and a relative
-    ``parents[n]`` walk silently pointed at the wrong directory.
+
+def _default_pytard_root() -> Path:
+    """Locate the pytARD checkout this backend should import from.
+
+    pytARD is an optional dependency and is NOT distributed with PureSound: it
+    is AGPL-3.0 and script-oriented, with no package on PyPI. Point
+    ``PURESOUND_PYTARD_ROOT`` at your own checkout, or pass ``third_party_root``
+    explicitly. A checkout placed under ``puresound/third_party/pytARD`` is
+    still honoured, so an installation that vendors it keeps working.
+
+    The fallback is anchored on the ``puresound`` package rather than on
+    ``__file__`` parent counting, which silently points at the wrong directory
+    whenever this module moves.
     """
+
+    import os
+
+    configured = os.environ.get(PYTARD_ROOT_ENV)
+    if configured:
+        return Path(configured).expanduser()
 
     import puresound
 
     return Path(puresound.__file__).resolve().parent / "third_party" / "pytARD"
+
+
+def pytard_is_available(root: Optional[Path] = None) -> bool:
+    """Whether a usable pytARD checkout is reachable."""
+
+    candidate = root or _default_pytard_root()
+    return (candidate / "pytARD_3D").is_dir() and (candidate / "common").is_dir()
 
 
 @contextmanager
@@ -230,7 +250,7 @@ def solve_modal_ard(
 ) -> list[np.ndarray]:
     """Exact modal ARD solve specialized to single-voxel sources and one mic.
 
-    The vendored pytARD interior update integrates each room mode as an
+    The pytARD interior update integrates each room mode as an
     independent undamped oscillator, so it is mathematically identical to its
     per-step 3D DCT/IDCT loop. Two facts let us drop both transforms from the
     hot loop entirely:
@@ -490,11 +510,13 @@ class PytARDWaveBackend:
 
 @dataclass
 class GpuARDPytARDBackend:
-    """Backend for the vendored ``gpuard/pytARD`` implementation.
+    """Backend for the optional ``gpuard/pytARD`` solver.
 
-    The upstream project is script-oriented and imports modules from its repo
-    root (for example ``pytARD_3D`` and ``common``).  This adapter adds the
-    vendored path during simulation, builds one 3D air partition per source,
+    pytARD is not distributed with PureSound; see ``_default_pytard_root`` for
+    how the checkout is located. The upstream project is script-oriented and
+    imports modules from its repo root (for example ``pytARD_3D`` and
+    ``common``).  This adapter adds that path during simulation, builds one 3D
+    air partition per source,
     reads the microphone signal in memory, and resamples it to the requested
     output sample rate when needed.
     """
@@ -555,9 +577,10 @@ class GpuARDPytARDBackend:
         root = self.third_party_root or _default_pytard_root()
         if not root.exists():
             raise ImportError(
-                f"Vendored pytARD was not found at {root}. "
-                "Clone https://github.com/gpuard/pytARD.git into "
-                "puresound/third_party/pytARD."
+                f"pytARD was not found at {root}. It is an optional dependency "
+                "and is not distributed with PureSound (AGPL-3.0, not on PyPI). "
+                f"Clone {PYTARD_UPSTREAM_URL} and point "
+                f"{PYTARD_ROOT_ENV} at the checkout, or pass third_party_root."
             )
 
         cp = _import_cupy() if use_cupy else None
@@ -664,7 +687,7 @@ class GpuARDPytARDBackend:
 
 @dataclass
 class GpuARDPytARDCuPyBackend(GpuARDPytARDBackend):
-    """CuPy-accelerated backend for vendored ``gpuard/pytARD``.
+    """CuPy-accelerated backend for the optional ``gpuard/pytARD`` solver.
 
     This keeps the third-party source untouched and patches pytARD's 3D DCT/IDCT
     calls to CuPy only while this backend is running.

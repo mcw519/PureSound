@@ -102,6 +102,7 @@ include = ["puresound*"]
 puresound = ["web/static/*"]
 
 [tool.pytest.ini_options]
+norecursedirs = ["_internal"]
 markers = [
   "src",
   "nnet",
@@ -122,7 +123,7 @@ filterwarnings = [
 ]
 
 [tool.ruff]
-# Vendored code is not ours to lint.
+# Third-party checkouts are not ours to lint.
 extend-exclude = ["puresound/third_party"]
 
 [tool.ruff.lint]

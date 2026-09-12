@@ -78,7 +78,7 @@ coupling model, index limit, and mode cap.
 
 ## Exact damped recurrence
 
-The vendored pytARD adapter already diagonalizes the room into independent
+The pytARD adapter already diagonalizes the room into independent
 modes. M2 replaces the undamped homogeneous recurrence with the exact sampled
 poles of:
 

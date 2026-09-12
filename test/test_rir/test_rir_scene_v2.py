@@ -4,6 +4,16 @@ import importlib.util
 import numpy as np
 import pytest
 
+from puresound.audio.rir.render.low_frequency.pytard import (
+    pytard_is_available as _pytard_is_available,
+)
+
+# pytARD is optional and not distributed with PureSound; see
+# `puresound/third_party/README.md`.
+needs_pytard = pytest.mark.skipif(
+    not _pytard_is_available(), reason="needs a pytARD checkout (PURESOUND_PYTARD_ROOT)"
+)
+
 from puresound.audio.rir.contracts import HybridRIRConfig
 from puresound.audio.rir.render.high_frequency import (
     PyroomacousticsHighFrequencyBackend,
@@ -395,6 +405,7 @@ def test_material_damped_low_backend_removes_global_rt60_envelope_metadata():
     )
 
 
+@needs_pytard
 def test_exact_pytard_modal_recurrence_decays_faster_for_absorbing_boundaries():
     config = HybridRIRConfig(
         sample_rate=16000,

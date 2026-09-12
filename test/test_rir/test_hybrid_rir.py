@@ -28,7 +28,14 @@ from puresound.audio.rir.render.low_frequency import (
 )
 from puresound.audio.rir.render.low_frequency.pytard import (
     pytard_green_delta_excitation as _pytard_green_delta_excitation,
+    pytard_is_available as _pytard_is_available,
     solve_modal_ard as _solve_modal_ard,
+)
+
+# pytARD is optional and not distributed with PureSound; the tests that drive the
+# solver itself skip without a checkout. See `puresound/third_party/README.md`.
+needs_pytard = pytest.mark.skipif(
+    not _pytard_is_available(), reason="needs a pytARD checkout (PURESOUND_PYTARD_ROOT)"
 )
 from puresound.audio.rir.scene.geometry import polygons_overlap as _polygons_overlap
 from puresound.audio.rir.scene.sampling import (
@@ -500,6 +507,7 @@ def test_crossover_tail_fade_reaches_exact_zero():
     assert metadata["tail_fade"]["sample_count"] == 160
 
 
+@needs_pytard
 def test_vendored_pytard_backend_smoke():
     config = HybridRIRConfig(
         sample_rate=16000,
@@ -545,6 +553,7 @@ def test_pytard_green_excitation_has_no_legacy_390_hz_comb():
     assert magnitude[legacy_notch] == pytest.approx(1.0)
 
 
+@needs_pytard
 def test_pytard_render_ensemble_has_no_shared_390_hz_notch():
     config = HybridRIRConfig(
         sample_rate=16000,
@@ -579,6 +588,7 @@ def test_pytard_render_ensemble_has_no_shared_390_hz_notch():
     assert float(np.percentile(dips_db, 90.0)) < 10.0
 
 
+@needs_pytard
 def test_cupy_pytard_backend_requires_cupy_or_runs_smoke():
     config = HybridRIRConfig(sample_rate=16000, duration=0.005)
     scene = HybridRIRScene(
@@ -683,6 +693,7 @@ def test_crossover_rejects_audit_band_that_excludes_crossover():
         hybrid_crossover(direct, direct, config)
 
 
+@needs_pytard
 def test_pytard_calibrated_signal_has_rt60_tail_decay():
     from puresound.audio.rir.render.low_frequency.pytard import (
         calibrate_pytard_signal as _calibrate_pytard_signal,

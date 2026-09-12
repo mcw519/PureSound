@@ -1,1 +1,1 @@
-"""Vendored third-party research code used by optional PureSound features."""
+"""Optional third-party dependencies, documented here but not distributed."""
