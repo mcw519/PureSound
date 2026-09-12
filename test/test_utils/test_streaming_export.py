@@ -23,6 +23,20 @@ import yaml
 
 from test.test_utils.test_dparn_streaming import MINIMAL_DPARN_CONFIG
 
+
+def _archivable(relative: str) -> Path:
+    """A checkpoint or export that may have been archived out of the tree.
+
+    The model zoo ships two voice-isolation versions; the rest moved to the
+    gitignored `pretrained_ckpt/backup/` when the catalog was trimmed. They are
+    still the right fixtures for these tests, so look for them in both places
+    and let the caller skip if neither has the file.
+    """
+
+    root = Path(__file__).resolve().parents[2] / "egs/voice_isolate/pretrained_ckpt"
+    in_tree = root / relative
+    return in_tree if in_tree.is_file() else root / "backup" / relative
+
 from puresound.system.postprocess import Postprocessor
 from puresound.streaming import (
     StreamingOrt,
@@ -265,8 +279,7 @@ def test_side_information_collection_is_opt_in_and_drains():
 
 
 @pytest.mark.skipif(
-    not (_REPO / "egs/voice_isolate/pretrained_ckpt/streaming/dpcrn_v11_ep19_heads.onnx").is_file()
-    if (_REPO := Path(__file__).resolve().parents[2]) else True,
+    not _archivable("streaming/dpcrn_v11_ep19_heads.onnx").is_file(),
     reason="needs the heads export",
 )
 def test_the_constructor_defaults_collection_off():
@@ -276,8 +289,7 @@ def test_the_constructor_defaults_collection_off():
     changed default -- and an always-on default is exactly the regression that
     grows an unbounded history in a long-running stream.
     """
-    root = Path(__file__).resolve().parents[2]
-    onnx = root / "egs/voice_isolate/pretrained_ckpt/streaming/dpcrn_v11_ep19_heads.onnx"
+    onnx = _archivable("streaming/dpcrn_v11_ep19_heads.onnx")
     runtime = StreamingOrt(onnx_path=onnx, provider="cpu")
     assert runtime.collect_extras is False
     assert runtime.extra_names == ["vad_logit", "background_vad_logit"]
@@ -291,8 +303,7 @@ def test_the_constructor_defaults_collection_off():
 
 @pytest.mark.slow
 @pytest.mark.skipif(
-    not (Path(__file__).resolve().parents[2]
-         / "egs/voice_isolate/pretrained_ckpt/dpcrn_v11_ep19.ckpt").is_file(),
+    not _archivable("dpcrn_v11_ep19.ckpt").is_file(),
     reason="needs the v11 checkpoint",
 )
 def test_exported_head_logits_track_torch_over_many_frames():
@@ -313,14 +324,14 @@ def test_exported_head_logits_track_torch_over_many_frames():
     from puresound.streaming import load_streaming_dpcrn_model
 
     recipe_dir = Path(__file__).resolve().parents[2] / "egs/voice_isolate"
-    onnx_path = recipe_dir / "pretrained_ckpt/streaming/dpcrn_v11_ep19_heads.onnx"
+    onnx_path = _archivable("streaming/dpcrn_v11_ep19_heads.onnx")
     if not onnx_path.is_file():
         pytest.skip("heads export not built")
     manifest = json.loads(onnx_path.with_suffix(".json").read_text())
 
     frame_model = load_streaming_dpcrn_model(
         recipe_dir / "config/infer_dpcrn_heads.yaml",
-        recipe_dir / "pretrained_ckpt/dpcrn_v11_ep19.ckpt",
+        _archivable("dpcrn_v11_ep19.ckpt"),
     ).eval()
     system = frame_model.system_model.eval()
 

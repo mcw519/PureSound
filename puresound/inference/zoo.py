@@ -115,15 +115,8 @@ class ModelZoo:
 
     def get(self, model_id: str) -> ModelSpec:
         aliases = {
-            "dpcrn_v6": "voice-isolate-dpcrn-v6",
-            "dpcrn_v7": "voice-isolate-dpcrn-v7",
             "dpcrn_v8": "voice-isolate-dpcrn-v8",
-            "dpcrn_v9": "voice-isolate-dpcrn-v9",
-            "dpcrn_v10": "voice-isolate-dpcrn-v10",
-            "dpcrn_v11_ep19": "voice-isolate-dpcrn-v11-ep19",
-            "dpcrn_v16_ep19": "voice-isolate-dpcrn-v16-ep19",
-            "voice-isolate-dpcrn-v11": "voice-isolate-dpcrn-v11-ep19",
-            "voice-isolate-dpcrn-v16": "voice-isolate-dpcrn-v16-ep19",
+            "dpcrn_curriculum_v1": "voice-isolate-dpcrn-curriculum-v1",
             "PS-spk-v1": "speaker-verification-ps-spk-v1",
             "PS-spk-v1-1": "speaker-verification-ps-spk-v1-1",
             "ps-spk-v1": "speaker-verification-ps-spk-v1",

@@ -13,7 +13,7 @@ recipe 的歷史紀錄——較早的 pipeline 階段、消融實驗與僅供 ev
 ```bash
 # 訓練（從 repo root），從前一個發布版本 warm-start
 uv run python egs/voice_isolate/main.py egs/voice_isolate/config/train_dpcrn.yaml --training \
-    --pretrained_ckpt_path egs/voice_isolate/pretrained_ckpt/dpcrn_v7.ckpt
+    --pretrained_ckpt_path egs/voice_isolate/pretrained_ckpt/backup/dpcrn_v7.ckpt
 
 # 推論／demo
 uv run python egs/voice_isolate/scripts/demo.py \

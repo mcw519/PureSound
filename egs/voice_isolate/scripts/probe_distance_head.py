@@ -19,7 +19,7 @@ make the field set look good. Run it on clips whose true distance you know and c
 
     uv run python egs/voice_isolate/scripts/probe_distance_head.py \
         egs/voice_isolate/config/train_dpcrn.yaml \
-        --ckpt egs/voice_isolate/pretrained_ckpt/dpcrn_v10.ckpt \
+        --ckpt egs/voice_isolate/pretrained_ckpt/backup/dpcrn_v10.ckpt \
         --cases-dir egs/voice_isolate/data_report/field_cases/test_vector_cases --device cuda:0
 
 Pass the TRAINING config, not infer_dpcrn.yaml -- the inference config builds no dist head

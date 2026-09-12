@@ -424,8 +424,8 @@ class StreamingOrt:
         # portable copy of this loop reads the same key -- see
         # `test_sdk_postprocess.py`, which pins the two against each other.
         # An absent section means no relief -- the documented convention, and the
-        # same thing `Postprocessor()` defaults to. `dpcrn_v6` is the one shipped
-        # export without it.
+        # same thing `Postprocessor()` defaults to. Every export still in the
+        # catalog carries the section; the convention is for third-party ones.
         postprocess = dict(self.manifest.get(Postprocessor.MANIFEST_KEY) or {})
         if postprocess_overrides:
             unknown = set(postprocess_overrides) - {"dry_blend", "spec_floor"}

@@ -30,7 +30,7 @@ def test_web_catalog_payload_is_path_stable_and_default_first():
     models = service.list_models()
 
     assert models
-    assert models[0]["id"] == "voice-isolate-dpcrn-v8"
+    assert models[0]["id"] == "voice-isolate-dpcrn-curriculum-v1"
     assert all(not str(item["source_checkpoint"]).startswith("/") for item in models if item["source_checkpoint"])
     artifact = service.inspect_model("voice-isolate-dpcrn-v8")["artifacts"][0]
     assert artifact["filename"] == "dpcrn_v8.onnx"
@@ -178,7 +178,7 @@ def test_web_measure_forwards_the_onset_guard_and_reports_what_ran(monkeypatch):
     report = service.measure(
         {
             "inputs": {"audio": {"filename": "input.wav", "data": _wav_data_url()}},
-            "models": ["voice-isolate-dpcrn-v8", "voice-isolate-dpcrn-v7"],
+            "models": ["voice-isolate-dpcrn-v8", "voice-isolate-dpcrn-curriculum-v1"],
             "parameters": _guard_request(),
         }
     )

@@ -1,7 +1,7 @@
 # PureSound Model Zoo
 
 `catalog.yaml` is the version-controlled registry for the ONNX artifacts that
-ship with this repository.  It contains eleven logical models and twelve artifacts;
+ship with this repository.  It contains four logical models and four artifacts;
 weights stay in their existing `egs/` directories.  Every artifact has a
 processor contract, sidecar (where required), and SHA256 digest.
 
@@ -17,7 +17,7 @@ The same catalog powers the public facade and the demos:
 from puresound.inference import ModelZoo, load_model
 
 models = ModelZoo.default().list(task="voice_isolation")
-runtime = load_model("voice-isolate-dpcrn-v8", provider="auto")
+runtime = load_model("voice-isolate-dpcrn-curriculum-v1", provider="auto")
 result = runtime.infer({"audio": "input.wav"})
 ```
 

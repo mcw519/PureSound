@@ -707,15 +707,15 @@ def enhance_audio(
             raise ValueError(
                 f"Show VAD heads needs an ONNX graph that exports them; "
                 f"{Path(checkpoint_path).name} exports nothing. Export with "
-                "config/infer_dpcrn_heads.yaml (see "
-                "pretrained_ckpt/streaming/dpcrn_v11_ep19_heads.onnx)."
+                "config/infer_dpcrn_heads.yaml via "
+                "scripts/streaming_onnx.py export."
             )
         if gate_mode != "Off" and "vad_logit" not in runtime.extra_names:
             raise ValueError(
                 f"Gate mode needs an ONNX graph that exports vad_logit; "
                 f"{Path(checkpoint_path).name} exports {runtime.extra_names or 'nothing'}. "
-                "Export with config/infer_dpcrn_heads.yaml (see "
-                "pretrained_ckpt/streaming/dpcrn_v11_ep19_heads.onnx)."
+                "Export with config/infer_dpcrn_heads.yaml via "
+                "scripts/streaming_onnx.py export."
             )
         target_sample_rate = runtime.sample_rate
         device = f"onnxruntime:{','.join(runtime.providers)}"

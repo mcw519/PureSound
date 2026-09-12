@@ -25,7 +25,7 @@ Usage (from anywhere):
 
     uv run python egs/voice_isolate/scripts/overfit_check.py \
         egs/voice_isolate/config/exp/train_dpcrn_gate.yaml --gate \
-        --ckpt egs/voice_isolate/pretrained_ckpt/dpcrn_v6.ckpt --device cpu --steps 50
+        --ckpt egs/voice_isolate/pretrained_ckpt/backup/dpcrn_v6.ckpt --device cpu --steps 50
 """
 from __future__ import annotations
 

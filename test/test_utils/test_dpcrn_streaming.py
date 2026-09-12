@@ -16,6 +16,20 @@ CAUSAL_CONFIG = str(_REPO_ROOT / "egs/voice_isolate/config/exp/train_dpcrn_wide_
 LOOKAHEAD_CONFIG = str(_REPO_ROOT / "egs/voice_isolate/config/exp/train_dpcrn_wide_antisup.yaml")
 
 
+def _archivable(relative: str) -> Path:
+    """A checkpoint or export that may have been archived out of the tree.
+
+    The model zoo ships two voice-isolation versions; the rest moved to the
+    gitignored `pretrained_ckpt/backup/` when the catalog was trimmed. They are
+    still the right fixtures for these tests, so look for them in both places
+    and let the caller skip if neither has the file.
+    """
+
+    root = Path(__file__).resolve().parents[2] / "egs/voice_isolate/pretrained_ckpt"
+    in_tree = root / relative
+    return in_tree if in_tree.is_file() else root / "backup" / relative
+
+
 def test_dpcrn_streaming_config_validates_causal_recipe():
     config = load_hparam(CAUSAL_CONFIG)
     manifest = validate_streaming_dpcrn_config(config)
@@ -138,7 +152,7 @@ def _heads_frame_model():
 
     return load_streaming_dpcrn_model(
         _REPO_ROOT / "egs/voice_isolate/config/infer_dpcrn_heads.yaml",
-        _REPO_ROOT / "egs/voice_isolate/pretrained_ckpt/dpcrn_v11_ep19.ckpt",
+        _archivable("dpcrn_v11_ep19.ckpt"),
     ).eval()
 
 
@@ -150,7 +164,7 @@ def _tone(seconds=6):
 
 
 @pytest.mark.skipif(
-    not (_REPO_ROOT / "egs/voice_isolate/pretrained_ckpt/dpcrn_v11_ep19.ckpt").is_file(),
+    not (_archivable("dpcrn_v11_ep19.ckpt")).is_file(),
     reason="needs the v11 checkpoint",
 )
 def test_head_logits_stream_bit_exactly_at_the_algorithmic_delay():
@@ -186,7 +200,7 @@ def test_head_logits_stream_bit_exactly_at_the_algorithmic_delay():
 
 
 @pytest.mark.skipif(
-    not (_REPO_ROOT / "egs/voice_isolate/pretrained_ckpt/dpcrn_v11_ep19.ckpt").is_file(),
+    not (_archivable("dpcrn_v11_ep19.ckpt")).is_file(),
     reason="needs the v11 checkpoint",
 )
 def test_enabling_the_heads_does_not_touch_the_audio():
@@ -195,7 +209,7 @@ def test_enabling_the_heads_does_not_touch_the_audio():
     changed the system every benchmark measured."""
     from puresound.streaming import load_streaming_dpcrn_model
 
-    ckpt = _REPO_ROOT / "egs/voice_isolate/pretrained_ckpt/dpcrn_v11_ep19.ckpt"
+    ckpt = _archivable("dpcrn_v11_ep19.ckpt")
     wav = _tone(3)
     outs = []
     for cfg in ("config/infer_dpcrn.yaml", "config/infer_dpcrn_heads.yaml"):

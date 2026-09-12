@@ -10,15 +10,18 @@ speaker, suppress far/competing speakers + noise. The only cue is the **near/far
 overfit + full-train comparison showed the original TS-Conformer (mapping head) could not separate
 hard near/far cases while DPCRN/DPARN could — see "Pre-DPCRN history" below.
 
-## Current default: `pretrained_ckpt/dpcrn_v8.ckpt` + `dry_blend 0.9`
+## The v1–v8 ladder's endpoint: `pretrained_ckpt/dpcrn_v8.ckpt` + `dry_blend 0.9`
+
+> The model zoo's default is now `dpcrn_curriculum_v1.ckpt`, from the separate curriculum
+> lineage; `dpcrn_v8` is registered beside it as the conservative cross-chain alternative.
+> This section describes the ladder documented below, whose last rung v8 is. Both shipped
+> versions and the archived ones: [`pretrained_ckpt/README.md`](pretrained_ckpt/README.md).
 
 > **`dry_blend` is applied by the runtime, not by the graph.** The ONNX export
 > records it in the manifest under `recommended_inference.dry_blend`, and
-> `StreamingOrt` / the portable SDK apply it after the graph. Four of the five
-> manifests under `pretrained_ckpt/streaming/` have always carried
-> `dry_blend: 0.9` there -- nothing read it until now, so those exports ran
-> unblended; they are honoured as they stand. `dpcrn_v6` has no section, which
-> means no relief.
+> `StreamingOrt` / the portable SDK apply it after the graph. Both manifests
+> under `pretrained_ckpt/streaming/` carry `dry_blend: 0.9` there. An export
+> without the section gets no relief -- the documented convention.
 >
 > Note what the blend costs: it keeps `1 - dry_blend` of the input whatever the
 > model did, so 0.9 caps attenuation at exactly **-20 dB**
@@ -42,8 +45,8 @@ keeping near-field speech flat and **lowering** ASR error on real recordings rat
 (`pretrained_ckpt/streaming/dpcrn_v8.{onnx,json}`, 30 ms latency).
 
 One trade to know about: on reverberation far above the training domain (RT60 > 1 s) stage 8 raises
-WER by 0.020 where stage 7 was neutral, so `dpcrn_v7.ckpt` remains the better pick for
-very reverberant deployments.
+WER by 0.020 where stage 7 was neutral. `dpcrn_v7.ckpt` was the better pick for very reverberant
+deployments; it is archived under `pretrained_ckpt/backup/` rather than shipped.
 
 What made the difference was **real recordings on both sides of the decision** plus **turn-taking
 supervision**, not more or better RIRs. Every simulated far-field rung tried before it (boundary
@@ -52,8 +55,9 @@ RIR-convolution domain arbitrarily well and does not transfer to real recordings
 far-suppression harder inside that domain blows up real-acoustic deletion (reverberant-office WER
 0.663 vs 0.529). Those rungs are closed; `config/exp/` keeps their recipes.
 
-`dpcrn_v6.ckpt` remains the fallback (no runtime knob, most conservative on far-field
-suppression). Per-version detail, results and the deployment notes: `pretrained_ckpt/README.md`.
+`dpcrn_v6.ckpt` was the fallback (no runtime knob, most conservative on far-field suppression);
+it is archived too. Per-version detail, results, and which versions are still shipped:
+`pretrained_ckpt/README.md`.
 
 ## The pipeline (9 stages, each warm-started from the previous)
 
@@ -78,8 +82,9 @@ Run **from this directory** — the configs' metafile and work-folder paths are 
 cd egs/voice_isolate
 
 # default recipe, warm-started from the previous release
+# (stage 8 warm-started from v7, now under pretrained_ckpt/backup/)
 uv run python main.py config/train_dpcrn.yaml --training \
-    --pretrained_ckpt_path pretrained_ckpt/dpcrn_v6.ckpt
+    --pretrained_ckpt_path pretrained_ckpt/backup/dpcrn_v7.ckpt
 
 # reproducing an earlier stage
 uv run python main.py config/exp/train_dpcrn_curriculum_core.yaml --training
@@ -118,7 +123,7 @@ loss weight further.
 
 ## Streaming deployment (ONNX, real-time)
 
-`pretrained_ckpt/streaming/dpcrn_v8.{onnx,json}` (plus `dpcrn_v7`/`dpcrn_v6`) — per-frame
+`pretrained_ckpt/streaming/dpcrn_v8.{onnx,json}` (plus `dpcrn_curriculum_v1`) — per-frame
 streaming exports built with `scripts/streaming_onnx.py`. The look-ahead (`delay=[1,1,1]`, 30 ms)
 is handled by **future-buffering baked into the ONNX graph as extra state** (inter-LSTM warmup gate +
 U-Net skip delay lines + noisy-spectrum delay) — no runtime code changes were needed; the existing

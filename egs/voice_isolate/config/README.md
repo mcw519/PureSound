@@ -13,7 +13,7 @@ Two files here are the **defaults**: the tuned settings to use as-is. Everything
 ```bash
 # train (from repo root), warm-starting from the previous release
 uv run python egs/voice_isolate/main.py egs/voice_isolate/config/train_dpcrn.yaml --training \
-    --pretrained_ckpt_path egs/voice_isolate/pretrained_ckpt/dpcrn_v7.ckpt
+    --pretrained_ckpt_path egs/voice_isolate/pretrained_ckpt/backup/dpcrn_v7.ckpt
 
 # inference / demo
 uv run python egs/voice_isolate/scripts/demo.py \

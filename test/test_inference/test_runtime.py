@@ -9,14 +9,8 @@ from puresound.inference import InferenceCancelled, load_model
 @pytest.mark.parametrize(
     ("model_id", "variant"),
     [
-        ("voice-isolate-dpcrn-v6", "default"),
-        ("voice-isolate-dpcrn-v7", "default"),
         ("voice-isolate-dpcrn-v8", "default"),
-        ("voice-isolate-dpcrn-v9", "default"),
-        ("voice-isolate-dpcrn-v10", "default"),
-        ("voice-isolate-dpcrn-v11-ep19", "default"),
-        ("voice-isolate-dpcrn-v11-ep19", "heads"),
-        ("voice-isolate-dpcrn-v16-ep19", "default"),
+        ("voice-isolate-dpcrn-curriculum-v1", "default"),
     ],
 )
 def test_every_voice_isolation_artifact_runs_on_cpu(model_id, variant):
@@ -129,19 +123,6 @@ def test_onset_guard_rejects_values_outside_the_allowed_range(parameters, messag
     runtime = load_model("voice-isolate-dpcrn-v8", provider="cpu")
     with pytest.raises(ValueError, match=message):
         runtime.infer({"audio": np.zeros(1600, dtype=np.float32)}, parameters)
-
-
-def test_heads_variant_exposes_side_outputs_without_changing_waveform():
-    samples = np.random.default_rng(1).normal(0, 0.05, 1600).astype(np.float32)
-    plain = load_model(
-        "voice-isolate-dpcrn-v11-ep19", provider="cpu", variant="default"
-    ).infer({"audio": samples})
-    heads = load_model(
-        "voice-isolate-dpcrn-v11-ep19", provider="cpu", variant="heads"
-    ).infer({"audio": samples}, {"collect_extras": True})
-    assert np.allclose(plain.outputs["audio"], heads.outputs["audio"], rtol=1e-5, atol=1e-6)
-    assert heads.outputs["vad_logit"].ndim == 1
-    assert heads.outputs["background_vad_logit"].ndim == 1
 
 
 def test_two_stream_runtimes_keep_independent_state():

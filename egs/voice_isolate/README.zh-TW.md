@@ -11,7 +11,11 @@ ratio) 對比**。目標效果 = ai-coustics Voice Focus 2.0。
 （mapping head）無法分離困難的近／遠案例，而 DPCRN/DPARN 可以——見下方
 「Pre-DPCRN 沿革」。
 
-## 現行預設：`pretrained_ckpt/dpcrn_v8.ckpt` + `dry_blend 0.9`
+## v1–v8 階梯的終點：`pretrained_ckpt/dpcrn_v8.ckpt` + `dry_blend 0.9`
+
+> model zoo 現在的預設是另一條 curriculum 血統的 `dpcrn_curriculum_v1.ckpt`；`dpcrn_v8`
+> 在旁邊登錄為跨錄音鏈的保守替代方案。本節描述的是下方那條階梯，v8 是它的最後一階。
+> 兩個現役版本與已封存版本：[`pretrained_ckpt/README.zh-TW.md`](pretrained_ckpt/README.zh-TW.md)。
 
 以 `config/train_dpcrn.yaml`（下方第 8 階段）訓練，發布時**把 runtime blend 當成
 設定的一部分**——`out = 0.9 * enhanced + 0.1 * input`，把任何一點的衰減量都限制在
@@ -23,7 +27,8 @@ ratio) 對比**。目標效果 = ai-coustics Voice Focus 2.0。
 （`pretrained_ckpt/streaming/dpcrn_v8.{onnx,json}`，30 ms 延遲）。
 
 有一個取捨要留意：在遠超出訓練域的殘響（RT60 > 1 s）上，第 8 階段的 WER 比中性
-的第 7 階段高 0.020，所以極高殘響的部署場景仍建議選 `dpcrn_v7.ckpt`。
+的第 7 階段高 0.020。極高殘響的部署場景原本建議選 `dpcrn_v7.ckpt`，但它已封存在
+`pretrained_ckpt/backup/` 而不隨 repo 發佈。
 
 真正造成差異的是**決策兩端都用上真實錄音**，加上 **turn-taking 監督**，而不是
 更多或更好的 RIR。在此之前試過的每一個模擬遠場 rung（邊界距離、訓練中加入實測
@@ -32,7 +37,7 @@ RIR、只練 gate 的 VAD head、分離器＋gate 聯訓）都能把 RIR-convolu
 deletion 爆掉（reverberant-office WER 0.663 對 0.529）。這些 rung 都已結案；
 `config/exp/` 保留了它們的 recipe。
 
-`dpcrn_v6.ckpt` 仍是 fallback（沒有 runtime 旋鈕、對遠場壓制最保守）。各版本的
+`dpcrn_v6.ckpt` 原本是 fallback（沒有 runtime 旋鈕、對遠場壓制最保守），同樣已封存。各版本的
 細節、結果與部署說明見 `pretrained_ckpt/README.md`。
 
 ## Pipeline（9 個階段，每階段皆從前一階段 warm-start）
@@ -60,7 +65,7 @@ cd egs/voice_isolate
 
 # 預設 recipe，從前一個版本 warm-start
 uv run python main.py config/train_dpcrn.yaml --training \
-    --pretrained_ckpt_path pretrained_ckpt/dpcrn_v6.ckpt
+    --pretrained_ckpt_path pretrained_ckpt/backup/dpcrn_v7.ckpt
 
 # 重現較早的階段
 uv run python main.py config/exp/train_dpcrn_curriculum_core.yaml --training
@@ -83,7 +88,7 @@ real RIR，rt60 1.15–1.84）卻*變差*（substitution/insertion 上升得比 
 
 ## Streaming 部署（ONNX、real-time）
 
-`pretrained_ckpt/streaming/dpcrn_v8.{onnx,json}`（加上 `dpcrn_v7`/`dpcrn_v6`）——
+`pretrained_ckpt/streaming/dpcrn_v8.{onnx,json}`（加上 `dpcrn_curriculum_v1`）——
 用 `scripts/streaming_onnx.py` 建置的逐幀 streaming 匯出。look-ahead
 （`delay=[1,1,1]`，30 ms）由**烘進 ONNX graph 當成額外 state 的 future-buffering**
 處理（inter-LSTM warmup gate + U-Net skip 延遲線 + noisy-spectrum 延遲）——不需要

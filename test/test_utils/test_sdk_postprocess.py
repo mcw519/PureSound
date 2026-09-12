@@ -331,8 +331,8 @@ def test_an_absent_section_means_no_relief(
 ):
     """The documented convention, and what `Postprocessor()` defaults to.
 
-    `dpcrn_v6` is the one shipped export without the section; the other four
-    already carried `dry_blend: 0.9` under it long before any runtime read it.
+    Every export still in the catalog carries the section with `dry_blend: 0.9`,
+    so the absent case is exercised here rather than by a shipped manifest.
     """
     from puresound.streaming.base import StreamingOrt
 

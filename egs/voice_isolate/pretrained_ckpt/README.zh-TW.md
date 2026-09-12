@@ -5,7 +5,9 @@ English version: [`README.md`](README.md)
 近場（<1 m）前景語音分離，單聲道，免註冊：保留近距語者，壓制遠距／競爭語者
 與噪音。
 
-版本依訓練順序編號——**`dpcrn_v8.ckpt` 是現行預設**。每個版本都共用同一套架構
+版本依訓練順序編號。**`dpcrn_curriculum_v1.ckpt` 是 model zoo 的預設**，`dpcrn_v8.ckpt`
+在旁邊作為保守替代方案；這兩個是[`model_zoo/catalog.yaml`](../../../model_zoo/catalog.yaml)
+裡僅存的兩個版本。下表用來與它們對照的其他版本已封存——見「封存版本」。每個版本都共用同一套架構
 （DPCRN、complex ratio mask、16 kHz、約 0.8 M 參數、30 ms look-ahead），所以
 一份推論設定就能載入全部版本：
 
@@ -14,9 +16,11 @@ uv run python egs/voice_isolate/scripts/demo.py \
     --config_path egs/voice_isolate/config/infer_dpcrn.yaml     # 下拉選單列出每個版本
 ```
 
-## 預設：`dpcrn_v8.ckpt` + `dry_blend = 0.9`
+## 已發布的 blend：`dry_blend = 0.9`
 
-Runtime blend 是**已發布設定的一部分**，不是可有可無的附加選項：
+Runtime blend 是兩個現役版本**已發布設定的一部分**，不是可有可無的附加選項。下面的數字
+出自 v8，也就是當初論證這個 blend 的地方；curriculum 這條線沿用同一個設定與同一個
+manifest key：
 
 ```python
 enhanced = model(wav, dry_blend=0.9)      # out = 0.9 * enhanced + 0.1 * input
@@ -62,6 +66,19 @@ manifest 把這個值放在 `recommended_inference` 底下。
 > 並未成立。主要 WER 閘門已改為 `wer_set_moderate_test`，它能乾淨地分辨同一組比較。細節與
 > 配對數字見 [`../benchmarks/wer_sets/README.md`](../benchmarks/wer_sets/README.md)。
 
+## 封存版本
+
+把 model zoo 縮到兩個現役版本時，`dpcrn_v6`、`dpcrn_v7`、`dpcrn_v9`、`dpcrn_v10`、
+`dpcrn_v11_ep19`、`dpcrn_v16_ep19` 與 `dpcrn_curriculum_v0` 已移出版本控制。它們的
+`.ckpt` 與 `streaming/` 匯出檔現在放在本目錄下的 `backup/` 與 `backup/streaming/`，該路徑
+被 gitignore：檔案還在磁碟上、仍可用路徑載入，但不再隨 repo 發佈、也不再登錄在 catalog 裡。
+上表仍以它們為對照，`../benchmarks/probes/` 底下的探針腳本也仍指名那些路徑，所以請把它們
+指向 `backup/`，或從 git 歷史取回單一檔案
+（`git show <rev>:egs/voice_isolate/pretrained_ckpt/<name>.ckpt`）。
+
+`dpcrn_v1`–`dpcrn_v5`、`dpcrn_v6_gate` 與 `dpcrn_v11_ep16` 仍留在版本控制裡：它們是訓練
+歷史階段與參考檔，本來就沒有登錄進 catalog。
+
 `dpcrn_curriculum_v0.ckpt`——以另一種意義不在主線上：架構與任務都相同，但它是這裡
 唯一**沒有**從別的版本 warm-start 的版本。它是可復現的單run基線（一份設定、一道指令），
 也是「排程能取代什麼、不能取代什麼」的參照點；部署選項仍是上面那幾版。
@@ -73,7 +90,11 @@ manifest 把這個值放在 `recommended_inference` 底下。
 只有 10 個 BatchNorm running-statistic buffer 產生漂移，所以除了這些 buffer
 以外，它的 mask 輸出就是 v6 的輸出。
 
-**如何選版本。** 選 `dpcrn_v8.ckpt` 搭配 `dry_blend 0.9`——它仍是預設。
+**如何選版本。** 這個目錄裡僅存的兩個版本中，選 `dpcrn_curriculum_v1.ckpt` 搭配
+`dry_blend 0.9`——它是 model zoo 的預設，也是唯一能在內部裝置鏈上壓下「沒有近場錨的
+孤立遠場人聲」的版本。當部署是跨錄音鏈時選 `dpcrn_v8.ckpt`：它放棄冷啟動的增益，但不會
+在訓練語料以外的錄音上讓 keep 退步，而那正是 curriculum-v1 未解的缺陷。這段以下描述的
+是已封存的版本，保留是因為上表每個版本都以它們為對照。
 `dpcrn_v9.ckpt` 位在不同的工作點：當目標是近場語者的下游 ASR 品質時選它
 （它的 reverberant-office WER 增益是 v8 的兩倍、deletion 是歷來最低），
 代價是遠場壓制淺約 3.5 dB——殘留音裡遠場人聲會比 v8 更聽得見。當部署場景的殘響遠超過
@@ -96,8 +117,8 @@ manifest 把這個值放在 `recommended_inference` 底下。
 
 ## `streaming/` —— 逐幀 ONNX 匯出
 
-`dpcrn_v6.{onnx,json}` 到 `dpcrn_v10.{onnx,json}`，加上 `dpcrn_v16_ep19` 與
-`dpcrn_curriculum_v0`、`dpcrn_curriculum_v1`，用 `../scripts/streaming_onnx.py export` 建置。全部都因 look-ahead 而帶有
+`dpcrn_v8.{onnx,json}` 與 `dpcrn_curriculum_v1.{onnx,json}`——兩個註冊在案的版本；
+已封存版本的匯出檔隨其 checkpoint 一起搬走了。全部用 `../scripts/streaming_onnx.py export` 建置。全部都因 look-ahead 而帶有
 **30 ms（3 幀）演算法延遲**，由烘進 graph 當成額外 state 的 future-buffering
 處理（`puresound/streaming/dpcrn.py`），而且全部都在對齊該延遲後與離線模型比對驗證過。
 `verify` 預設用**白噪音**探針，那是壓力訊號而非部署訊號——v6 88–105 dB、v7 63 dB、

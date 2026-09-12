@@ -54,7 +54,7 @@ EncDecMaskBase(
 ### `forward(wav, dry_blend=1.0, spec_floor=0.0) -> Tensor`
 
 - `wav` — `[N, T]`（開頭多出的單一 channel 維度會被 squeeze 掉）。
-- `dry_blend` — 僅用於推論時緩解過度抑制，範圍 `(0, 1]`。輸出會變成兩者重疊長度上的 `dry_blend * enh + (1 - dry_blend) * input`，再 clamp 到 `[-1, 1]`；`1.0`（預設值）是 no-op。這正是 `egs/voice_isolate` 部署 checkpoint 所搭配的 release blend——`dpcrn_v8`/`dpcrn_v7` 都是以 `dry_blend 0.9` 發布（`out = 0.9*enhanced + 0.1*input`），把最差情況下的衰減限制在約 −20 dB，以少量的 interferer 洩漏換取更少的刪除（見 `egs/voice_isolate/README.md`）。這個參數與 `mask_type` 無關——它是在波形域、解碼之後套用的，不論 `mask_type` 為何都一樣。
+- `dry_blend` — 僅用於推論時緩解過度抑制，範圍 `(0, 1]`。輸出會變成兩者重疊長度上的 `dry_blend * enh + (1 - dry_blend) * input`，再 clamp 到 `[-1, 1]`；`1.0`（預設值）是 no-op。這正是 `egs/voice_isolate` 部署 checkpoint 所搭配的 release blend——`dpcrn_v8`/`dpcrn_curriculum_v1` 都是以 `dry_blend 0.9` 發布（`out = 0.9*enhanced + 0.1*input`），把最差情況下的衰減限制在約 −20 dB，以少量的 interferer 洩漏換取更少的刪除（見 `egs/voice_isolate/README.md`）。這個參數與 `mask_type` 無關——它是在波形域、解碼之後套用的，不論 `mask_type` 為何都一樣。
 - `spec_floor` — 僅用於推論時的頻譜下限，範圍 `[0, 1)`，**只適用於 complex-mask 模型**。會把每個強化後 T-F bin 的振幅限制在至少 `spec_floor * |mix bin|`，同時保留強化後的相位（`_apply_spec_floor`）；`0.0`（預設值）是 no-op。
 - 回傳 clamp 到 `[-1, 1]` 的強化波形。
 - 副作用：`self.last_mask` 每次呼叫都會被重新賦值——`training_step` 裡的 channel-consistency 正則項會在呼叫後立刻讀取它；對不相關的呼叫而言，這個值沒有任何意義。

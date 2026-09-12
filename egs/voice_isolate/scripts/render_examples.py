@@ -45,7 +45,7 @@ EGS = REPO_ROOT / "egs/voice_isolate"
 CASES_DIR = EGS / "data_report/field_cases/test_vector_cases"
 CONFIG = EGS / "config/infer_dpcrn.yaml"
 CKPTS = {"v8": EGS / "pretrained_ckpt/dpcrn_v8.ckpt",
-         "v11": EGS / "pretrained_ckpt/dpcrn_v11_ep19.ckpt"}
+         "v11": EGS / "pretrained_ckpt/backup/dpcrn_v11_ep19.ckpt"}
 BLEND = 0.9
 SR = 16000
 MIN_HEADROOM = 6.0

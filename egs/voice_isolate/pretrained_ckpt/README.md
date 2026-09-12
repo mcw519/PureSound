@@ -5,7 +5,10 @@
 Near-field (<1 m) foreground voice isolation, single channel, no enrollment: keep the near
 speaker, suppress far/competing speakers and noise.
 
-Versions are numbered in training order — **`dpcrn_v8.ckpt` is the current default**. Every
+Versions are numbered in training order. **`dpcrn_curriculum_v1.ckpt` is the model-zoo
+default**, with `dpcrn_v8.ckpt` beside it as the conservative alternative; those two are the
+only versions registered in [`model_zoo/catalog.yaml`](../../../model_zoo/catalog.yaml). The
+versions the table below judges against them are archived — see *Archived versions*. Every
 version shares the same architecture (DPCRN, complex ratio mask, 16 kHz, ~0.8 M params,
 30 ms look-ahead), so one inference config loads all of them:
 
@@ -14,9 +17,11 @@ uv run python egs/voice_isolate/scripts/demo.py \
     --config_path egs/voice_isolate/config/infer_dpcrn.yaml     # dropdown lists every version
 ```
 
-## Default: `dpcrn_v8.ckpt` + `dry_blend = 0.9`
+## The released blend: `dry_blend = 0.9`
 
-The runtime blend is **part of the released configuration**, not an optional extra:
+The runtime blend is **part of the released configuration** of both shipped versions, not an
+optional extra. The numbers below are v8's, where the blend was first justified; the
+curriculum line inherits the same setting and the same manifest key:
 
 ```python
 enhanced = model(wav, dry_blend=0.9)      # out = 0.9 * enhanced + 0.1 * input
@@ -68,6 +73,21 @@ path needs a gate rather than a blend.
 > comparison cleanly. Detail and the paired numbers:
 > [`../benchmarks/wer_sets/README.md`](../benchmarks/wer_sets/README.md).
 
+## Archived versions
+
+`dpcrn_v6`, `dpcrn_v7`, `dpcrn_v9`, `dpcrn_v10`, `dpcrn_v11_ep19`, `dpcrn_v16_ep19` and
+`dpcrn_curriculum_v0` were taken out of version control when the model zoo was reduced to the
+two shipped versions. Their `.ckpt` and their `streaming/` exports now sit under `backup/` and
+`backup/streaming/` in this directory, which is gitignored: still on disk, still loadable by
+path, no longer distributed and no longer registered in the catalog. The table above keeps
+judging against them, and the probe scripts under `../benchmarks/probes/` still name those
+paths, so point them at `backup/` or restore a file from git history
+(`git show <rev>:egs/voice_isolate/pretrained_ckpt/<name>.ckpt`).
+
+`dpcrn_v1`–`dpcrn_v5`, `dpcrn_v6_gate` and `dpcrn_v11_ep16` stay in version control: they are
+training-history stages and references that were never registered in the catalog to begin
+with.
+
 `dpcrn_curriculum_v0.ckpt` — off the main line in a different sense: same architecture and
 the same task, but the only version here that was **not** warm-started from another. It is
 the reproducible single-run baseline (one config, one command) and the reference point for
@@ -80,7 +100,13 @@ an engineering reference for the gate path, not a deployable model. Its separato
 identical to v6; only 10 BatchNorm running-statistic buffers drifted during that run, so its
 mask output is v6's up to those buffers.
 
-**Choosing a version.** Take `dpcrn_v8.ckpt` with `dry_blend 0.9` — it remains the default.
+**Choosing a version.** Of the two versions still in this directory, take
+`dpcrn_curriculum_v1.ckpt` with `dry_blend 0.9` — it is the model-zoo default, and the only
+version that suppresses a far voice with no near anchor on the internal device chain. Take
+`dpcrn_v8.ckpt` when the deployment is cross-chain: it gives up the cold-start gain but does
+not regress keep on recordings unlike the training corpora, which is curriculum-v1's open
+defect. The rest of this paragraph describes archived versions, kept because the table above
+judges every version against them.
 `dpcrn_v9.ckpt` sits at a different operating point: pick it when downstream ASR quality on
 the near speaker is the objective (its reverberant-office WER gain is double v8's and its
 deletion is the lowest of any version), and accept ~3.5 dB shallower far-field suppression —
@@ -107,8 +133,8 @@ number above comes from a trough epoch.
 
 ## `streaming/` — per-frame ONNX exports
 
-`dpcrn_v6.{onnx,json}` through `dpcrn_v10.{onnx,json}`, plus `dpcrn_v16_ep19` and
-`dpcrn_curriculum_v0` and `dpcrn_curriculum_v1`, built with `../scripts/streaming_onnx.py export`. All carry a **30 ms (3-frame) algorithmic latency** from
+`dpcrn_v8.{onnx,json}` and `dpcrn_curriculum_v1.{onnx,json}` — the two registered versions;
+the archived versions' exports moved with their checkpoints. All built with `../scripts/streaming_onnx.py export`. All carry a **30 ms (3-frame) algorithmic latency** from
 the look-ahead, handled by future-buffering baked into the graph as extra state
 (`puresound/streaming/dpcrn.py`), and all are verified against the offline model once aligned by
 that latency. `verify` defaults to a **white-noise** probe, which is a stress signal rather than
