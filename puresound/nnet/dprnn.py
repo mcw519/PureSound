@@ -10,18 +10,19 @@ from .lobe.trivial import FiLM, SplitMerge
 class DPRNN(nn.Module):
     """
     Deep dual-path RNN.
-    
+
     Args:
         input_size (int): input feature(channel) dimension
         hidden_size (int): hidden feature(channel) dimension
         output_size (int): output feature(channel) dimension
         n_blocks (int): number of blocks (intra+inter).
         seg_size (int): chunk size
-        seg_overlap (bool): if true, chunk stride is half chunk size.
-        embed_dim (int): if not zero, concate in right_conv's input.
+        seg_overlap (bool): if true, chunk stride is half chunk size (50% overlap); if false, chunks are split contiguously (no overlap).
+        causal (bool): if True, both intra-chunk and inter-chunk LSTMs are unidirectional (causal); if False, both are bidirectional.
+        embed_dim (int): if not zero, blocks flagged in `block_with_embed` FiLM-condition their segment input on `embed`.
         embed_norm (bool): applies 2-norm for input embedding.
-        causal (bool): padding by causal scenario, others padding to same length between input and output.
         block_with_embed (list): which layer insert embedding.
+        embedding_free_tse (bool): if True, `embed` is an enrollment feature sequence `[N, C, T]` instead of a fixed embedding vector; its own intra/inter hidden states (via `_get_hidden_states`) seed each block's inter-chunk LSTM initial state instead of FiLM conditioning.
     """
 
     def __init__(
@@ -120,7 +121,7 @@ class DPRNN(nn.Module):
         if self.embedding_free_tse:
             assert (
                 embed.dim() == 3
-            ), f"embedding free tse need enrollment waveform as input."
+            ), "embedding free tse need enrollment waveform as input."
             inter_hidd_init_states = self._get_hidden_states(embed)
         else:
             inter_hidd_init_states = [None for _ in range(self.n_blocks)]

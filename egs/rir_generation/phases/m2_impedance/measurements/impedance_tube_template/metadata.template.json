@@ -1,0 +1,51 @@
+{
+  "schema_version": "puresound.impedance_tube_transfer_measurement.v1",
+  "measurement_id": "replace_with_stable_measurement_id",
+  "method": "ISO 10534-2 two-microphone transfer function",
+  "phasor_convention": "exp(+i*omega*t)",
+  "environment": {
+    "air_density_kg_m3": 1.204,
+    "sound_speed_m_s": 343.0,
+    "temperature_c": 20.0,
+    "relative_humidity_percent": 50.0,
+    "pressure_pa": 101325.0
+  },
+  "tube": {
+    "shape": "circular",
+    "diameter_m": 0.1,
+    "microphone_1_distance_from_sample_m": 0.1,
+    "microphone_2_distance_from_sample_m": 0.05
+  },
+  "acquisition": {
+    "analysis_frequency_range_hz": [
+      200.0,
+      1600.0
+    ],
+    "minimum_coherence": 0.95,
+    "minimum_spacing_sine": 0.05,
+    "source_spl_db": 80.0,
+    "excitation": "replace_with_excitation_and_estimator",
+    "microphone_switch_calibration_required": true,
+    "passivity_tolerance": 1e-06
+  },
+  "sample": {
+    "sample_id": "replace_with_specimen_and_installation_id",
+    "material_label": "replace_with_material_label",
+    "batch_id": "replace_with_batch_id",
+    "thickness_m": 0.05,
+    "thickness_std_m": 0.0,
+    "mounting": "flush and perimeter sealed",
+    "backing": "rigid",
+    "air_gap_m": 0.0
+  },
+  "provenance": {
+    "source_url": "replace_with_laboratory_record_url",
+    "license": "replace_with_data_license",
+    "operator": "replace_with_operator",
+    "acquired_utc": "replace_with_timestamp"
+  },
+  "applicability": {
+    "scope": "measurement_validation_pending",
+    "automatic_scene_catalog_mapping": false
+  }
+}

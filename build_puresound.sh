@@ -1,5 +1,5 @@
 #!/bin/bash
+set -euo pipefail
 
-rm -r build/ crescendo.egg-info/ dist/
-python setup.py sdist
-python setup.py install
+uv sync --locked --group dev --extra cpu
+uv build

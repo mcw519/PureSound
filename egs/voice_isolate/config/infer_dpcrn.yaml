@@ -1,0 +1,78 @@
+# voice_isolate -- DPCRN inference config (default).
+#
+# Shared by EVERY checkpoint in ../pretrained_ckpt/: the `model:` block is the same
+# for all of them, so pick the checkpoint with --ckpt / --checkpoint_path, or from
+# the demo.py dropdown (it scans trainer.work_folder below). Default checkpoint =
+# `dpcrn_v8.ckpt`; see ../pretrained_ckpt/README.md for what each version is.
+#
+# RECOMMENDED RUNTIME SETTING for dpcrn_v7 and dpcrn_v8: `dry_blend = 0.9`, i.e.
+#   out = 0.9 * enhanced + 0.1 * input
+# It bounds attenuation at any point to -20 dB, which trades a little residual
+# interferer for a large drop in deletions on unmatched capture chains -- with it
+# the model lowers ASR error on real recordings instead of raising it. Offline:
+# `model(wav, dry_blend=0.9)`; eval scripts take `--dry-blend`; streaming blends
+# the enhanced frame with the latency-aligned input frame (the exported manifest
+# carries the value under `recommended_inference`).
+#
+# Training-only heads (e.g. the distance/DRR aux head) are deliberately absent
+# here: their weights are skipped on load and the output is bit-identical.
+#
+# Used by: scripts/demo.py (gradio), scripts/streaming_onnx.py (ONNX export) and any
+# one-off enhance script that only has to build the model (no dataset/augmentation).
+# `trainer.work_folder` is used by the demo to discover checkpoints. No training
+# optimizer, scheduler or loss payload belongs in this model-only recipe.
+schema_version: 2
+purpose: inference
+task: voice_isolation
+
+dataset:
+  target_sample_rate: 16000
+
+trainer:
+  work_folder: pretrained_ckpt
+
+model:
+  lightning_module:
+    type: EncDecMaskBase
+    module_args:
+      mask_type: complex   # DPCRN emits a complex ratio mask applied to the noisy STFT
+      encoder_lr_factor: 0.1
+      feats_lr_factor: 0.1
+      backbone_lr_factor: 1.
+  encoder:
+    type: ConvEncDec
+    encoder_args:
+      fft_length: 512
+      win_type: "hann"
+      win_length: 512
+      hop_length: 160
+      fmin: 0
+      fmax: 8000
+      sr: 16000
+      trainable: False
+  features:
+    feats_type: complex
+    drop_stft_first_bin: True
+    trainable: False
+    include_specaug: False
+  backbone:
+    # DPCRN (dual-path conv-recurrent, complex mask), 16k-native: fft 512 -> 256 bins.
+    type: DPCRN
+    backbone_args:
+      input_dim: 256
+      activation_type: PReLU
+      norm_type: bN2d
+      dropout: 0.05
+      channels: [2, 32, 64, 128]
+      transpose_t_size: 2
+      transpose_delay: False
+      skip_conv: False
+      kernel_t: [2, 2, 2]
+      stride_t: [1, 1, 1]
+      dilation_t: [1, 1, 1]
+      kernel_f: [5, 3, 3]
+      stride_f: [2, 2, 1]
+      dilation_f: [1, 1, 1]
+      delay: [1, 1, 1]      # 3-frame (~30ms) look-ahead; matches every pipeline ckpt except train_dpcrn_wide_causal.yaml (untrained, delay=[0,0,0])
+      rnn_hidden: 96
+      spectral_compress: False

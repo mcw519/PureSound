@@ -1,0 +1,357 @@
+# voice_isolate -- DPCRN. UNUSED alternative: fully-causal variant of train_dpcrn_wide_antisup.yaml
+# (delay [1,1,1] -> [0,0,0]), kept only as a documented fallback -- NOT currently needed, since streaming
+# export solved look-ahead via future-buffering instead (see puresound/streaming/dpcrn.py). Never trained.
+# Rationale and status: see ../README.md and ../NEXT_STEPS.md.
+# Recipe schema v2: `task` selects the model that validates this file
+# (puresound/config/recipe.py); `purpose` picks training vs model-only.
+schema_version: 2
+purpose: train
+task: voice_isolation
+
+dataset:
+  train_metafile: data/dns5-read.train.list
+  valid_metafile: data/dns5-read.dev.list
+  test_folder: data/test
+  proc_output_folder: proc
+  target_sample_rate: 16000
+  gain_normalized_to: -28
+  training_length_seconds: 6.
+  filter_min_utterance_length: 2 # 4.
+  filter_min_utterance_per_speaker: 1
+
+# The first sampled speaker is the near-field foreground; the rest are far-field
+# interferers to suppress.
+augmentation_speech:
+  used: True
+  is_target: False
+  prob: 0.70
+  add_n_cases:        # number of interferers (far speakers) per item
+    - 1
+    - 2
+  snr_range:          # HARD SIR: foreground may be up to 10 dB QUIETER than the
+    - -10             # interferer, so loudness alone cannot solve it and the
+    - 10              # in-domain SI-SDRi metric stays sensitive (no passthrough rows).
+  media_voice:        # TV/loudspeaker-style band-limited interferer -- ON for the deployment
+    used: True        # recipe: the most common non-human interferer in real near-field rooms.
+    prob: 0.30
+    hp_cutoff_range: [200, 400]
+    lp_cutoff_range: [3500, 7000]
+    compress_power_range: [0.6, 0.9]
+  echo_playback:      # device self-playback echo as residual interferer (OFF for now)
+    used: False
+    prob: 0.20
+    distance_range: [0.2, 1.0]
+    erle_db_range: [20, 35]
+  overlap_control:    # spread the foreground/interferer temporal overlap across
+    used: True        # no/mid/high regimes (else >80% overlap dominates training)
+    no_overlap_prob: 0.20
+    high_overlap_prob: 0.35
+    mid_overlap_range:
+      - 0.10
+      - 0.50
+    high_overlap_range:
+      - 0.50
+      - 1.00
+    fill_on_silent_range:
+      - 0.50
+      - 0.80
+    fade_samples: 400
+  mix_mode:           # foreground/interferer level relationship (N+F rows only):
+    used: True        # keep the natural physical cue most of the time, stress the rest.
+    modes:
+      # physical: sum at natural post-RIR levels -> real DRR/proximity cue survives.
+      - {name: physical,      prob: 0.5, physical: True}
+      # moderate: mild rescale, keeps difficulty without routinely inverting levels.
+      - {name: moderate,      prob: 0.3, sir_range: [-3, 6]}
+      # counter_level: near deliberately quieter -> forces a non-energy cue (hardest).
+      - {name: counter_level, prob: 0.2, sir_range: [-10, 0]}
+
+# OFF (curriculum): target-absent silence injection. Turned OFF here -- it was the prime suspect for
+# the allrir_la ep19 over-suppression blow-up (Dawn deletion 0.286 / SI-SDRi -9.53). It teaches the
+# model to output SILENCE when foreground judged absent; on real (domain-gapped) audio it mis-fires and
+# silences true speech. We are fighting over-suppression, so keep OFF. Re-enable (small prob) only at a
+# late stage IF insertion/leakage (model leaks interferer when nobody is near) becomes the actual problem.
+augmentation_target_absent:
+  used: False
+  prob: 0.20
+  force_interferer: True
+
+augmentation_noise:
+  used: True
+  prob: 0.8
+  noise_folder: /path/to/audio/dns-5/datasets_fullband_16k/noise_fullband
+  snr_range:
+    - 0
+    - 20
+  prob_white_noise: 0.1
+  white_noise_snr_range:
+    - 10
+    - 30
+
+# Reverb from the pre-generated RIR bank (source-level: foreground = near channel,
+# interferers = far channels of the SAME room).
+augmentation_reverb:
+  used: True
+  prob: 1.
+  rir_folder:
+  # target_rir_type "early": the target is the early-reflection (de-reverbed) near
+  # speech. full-RIR targets let passthrough match the target (near is dominant),
+  # so "early" forces reverb-tail removal and keeps separation a real objective.
+  target_rir_type: "early"
+  simulator:
+    used: True
+    source_level: True
+    pregenerated:
+      used: True
+      # CURRICULUM STAGE 2 = EXPAND: RT60 0.20-0.65, near/far DRR gap >=3dB, 62361 items (superset of
+      # core, adds weak-contrast / more-reverberant rooms). Flat .wav/.json under <folder>/items/.
+      folder: /path/to/puresound_exp/hybrid_rir_16k_levels/wide
+      near_labels: [near_0, near_1]
+      far_labels: [far_0, far_1, far_2]
+      drr_window_ms: 2.5
+      cache_size: 128
+
+augmentation_speed:
+  used: True
+  prob: 0.5
+  speed_range:
+    - 0.95
+    - 1.05
+
+augmentation_ir_response:
+  used: True
+  prob: 0.3
+
+augmentation_src:        # random down/up-sample (bandwidth variation)
+  used: True
+  prob: 0.5
+  src_range:
+    - 8000
+    - 16000
+  prob_each:
+    - 0.2
+    - 0.8
+
+# ON for the deployment recipe: real device mic front-ends commonly high-pass at 100-300 Hz.
+augmentation_hpf:
+  used: True
+  prob: 0.25
+  cutoff:
+    - 100
+    - 200
+    - 300
+  prob_each:
+    - 0.4
+    - 0.4
+    - 0.2
+
+augmentation_volume:
+  used: True
+  prob: 0.5
+  perturbed_range:
+    - 0.4
+    - 1.6
+  clipping_prob: 0.
+  clipping_range:
+    min:
+      - 0.
+      - 0.1
+    max:
+      - 0.9
+      - 1.0
+
+augmentation_codec:      # OFF for now (QVF2 realism, add incrementally on expand)
+  used: False
+  prob: 0.5
+  codecs:
+    - libopus
+    - g722
+  prob_each:
+    - 0.7
+    - 0.3
+  bitrate_range:
+    libopus:
+      - 6000
+      - 32000
+
+augmentation_packet_loss:  # OFF for now (QVF2 realism, add incrementally on expand)
+  used: False
+  prob: 0.3
+  packet_ms_choices:
+    - 20
+    - 40
+    - 60
+  loss_rate_range:
+    - 0.01
+    - 0.10
+
+# VAD is OFF (separation-only). Kept used:True with the cheap ENERGY backend ONLY
+# so overlap_control has a gating labeler; no loss consumes these labels.
+vad_label:
+  used: True
+  backend: energy
+  args:
+    frame_length: 400
+    hop_length: 160
+
+trainer:
+  lightning_trainer_args:
+    max_epochs: 100
+    gradient_clip_val: 5.
+    accumulate_grad_batches: 2
+    precision: bf16-mixed
+  train_iter_per_epoch: 1000
+  valid_iter_per_epoch: 100
+  valid_seed: 1234
+  n_spk_per_batch: 12
+  n_utt_per_speaker: 1
+  num_workers: 20
+  num_gpus: 2
+  find_unused_parameters: true
+  work_folder: exp/dpcrn_wide_causal_0703
+
+optimizer:
+  type: AdamW
+  learning_rate: 0.001
+  args:
+    weight_decay: 0.00001
+    betas:
+     - 0.9
+     - 0.999
+
+scheduler:
+  # Warm restarts every T_0 epochs; compare runs only at the cosine troughs
+  # (~ep19, ~ep39, ...) -- mid-cycle epochs are LR-perturbed and not comparable.
+  type: CosineAnnealingWarmRestarts
+  warmup_step: 250
+  args:
+    T_0: 20
+    T_mult: 1
+    eta_min: 0.00001
+
+loss_func:
+  - type: SDRLoss
+    weighted: 1.
+    args:
+      scaled: False
+      scale_dependent: True
+      zero_mean: True
+      source_aggregated: False
+      sdr_max: 50
+      threshold: -50
+
+  - type: MultiResolutionSTFTLoss
+    weighted: 0.5
+    args:
+      fft_sizes:
+        - 512
+        - 1024
+        - 256
+      hop_sizes:
+        - 128
+        - 256
+        - 64
+      win_lengths:
+        - 512
+        - 1024
+        - 256
+      window: hann_window
+      factor_sc: 0.5
+      factor_mag: 0.5
+
+  # TIER-1 ANTI-SUPPRESSION: pure-magnitude one-sided loss = mean(ReLU(|T|^p - |E|^p)^2).
+  # Penalises enhanced magnitude falling BELOW target (deletion); the residual/over-estimation
+  # side is already covered by SD-SDR + STFT above, so this adds net asymmetric pressure toward
+  # preservation. `weighted` is the del<->sub knob (start 1.0; raw ~0.07). Added to fight the
+  # over-suppression Azure STT revealed (enh deletion 0.264 -> 0.444). Judge with a STRONG ASR.
+  - type: OverSuppressionLoss
+    weighted: 3.0
+    args:
+      p: 0.5
+      fft_size: 512
+      hop_size: 128
+      win_length: 512
+
+  # Training-only background accounting: residual = noisy - enhanced is supervised
+  # against consistency_noise (= noisy - clean). Deployment stays single-output.
+  - type: ResidualReferenceLoss
+    weighted: 0.2
+    args:
+      reference_key: consistency_noise
+      loss: l1
+      target_present_only: True
+
+  # ASR-aware perceptual loss: match enhanced features to the clean
+  # target's features inside frozen 16k SSL encoders, penalising destroyed intelligibility
+  # (counters real-domain over-suppression). DUAL-SSL = two stacked ASRFeatureLoss terms:
+  #   term 1  HuBERT_BASE  -- kept exactly at the w1 best (l1 @1.0), the current strongest
+  #                           synthetic-WER config (Dawn ep19 0.457 < w0.3 0.497).
+  #   term 2  WavLM_Base+  -- WavLM is pretrained with denoising / simulated overlapped speech,
+  #                           so its features are noise/overlap robust -> directly targets the
+  #                           deletion (over-suppression) fingerprint HuBERT alone did NOT fix
+  #                           (w1 ep19 deletion 0.196 -> 0.238).
+  # CAVEAT: HuBERT vs WavLM L1 feature magnitudes differ, so weights are NOT equal-influence;
+  #   term-2 `weighted` below is the knob to tune. If the two scales fight, switch BOTH terms to
+  #   `loss: cosine` (scale-invariant) so equal weights mean equal influence.
+  # Judge at the ep19 cosine trough: Dawn Chorus WER + deletion vs floor 0.157; in-domain
+  # by-bucket (counter_level / 1N+0F) must not drop below the w1 plateau.
+  - type: ASRFeatureLoss          # term 1: HuBERT (unchanged from w1 -- the current best)
+    weighted: 1.0
+    args:
+      bundle: HUBERT_BASE
+      layers: [6, 9]
+      loss: cosine
+  
+  - type: ASRFeatureLoss          # term 2: WavLM-Base+ (noise/overlap-robust SSL, the new lever)
+    weighted: 1.0                 # KNOB: WavLM's marginal pressure on top of HuBERT
+    args:
+      bundle: WAVLM_BASE_PLUS
+      layers: [6, 9]
+      loss: cosine
+
+model:
+  lightning_module:
+    type: EncDecMaskBase
+    module_args:
+      mask_type: complex   # DPCRN emits a complex ratio mask applied to the noisy STFT
+      encoder_lr_factor: 0.1
+      feats_lr_factor: 0.1
+      backbone_lr_factor: 1.
+  encoder:
+    type: ConvEncDec
+    encoder_args:
+      fft_length: 512
+      win_type: "hann"
+      win_length: 512
+      hop_length: 160
+      fmin: 0
+      fmax: 8000
+      sr: 16000
+      trainable: False
+  features:
+    feats_type: complex
+    drop_stft_first_bin: True
+    trainable: False
+    include_specaug: False
+  backbone:
+    # DPCRN (dual-path conv-recurrent, complex mask), 16k-native: fft 512 -> 256
+    # bins. backbone_args adapted from egs/noise_suppression/config/dpcrn.yaml.
+    type: DPCRN
+    backbone_args:
+      input_dim: 256
+      activation_type: PReLU
+      norm_type: bN2d
+      dropout: 0.05
+      channels: [2, 32, 64, 128]   # 2x width (was [2,16,32,64]); cold-start, bigger capacity
+      transpose_t_size: 2
+      transpose_delay: False
+      skip_conv: False
+      kernel_t: [2, 2, 2]
+      stride_t: [1, 1, 1]
+      dilation_t: [1, 1, 1]
+      kernel_f: [5, 3, 3]
+      stride_f: [2, 2, 1]
+      dilation_f: [1, 1, 1]
+      delay: [0, 0, 0]      # CAUSAL (was [1,1,1] look-ahead) -> per-frame streaming is bit-exact vs offline
+      rnn_hidden: 96       # 1.5x DPRNN (was 64)
+      spectral_compress: False

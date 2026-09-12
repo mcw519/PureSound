@@ -1,0 +1,325 @@
+# Recipe schema v2: `task` selects the model that validates this file
+# (puresound/config/recipe.py); `purpose` picks training vs model-only.
+schema_version: 2
+purpose: train
+task: noise_suppression
+
+dataset:
+  train_metafile: ./data/vctk_16k_train
+  valid_metafile: ./data/vctk_16k_valid
+  test_folder: ./data/eval_demand
+  proc_output_folder: ./proc
+  target_sample_rate: 16000
+  gain_normalized_to:
+  training_length_seconds: 4.
+  filter_min_utterance_length: 2.
+  filter_min_utterance_per_speaker: 1
+
+augmentation_speech:
+  used: True
+  is_target: True
+  prob: 0.2
+  add_n_cases: 1
+  snr_range:
+    - 10
+    - 30
+  
+augmentation_noise:
+  used: True
+  prob: 0.9
+  noise_folder: data/noise_demand_16k
+  snr_range:
+    - -20
+    - 20
+  prob_white_noise: 0.2 # prob. of augmentation replaced by white noise
+  white_noise_snr_range:
+    - 10
+    - 30
+
+augmentation_reverb:
+  used: False
+  prob: 0.75
+  rir_folder: data/rir_16k
+  target_rir_type: "early" # ["full", "early", "direct", "anechoic"]
+  simulator:
+    used: False
+    source_level: True
+    room_dim_range:
+      - [3.0, 8.0]
+      - [3.0, 8.0]
+      - [2.4, 3.5]
+    rt60_range: [0.15, 0.8]
+    source_receiver_distance_range: [0.3, 4.0]
+    foreground_distance_range: [0.3, 1.2]
+    interferer_distance_range: [1.2, 4.0]
+    receiver_margin: 0.4
+    source_margin: 0.4
+    nsample: 4096
+    order: -1
+    hp_filter: True
+
+augmentation_speed:
+  used: True
+  prob: 0.5
+  speed_range:
+    - 0.9
+    - 1.1
+
+augmentation_ir_response:
+  used: False
+  prob: 0.5
+
+augmentation_src:
+  used: False
+  prob: 0.75
+  src_range:
+    - 8000
+    - 16000
+    - 24000
+    - 32000
+  prob_each:
+    - 0.3
+    - 0.3
+    - 0.2
+    - 0.2
+
+augmentation_hpf:
+  used: False
+  prob: 0.25
+  cutoff:
+    - 100
+    - 200
+    - 300
+    - 600
+    - 800
+  prob_each:
+    - 0.2
+    - 0.3
+    - 0.3
+    - 0.1
+    - 0.1
+
+augmentation_volume:
+  used: True
+  prob: 0.75
+  perturbed_range:
+    - 0.2
+    - 1.2
+  clipping_prob: 0.2
+  clipping_range:
+    min:
+      - 0.
+      - 0.1
+    max:
+      - 0.9
+      - 1.0
+
+vad_label:
+  used: True
+  backend: silero
+  args:
+    frame_length: 400
+    hop_length: 160
+    threshold: 0.5
+    min_overlap: 0.5
+    model_sample_rate: 16000
+
+trainer:
+  lightning_trainer_args:
+    max_epochs: 100
+    gradient_clip_val: 5.
+    accumulate_grad_batches: 1
+  train_iter_per_epoch: 1000
+  valid_iter_per_epoch: 300
+  n_spk_per_batch: 8
+  n_utt_per_speaker: 1
+  num_workers: 40
+  num_gpus: 2
+  work_folder: ./exp/vctk_demand/dparn
+
+optimizer:
+  type: AdamW
+  learning_rate: 0.0001
+  args:
+    weight_decay: 0.001
+    betas:
+     - 0.9
+     - 0.999
+
+scheduler:
+  type: StepLR
+  warmup_step: 4000
+  args:
+    step_size: 3
+    gamma: 0.98
+
+loss_func:
+  # The first loss func: Si-SNR
+  - type: SDRLoss
+    weighted: 1
+    args:
+      scaled: True
+      scale_dependent: False
+      zero_mean: True
+      source_aggregated: False
+
+  # The second loss func: Multi Resolution STFT
+  - type: MultiResolutionSTFTLoss
+    weighted: 1.
+    args:
+      fft_sizes:
+        - 512
+        - 256
+        - 1024
+      hop_sizes:
+        - 128
+        - 64
+        - 256
+      win_lengths:
+        - 512
+        - 256
+        - 1024
+      window: hann_window
+      factor_sc: 1.
+      factor_mag: 1.
+
+  # VAD-driven objective: reduce background-speaker false activity while
+  # preserving clean foreground-active frames.
+  - type: VADActivityLoss
+    weighted: 0.1
+    args:
+      frame_length: 400
+      hop_length: 160
+      activity_threshold_db: -40
+      false_positive_weight: 2.0
+      false_negative_weight: 1.0
+
+model:
+  lightning_module:
+    type: EncDecMaskBase
+    module_args:
+      mask_type: complex
+      encoder_lr_factor: 0.1
+      feats_lr_factor: 0.1
+      backbone_lr_factor: 1.
+  encoder:
+    type: ConvEncDec
+    encoder_args:
+      fft_length: 512
+      win_type: "hann"
+      win_length: 512
+      hop_length: 128
+      fmin: 0
+      fmax: 8000
+      sr: 16000
+      trainable: True
+  freq_eq:
+    type: FrequencyEQLayer
+    eq_args:
+      n_fft: 512
+      sample_rate: 16000
+      eq_band_gain: 
+        - 2.5
+        - 5.5
+        - 3.25
+        - 2.5
+        - -2
+        - -4
+        - -8
+      eq_band_cutoff:
+        - 500
+        - 1000
+        - 1500
+        - 2500
+        - 3500
+        - 5500
+        - 7500
+      eq_band_q_factor:
+        - 0.707
+        - 0.707
+        - 0.707
+        - 0.707
+        - 0.707
+        - 0.707
+        - 0.707
+      low_shelf_gain_dB: 0.
+      low_shelf_cutoff_freq: 80.
+      low_shelf_q_factor: 0.707
+      high_shelf_gain_dB: -20
+      high_shelf_cutoff_freq: 7800
+      high_shelf_q_factor: 0.707
+  features:
+    feats_type: complex
+    drop_stft_first_bin: True
+    trainable: True
+    include_specaug: True
+    specaug_args:
+      freq_mask_length: 20
+      time_mask_length: 20
+      fill_value: 0.
+      n_freq_mask: 1
+      n_time_mask: 2
+      prob: 0.5
+  backbone:
+    type: DPARN
+    backbone_args:
+      input_dim: 256
+      activation_type: PReLU
+      norm_type: bN2d
+      dropout: 0.1
+      channels:
+        - 2
+        - 32
+        - 32
+        - 32
+        - 64
+        - 128
+      transpose_t_size: 2
+      transpose_delay: False
+      skip_conv: False
+      kernel_t:
+        - 2
+        - 2
+        - 2
+        - 2
+        - 2
+      stride_t:
+        - 1
+        - 1
+        - 1
+        - 1
+        - 1
+      dilation_t:
+        - 1
+        - 1
+        - 1
+        - 1
+        - 1
+      kernel_f:
+        - 5
+        - 3
+        - 3
+        - 3
+        - 3
+      stride_f:
+        - 2
+        - 2
+        - 1
+        - 1
+        - 1
+      dilation_f:
+        - 1
+        - 1
+        - 1
+        - 1
+        - 1
+      delay:
+        - 1
+        - 1
+        - 1
+        - 1
+        - 1
+      n_dparn_block: 2
+      rnn_hidden: 128
+      nhead: 8
+      spectral_compress: False

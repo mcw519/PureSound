@@ -1,10 +1,12 @@
 google
 protobuf
-torch
-torchaudio>=0.9.0
+torch==2.6.0+cu124
+torchaudio==2.6.0+cu124
+torchcodec==0.2.1+cu124
 matplotlib
 numpy
-sklearn
+scipy
+scikit-learn
 tqdm
 tensorboard
 packaging
@@ -17,3 +19,14 @@ rir-generator
 plotly
 pandas
 kaleido
+lightning
+gradio
+onnx
+# requirements.txt is the CPU/CoreML profile. Use the `cuda` project extra
+# instead for NVIDIA inference; never install both ORT distributions.
+onnxruntime>=1.24,<2; sys_platform != "darwin"
+onnxruntime==1.23.2; sys_platform == "darwin"
+requests
+silero-vad
+librosa
+torchmetrics

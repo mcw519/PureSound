@@ -258,20 +258,24 @@ class SegLSTM(nn.Module):
 
 class SkiM(nn.Module):
     """
-    Skipping memory LSTM.
-    
+    Skipping memory LSTM: a stack of per-segment LSTMs (`SegLSTM`) whose
+    hidden/cell states are bridged across segments by a `MemLSTM`, avoiding
+    the cost of running an inter-chunk LSTM over every segment at once.
+
     Args:
         input_size (int): input feature(channel) dimension
         hidden_size (int): hidden feature(channel) dimension
         output_size (int): output feature(channel) dimension
         n_blocks (int): number of blocks (intra+inter).
         seg_size (int): chunk size
-        seg_overlap (bool): if true, chunk stride is half chunk size.
-        embed_dim (int): if not zero, concate in right_conv's input.
+        seg_overlap (bool): if true, chunk stride is half chunk size (50% overlap); if false, chunks are split contiguously (no overlap).
+        causal (bool): if True, every SegLSTM and MemLSTM is unidirectional (causal); if False, bidirectional.
+        embed_dim (int): if not zero, blocks flagged in `block_with_embed` fuse `embed` into their segment input via `embed_fusion`.
         embed_norm (bool): applies 2-norm for input embedding.
-        causal (bool): padding by causal scenario, others padding to same length between input and output.
+        embed_fusion (str): fusion strategy used when `embed_dim` is set: "film" or "gate".
         block_with_embed (list): which layer insert embedding.
-    
+        dropout (float): dropout rate inside each SegLSTM/MemLSTM.
+
     References:
         [1]: https://arxiv.org/abs/2201.10800
         [2]: https://github.com/espnet/espnet/blob/master/espnet2/enh/layers/skim.py
@@ -305,8 +309,10 @@ class SkiM(nn.Module):
         self.embed_norm = embed_norm
         self.block_with_embed = block_with_embed
 
+        fusion_dim = embed_dim
+
         self.seg_lstm = nn.ModuleList()
-        if embed_dim == 0:
+        if fusion_dim == 0:
             for i in range(n_blocks):
                 self.seg_lstm.append(
                     SegLSTM(input_size, hidden_size, causal=causal, dropout=dropout)
@@ -320,12 +326,12 @@ class SkiM(nn.Module):
                 if block_with_embed[i]:
                     if embed_fusion.lower() == "film":
                         self.seg_input_fusion.append(
-                            FiLM(input_size, embed_dim, input_norm=True)
+                            FiLM(input_size, fusion_dim, input_norm=True)
                         )
 
                     elif embed_fusion.lower() == "gate":
                         self.seg_input_fusion.append(
-                            Gate(input_size, hidden_size=128, embed_size=embed_dim)
+                            Gate(input_size, hidden_size=128, embed_size=fusion_dim)
                         )
 
                     else:
@@ -407,15 +413,33 @@ class SkiM(nn.Module):
 
         return output.contiguous()
 
-    def forward(self, x: torch.Tensor, embed: Optional[torch.Tensor] = None):
+    def forward(
+        self,
+        x: torch.Tensor,
+        embed: Optional[torch.Tensor] = None,
+    ):
         """
         Args:
             input tensor shape is [N, C, T]
             Conditional embedding vector has shape [N, C]
-        
+
         Returns:
             output tensor shape is [N, C, T]
+
+        Complex-mask front-ends (feats_type=complex) hand SkiM a 4-D
+        ``[N, 2, F, T]`` real/imag tensor. SkiM is a 1-D sequence model, so we
+        fold the (2, F) axes into the channel dim (``input_size`` must equal
+        ``2 * F``), run the sequence stack, then unfold the output back to
+        ``[N, 2, F, T]`` so it can be consumed as a complex mask. 3-D
+        ``[N, C, T]`` inputs (mapping / learned-basis front-ends) pass through
+        unchanged.
         """
+        reshaped_from_4d = False
+        if x.dim() == 4:
+            n4, c4, f4, t4 = x.shape
+            x = x.reshape(n4, c4 * f4, t4)
+            reshaped_from_4d = True
+
         if self.embed_norm and embed is not None:
             embed = F.normalize(embed, p=2, dim=1)
 
@@ -465,5 +489,9 @@ class SkiM(nn.Module):
         else:
             output = output.reshape(N, S * K, C)[:, :T, :]
             output = self.output_fc(output.transpose(1, 2))
+
+        if reshaped_from_4d:
+            # [N, 2*F, T] -> [N, 2, F, T] complex mask (output_size == 2*F)
+            output = output.reshape(n4, c4, f4, output.shape[-1])
 
         return output

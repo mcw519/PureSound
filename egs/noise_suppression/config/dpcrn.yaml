@@ -1,0 +1,278 @@
+# Recipe schema v2: `task` selects the model that validates this file
+# (puresound/config/recipe.py); `purpose` picks training vs model-only.
+schema_version: 2
+purpose: train
+task: noise_suppression
+
+dataset:
+  train_metafile: ./data/train
+  valid_metafile: ./data/valid
+  test_folder: ./data/test
+  proc_output_folder: ./proc
+  target_sample_rate: 32000
+  gain_normalized_to: # ex: -28
+  training_length_seconds: 6.
+  filter_min_utterance_length: 4.
+  filter_min_utterance_per_speaker: 5
+
+augmentation_speech:
+  used: False
+  is_target: False
+  prob: 0.5
+  add_n_cases: 2
+  snr_range:
+    - -10
+    - 10
+  
+augmentation_noise:
+  used: False
+  prob: 0.5
+  noise_folder:
+  snr_range:
+    - -10
+    - 10
+  prob_white_noise: 0. # prob. of augmentation replaced by white noise
+  white_noise_snr_range:
+    - 10
+    - 30
+
+augmentation_reverb:
+  used: False
+  prob: 0.5
+  rir_folder:
+  target_rir_type: "full" # ["full", "early", "direct", "anechoic"]
+  simulator:
+    used: False
+    source_level: True
+    room_dim_range:
+      - [3.0, 8.0]
+      - [3.0, 8.0]
+      - [2.4, 3.5]
+    rt60_range: [0.15, 0.8]
+    source_receiver_distance_range: [0.3, 4.0]
+    foreground_distance_range: [0.3, 1.2]
+    interferer_distance_range: [1.2, 4.0]
+    receiver_margin: 0.4
+    source_margin: 0.4
+    nsample: 8192
+    order: -1
+    hp_filter: True
+
+augmentation_speed:
+  used: False
+  prob: 0.5
+  speed_range:
+    - 0.9
+    - 1.1
+
+augmentation_ir_response:
+  used: False
+  prob: 0.5
+
+augmentation_src:
+  used: False
+  prob: 0.5
+  src_range:
+    - 8000
+    - 16000
+    - 24000
+    - 32000
+    - 44100
+    - 48000
+  prob_each:
+    - 0.2
+    - 0.3
+    - 0.15
+    - 0.15
+    - 0.1
+    - 0.1
+
+augmentation_hpf:
+  used: False
+  prob: 0.25
+  cutoff:
+    - 100
+    - 200
+    - 300
+    - 600
+    - 800
+  prob_each:
+    - 0.2
+    - 0.3
+    - 0.3
+    - 0.1
+    - 0.1
+
+augmentation_volume:
+  used: False
+  prob: 0.5
+  perturbed_range:
+    - 0.2
+    - 1.2
+  clipping_prob: 0.5
+  clipping_range:
+    min:
+      - 0.
+      - 0.1
+    max:
+      - 0.9
+      - 1.0
+
+vad_label:
+  used: True
+  backend: silero
+  args:
+    frame_length: 800
+    hop_length: 320
+    threshold: 0.5
+    min_overlap: 0.5
+    model_sample_rate: 16000
+
+trainer:
+  lightning_trainer_args:
+    max_epochs: 200
+    gradient_clip_val: 5.
+    accumulate_grad_batches: 1
+  train_iter_per_epoch: 1000
+  valid_iter_per_epoch: 200
+  n_spk_per_batch: 5
+  n_utt_per_speaker: 4
+  num_workers: 20
+  num_gpus: 2
+  work_folder: ./exp/work
+
+optimizer:
+  type: AdamW
+  learning_rate: 0.01
+  args:
+    weight_decay: 0.001
+    betas:
+     - 0.9
+     - 0.999
+
+scheduler:
+  type: StepLR
+  warmup_step: 1
+  args:
+    step_size: 10
+    gamma: 0.5
+
+loss_func:
+  # The first loss func
+  - type: SDRLoss
+    weighted: 1.
+    args:
+      scaled: False
+      scale_dependent: False
+      zero_mean: True
+      source_aggregated: False
+      sdr_max: 50
+      threshold: -50
+  
+  # The second loss func
+  - type: MultiResolutionSTFTLoss
+    weighted: 1.
+    args:
+      fft_sizes:
+        - 1024
+        - 2048
+        - 512
+      hop_sizes:
+        - 120
+        - 240
+        - 50
+      win_lengths:
+        - 600
+        - 1200
+        - 240
+      window: hann_window
+      factor_sc: 0.1
+      factor_mag: 0.1  
+
+  # VAD-driven objective: reduce background-speaker false activity while
+  # preserving clean foreground-active frames.
+  - type: VADActivityLoss
+    weighted: 0.1
+    args:
+      frame_length: 800
+      hop_length: 320
+      activity_threshold_db: -40
+      false_positive_weight: 2.0
+      false_negative_weight: 1.0
+
+model:
+  lightning_module:
+    type: EncDecMaskBase
+    module_args:
+      mask_type: complex
+      encoder_lr_factor: 1.
+      feats_lr_factor: 1.
+      backbone_lr_factor: 1.
+  encoder:
+    type: ConvEncDec
+    encoder_args:
+      fft_length: 1024
+      win_type: "hann"
+      win_length: 1024
+      hop_length: 320
+      fmin: 0
+      fmax: 16000
+      sr: 32000
+      trainable: True
+  features:
+    feats_type: complex
+    drop_stft_first_bin: True
+    trainable: False
+    include_specaug: True
+    specaug_args:
+      freq_mask_length: 20
+      time_mask_length: 20
+      fill_value: 0.
+      n_freq_mask: 1
+      n_time_mask: 2
+      prob: 0.5
+  backbone:
+    type: DPCRN
+    backbone_args:
+      input_dim: 512
+      activation_type: PReLU
+      norm_type: bN2d
+      dropout: 0.05
+      channels:
+        - 2
+        - 16
+        - 32
+        - 64
+      transpose_t_size: 2
+      transpose_delay: False
+      skip_conv: False
+      kernel_t:
+        - 2
+        - 2
+        - 2
+      stride_t:
+        - 1
+        - 1
+        - 1
+      dilation_t:
+        - 1
+        - 1
+        - 1
+      kernel_f:
+        - 5
+        - 3
+        - 3
+      stride_f:
+        - 2
+        - 2
+        - 1
+      dilation_f:
+        - 1
+        - 1
+        - 1
+      delay:
+        - 0
+        - 0
+        - 0
+      rnn_hidden: 64
+      spectral_compress: False

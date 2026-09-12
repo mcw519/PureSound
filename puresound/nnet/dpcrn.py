@@ -3,8 +3,10 @@ from typing import Dict, Optional, Tuple
 import torch
 import torch.nn as nn
 
+from .lobe.heads import DistHead, IdentityHead, ProximityHead, VADHead
 from .lobe.rnn import SingleRNN
-from .lobe.trivial import spectral_compression
+from .lobe.ssm import MambaInter
+from .lobe.trivial import FiLM, spectral_compression
 from .unet import Unet
 
 
@@ -18,21 +20,74 @@ class DPRNNblock2D(nn.Module):
         dropout: dropout rate
     """
 
-    def __init__(self, input_size: int, hidden_size: int, dropout: float = 0.0) -> None:
+    def __init__(
+        self,
+        input_size: int,
+        hidden_size: int,
+        dropout: float = 0.0,
+        inter_type: str = "lstm",
+        mamba_args: Optional[dict] = None,
+        embedding_size: Optional[int] = None,
+        fused_type: Optional[str] = None,
+    ) -> None:
         super().__init__()
+        self.embedding_size = embedding_size
+        self.fused_type = fused_type.lower()
+
+        if embedding_size is not None:
+            if self.fused_type == "film":
+                self.film = FiLM(
+                    feats_size=input_size,
+                    embed_size=embedding_size,
+                    input_norm=True,
+                )
+            else:
+                raise ValueError(
+                    f"unknown fused_type {self.fused_type!r}; only 'film' is "
+                    "implemented for embedding conditioning."
+                )
 
         self.intra_rnn = SingleRNN(
             "LSTM", input_size, hidden_size, bidirectional=True, dropout=dropout
         )
         self.intra_norm = nn.LayerNorm(input_size)
 
-        self.inter_rnn = SingleRNN(
-            "LSTM", input_size, hidden_size, bidirectional=False, dropout=dropout
-        )
+        # inter(-time) path. "lstm" is the shipped default. "mamba" REPLACES it
+        # with a selective-state-space block at matched parameter budget -- and
+        # a replacement re-initialises the network's only context carrier, which
+        # the v13 round measured as the dominant cost (a from-scratch LSTM on the
+        # same recipe scores worse than the swap did). "lstm+mamba" keeps the
+        # trained LSTM and adds the SSM as a parallel branch whose output
+        # projection starts at zero: the sum equals the LSTM alone at step 0, so
+        # a warm start carries no re-initialisation debt and the SSM can only
+        # earn its way in. See lobe/ssm.py.
+        self.inter_ssm = None
+        if inter_type in ("lstm", "lstm+mamba"):
+            self.inter_rnn = SingleRNN(
+                "LSTM", input_size, hidden_size, bidirectional=False, dropout=dropout
+            )
+            if inter_type == "lstm+mamba":
+                self.inter_ssm = MambaInter(
+                    d_model=input_size, dropout=dropout, zero_init_out=True,
+                    **(mamba_args or {})
+                )
+        elif inter_type == "mamba":
+            self.inter_rnn = MambaInter(
+                d_model=input_size, dropout=dropout, **(mamba_args or {})
+            )
+        else:
+            raise ValueError(
+                "inter_type must be 'lstm', 'mamba' or 'lstm+mamba', "
+                f"got {inter_type!r}"
+            )
         self.inter_norm = nn.LayerNorm(input_size)
 
     def forward(
-        self, x: torch.Tensor, intra_skip: bool = True, inter_skip: bool = True
+        self,
+        x: torch.Tensor,
+        intra_skip: bool = True,
+        inter_skip: bool = True,
+        embed: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
         """
         Args:
@@ -44,7 +99,8 @@ class DPRNNblock2D(nn.Module):
             output -- [N, ch, C, T]
         """
         self.intra_rnn.rnn.flatten_parameters()
-        self.inter_rnn.rnn.flatten_parameters()
+        if hasattr(self.inter_rnn, "rnn"):          # MambaInter has no cuDNN params
+            self.inter_rnn.rnn.flatten_parameters()
 
         x_intra_skip = x.clone()
         N, CH, C, T = x.shape
@@ -64,11 +120,26 @@ class DPRNNblock2D(nn.Module):
 
         x_inter_skip = x.clone()
 
+        if self.embedding_size is not None and embed is not None:
+            if self.fused_type == "film":
+                x = x.permute(0, 2, 1, 3)  # [N, C, CH, T]
+                x = x.reshape(-1, CH, T)
+                embed_inp = embed.unsqueeze(1).repeat(1, C, 1)
+                embed_inp = embed_inp.reshape(-1, embed.shape[-1])
+                x = self.film(x, embed_inp)
+                x = x.reshape(N, C, CH, T)
+                x = x.permute(0, 2, 1, 3)
+            else:
+                raise NotImplementedError
+
         # inter-chunk, time dependent and frequency independent
         x = x.permute(0, 2, 3, 1).reshape(
             N * C, T, -1
         )  # [N, CH, C, T] -> [N, C, T, CH] -> [N*C, T, CH]
-        x = self.inter_rnn(x.permute(0, 2, 1))  # [N*C, T, CH] -> [N*C, CH, T]
+        x_inter = x.permute(0, 2, 1)  # [N*C, T, CH] -> [N*C, CH, T]
+        x = self.inter_rnn(x_inter)
+        if self.inter_ssm is not None:
+            x = x + self.inter_ssm(x_inter)
         x = x.permute(0, 2, 1)  # [N*C, CH, T] -> [N*C, T, CH]
         x = self.inter_norm(x)
         x = x.permute(0, 2, 1)
@@ -84,8 +155,8 @@ class DPRNNblock2D(nn.Module):
 class DPCRN(Unet):
     def __init__(
         self,
-        input_type: str = "RI",
         input_dim: int = 512,
+        dvec_dim: Optional[int] = None,
         activation_type: str = "PReLU",
         norm_type: str = "bN2d",
         dropout: float = 0.05,
@@ -101,10 +172,17 @@ class DPCRN(Unet):
         dilation_f: Tuple = (1, 1, 1, 1, 1),
         delay: Tuple = (0, 0, 0, 0, 0),
         rnn_hidden: int = 128,
+        inter_type: str = "lstm",
+        mamba_args: Optional[dict] = None,
         spectral_compress: bool = False,
+        vad_head: Optional[Dict] = None,
+        background_vad_head: Optional[Dict] = None,
+        dist_head: Optional[Dict] = None,
+        identity_head: Optional[Dict] = None,
+        proximity_head: Optional[Dict] = None,
+        expose_bottleneck: bool = False,
     ):
         super().__init__(
-            input_type,
             input_dim,
             activation_type,
             norm_type,
@@ -124,32 +202,100 @@ class DPCRN(Unet):
         self.transpose_delay = transpose_delay
         self.rnn_hidden = rnn_hidden
         self.spectral_compress = spectral_compress
+        self.dvec_dim = dvec_dim
+        self.vad_head_args = vad_head
 
         # DPRNN block
         self.dprnn_block1 = DPRNNblock2D(
-            input_size=channels[-1], hidden_size=rnn_hidden, dropout=dropout
+            input_size=channels[-1],
+            inter_type=inter_type,
+            mamba_args=mamba_args,
+            hidden_size=rnn_hidden,
+            dropout=dropout,
+            embedding_size=dvec_dim,
+            fused_type="FiLM",
         )
         self.dprnn_block2 = DPRNNblock2D(
-            input_size=channels[-1], hidden_size=rnn_hidden, dropout=dropout
+            input_size=channels[-1],
+            inter_type=inter_type,
+            mamba_args=mamba_args,
+            hidden_size=rnn_hidden,
+            dropout=dropout,
+            embedding_size=dvec_dim,
+            fused_type="FiLM",
         )
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        # Attribute names are the checkpoint keys (`backbone.vad_head.*`), so
+        # they are load-bearing; what each head is built from lives with the
+        # head, in `nnet/lobe/heads.py`.
+        self.vad_head = VADHead.from_config(vad_head, enc_channels=channels[-1])
+        self.last_vad_logits: Optional[torch.Tensor] = None
+
+        # Companion head: "is NON-target speech present now". Same block shape,
+        # separate weights -- BackgroundVADHeadBCELoss and the dataset's
+        # background_vad_reference have been waiting for it since the conformer
+        # axis left (380da2e).
+        self.background_vad_head = VADHead.from_config(
+            background_vad_head, enc_channels=channels[-1]
+        )
+        self.last_background_vad_logits: Optional[torch.Tensor] = None
+
+        self.dist_head = DistHead.from_config(dist_head, enc_channels=channels[-1])
+        self.last_dist_preds: Optional[torch.Tensor] = None
+
+        # Per-frame identity / relative-proximity readouts (v20 R1a). Same
+        # training-only contract as the heads above: enabled from
+        # `backbone_args`, never read by inference or by the streaming export,
+        # and absent from the module (so from the checkpoint) when disabled.
+        self.identity_head = IdentityHead.from_config(
+            identity_head, enc_channels=channels[-1]
+        )
+        self.last_identity_emb: Optional[torch.Tensor] = None
+        self.proximity_head = ProximityHead.from_config(
+            proximity_head, enc_channels=channels[-1]
+        )
+        self.last_proximity: Optional[torch.Tensor] = None
+
+        # The bottleneck itself, for readouts that are not modules -- the
+        # inference-only presence gate fits a linear probe on exactly this
+        # tensor. Off by default: a reference here would keep the graph alive
+        # for the whole step, and training has no use for it.
+        self.stash_bottleneck: bool = False
+        self.last_bottleneck: Optional[torch.Tensor] = None
+
+        # ...and the same tensor WITH its graph, frequency-pooled, for losses
+        # that have to run a module of their own over the bottleneck -- the
+        # identity loss's EMA teacher is a second copy of the head, so it needs
+        # the features, not the head's output. Two separate switches on purpose:
+        # `stash_bottleneck` is an inference flag flipped per call by
+        # `EncDecMaskBase.forward` and its tensor is detached, and handing a
+        # gradient path to something that expected a detached probe input is
+        # exactly the kind of silent change this repo does not want. This one is
+        # a build-time flag (`backbone_args.expose_bottleneck: true`), so what a
+        # recipe trains is visible in the recipe.
+        self.expose_bottleneck: bool = bool(expose_bottleneck)
+        self.last_bottleneck_graph: Optional[torch.Tensor] = None
+
+    def forward(
+        self, x: torch.Tensor, dvec: Optional[torch.Tensor] = None
+    ) -> torch.Tensor:
         """
         Args:
-            x: input tensor shape [N, C, T]
-            
+            x: input tensor shape [N, CH, C, T]
+            dvec: speaker embedding tensor shape [N, D]
+
         Returns:
-            output tensor has shape [N, C, T]
+            output tensor has shape [N, CH, C, T]
         """
         if self.spectral_compress:
             x = spectral_compression(x, alpha=0.3, dim=1)
 
-        if self.input_type.lower() == "ri":
-            _re, _im = torch.chunk(x, 2, dim=-2)
-            x = torch.stack([_re, _im], dim=1)  # [N, C, T] -> [N, 2, C, T]
-        else:
-            if x.dim() == 3:
-                x = x.unsqueeze(1)  # [N, 1, C, T]
+        if x.dim() == 3:
+            x = x.unsqueeze(1)  # [N, 1, C, T]
+
+        x = self.input_norm(x)
+        if dvec is not None:
+            dvec = nn.functional.normalize(dvec, dim=1, p=2)
 
         skip = [x.clone()]
 
@@ -159,8 +305,39 @@ class DPCRN(Unet):
             skip.append(x)
 
         # forward dprnn
-        x = self.dprnn_block1(x)  # [N, ch, C, T]
-        x = self.dprnn_block2(x)  # [N, ch, C, T]
+        x = self.dprnn_block1(x, embed=dvec)  # [N, ch, C, T]
+        x = self.dprnn_block2(x, embed=dvec)  # [N, ch, C, T]
+
+        if self.vad_head is not None:
+            self.last_vad_logits = self.vad_head(x)
+        else:
+            self.last_vad_logits = None
+
+        if self.background_vad_head is not None:
+            self.last_background_vad_logits = self.background_vad_head(x)
+        else:
+            self.last_background_vad_logits = None
+
+        if self.dist_head is not None:
+            self.last_dist_preds = self.dist_head(x)
+        else:
+            self.last_dist_preds = None
+
+        if self.identity_head is not None:
+            self.last_identity_emb = self.identity_head(x)  # [N, T, D]
+        else:
+            self.last_identity_emb = None
+
+        if self.proximity_head is not None:
+            self.last_proximity = self.proximity_head(x)  # [N, T]
+        else:
+            self.last_proximity = None
+
+        self.last_bottleneck = x.detach() if self.stash_bottleneck else None
+        # Frequency-pooled and NOT detached: `[N, C, T]`, the same convention
+        # the probes cache as `feat` (`anchor_gate_cache.py`) and the same one
+        # every per-frame head pools to internally.
+        self.last_bottleneck_graph = x.mean(dim=2) if self.expose_bottleneck else None
 
         # forward CNN-up layers
         for i, cnn_layer in enumerate(self.cnn_up):
@@ -180,34 +357,4 @@ class DPCRN(Unet):
                         ..., : -(self.t_kernel - 1)
                     ]  # transpose-conv with t-kernel size would increase (t-1) length
 
-        if self.input_type.lower() == "ri":
-            _re = x[:, 0, :, :]
-            _im = x[:, 1, :, :]
-            x = torch.cat([_re, _im], dim=1)
-
-        else:
-            x = x.squeeze(1)  # [N, 1, C, T] -> [N, C, T]
-
         return x
-
-    @property
-    def get_args(self) -> Dict:
-        return {
-            "input_type": self.input_type,
-            "input_dim": self.input_dim,
-            "activation_type": self.activation_type,
-            "norm_type": self.norm_type,
-            "dropout": self.dropout,
-            "channels": self.channels,
-            "transpose_t_size": self.transpose_t_size,
-            "transpose_delay": self.transpose_delay,
-            "skip_conv": self.skip_conv,
-            "kernel_t": self.kernel_t,
-            "stride_t": self.stride_t,
-            "dilation_t": self.dilation_t,
-            "kernel_f": self.kernel_f,
-            "stride_f": self.stride_f,
-            "dilation_f": self.dilation_f,
-            "delay": self.delay,
-            "rnn_hidden": self.rnn_hidden,
-        }

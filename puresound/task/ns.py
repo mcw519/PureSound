@@ -1,332 +1,851 @@
 import random
-from typing import Any, Dict, Optional, Tuple
+from copy import deepcopy
+from dataclasses import dataclass
+from typing import Dict, List, Optional, Tuple
 
 import torch
-import torchaudio
-from puresound.src.audio import AudioAugmentor, AudioIO
-from puresound.src.utils import load_text_as_dict
 from torch.nn.utils.rnn import pad_sequence
-from tqdm import tqdm
 
-from .base import BaseTrainer, TaskDataset
+from puresound.audio.noise import add_bg_noise
+from puresound.config.augmentation import (
+    CodecAugmentation,
+    PacketLossAugmentation,
+    TargetAbsentAugmentation,
+    RowInitialAmbientAugmentation,
+)
+from puresound.dataset.dynamic_base import (
+    DynamicBaseDataset,
+)
+from puresound.task.device_chain import (
+    DEVICE_CHAIN_SCALARS,
+    device_chain_from_blocks,
+)
+from puresound.task.paired_views import apply_chain_views, collate_paired_views
+from puresound.task.noise_stage import NoiseStage
+from puresound.task.overlap_gating import OverlapGating
 
 
-class NsCollateFunc:
+RIR_PROVENANCE_KEYS = (
+    "rir_release_id",
+    "rir_release_sha256",
+    "rir_recipe_id",
+    "rir_variant_id",
+    "rir_split",
+    "rir_origin",
+    "rir_renderer_profile_id",
+    "rir_production_certificate_sha256",
+    "rir_interferer_variant_ids",
+)
+
+
+@dataclass
+class RowPlan:
+    """Per-item decisions a task subclass makes before synthesis starts.
+
+    The base dataset only decides ``target_absent`` (and whether that forces an
+    interferer). Subclasses return a subclass of this plan from ``_plan_row`` to
+    drive their own row types through the shared synthesis skeleton without the
+    skeleton knowing about them:
+
+    * ``force_speech_interferers`` makes the interferer block fire without
+      consuming the speech-augmentation probability draw.
+    * ``skip_whole_mix_reverb`` keeps the whole-mix RIR off rows whose channel
+      must stay exactly as the foreground provided it.
+    * ``skip_overlap_gating`` is for a row type that wrote its own turn script:
+      re-gating it would overwrite that script (see ``task/session_rows.py``).
+    * ``speed_perturb_companions`` carries the speed change onto
+      ``background_speech_reference`` as well. Off by default, which is why that
+      snapshot is a PRE-speed one everywhere else -- a ~5% timing error a
+      row-level test tolerates and a per-frame label does not.
+    * ``speed_factor`` is written by the synthesis skeleton, not by the planner:
+      it is what a row type needs to map a pre-speed script onto the post-speed
+      label grid.
+    """
+
+    target_absent: bool = False
+    force_interferer: bool = False
+    force_speech_interferers: bool = False
+    skip_whole_mix_reverb: bool = False
+    skip_overlap_gating: bool = False
+    speed_perturb_companions: bool = False
+    speed_factor: float = 1.0
+
+
+class NoiseSuppressionDataset(DynamicBaseDataset):
+    #: Transmission damage and the target-absent row type on top of the shared
+    #: capture blocks.
+    AUGMENTATION_BLOCKS = {
+        **DynamicBaseDataset.AUGMENTATION_BLOCKS,
+        "augmentation_codec_args": CodecAugmentation,
+        "augmentation_packet_loss_args": PacketLossAugmentation,
+        "augmentation_target_absent_args": TargetAbsentAugmentation,
+        "augmentation_row_initial_ambient_args": RowInitialAmbientAugmentation,
+    }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Fail fast instead of silently ignoring a task-specific block: mix_mode
+        # describes near/far level relationships, which only the voice-isolation
+        # dataset implements.
+        mm_cfg = (
+            self.augmentation_speech_args.mix_mode
+            if self.augmentation_speech_args
+            else None
+        )
+        if type(self) is NoiseSuppressionDataset and mm_cfg and mm_cfg.used:
+            raise ValueError(
+                "augmentation_speech.mix_mode needs dataset.task: voice_isolation"
+            )
+        self.rebind_augmentation_blocks()
+
+    def rebind_augmentation_blocks(self) -> None:
+        """The three components this task composes from its blocks.
+
+        Construction and re-derivation share this one path, so a knob that moves
+        during a run (a curriculum) cannot leave one of them holding the value it
+        was built with.
+        """
+        super().rebind_augmentation_blocks()
+        self.device_chain = device_chain_from_blocks(self.augmentor, self)
+        self.noise_stage = NoiseStage(self.augmentor, self.augmentation_noise_args)
+        self.overlap_gating = OverlapGating(
+            self.augmentation_speech_args.overlap_control
+            if self.augmentation_speech_args
+            else None,
+            self.gating_vad_labeler,
+        )
+
+    def _build_synthetic_interferers(
+        self,
+        target_speaker,
+        target_speech: torch.Tensor,
+        room_scene: Optional[dict],
+        source_level_reverb: bool,
+    ) -> Tuple[torch.Tensor, List[torch.Tensor], List[dict]]:
+        """Synthetic interferer path (extracted verbatim from __getitem__): sample
+        clean speakers, optionally color some as media, then reverberate with the
+        room's far-field RIR channels (source-level) or align (non-source-level).
+        Returns the (possibly re-aligned) target, the interferer list, and the RIR
+        metadata. This is the clean-speech-convolved-with-RIR far channel the
+        real-far branch replaces with genuine end-to-end recordings."""
+        interferer_rir_metadata: List[dict] = []
+        interfered_speech: List[torch.Tensor] = []
+        # Samples speakers from overall speaker pool
+        if self.target_sr is not None:
+            spk_pool = deepcopy(self.total_spks)
+        # Samples speakers from same SR conditions
+        else:
+            spk_pool = deepcopy(list(self.sr_meta[self.ori_audio_sr].keys()))
+
+        spk_pool = set(spk_pool)
+        spk_pool.remove(target_speaker)
+        add_n_cases_cfg = self.augmentation_speech_args.add_n_cases
+        if isinstance(add_n_cases_cfg, (list, tuple)):
+            lo, hi = int(add_n_cases_cfg[0]), int(add_n_cases_cfg[1])
+            n_interferers = random.randint(lo, hi)
+        else:
+            n_interferers = int(add_n_cases_cfg)
+        if n_interferers > len(spk_pool):
+            n_interferers = len(spk_pool)
+        if n_interferers < 1:
+            n_interferers = 1
+        interference_spk_list = random.sample(sorted(spk_pool), k=n_interferers)
+        interference_sr = None if self.target_sr is not None else self.ori_audio_sr
+        for spk in interference_spk_list:
+            _speech, _sr, _ = self.choose_an_utterance_by_speaker_name(
+                target_speaker_name=spk,
+                select_channel=0,
+                select_with_sr_as_key=interference_sr,
+            )
+            # Interfered speech has to be same sample rate of target speech.
+            # BOUND the redraw: a speaker with no utterance at ori_audio_sr
+            # would otherwise loop forever -- a stalled DataLoader worker then
+            # deadlocks DDP. Give up after a few tries and skip this interferer
+            # (the interferer count is already random) rather than hang.
+            sr_retry = 0
+            while _sr != self.ori_audio_sr and sr_retry < 5:
+                sr_retry += 1
+                _speech, _sr, _ = self.choose_an_utterance_by_speaker_name(
+                    target_speaker_name=spk,
+                    select_channel=0,
+                    select_with_sr_as_key=interference_sr,
+                )
+            if _sr != self.ori_audio_sr:
+                continue
+            interfered_speech.append(_speech)
+
+        # Some interferers become "media-device" speech (TV / loudspeaker
+        # playback): band-limited + lightly compressed before its RIR. With a
+        # pre-generated bank the "media" role draws from the same far pool as a
+        # plain interferer; only the on-the-fly room simulator places media
+        # sources wall-adjacent.
+        media_cfg = self.augmentation_speech_args.media_voice
+        media_flags = [
+            bool(
+                media_cfg
+                and media_cfg.used
+                and torch.rand(1).item() < media_cfg.prob
+            )
+            for _ in interfered_speech
+        ]
+        if any(media_flags):
+            hp_lo, hp_hi = media_cfg.hp_cutoff_range
+            lp_lo, lp_hi = media_cfg.lp_cutoff_range
+            cp_lo, cp_hi = media_cfg.compress_power_range
+            for idx, is_media in enumerate(media_flags):
+                if not is_media:
+                    continue
+                interfered_speech[idx], _ = self.augmentor.apply_media_coloring(
+                    wav=interfered_speech[idx],
+                    sr=self.audio_sr,
+                    hp_cutoff=torch.empty(1).uniform_(hp_lo, hp_hi).item(),
+                    lp_cutoff=torch.empty(1).uniform_(lp_lo, lp_hi).item(),
+                    compress_power=torch.empty(1).uniform_(cp_lo, cp_hi).item(),
+                )
+
+        if source_level_reverb:
+            interfered_speech = self.align_audio_list(
+                wav_list=interfered_speech,
+                length=self.sample_length,
+                padding_type="zero",
+            )
+            reverb_interferers = []
+            for speech, is_media in zip(interfered_speech, media_flags):
+                reverbed = self.apply_source_level_interferer_reverb(
+                    wav=speech,
+                    sr=self.audio_sr,
+                    room_scene=room_scene,
+                    source_role="media" if is_media else "interferer",
+                )
+                reverb_interferers.append(reverbed.wav)
+                if reverbed.metadata is not None:
+                    interferer_rir_metadata.append(dict(reverbed.metadata))
+            interfered_speech = reverb_interferers
+        else:
+            # Aligned and Mixing
+            clips_wav = [target_speech] + interfered_speech
+            clips_wav = self.align_audio_list(
+                wav_list=clips_wav,
+                length=self.sample_length,
+                padding_type="zero",
+            )
+            target_speech = clips_wav[0]
+            interfered_speech = clips_wav[1:]
+
+        return target_speech, interfered_speech, interferer_rir_metadata
+
+    # ------------------------------------------------------------------ #
+    # Row-type hooks. The synthesis skeleton in __getitem__ calls these at
+    # every point where a task subclass may substitute its own row types.
+    # Each base implementation IS the generic noise-suppression behaviour,
+    # and none of them touches the RNG stream beyond what the equivalent
+    # inline code always drew, so recipes regenerate bit-identically.
+    # ------------------------------------------------------------------ #
+    def _plan_row(self, target_speech: torch.Tensor) -> Tuple[RowPlan, torch.Tensor]:
+        """Decide the row type; may replace the foreground waveform."""
+        cfg = self.augmentation_target_absent_args
+        target_absent = (
+            cfg is not None
+            and cfg.used
+            and torch.rand(1).item() < cfg.prob
+        )
+        force_interferer = bool(target_absent and cfg is not None and cfg.force_interferer)
+        return (
+            RowPlan(target_absent=target_absent, force_interferer=force_interferer),
+            target_speech,
+        )
+
+    def _prepare_foreground(
+        self, target_speech: torch.Tensor, plan: RowPlan
+    ) -> Tuple[bool, Optional[dict], Optional[dict], torch.Tensor, torch.Tensor]:
+        """Give the foreground its channel; returns
+        (source_level_reverb, room_scene, fg_metadata, noisy_speech, target_speech)."""
+        source_level_reverb = self.should_apply_source_level_reverb()
+        room_scene = self.augmentor.sample_room_scene() if source_level_reverb else None
+        fg_rir_metadata = None
+        if source_level_reverb:
+            noisy_speech, target_speech, fg_rir_metadata = (
+                self.apply_source_level_target_reverb(
+                    wav=target_speech,
+                    sr=self.audio_sr,
+                    room_scene=room_scene,
+                )
+            )
+        else:
+            noisy_speech = target_speech.clone()
+        return source_level_reverb, room_scene, fg_rir_metadata, noisy_speech, target_speech
+
+    def _sample_interferers(
+        self,
+        target_speaker,
+        target_speech: torch.Tensor,
+        room_scene: Optional[dict],
+        source_level_reverb: bool,
+        plan: RowPlan,
+    ) -> Tuple[torch.Tensor, List[torch.Tensor], List[dict]]:
+        """Source the interfering speech; returns (target, interferers, metadata)."""
+        return self._build_synthetic_interferers(
+            target_speaker=target_speaker,
+            target_speech=target_speech,
+            room_scene=room_scene,
+            source_level_reverb=source_level_reverb,
+        )
+
+    def _turn_taking_override(self, plan: RowPlan) -> Optional[float]:
+        """Row-level turn-taking rate; None = use the overlap_control value."""
+        return None
+
+    def _mix_foreground_with_interferers(
+        self,
+        fg_wav: torch.Tensor,
+        interfered_speech: torch.Tensor,
+        plan: RowPlan,
+        fg_metadata: Optional[dict] = None,
+        interferer_metadata: Optional[List[dict]] = None,
+    ) -> Tuple[torch.Tensor, torch.Tensor, str, float]:
+        """Combine foreground and summed interferers; returns
+        (noisy_speech, background_speech_reference, mix_mode_name, realized_sir)."""
+        sir = (
+            torch.FloatTensor(1)
+            .uniform_(
+                self.augmentation_speech_args.snr_range[0],
+                self.augmentation_speech_args.snr_range[1],
+            )
+            .item()
+        )
+
+        # Mixing with SIR
+        noisy_speech, interfered_speech = add_bg_noise(
+            wav=fg_wav,
+            noise=[interfered_speech],
+            snr_list=[sir],
+        )
+        return noisy_speech[0], interfered_speech[0], "legacy", sir
+
+    def __getitem__(self, target_speaker: Tuple):
+        # The key carries whatever the run asked the sampler for: a per-item seed
+        # (which reseeds every RNG this path uses, so the row regenerates
+        # bit-exact across epochs, runs and worker layouts), a row length, an
+        # epoch. All of it is unpacked and applied in one shared place.
+        key = self.parse_item_key(target_speaker)
+        target_speaker, batch_sr = key.speaker, key.sample_rate
+        target_speech, self.ori_audio_sr, (_, _) = (
+            self.choose_an_utterance_by_speaker_name(
+                target_speaker_name=target_speaker, select_channel=0, select_with_sr_as_key=batch_sr
+            )
+        )
+        # Snipts first
+        target_speech = self.align_audio_list(
+            wav_list=[target_speech],
+            length=self.sample_length,
+        )[0]
+        # Decide once per sample what row this is (target-absent and any
+        # task-specific row type). The plan hook may replace the foreground
+        # entirely; concrete target-absent gating happens after the
+        # augmentation_speech block so SIR sampling and overlap-control still
+        # use the real target as a reference; we subtract target_in_mix at
+        # the end.
+        plan, target_speech = self._plan_row(target_speech)
+        target_absent = plan.target_absent
+        force_interferer = plan.force_interferer
+
+        interferer_rir_metadata: List[dict] = []
+        background_speech_reference = None
+
+        source_level_reverb, room_scene, fg_rir_metadata, noisy_speech, target_speech = (
+            self._prepare_foreground(target_speech, plan)
+        )
+
+        # Snapshot the target's contribution to the mixture; subtracted later
+        # for target-absent samples so noisy_speech keeps only interferer+noise.
+        target_in_mix = noisy_speech.clone()
+
+        # Diagnostic scalars emitted as per-sample metadata, so eval can bucket
+        # samples by geometry. Defaults cover the no-interferer / no-noise paths.
+        far_count = 0
+        mix_mode_name = "none"
+        realized_speech_sir = float("nan")
+        noise_snr = float("nan")
+        overlap_fraction = float("nan")
+        turn_taking = 0.0
+
+        # Add interference speech from other speakers
+        interfered_speech = []
+        if (
+            self.augmentation_speech_args
+            and self.augmentation_speech_args.used
+            and (
+                force_interferer
+                or plan.force_speech_interferers
+                or torch.rand(1) < self.augmentation_speech_args.prob
+            )
+        ):
+            target_speech, interfered_speech, itf_meta = self._sample_interferers(
+                target_speaker=target_speaker,
+                target_speech=target_speech,
+                room_scene=room_scene,
+                source_level_reverb=source_level_reverb,
+                plan=plan,
+            )
+            interferer_rir_metadata.extend(itf_meta)
+
+            # A row type that arrived with its own turn script keeps it: this
+            # gating decides who talks when, and running it over a scripted row
+            # would silently replace that script (task/session_rows.py). The
+            # guard is a plan field, so every row type that does not set it
+            # draws exactly what it drew before.
+            if not plan.skip_overlap_gating:
+                gating = self.overlap_gating.apply(
+                    target_speech,
+                    interfered_speech,
+                    sr=self.audio_sr,
+                    target_mix=noisy_speech,
+                    allow_turn_taking=not target_absent,
+                    turn_taking_prob=self._turn_taking_override(plan),
+                )
+                target_speech = gating.target
+                noisy_speech = gating.target_mix
+                interfered_speech = gating.interferers
+                overlap_fraction = gating.overlap_fraction
+                turn_taking = gating.turn_taking
+
+            far_count = len(interfered_speech)
+            interfered_speech = (
+                torch.cat(interfered_speech, dim=0).sum(dim=0).reshape(1, -1)
+            )
+
+            # Foreground-vs-interferer mixing (task subclasses may add richer
+            # level relationships; the base draw is one hard SIR from
+            # augmentation_speech.snr_range).
+            fg_wav = noisy_speech if source_level_reverb else target_speech
+            noisy_speech, background_speech_reference, mix_mode_name, realized_speech_sir = (
+                self._mix_foreground_with_interferers(
+                    fg_wav,
+                    interfered_speech,
+                    plan,
+                    fg_metadata=fg_rir_metadata,
+                    interferer_metadata=interferer_rir_metadata,
+                )
+            )
+
+            # Treating all speech clips as target speech
+            if self.augmentation_speech_args.is_target:
+                target_speech = noisy_speech.clone()
+
+        # Target-absent gating: strip the foreground contribution from the
+        # mixture and zero the reference so VAD / SDR / consistency_noise
+        # downstream all reflect "no near-field speaker". Done before any
+        # rescaling so the leftover mixture levels stay self-consistent.
+        if target_absent:
+            noisy_speech = noisy_speech - target_in_mix
+            target_speech = torch.zeros_like(target_speech)
+
+        # Residual playback echo: the device's own loudspeaker leaks into the
+        # mic. Modeled as another utterance through a channel of the same room,
+        # added at the residual level an upstream AEC would leave
+        # (erle_db_range below the mixture). Never in the target; requires
+        # source-level reverb for its own RIR. NOTE: with a pre-generated bank
+        # the channel comes from the FAR pool (distance_range_override cannot
+        # be honored there; the bank picks the far channel closest to the
+        # requested band); a true near-field echo channel needs the on-the-fly
+        # simulator.
+        echo_cfg = (
+            self.augmentation_speech_args.echo_playback
+            if self.augmentation_speech_args
+            else None
+        )
+        if (
+            echo_cfg
+            and echo_cfg.used
+            and source_level_reverb
+            and torch.rand(1).item() < echo_cfg.prob
+        ):
+            if self.target_sr is not None:
+                echo_pool = set(self.total_spks)
+            else:
+                echo_pool = set(self.sr_meta[self.ori_audio_sr].keys())
+            echo_pool.discard(target_speaker)
+            echo_spk = random.choice(sorted(echo_pool))
+            echo_speech, _, _ = self.choose_an_utterance_by_speaker_name(
+                target_speaker_name=echo_spk,
+                select_channel=0,
+                select_with_sr_as_key=None if self.target_sr is not None else self.ori_audio_sr,
+            )
+            echo_speech = self.align_audio_list(
+                wav_list=[echo_speech],
+                length=self.sample_length,
+                padding_type="zero",
+            )[0]
+            # Echo is never part of the target and never reported in the RIR
+            # lineage, so its channel metadata is deliberately dropped here.
+            echo_speech = self.apply_source_level_interferer_reverb(
+                wav=echo_speech,
+                sr=self.audio_sr,
+                room_scene=room_scene,
+                distance_range_override=list(echo_cfg.distance_range),
+            ).wav
+            erle_lo, erle_hi = echo_cfg.erle_db_range
+            erle_db = torch.empty(1).uniform_(float(erle_lo), float(erle_hi)).item()
+            noisy_speech, _ = add_bg_noise(
+                wav=noisy_speech, noise=[echo_speech], snr_list=[erle_db]
+            )
+            noisy_speech = noisy_speech[0]
+
+        # Avoiding clipping issue
+        [noisy_speech, target_speech] = self.avoid_audio_clipping(
+            wav_list=[noisy_speech, target_speech]
+        )
+
+        # Speed Perturbation
+        if (
+            self.augmentation_speed_args
+            and self.augmentation_speed_args.used
+            and torch.rand(1) < self.augmentation_speed_args.prob
+        ):
+            # include the range top: a bare arange(lo, hi, step) excludes hi,
+            # which silently removed the speed-up half of the perturbation
+            speed = torch.arange(
+                self.augmentation_speed_args.speed_range[0],
+                self.augmentation_speed_args.speed_range[1] + 0.025,
+                0.05,
+            )
+            speed = random.choice(speed)
+            noisy_speech, (speed) = self.augmentor.sox_speed_perturbed(
+                wav=noisy_speech,
+                speed=speed.item(),
+                sr=self.audio_sr,
+            )
+            target_speech, _ = self.augmentor.sox_speed_perturbed(
+                wav=target_speech,
+                speed=speed,
+                sr=self.audio_sr,
+            )
+            # Recorded, not drawn again: a row type with per-frame labels has to
+            # map its pre-speed frame grid onto the post-speed one, and after the
+            # crop below the length ratio no longer recovers this factor.
+            plan.speed_factor = float(speed)
+            if plan.speed_perturb_companions and background_speech_reference is not None:
+                background_speech_reference, _ = self.augmentor.sox_speed_perturbed(
+                    wav=background_speech_reference,
+                    speed=speed,
+                    sr=self.audio_sr,
+                )
+
+        # Reverb (whole-mix folder RIR; skipped when the row plan says the
+        # channel must stay exactly as the foreground provided it)
+        if (
+            self.augmentation_reverb_args
+            and self.augmentation_reverb_args.used
+            and not source_level_reverb
+            and not plan.skip_whole_mix_reverb
+            and torch.rand(1) < self.augmentation_reverb_args.prob
+        ):
+            # RIR's target for noisy is full
+            noisy_speech, (rir_id, _) = self.augmentor.apply_rir(
+                wav=noisy_speech,
+                rir_mode="full",
+                sr=self.audio_sr,
+            )
+            # Warping target speech for same RIR but different rir mode
+            if self.augmentation_reverb_args.target_rir_type != "anechoic":
+                target_speech, _ = self.augmentor.apply_rir(
+                    wav=target_speech,
+                    rir_id=rir_id,
+                    rir_mode=self.augmentation_reverb_args.target_rir_type,
+                    sr=self.audio_sr,
+                )
+
+            if noisy_speech.shape[0] != 1:
+                noisy_speech = noisy_speech[0].view(1, -1)
+                target_speech = target_speech[0].view(1, -1)
+
+        # Row-initial ambient lead (v17): silence EVERY speech component over the
+        # first 1-4 s so the noise stage below fills the lead with the row's own
+        # room sound. Placed here on purpose: after speed/reverb (timings final),
+        # before noise (the lead must contain ambience, not digital silence) and
+        # before the vad_reference snapshot (labels inherit the mask). Applied to
+        # keep and suppress rows alike -- the lead must never predict the label.
+        ria = self.augmentation_row_initial_ambient_args
+        if ria is not None and ria.used and torch.rand(1).item() < ria.prob:
+            lo, hi = ria.lead_seconds_range
+            n_lead = int(float(torch.empty(1).uniform_(lo, hi)) * self.audio_sr)
+            keep_min = int(0.5 * self.audio_sr)   # never mask a row into silence
+            if 0 < n_lead < noisy_speech.shape[-1] - keep_min:
+                n_fade = max(1, int(ria.fade_ms / 1000.0 * self.audio_sr))
+                n_fade = min(n_fade, noisy_speech.shape[-1] - n_lead)
+                mask = noisy_speech.new_ones(noisy_speech.shape[-1])
+                mask[:n_lead] = 0.0
+                ramp = torch.linspace(0.0, 1.0, n_fade, dtype=mask.dtype)
+                mask[n_lead : n_lead + n_fade] = 0.5 - 0.5 * torch.cos(ramp * torch.pi)
+                noisy_speech = noisy_speech * mask
+                # speed perturbation upstream changes noisy/target length but NOT
+                # background_speech_reference (a pre-speed snapshot), so every
+                # companion signal is masked over the overlap and truncated to it
+                # -- anything past noisy's length is cropped downstream anyway.
+                nt = min(target_speech.shape[-1], mask.shape[-1])
+                target_speech = target_speech[..., :nt] * mask[:nt]
+                if background_speech_reference is not None:
+                    nb = min(background_speech_reference.shape[-1], mask.shape[-1])
+                    background_speech_reference = (
+                        background_speech_reference[..., :nb] * mask[:nb]
+                    )
+
+        # Noise: recorded at an SNR (optionally through this row's room), white
+        # noise, then the absolute capture floor. Order and RNG discipline are
+        # the stage's contract -- see puresound/task/noise_stage.py.
+        noise = self.noise_stage.apply(
+            noisy_speech, sample_rate=self.audio_sr, room_scene=room_scene
+        )
+        noisy_speech, noise_snr = noise.noisy, noise.snr
+
+        # Snapshot the clean target for VAD labeling before the downstream
+        # distortion chain (SRC / IIR / HPF / volume / clipping). Silero VAD
+        # gets unreliable on heavily distorted speech, so we label activity on
+        # the early-reverb clean signal (post speed-perturb so timing matches).
+        vad_reference = target_speech.clone()
+
+        # Capture and transmission chain: the analogue path (SRC, IIR, HPF,
+        # volume), the converter, then digital transmission (codec, packet
+        # loss). Order, linearity and RNG discipline are the chain's contract --
+        # see puresound/task/device_chain.py.
+        chain, paired_chain = apply_chain_views(
+            self.device_chain, noisy_speech, target_speech,
+            sample_rate=self.audio_sr, sample_length=self.sample_length,
+            probability=self._auxiliary_chain_view_probability(plan),
+        )
+        noisy_speech, target_speech = chain.noisy, chain.target
+
+        # Snipts to training target sample length
+        noisy_speech = noisy_speech[..., : self.sample_length]
+        target_speech = target_speech[..., : self.sample_length]
+
+        audio_sr = self.audio_sr
+        vad_reference = vad_reference[..., : noisy_speech.shape[-1]]
+        vad_target = None
+        if not self.defer_vad_to_gpu:
+            vad_target = self.create_vad_target(vad_reference, sample_rate=audio_sr)
+        background_vad_target = None
+        if background_speech_reference is not None:
+            background_speech_reference = background_speech_reference[
+                ..., : noisy_speech.shape[-1]
+            ]
+            if not self.defer_vad_to_gpu:
+                background_vad_target = self.create_vad_target(
+                    background_speech_reference,
+                    sample_rate=audio_sr,
+                )
+
+        # Far parent target: the summed full-RIR interferer speech (post-SIR),
+        # zeros when no interferer is present.
+        #
+        # No loss consumes this. It was added for a far decoder that was never
+        # written -- the comment here used to name a `FarReconstructionLoss` that
+        # does not exist. It stays because it IS read: `scripts/eval_indomain.py`
+        # measures far-speech leakage against it, which is the near/far axis's
+        # main diagnostic. Treat it as an eval output, not a training target, and
+        # if you add that decoder, say so here.
+        far_target = (
+            background_speech_reference
+            if background_speech_reference is not None
+            else torch.zeros_like(noisy_speech)
+        )
+        sample = {
+            "noisy_speech": noisy_speech,
+            "clean_speech": target_speech,
+            "consistency_noise": noisy_speech - target_speech,
+            "far_target": far_target,
+            "speaker_id": self.spk2idx[target_speaker],
+            "audio_sr": audio_sr,
+            "audio_length": noisy_speech.shape[-1],
+        }
+        if vad_target is not None:
+            sample["vad_target"] = vad_target
+        elif self.defer_vad_to_gpu:
+            # Clean (pre-distortion) reference for the batched GPU VAD labeler.
+            sample["vad_reference"] = vad_reference
+        if background_vad_target is not None:
+            sample["background_vad_target"] = background_vad_target
+        elif self.defer_vad_to_gpu and background_speech_reference is not None:
+            sample["background_vad_reference"] = background_speech_reference
+        sample.update(
+            {
+                key: torch.tensor(value, dtype=torch.float32)
+                for key, value in chain.applied.items()
+            }
+        )
+        self._emit_task_metadata(
+            sample,
+            foreground_metadata=fg_rir_metadata,
+            interferer_metadata=interferer_rir_metadata,
+            target_absent=target_absent,
+            background_speech_reference=background_speech_reference,
+            near_count=0 if target_absent else 1,
+            far_count=far_count,
+            mix_mode=mix_mode_name,
+            realized_speech_sir=realized_speech_sir,
+            noise_snr=noise_snr,
+            overlap_fraction=overlap_fraction,
+            turn_taking=turn_taking,
+        )
+        # Per-frame / per-turn labels a row type may add. Placed after the crop
+        # and the VAD block on purpose: the references handed over are the ones
+        # `vad_target` was computed from, so a label cannot land on a different
+        # grid than the one the losses read.
+        self._emit_row_labels(
+            sample,
+            plan,
+            vad_reference=vad_reference,
+            background_speech_reference=background_speech_reference,
+        )
+        if paired_chain is not None:
+            source_id = torch.randint(0, 2**62, (), dtype=torch.long)
+            sample["row_source_id"] = source_id
+            # Cropped to THIS row's primary length, not to sample_length: a
+            # chain stage that resamples can return a few samples short, and the
+            # two views draw their stages independently, so one may be shorter
+            # than the other. The collate pads a shorter view; a view longer
+            # than the primary batch has nowhere to go.
+            row_length = noisy_speech.shape[-1]
+            sample["paired_view"] = {
+                "noisy_speech": paired_chain.noisy[..., :row_length],
+                "clean_speech": paired_chain.target[..., :row_length],
+                "row_source_id": source_id.clone(),
+            }
+            self._emit_auxiliary_chain_view_labels(sample, plan)
+        return sample
+
+    def _auxiliary_chain_view_probability(self, plan: RowPlan) -> float:
+        """Task hook selecting rows for a second capture; default has no RNG cost."""
+        return 0.0
+
+    def _emit_auxiliary_chain_view_labels(self, sample: Dict, plan: RowPlan) -> None:
+        """Optional task provenance; source mapping is already set by the base."""
+        return None
+
+    def _emit_row_labels(
+        self,
+        sample: Dict,
+        plan: RowPlan,
+        *,
+        vad_reference: Optional[torch.Tensor],
+        background_speech_reference: Optional[torch.Tensor],
+    ) -> None:
+        """Row-type frame labels. The generic row has none, so this is a no-op."""
+        return None
+
+    def _emit_task_metadata(
+        self,
+        sample: Dict,
+        *,
+        foreground_metadata: Optional[dict],
+        interferer_metadata: List[dict],
+        target_absent: bool,
+        background_speech_reference: Optional[torch.Tensor],
+        near_count: int = 1,
+        far_count: int = 0,
+        mix_mode: str = "none",
+        realized_speech_sir: float = float("nan"),
+        noise_snr: float = float("nan"),
+        overlap_fraction: float = float("nan"),
+        turn_taking: float = 0.0,
+    ) -> None:
+        """Attach bank lineage; subclasses may add task-specific labels."""
+
+        primary = foreground_metadata or (
+            interferer_metadata[0] if interferer_metadata else {}
+        )
+
+        def _text(metadata: Optional[dict], key: str) -> str:
+            if not metadata:
+                return ""
+            value = metadata.get(key)
+            return "" if value is None else str(value)
+
+        sample.update(
+            {
+                "rir_release_id": _text(primary, "release_id"),
+                "rir_release_sha256": _text(primary, "release_sha256"),
+                "rir_recipe_id": _text(primary, "release_recipe_id"),
+                "rir_variant_id": _text(primary, "release_variant_id"),
+                "rir_split": _text(primary, "split"),
+                "rir_origin": _text(primary, "origin")
+                or _text(primary, "release_origin"),
+                "rir_renderer_profile_id": _text(
+                    primary,
+                    "renderer_profile_id",
+                ),
+                "rir_production_certificate_sha256": _text(
+                    primary,
+                    "production_certificate_sha256",
+                ),
+                "rir_interferer_variant_ids": tuple(
+                    _text(metadata, "release_variant_id")
+                    for metadata in interferer_metadata
+                ),
+            }
+        )
+
+class NoiseSuppressionCollateFunc:
     """Collate functino used in Dataloader."""
 
     def __init__(self):
         pass
 
-    def __call__(self, batch: Any) -> Dict:
-        col_key = []
+    def __call__(self, batch: Dict):
+        col_noisy = []
         col_clean = []
-        col_process = []
+        col_consistency = []
+        col_spkid = []
+        col_sr = []
+        col_length = []
+        col_vad = []
+        col_vad_ref = []
 
         for b in batch:
             """
-            one batch -- (dict) -- {'uttid': key, 'process_wav': process_wav, 'clean_wav': clean_wav}
+            one batch -- (dict) -- {
+                "noisy_speech",
+                "clean_speech",
+                "consistency_noise",
+                "speaker_id",
+                "audio_sr",
+                "audio_length", }
             wav file each with shape [1, L]
             """
-            col_key.append(b["uttid"])
-            col_clean.append(b["clean_wav"].squeeze())
-            col_process.append(b["process_wav"].squeeze())
+            col_clean.append(b["clean_speech"].squeeze())
+            col_noisy.append(b["noisy_speech"].squeeze())
+            col_consistency.append(b["consistency_noise"].squeeze())
+            col_spkid.append(b["speaker_id"])
+            col_sr.append(b["audio_sr"])
+            col_length.append(b["audio_length"])
+            if "vad_target" in b:
+                col_vad.append(b["vad_target"].squeeze())
+            if "vad_reference" in b:
+                col_vad_ref.append(b["vad_reference"].squeeze())
 
         padded_clean = pad_sequence(col_clean, batch_first=True)  # [N, L]
-        padded_process = pad_sequence(col_process, batch_first=True)  # [N, L]
+        padded_noisy = pad_sequence(col_noisy, batch_first=True)  # [N, L]
+        padded_consistency = pad_sequence(col_consistency, batch_first=True)  # [N, L]
 
-        return {
-            "uttid": col_key,
-            "clean_wav": padded_clean,
-            "process_wav": padded_process,
+        out = {
+            "clean_speech": padded_clean,
+            "noisy_speech": padded_noisy,
+            "consistency_noise": padded_consistency,
+            "spkid": torch.Tensor(col_spkid),
+            "sr": torch.Tensor(col_sr),
+            "length": torch.Tensor(col_length),
         }
-
-
-class NsDataset(TaskDataset):
-    """
-    Noise suppression dataset.
-    Online dataset should implement wave_process() to generate parallel data for training.
-
-    Args:
-        resample_to: open waveform then resample it.
-        max_length: cut each waveform until max_length(seconds).
-    """
-
-    def __init__(
-        self,
-        folder: str,
-        resample_to: int,
-        max_length: Optional[int] = None,
-        noise_folder: Optional[str] = None,
-        rir_folder: Optional[str] = None,
-        rir_mode: str = "image",
-        vol_perturbed: Optional[tuple] = None,
-        speed_perturbed: bool = False,
-        perturb_frequency_response: bool = False,
-    ):
-
-        self.max_length = max_length
-        self.noise_folder = noise_folder
-        self.rir_folder = rir_folder
-        self.rir_mode = rir_mode
-        self.speed_perturbed = speed_perturbed
-        self.vol_perturbed = vol_perturbed
-        self.perturb_frequency_response = perturb_frequency_response
-        super().__init__(folder, resample_to=resample_to)
-
-        if (
-            self.noise_folder is not None
-            or self.rir_folder is not None
-            or self.speed_perturbed
-            or self.vol_perturbed is not None
-            or self.perturb_frequency_response
-        ):
-            self.create_augmentor()
-        else:
-            self.augmentor = None
-
-    @property
-    def folder_content(self):
-        _content = {
-            "wav2scp": "wav2scp.txt",  # clean wav path
-            "wav2ref": "wav2ref.txt",  # clean wav path
-        }
-
-        return _content
-
-    def __getitem__(self, index: int) -> Dict:
-        key = self.idx_df[index]
-        feats = self.get_feature(key)
-        process_wav = feats["process_wav"].view(1, -1)
-        clean_wav = feats["clean_wav"].view(1, -1)
-        return {"uttid": key, "process_wav": process_wav, "clean_wav": clean_wav}
-
-    def get_feature(self, key: str) -> Dict:
-        """noisy_wav(2 speaker mixed) -> speed perturbed -> rir reverb -> noise inject"""
-        wav, sr = AudioIO.open(f_path=self.df[key]["wav2scp"])
-        if sr != self.resample_to:
-            wav = torchaudio.transforms.Resample(
-                orig_freq=sr, new_freq=self.resample_to
-            )(wav)
-
-        if wav.shape[0] != 1:
-            wav = wav[0].view(1, -1)  # ignore multi-channel
-
-        clean_wav, sr = AudioIO.open(f_path=self.df[key]["wav2ref"])
-        if sr != self.resample_to:
-            clean_wav = torchaudio.transforms.Resample(
-                orig_freq=sr, new_freq=self.resample_to
-            )(clean_wav)
-
-        if clean_wav.shape[0] != 1:
-            clean_wav = clean_wav[0].view(1, -1)  # ignore multi-channel
-
-        if self.max_length is not None:
-            # only using segmented audio
-            target_len = sr * self.max_length
-            if wav.shape[-1] > target_len:
-                offset = random.randint(0, int(wav.shape[-1]) - target_len)
-                # Avoid choice the zero tensor as target
-                while clean_wav[:, offset : offset + target_len].sum() == 0:
-                    offset = random.randint(0, int(wav.shape[-1]) - target_len)
-                    if clean_wav[:, offset : offset + target_len].sum() != 0:
-                        break
-                wav = wav[:, offset : offset + target_len]
-                clean_wav = clean_wav[:, offset : offset + target_len]
-            else:
-                pad_zero = torch.zeros(1, target_len - wav.shape[-1])
-                wav = torch.cat([wav, pad_zero], dim=-1)
-                pad_zero = torch.zeros(1, target_len - clean_wav.shape[-1])
-                clean_wav = torch.cat([clean_wav, pad_zero], dim=-1)
-        else:
-            target_len = wav.shape[1]  # wav is a tensor with shape [channel, N_sample]
-
-        # Start audio augmentation
-        if self.augmentor:
-            (
-                process_wav,
-                (speed, _, rir_id, rir_ch, a_coeffs, b_coeffs),
-            ) = self.wave_process(wav)
-        else:
-            process_wav, speed, rir_id, rir_ch, a_coeffs, b_coeffs = (
-                wav,
-                None,
-                None,
-                None,
-                None,
-                None,
-            )
-
-        # warp clean_wav with same speed perturbed
-        if speed is not None:
-            clean_wav, _ = self.augmentor.sox_speed_perturbed(clean_wav, speed)
-
-        # warp clean_wav with same rir reverb type, but different reverb mode
-        # 1. target image: warp same rir channel impaulse
-        # 2. target direct: warp same rir channel impaulse with 6ms center from peak
-        # 3. target early: warp same rir channel impaulse with 50ms center from peak
-        if rir_id is not None and self.rir_mode != "anechoic":
-            clean_wav = self.augmentor.apply_rir_by_key(
-                clean_wav, rir_id, choose_ch=rir_ch, rir_mode=self.rir_mode
-            )
-
-        # warp clean_wav with same frequency response variation
-        if a_coeffs is not None and b_coeffs is not None:
-            clean_wav, _, _ = self.augmentor.add_variaion_response(
-                clean_wav, a_coeffs, b_coeffs
-            )
-
-        # random adjust volumn on both clean and process wav
-        if self.vol_perturbed is not None:
-            if not isinstance(self.vol_perturbed, tuple):
-                min_ratio = float(self.vol_perturbed.strip().split(",")[0])
-                max_ratio = float(self.vol_perturbed.strip().split(",")[1])
-            else:
-                min_ratio, max_ratio = self.vol_perturbed
-            perturbed_ratio = torch.FloatTensor(1).uniform_(min_ratio, max_ratio).item()
-            clean_wav = self.augmentor.sox_volumn_perturbed(clean_wav, perturbed_ratio)
-            clean_wav = torch.clamp(clean_wav, min=-1, max=1)
-            process_wav = self.augmentor.sox_volumn_perturbed(
-                process_wav, perturbed_ratio
-            )
-            process_wav = torch.clamp(process_wav, min=-1, max=1)
-
-        return {"clean_wav": clean_wav, "process_wav": process_wav}
-
-    def create_augmentor(self) -> None:
-        self.augmentor = AudioAugmentor(
-            sample_rate=self.resample_to, convolve_mode="fft"
-        )
-        print(f"Created audio augmentor")
-
-        if self.noise_folder:
-            self.augmentor.load_bg_noise_from_folder(self.noise_folder)
-            print(f"Finished load {len(self.augmentor.bg_noise.keys())} noises")
-
-        if self.rir_folder:
-            self.augmentor.load_rir_from_folder(self.rir_folder)
-            print(f"Finished load {len(self.augmentor.rir.keys())} rirs")
-
-    def wave_process(self, x: torch.Tensor) -> Tuple:
-        speed, snr, rir_id, rir_ch, a_coeffs, b_coeffs = (
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-        )
-        backup = x.clone()
-
-        # speed perturbed
-        if self.speed_perturbed and torch.rand(1) < 0.5:
-            speed = float(torch.FloatTensor(1).uniform_(0.9, 1.1))
-            x, _ = self.augmentor.sox_speed_perturbed(x, speed)
-
-        # rir inject
-        if self.rir_folder is not None and torch.rand(1) < 0.8:
-            x, rir_id, rir_ch = self.augmentor.apply_rir(x)
-
-        # noise inject
-        if self.noise_folder is not None and torch.rand(1) < 0.8:
-            snr = float(torch.FloatTensor(1).uniform_(-5, 15))
-            x = self.augmentor.add_bg_noise(x, [snr])[0]
-
-        # frequency variations
-        if self.perturb_frequency_response and torch.rand(1) < 0.8:
-            x, a_coeffs, b_coeffs = self.augmentor.add_variaion_response(x)
-
-        # error handling
-        if torch.isnan(x).any():
-            print(
-                f"warning this augment has nan, snr={snr}, speed={speed}, rir_id={rir_id}"
-            )
-            x, speed, rir_id, a_coeffs, b_coeffs = backup, None, None, None, None
-
-        return x, (speed, snr, rir_id, rir_ch, a_coeffs, b_coeffs)
-
-
-class NsTask(BaseTrainer):
-    def __init__(self, hparam, device_backend, train_dataloader, dev_dataloader):
-        super().__init__(hparam, device_backend)
-        self.overall_step = 0
-        self.train_dataloader = train_dataloader
-        self.dev_dataloader = dev_dataloader
-
-    def train_one_epoch(self, current_epoch):
-        step = 0
-        total_loss = 0.0
-
-        for batch_idx, batch in enumerate(tqdm(self.train_dataloader)):
-            self.overall_step += 1
-            step += 1
-            clean_wav = batch["clean_wav"].to(self.device)  # [N, L]
-            noisy_wav = batch["process_wav"].to(self.device)  # [N, L]
-
-            self.optimizer.zero_grad(set_to_none=True)
-
-            # Model forward
-            loss = self.model(noisy=noisy_wav, enroll=None, ref_clean=clean_wav)
-            loss = torch.mean(loss, dim=0)  # aggregate loss from each device
-            print(f"epoch: {current_epoch}, iter: {batch_idx+1}, batch_loss: {loss}")
-            total_loss += loss.item()
-            loss.backward()
-
-            if self.hparam["OPTIMIZER"]["gradiend_clip"] is not None:
-                torch.nn.utils.clip_grad_norm_(
-                    self.model.parameters(), self.hparam["OPTIMIZER"]["gradiend_clip"]
-                )
-
-            self.optimizer.step()
-
-            if self.tf_writer:
-                _log_name = "train/batch_loss"
-                self.tf_writer.update_step_loss(_log_name, loss, self.overall_step)
-
-        return {"total_loss": total_loss / step}
-
-    def compute_dev_loss(self, current_epoch):
-        step = 0
-        dev_total_loss = 0.0
-
-        for _, batch in enumerate(tqdm(self.dev_dataloader)):
-            step += 1
-            clean_wav = batch["clean_wav"].to(self.device)  # [N, L]
-            noisy_wav = batch["process_wav"].to(self.device)  # [N, L]
-
-            with torch.no_grad():
-                loss = self.model(noisy=noisy_wav, enroll=None, ref_clean=clean_wav)
-                loss = torch.mean(loss, dim=0)  # aggregate loss from each device
-                dev_total_loss += loss.item()
-
-        print(f"dev average loss: {dev_total_loss / step}")
-        return {"total_loss": dev_total_loss / step}
-
-    def gen_logging(self, epoch: int, prefix: str):
-        """
-        Generate samples on tensorboard for loggin
-        """
-        test_audio_dct = load_text_as_dict(
-            f"{self.hparam['DATASET']['eval']}/wav2scp.txt"
-        )
-        resample_to = self.hparam["DATASET"]["sample_rate"]
-
-        for _, key in enumerate(test_audio_dct.keys()):
-            uttid = key
-            print(f"Running inference: {uttid}")
-            wav, sr = AudioIO.open(f_path=test_audio_dct[key][0])
-            if sr != resample_to:
-                wav = torchaudio.transforms.Resample(
-                    orig_freq=sr, new_freq=resample_to
-                )(wav)
-
-            wav = wav.to(self.device)
-
-            if isinstance(self.model, torch.nn.DataParallel):
-                enh_wav = self.model.module.inference(noisy=wav, enroll=None)
-            else:
-                enh_wav = self.model.inference(noisy=wav, enroll=None)
-
-            if self.tf_writer:
-                self.tf_writer.add_ep_audio(
-                    f"{prefix}{uttid}.wav", enh_wav, epoch, resample_to
-                )
+        if col_vad:
+            out["vad_target"] = pad_sequence(col_vad, batch_first=True)
+        if col_vad_ref:
+            out["vad_reference"] = pad_sequence(col_vad_ref, batch_first=True)
+        # Which channel each row went through -- see DEVICE_CHAIN_SCALARS. Every
+        # row carries every key, so one `cat` per key is well defined.
+        for key in DEVICE_CHAIN_SCALARS:
+            values = [b[key].view(-1) for b in batch if key in b]
+            if values:
+                out[key] = torch.cat(values, dim=0)
+        for key in RIR_PROVENANCE_KEYS:
+            if any(key in item for item in batch):
+                out[key] = [item.get(key, "") for item in batch]
+        return collate_paired_views(batch, out)

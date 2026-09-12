@@ -1,0 +1,265 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#010120" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <title>PureSound · Inference Workspace</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar" aria-label="Primary navigation">
+        <div class="brand">
+          <span class="brand-mark" aria-hidden="true">
+            <img src="/favicon.svg" alt="" />
+          </span>
+          <span class="brand-name">PureSound</span>
+          <button class="sidebar-toggle" id="sidebar-toggle" type="button" aria-label="Collapse navigation" aria-expanded="true">‹</button>
+        </div>
+
+        <nav class="nav-stack">
+          <button class="nav-link is-active" data-screen="zoo" type="button">
+            <span class="nav-icon" aria-hidden="true">◈</span>
+            <span>Model Zoo</span>
+          </button>
+          <button class="nav-link" data-screen="playground" type="button">
+            <span class="nav-icon" aria-hidden="true">▷</span>
+            <span>Playground</span>
+          </button>
+          <button class="nav-link" data-screen="measurements" type="button">
+            <span class="nav-icon" aria-hidden="true">⌁</span>
+            <span>Measurements</span>
+          </button>
+        </nav>
+
+        <div class="sidebar-spacer"></div>
+        <div class="runtime-card">
+          <div class="status-line"><span class="status-dot"></span><span>Local runtime</span></div>
+          <div class="runtime-value" id="runtime-status">Connecting…</div>
+          <div class="runtime-meta" id="runtime-meta">Model Zoo</div>
+        </div>
+        <div class="sidebar-footer">
+          <span>PURESOUND / ONNX</span>
+          <span class="version-label">v0.1</span>
+        </div>
+      </aside>
+
+      <main class="main-content">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">LOCAL INFERENCE WORKSPACE</p>
+            <p class="topbar-context" id="topbar-context">Model Zoo / Overview</p>
+          </div>
+          <div class="topbar-actions">
+            <button class="icon-button" id="refresh-button" type="button" title="Refresh catalog" aria-label="Refresh catalog">↻</button>
+            <a class="button button-dark button-small" href="https://github.com/mcw519/PureSound" target="_blank" rel="noreferrer">Docs <span aria-hidden="true">↗</span></a>
+          </div>
+        </header>
+
+        <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+        <section class="screen is-visible" id="screen-zoo" data-screen-panel="zoo">
+          <div class="hero-row">
+            <div>
+              <p class="eyebrow accent-eyebrow">CATALOG / RELEASED ARTIFACTS</p>
+              <h1>Model Zoo</h1>
+              <p class="lede">A versioned, verifiable home for every PureSound ONNX model.</p>
+            </div>
+            <button class="button button-mint" data-screen-target="playground" type="button">Open playground <span aria-hidden="true">→</span></button>
+          </div>
+
+          <div class="stats-grid" aria-label="Catalog summary">
+            <div class="stat-card"><span class="stat-label">Logical models</span><strong id="stat-models">—</strong><span class="stat-hint">registered</span></div>
+            <div class="stat-card"><span class="stat-label">ONNX artifacts</span><strong id="stat-artifacts">—</strong><span class="stat-hint">hash checked</span></div>
+            <div class="stat-card stat-card-accent"><span class="stat-label">Default voice model</span><strong id="stat-default-voice">—</strong><span class="stat-hint">release preset</span></div>
+            <div class="stat-card"><span class="stat-label">Runtime</span><strong id="stat-runtime">CPU</strong><span class="stat-hint">provider auto</span></div>
+          </div>
+
+          <div class="toolbar panel">
+            <label class="search-field"><span aria-hidden="true">⌕</span><input id="model-search" type="search" placeholder="Search models…" autocomplete="off" /></label>
+            <label class="select-field"><span>Task</span><select id="task-filter"><option value="all">All tasks</option><option value="voice_isolation">Voice isolation</option><option value="speaker_embedding">Speaker verification</option></select></label>
+            <label class="select-field"><span>Lifecycle</span><select id="lifecycle-filter"><option value="all">All lifecycle</option><option value="released">Released</option><option value="candidate">Candidate</option><option value="reference">Reference</option><option value="experimental">Experimental</option></select></label>
+            <span class="toolbar-count" id="model-count">Loading…</span>
+          </div>
+
+          <div class="model-grid" id="model-grid" aria-live="polite">
+            <div class="empty-state">Loading Model Zoo…</div>
+          </div>
+        </section>
+
+        <section class="screen" id="screen-playground" data-screen-panel="playground">
+          <div class="hero-row compact-hero">
+            <div>
+              <p class="eyebrow accent-eyebrow">PLAYGROUND / AUDIO CONTRACTS</p>
+              <h1>Inference playground</h1>
+              <p class="lede">Run the same named-input contract used by the CLI and future APIs.</p>
+            </div>
+            <div class="playground-hero-actions"><span class="provider-chip" id="provider-chip"><span class="status-dot"></span><span id="provider-chip-label">Provider auto</span></span><button class="button button-dark" id="playground-settings-open" type="button" aria-expanded="false">Settings <span aria-hidden="true">→</span></button></div>
+          </div>
+
+          <div class="workspace-tabs" role="tablist" aria-label="Inference tasks">
+            <button class="workspace-tab is-active" data-workspace="voice" role="tab" aria-selected="true" type="button"><span class="tab-glyph glyph-wave">∿</span>Voice Isolation</button>
+            <button class="workspace-tab" data-workspace="sv" role="tab" aria-selected="false" type="button"><span class="tab-glyph glyph-spk">◌</span>Speaker Verification</button>
+          </div>
+
+          <div class="workspace" id="workspace-voice" data-workspace-panel="voice">
+            <div class="workspace-main">
+              <div class="panel input-panel">
+                <div class="panel-header"><div><p class="eyebrow">INPUT / AUDIO</p><h2>Upload a noisy recording</h2></div><span class="contract-label">audio</span></div>
+                <label class="dropzone" id="voice-dropzone" for="voice-audio">
+                  <input id="voice-audio" type="file" accept="audio/*,.wav,.flac,.mp3,.m4a" />
+                  <span class="upload-icon" aria-hidden="true">↑</span>
+                  <strong>Drop audio here</strong>
+                  <span>or click to browse · mono 16 kHz is prepared by the processor</span>
+                </label>
+                <div class="audio-preview" id="voice-input-preview" hidden>
+                  <div class="audio-preview-head"><span id="voice-file-name">input.wav</span><span class="audio-meta" id="voice-file-meta">—</span></div>
+                  <div class="audio-inspector" id="voice-input-audio" data-wave-color="#c8f6f9"></div>
+                </div>
+              </div>
+
+              <div class="panel result-panel" id="voice-result" hidden>
+                <div class="panel-header"><div><p class="eyebrow">OUTPUT / ENHANCED</p><h2>Voice isolation result</h2></div><a class="button button-outline button-small" id="voice-download" href="#" download="enhanced.wav">Export WAV <span aria-hidden="true">↓</span></a></div>
+                <div class="audio-preview audio-preview-output">
+                  <div class="audio-preview-head"><span>enhanced.wav</span><span class="audio-meta" id="voice-result-meta">—</span></div>
+                  <div class="audio-inspector" id="voice-output-audio" data-wave-color="#bdbbff"></div>
+                </div>
+                <div class="metric-row" id="voice-metrics"></div>
+                <p class="applied-settings" id="voice-applied">Dry blend — · Onset guard —</p>
+                <p class="measurement-inline-note" id="voice-measurement-note">Reference-free quality measurement will appear after the output is ready.</p>
+              </div>
+            </div>
+
+            <aside class="workspace-aside playground-drawer" id="playground-drawer-voice" aria-hidden="true" aria-label="Voice Isolation settings">
+              <div class="settings-panel">
+                <div class="panel-header playground-drawer-head"><div><p class="eyebrow">CONFIGURATION</p><h2>Voice Isolation settings</h2></div><button class="icon-button" data-playground-settings-close type="button" aria-label="Close Voice Isolation settings">×</button></div>
+                <div class="playground-drawer-scroll">
+                <label class="field-label" for="voice-model">Model</label>
+                <select class="control" id="voice-model"></select>
+                <label class="field-label" for="voice-variant">Artifact variant</label>
+                <select class="control" id="voice-variant"></select>
+                <label class="field-label" for="voice-provider">Provider</label>
+                <select class="control" id="voice-provider"><option value="auto">Auto · CUDA / CoreML / CPU</option><option value="cpu">CPU</option><option value="cuda">CUDA</option><option value="mps">Apple MPS · CoreML</option></select>
+                <div class="field-label range-label"><span>Dry blend</span><output id="voice-dry-output">0.90</output></div>
+                <input class="range" id="voice-dry-blend" type="range" min="0.1" max="1" step="0.05" value="0.9" />
+                <div class="range-hint"><span>wet</span><span>dry</span></div>
+                <label class="toggle-row"><input id="voice-onset-guard" type="checkbox" /><span class="toggle-ui"></span><span>Onset guard</span></label>
+                <p class="toggle-hint">Keeps the input untouched until a talker has been heard for 1 s: fewer deleted words, less suppression in the first second.</p>
+                <fieldset class="knob-grid" id="voice-onset-knobs" disabled>
+                  <legend>Guard knobs</legend>
+                  <label><span>Arm · s</span><input class="control" id="voice-onset-t-arm" type="number" min="0.2" max="5" step="0.1" value="1" /></label>
+                  <label><span>Forget · s</span><input class="control" id="voice-onset-t-forget" type="number" min="1" max="60" step="0.5" value="5" /></label>
+                  <label><span>Release · s</span><input class="control" id="voice-onset-tau-dn" type="number" min="0.1" max="10" step="0.1" value="2" /></label>
+                  <label><span>Margin · dB</span><input class="control" id="voice-onset-margin" type="number" min="3" max="20" step="0.5" value="8" /></label>
+                </fieldset>
+                <label class="toggle-row"><input id="voice-collect-extras" type="checkbox" /><span class="toggle-ui"></span><span>Collect VAD heads</span></label>
+                <div class="contract-list"><div><span>Sample rate</span><strong id="voice-sample-rate">16 kHz</strong></div><div><span>Channels</span><strong id="voice-channels">Mono</strong></div><div><span>Delay alignment</span><strong id="voice-delay">Manifest</strong></div></div>
+                <div class="job-progress" id="voice-job-progress" hidden><div class="job-progress-bar"><span></span></div><div class="job-progress-copy"><span data-job-phase>Queued</span><strong data-job-percent>0%</strong></div></div>
+                <div class="run-actions"><button class="button button-dark run-button" id="voice-run" type="button"><span class="button-spinner" aria-hidden="true"></span>Run inference <span aria-hidden="true">→</span></button><button class="button button-outline cancel-button" id="voice-cancel" type="button" hidden>Cancel</button></div>
+                <p class="form-note" id="voice-form-note">Select an audio file to begin.</p>
+                </div>
+              </div>
+            </aside>
+          </div>
+
+          <div class="workspace workspace-sv" id="workspace-sv" data-workspace-panel="sv" hidden>
+            <div class="workspace-main">
+              <div class="sv-input-grid">
+                <div class="panel input-panel sv-card">
+                  <div class="panel-header"><div><p class="eyebrow">INPUT / ENROLLMENT</p><h2>Reference voice</h2></div><span class="contract-label contract-purple">enrollment</span></div>
+                  <label class="dropzone compact-dropzone" for="sv-enrollment"><input id="sv-enrollment" type="file" accept="audio/*,.wav,.flac,.mp3,.m4a" /><span class="upload-icon" aria-hidden="true">↑</span><strong>Drop enrollment audio</strong><span>one clear speech sample</span></label>
+                  <div class="audio-preview" id="sv-enrollment-preview" hidden><div class="audio-preview-head"><span id="sv-enrollment-name">enrollment.wav</span><span class="audio-meta" id="sv-enrollment-meta">—</span></div><div class="audio-inspector is-compact" id="sv-enrollment-audio" data-wave-color="#bdbbff"></div></div>
+                </div>
+                <div class="panel input-panel sv-card">
+                  <div class="panel-header"><div><p class="eyebrow">INPUT / TEST</p><h2>Test voice</h2></div><span class="contract-label contract-purple">test</span></div>
+                  <label class="dropzone compact-dropzone" for="sv-test"><input id="sv-test" type="file" accept="audio/*,.wav,.flac,.mp3,.m4a" /><span class="upload-icon" aria-hidden="true">↑</span><strong>Drop test audio</strong><span>same speaker or impostor</span></label>
+                  <div class="audio-preview" id="sv-test-preview" hidden><div class="audio-preview-head"><span id="sv-test-name">test.wav</span><span class="audio-meta" id="sv-test-meta">—</span></div><div class="audio-inspector is-compact" id="sv-test-audio" data-wave-color="#ef2cc1"></div></div>
+                </div>
+              </div>
+              <div class="panel result-panel sv-result-panel" id="sv-result" hidden>
+                <div class="panel-header"><div><p class="eyebrow">RESULT / COSINE DECISION</p><h2>Speaker verification</h2></div><span class="result-time" id="sv-result-time">—</span></div>
+                <div class="sv-result-body"><div class="score-gauge" id="sv-score-gauge"><span class="gauge-value" id="sv-score">—</span><span class="gauge-label">similarity</span></div><div class="decision-copy"><span class="eyebrow">VERDICT</span><strong class="verdict" id="sv-verdict">—</strong><p>Threshold <b id="sv-threshold-result">0.80</b> · <span id="sv-verdict-note">Run two audio files to compare.</span></p></div></div>
+                <div class="metric-row" id="sv-metrics"></div>
+              </div>
+            </div>
+            <aside class="workspace-aside playground-drawer" id="playground-drawer-sv" aria-hidden="true" aria-label="Speaker Verification settings"><div class="settings-panel"><div class="panel-header playground-drawer-head"><div><p class="eyebrow">CONFIGURATION</p><h2>Speaker Verification settings</h2></div><button class="icon-button" data-playground-settings-close type="button" aria-label="Close Speaker Verification settings">×</button></div><div class="playground-drawer-scroll"><label class="field-label" for="sv-model">Model</label><select class="control" id="sv-model"></select><label class="field-label" for="sv-provider">Provider</label><select class="control" id="sv-provider"><option value="auto">Auto · CUDA / CoreML / CPU</option><option value="cpu">CPU</option><option value="cuda">CUDA</option><option value="mps">Apple MPS · CoreML</option></select><div class="field-label range-label"><span>Cosine threshold</span><output id="sv-threshold-output">0.80</output></div><input class="range" id="sv-threshold" type="range" min="0" max="1" step="0.01" value="0.8" /><div class="range-hint"><span>strict</span><span>lenient</span></div><div class="contract-list"><div><span>Sample rate</span><strong>16 kHz</strong></div><div><span>Embedding</span><strong>192 dimensions</strong></div><div><span>Decision</span><strong>Cosine similarity</strong></div></div><div class="job-progress" id="sv-job-progress" hidden><div class="job-progress-bar"><span></span></div><div class="job-progress-copy"><span data-job-phase>Queued</span><strong data-job-percent>0%</strong></div></div><div class="run-actions"><button class="button button-dark run-button" id="sv-run" type="button"><span class="button-spinner" aria-hidden="true"></span>Run verification <span aria-hidden="true">→</span></button><button class="button button-outline cancel-button" id="sv-cancel" type="button" hidden>Cancel</button></div><p class="form-note" id="sv-form-note">Select enrollment and test audio.</p></div></div></aside>
+          </div>
+          <div class="playground-drawer-backdrop" id="playground-drawer-backdrop" hidden></div>
+        </section>
+
+        <section class="screen" id="screen-measurements" data-screen-panel="measurements">
+          <div class="hero-row compact-hero"><div><p class="eyebrow accent-eyebrow">MEASUREMENTS / MODEL COMPARISON</p><h1>Compare model outputs</h1><p class="lede">Run one recording through several Voice Isolation models and compare the results side by side.</p></div><button class="button button-dark" id="measure-configure" type="button" aria-controls="measurement-drawer" aria-expanded="false">Configure comparison <span aria-hidden="true">→</span></button></div>
+          <div class="panel measurement-intro">
+            <div class="measurement-intro-copy"><p class="eyebrow">WHAT THIS PAGE DOES</p><h2>Make an evidence-based model choice</h2><p>Use the same input for every selected model, then review speed, level, clipping, and optional quality scores in one report.</p></div>
+            <div class="measurement-steps" aria-label="Measurement steps">
+              <div class="measurement-step"><span class="step-number" aria-hidden="true">01</span><div><strong>Choose a recording</strong><span>Upload one noisy clip to use as the common input.</span></div></div>
+              <div class="measurement-step"><span class="step-number" aria-hidden="true">02</span><div><strong>Select models</strong><span>Keep the default, or add candidates from the Model Zoo.</span></div></div>
+              <div class="measurement-step"><span class="step-number" aria-hidden="true">03</span><div><strong>Compare the report</strong><span>Lower RTF is faster; higher quality scores are better.</span></div></div>
+            </div>
+            <p class="measurement-intro-note"><span aria-hidden="true">＋</span><span><strong>Optional clean reference:</strong> add one only when you need SI-SDR, SNR, correlation, STOI, or PESQ.</span></p>
+          </div>
+          <div class="measurement-layout">
+            <div class="panel measurement-results" id="measurement-results">
+              <div class="panel-header"><div><p class="eyebrow">RESULT / SIDE-BY-SIDE</p><h2>Which output fits?</h2><p class="panel-help" id="measurement-result-summary">Configure a comparison to see measurements and audition every output.</p></div><div class="measurement-result-actions"><button class="button button-outline button-small" id="measure-export-json" type="button" hidden>JSON ↓</button><button class="button button-outline button-small" id="measure-export-csv" type="button" hidden>CSV ↓</button><span class="result-time" id="measurement-result-time">—</span></div></div>
+              <div class="measurement-summary" id="measurement-summary"><button class="measurement-empty" id="measurement-empty-configure" type="button"><span>＋</span><strong>Start a comparison</strong><small>Choose one recording and at least one model.</small></button></div>
+              <div class="measurement-report-content" id="measurement-report-content" hidden>
+                <div class="measurement-guide" aria-label="How to read the report">
+                  <div><strong>Speed</strong><span><abbr title="Real-time factor">RTF</abbr> below 1 is faster than real time.</span></div>
+                  <div><strong>Level</strong><span>RMS and peak describe loudness and headroom.</span></div>
+                  <div><strong>Quality</strong><span>DNSMOS works without a reference; higher SI-SDR and STOI need one.</span></div>
+                </div>
+                <p class="applied-settings" id="measurement-applied">Onset guard —</p>
+                <div class="measurement-table-wrap"><table class="measurement-table"><thead><tr><th>Model</th><th>Speed <abbr title="Real-time factor">RTF</abbr></th><th>Level</th><th>Peak</th><th>Clipped</th><th>DNSMOS <abbr title="Overall quality score">OVR</abbr></th><th>SI-SDR</th><th>STOI</th></tr></thead><tbody id="measurement-table-body"></tbody></table></div>
+                <p class="measurement-footnote">Lower RTF and clipping are safer for deployment. RMS and peak are level checks, not quality scores.</p>
+                <div class="measurement-audio-results" id="measurement-audio-results"></div>
+              </div>
+            </div>
+          </div>
+          <div class="measurement-drawer-backdrop" id="measurement-drawer-backdrop" hidden></div>
+          <aside class="measurement-drawer" id="measurement-drawer" aria-hidden="true" aria-label="Measurement settings">
+            <div class="measurement-drawer-head"><div><p class="eyebrow">COMPARISON SETUP</p><h2>Measurement settings</h2></div><button class="icon-button" id="measurement-drawer-close" type="button" aria-label="Close measurement settings">×</button></div>
+            <div class="measurement-drawer-scroll">
+            <div class="measurement-controls">
+              <div class="panel-header"><div><p class="eyebrow">STEP 1 / INPUT</p><h2>Choose the recording</h2><p class="panel-help">This file is sent to every selected model.</p></div><span class="measurement-icon" aria-hidden="true">⌁</span></div>
+              <div class="measurement-input-grid">
+                <label class="measure-file"><span class="field-label">Recording to compare <em>required</em></span><input id="measure-audio" type="file" accept="audio/*,.wav,.flac,.mp3,.m4a" /><strong data-measure-name="audio">Choose a noisy recording</strong><small data-measure-meta="audio">Sent to every selected model</small></label>
+                <label class="measure-file"><span class="field-label">Clean reference <em>optional</em></span><input id="measure-reference" type="file" accept="audio/*,.wav,.flac,.mp3,.m4a" /><strong data-measure-name="reference">Choose a clean reference</strong><small data-measure-meta="reference">Adds quality scores; leave blank for level and speed</small></label>
+              </div>
+              <div class="measure-model-heading"><div><p class="eyebrow">STEP 2 / MODELS</p><div class="field-label measure-model-label"><span>Choose models to compare</span></div><p class="panel-help">Start with the default model, then add candidates for a fair side-by-side run.</p></div><output id="measure-model-count">0 selected</output></div>
+              <div class="measure-model-list" id="measure-model-list"><span class="measure-empty">Load catalog to choose Voice Isolation models.</span></div>
+              <div class="measure-run-heading"><p class="eyebrow">OPTIONAL / ONSET GUARD</p><p>Applies to every selected model in this comparison.</p></div>
+              <label class="toggle-row"><input id="measure-onset-guard" type="checkbox" /><span class="toggle-ui"></span><span>Onset guard</span></label>
+              <p class="toggle-hint">Keeps the input untouched until a talker has been heard for 1 s: fewer deleted words, less suppression in the first second.</p>
+              <fieldset class="knob-grid" id="measure-onset-knobs" disabled>
+                <legend>Guard knobs</legend>
+                <label><span>Arm · s</span><input class="control" id="measure-onset-t-arm" type="number" min="0.2" max="5" step="0.1" value="1" /></label>
+                <label><span>Forget · s</span><input class="control" id="measure-onset-t-forget" type="number" min="1" max="60" step="0.5" value="5" /></label>
+                <label><span>Release · s</span><input class="control" id="measure-onset-tau-dn" type="number" min="0.1" max="10" step="0.1" value="2" /></label>
+                <label><span>Margin · dB</span><input class="control" id="measure-onset-margin" type="number" min="3" max="20" step="0.5" value="8" /></label>
+              </fieldset>
+              <div class="measure-run-heading"><p class="eyebrow">STEP 3 / COMPARE</p><p>Run the same input through the selected models.</p></div>
+              <div class="job-progress" id="measure-job-progress" hidden><div class="job-progress-bar"><span></span></div><div class="job-progress-copy"><span data-job-phase>Queued</span><strong data-job-percent>0%</strong></div></div>
+              <div class="measurement-actions"><button class="button button-dark" id="measure-run" type="button"><span class="button-spinner" aria-hidden="true"></span>Compare selected models <span aria-hidden="true">→</span></button><button class="button button-outline cancel-button" id="measure-cancel" type="button" hidden>Cancel</button><span class="form-note" id="measure-form-note"></span></div>
+            </div>
+            </div>
+          </aside>
+          <div class="panel result-history"><div class="panel-header"><div><p class="eyebrow">ACTIVITY / RECENT JOBS</p><h2>Recent runs</h2><p class="panel-help">Measurement comparisons and Playground inferences appear here.</p></div><button class="button button-outline button-small" id="history-refresh" type="button">Refresh</button></div><div id="job-history" class="job-history"><span class="measure-empty">No runs yet. Your completed comparisons will appear here.</span></div></div>
+          <details class="catalog-check panel">
+            <summary><span class="catalog-check-summary"><span class="eyebrow">TECHNICAL CHECK</span><strong>Model Zoo integrity</strong><span>Checks ONNX files, hashes, sidecars, and graph contracts. It does not compare audio quality.</span></span><span class="catalog-check-chevron" aria-hidden="true">＋</span></summary>
+            <div class="catalog-check-body"><div class="validation-panel"><div class="validation-status" id="validation-status"><span class="status-icon">✓</span><div><strong>Validation has not run</strong><span>Run a CPU graph and SHA256 check from the local catalog.</span></div></div><div class="validation-summary" id="validation-summary"></div><pre class="validation-errors" id="validation-errors" hidden></pre><div class="catalog-check-actions"><button class="button button-outline" id="validate-button" type="button">Run catalog check <span aria-hidden="true">→</span></button></div></div></div>
+          </details>
+          <div class="measurement-note panel"><span class="note-mark">i</span><div><strong>Use the report for the decision you need.</strong><p>Without a clean reference, compare speed, level, and clipping. With one, use SI-SDR and STOI to judge similarity to the clean signal.</p></div></div>
+        </section>
+      </main>
+    </div>
+
+    <dialog class="model-dialog" id="model-dialog">
+      <div class="dialog-header"><div><p class="eyebrow">MODEL / INSPECT</p><h2 id="dialog-title">Model details</h2></div><button class="icon-button" id="dialog-close" type="button" aria-label="Close">×</button></div>
+      <div id="dialog-body"></div>
+    </dialog>
+    <script src="/audio-view.js" defer></script>
+    <script src="/app.js" defer></script>
+  </body>
+</html>

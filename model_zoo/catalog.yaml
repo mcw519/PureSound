@@ -1,0 +1,122 @@
+schema_version: 1
+
+# The registry is intentionally metadata-only.  ONNX binaries and checkpoints
+# stay in their existing task directories; update the SHA256 whenever an
+# artifact is replaced in place.
+models:
+  - id: voice-isolate-dpcrn-v8
+    display_name: Voice Isolation DPCRN v8
+    task: voice_isolation
+    lifecycle: released
+    roles: [candidate]
+    description: The previous release default, kept as the conservative choice. It suppresses a distant talker less deeply than curriculum-v1, but it does not reduce the near talker on recordings made through capture hardware unlike its training data -- which is curriculum-v1's known weakness.
+    inputs: [audio]
+    outputs: [audio]
+    audio: {sample_rate: 16000, channels: 1}
+    capabilities: {offline_file: true, realtime_streaming: true, auxiliary_heads: false}
+    preprocessing: {mono: true, resample: 16000}
+    postprocessing: {type: manifest_recommended, streaming_delay_alignment: true}
+    recommended_inference: {dry_blend: 0.9}
+    parameters:
+      dry_blend: {type: float, default: 0.9, minimum: 0.1, maximum: 1.0}
+      onset_guard: {type: bool, default: false, description: "Keep the input untouched until a talker has been heard for t_arm_s of speech; fewer deleted words, less suppression in the first second."}
+      onset_guard_t_arm_s: {type: float, default: 1.0, minimum: 0.3, maximum: 5.0, description: "Sustained speech that confirms a talker and hands the output over to the model."}
+      onset_guard_t_forget_s: {type: float, default: 5.0, minimum: 1.0, maximum: 60.0, description: "Quiet this long drops the anchor, so the next onset is protected again."}
+      onset_guard_tau_dn_s: {type: float, default: 2.0, minimum: 0.1, maximum: 10.0, description: "Release time constant from the untouched input back to the model output."}
+      onset_guard_margin_db: {type: float, default: 8.0, minimum: 3.0, maximum: 20.0, description: "How far over the tracked noise floor a frame counts as speech."}
+    source_checkpoint: egs/voice_isolate/pretrained_ckpt/dpcrn_v8.ckpt
+    source_config: egs/voice_isolate/config/infer_dpcrn.yaml
+    benchmark_references: [egs/voice_isolate/pretrained_ckpt/README.md]
+    artifacts:
+      - format: onnx
+        variant: default
+        path: egs/voice_isolate/pretrained_ckpt/streaming/dpcrn_v8.onnx
+        manifest: egs/voice_isolate/pretrained_ckpt/streaming/dpcrn_v8.json
+        processor: stft_frame_ort
+        sha256: ddd7724eda31d160e7c9733b522c3c8da52997b9b972e800156b17e2f9a4857c
+
+  - id: voice-isolate-dpcrn-curriculum-v1
+    display_name: Voice Isolation DPCRN curriculum v1
+    task: voice_isolation
+    lifecycle: released
+    roles: [default]
+    description: The curriculum lineage's second step -- conversational session rows, a paired capture view, and per-frame proximity and presence heads, each brought in on a schedule. On recordings from the capture hardware it was tuned for, it suppresses a distant talker further than any previous version -- including from a cold start, with no near talker heard first -- and costs nothing on the near talker. Known weakness -- on recordings made through other capture hardware it can attenuate the near talker, badly in the worst case. Prefer dpcrn-v8 when the capture path is unknown.
+    inputs: [audio]
+    outputs: [audio]
+    audio: {sample_rate: 16000, channels: 1}
+    capabilities: {offline_file: true, realtime_streaming: true, auxiliary_heads: false}
+    preprocessing: {mono: true, resample: 16000}
+    postprocessing: {type: manifest_recommended}
+    recommended_inference: {dry_blend: 0.9}
+    parameters:
+      dry_blend: {type: float, default: 0.9, minimum: 0.1, maximum: 1.0}
+      onset_guard: {type: bool, default: false, description: "Keep the input untouched until a talker has been heard for t_arm_s of speech; fewer deleted words, less suppression in the first second."}
+      onset_guard_t_arm_s: {type: float, default: 1.0, minimum: 0.3, maximum: 5.0, description: "Sustained speech that confirms a talker and hands the output over to the model."}
+      onset_guard_t_forget_s: {type: float, default: 5.0, minimum: 1.0, maximum: 60.0, description: "Quiet this long drops the anchor, so the next onset is protected again."}
+      onset_guard_tau_dn_s: {type: float, default: 2.0, minimum: 0.1, maximum: 10.0, description: "Release time constant from the untouched input back to the model output."}
+      onset_guard_margin_db: {type: float, default: 8.0, minimum: 3.0, maximum: 20.0, description: "How far over the tracked noise floor a frame counts as speech."}
+    source_checkpoint: egs/voice_isolate/pretrained_ckpt/dpcrn_curriculum_v1.ckpt
+    source_config: egs/voice_isolate/config/infer_dpcrn.yaml
+    benchmark_references: [egs/voice_isolate/pretrained_ckpt/README.md]
+    artifacts:
+      - format: onnx
+        variant: default
+        path: egs/voice_isolate/pretrained_ckpt/streaming/dpcrn_curriculum_v1.onnx
+        manifest: egs/voice_isolate/pretrained_ckpt/streaming/dpcrn_curriculum_v1.json
+        processor: stft_frame_ort
+        sha256: e7c19b1769d26e474d0d4fd46e2fff55487bd794e867614183ab3701f473c936
+
+  - id: speaker-verification-ps-spk-v1
+    display_name: Speaker Verification PS-spk-v1
+    task: speaker_embedding
+    lifecycle: released
+    roles: [alternative]
+    description: 192-dimensional speaker embedding model (EER 1.10 in the release notes).
+    inputs: [enrollment, test]
+    outputs: [enrollment_embedding, test_embedding]
+    audio: {sample_rate: 16000, channels: 1, target_dbfs: -22.0}
+    capabilities: {offline_file: true, realtime_streaming: false, speaker_verification: true}
+    preprocessing: {mono: true, resample: 16000, target_dbfs: -22.0}
+    postprocessing: {type: cosine_similarity}
+    recommended_inference: {threshold: 0.8}
+    parameters:
+      threshold: {type: float, default: 0.8, minimum: 0.0, maximum: 1.0}
+      target_dbfs: {type: float, default: -22.0, minimum: -60.0, maximum: 0.0}
+    source_checkpoint: egs/speaker_embedding/pretrained/PS-spk-v1.ckpt
+    source_config: egs/speaker_embedding/conf/PS-spk-v1.yaml
+    benchmark_references: [egs/speaker_embedding/README.md]
+    artifacts:
+      - format: onnx
+        variant: default
+        path: egs/speaker_embedding/pretrained/PS-spk-v1.onnx
+        processor: waveform_embedding_ort
+        sha256: 349bfa8bbfaa180c3d865d73d2c87d1344514bffe0deb19abeb8a407a5c0ad12
+        input_names: [Audio]
+        output_names: [Embedding]
+  - id: speaker-verification-ps-spk-v1-1
+    display_name: Speaker Verification PS-spk-v1-1
+    task: speaker_embedding
+    lifecycle: released
+    roles: [default]
+    description: 192-dimensional speaker embedding release (EER 0.99 in the release notes).
+    inputs: [enrollment, test]
+    outputs: [enrollment_embedding, test_embedding]
+    audio: {sample_rate: 16000, channels: 1, target_dbfs: -22.0}
+    capabilities: {offline_file: true, realtime_streaming: false, speaker_verification: true}
+    preprocessing: {mono: true, resample: 16000, target_dbfs: -22.0}
+    postprocessing: {type: cosine_similarity}
+    recommended_inference: {threshold: 0.8}
+    parameters:
+      threshold: {type: float, default: 0.8, minimum: 0.0, maximum: 1.0}
+      target_dbfs: {type: float, default: -22.0, minimum: -60.0, maximum: 0.0}
+    source_checkpoint: egs/speaker_embedding/pretrained/PS-spk-v1-1.ckpt
+    source_config: egs/speaker_embedding/conf/PS-spk-v1-1.yaml
+    benchmark_references: [egs/speaker_embedding/README.md]
+    artifacts:
+      - format: onnx
+        variant: default
+        path: egs/speaker_embedding/pretrained/PS-spk-v1-1.onnx
+        processor: waveform_embedding_ort
+        sha256: 10200532046454608be0399c4dccaabc7fa9ff7ab0feec97697899b603fc08b2
+        input_names: [Audio]
+        output_names: [Embedding]

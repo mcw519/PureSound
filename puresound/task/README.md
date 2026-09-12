@@ -1,34 +1,16 @@
-# Task
+# puresound.task
 
-Task is a PyTorch based trainer.  
-Including functions:
-- Model training step
-- Model validation step
-- Schedule learning rate
-- Save checkpoint and logging
-- Tensorboard extension
+Task-specific dataset implementations, all built on `puresound.dataset`'s
+dynamic-augmentation base (`dynamic_base.py`).
 
-## Dataset class
-This class manage the data loading and on-the-fly data pipeline, just needing related metadata by user handcrafting.
+| module | status | use |
+|---|---|---|
+| `ns.py` | active | generic noise-suppression dataset + the shared synthesis skeleton every task dataset specializes |
+| `voice_isolation.py` | active | near-field voice isolation — real-recording rows, `mix_mode`, turn-taking, auxiliary distance/DRR/VAD labels; the voice-isolate recipe's dataset |
+| `sampler.py` | active | N-way K-shot speaker sampler, incl. a seeded variant for deterministic validation |
+| `sv.py` | legacy | speaker verification / embedding dataset |
+| `tse.py` | legacy | target speaker extraction dataset |
 
-## TseDataset & TseTask
-Target Speech Extraction
+Legacy modules are kept working but frozen: no new features, no rewrites.
 
-    # Needed metadata
-    wav2scp.txt: noisy wav path
-    wav2ref.txt: clean wav path
-    ref2list.txt: target enrollment speech list
-    ref2spk.txt: target speaker id
-    wav2spk.txt': speakers in mixture
-
-TSE task is shared with PVAD task, just replacing the training objects from target speech to target speech activity.
-
-    # Switch to PVAD dataset by adding one metadata
-    ref2vad.txt: pvad labels
-
-## NsDataset & NsTask
-Noise Suppression speech enhancement
-
-    # Needed metadata
-    wav2scp.txt: noisy wav path
-    wav2ref.txt: clean wav path
+Full API reference: `docs/task/`.

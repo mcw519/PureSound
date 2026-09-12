@@ -1,0 +1,5 @@
+egs/speaker_embedding/pretrained/* filter=lfs diff=lfs merge=lfs -text
+egs/speaker_embedding/pretrained/PS-spk-v1.ckpt filter=lfs diff=lfs merge=lfs -text
+egs/speaker_embedding/pretrained/PS-spk-v1.onnx filter=lfs diff=lfs merge=lfs -text
+egs/speaker_embedding/pretrained/PS-spk-v1-1.onnx filter=lfs diff=lfs merge=lfs -text
+egs/speaker_embedding/pretrained/PS-spk-v1-1.ckpt filter=lfs diff=lfs merge=lfs -text
