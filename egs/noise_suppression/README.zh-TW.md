@@ -235,7 +235,7 @@ strategy = (
 ### Precision
 
 `trainer.lightning_trainer_args` 會直接展開丟進
-`lightning.Trainer(**trainer_dict["lightning_trainer_args"], ...)`，所以它接受**任何**
+`pytorch_lightning.Trainer(**trainer_dict["lightning_trainer_args"], ...)`，所以它接受**任何**
 Lightning 的 `Trainer` 參數，不只是兩份範例 config 用到的那幾個（`max_epochs`、
 `gradient_clip_val`、`accumulate_grad_batches`）。precision 預設是 Lightning 的全精度
 `32-true`。想用一點點精度換速度/記憶體的話：

@@ -239,7 +239,7 @@ strategy = (
 
 ### Precision
 
-`trainer.lightning_trainer_args` is splatted directly into `lightning.Trainer(**trainer_dict["lightning_trainer_args"], ...)`,
+`trainer.lightning_trainer_args` is splatted directly into `pytorch_lightning.Trainer(**trainer_dict["lightning_trainer_args"], ...)`,
 so it accepts **any** Lightning `Trainer` kwarg, not just the ones the example configs use
 (`max_epochs`, `gradient_clip_val`, `accumulate_grad_batches`). Precision defaults to Lightning's
 full-precision `32-true`. To trade a little accuracy for speed/memory:

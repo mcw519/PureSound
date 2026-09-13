@@ -36,7 +36,7 @@ dependencies = [
   "plotly",
   "pandas",
   "kaleido",
-  "lightning",
+  "pytorch-lightning",
   "gradio",
   "onnx",
   "requests",

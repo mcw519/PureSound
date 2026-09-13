@@ -19,7 +19,7 @@ it::
 
 from pathlib import Path
 import sys
-import lightning as L
+import pytorch_lightning as L
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
