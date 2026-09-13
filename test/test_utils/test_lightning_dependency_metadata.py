@@ -62,5 +62,7 @@ def test_repo_source_no_longer_imports_lightning_namespace():
 
     assert pytorch_lightning_seen
     assert "lightning" not in imported_modules
+    assert "lightning.pytorch" not in imported_modules
+    assert "lightning.fabric" not in imported_modules
     assert "lightning.pytorch" not in imported_from_modules
     assert "lightning.fabric" not in imported_from_modules
