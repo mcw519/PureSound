@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 from pathlib import Path
+import re
 import tomllib
 
 
 ROOT = Path(__file__).resolve().parents[2]
+NAME_RE = re.compile(r"^\s*([A-Za-z0-9][A-Za-z0-9._-]*)")
 
 
 def test_project_declares_pytorch_lightning_distribution():
@@ -16,24 +18,27 @@ def test_project_declares_pytorch_lightning_distribution():
 
 
 def test_requirements_file_uses_pytorch_lightning_distribution():
-    requirements = (ROOT / "requirements.txt").read_text(encoding="utf-8").splitlines()
+    requirements = []
+    for line in (ROOT / "requirements.txt").read_text(encoding="utf-8").splitlines():
+        requirement = line.split("#", 1)[0].strip()
+        if not requirement:
+            continue
+        match = NAME_RE.match(requirement)
+        assert match, f"could not parse requirement line: {line!r}"
+        requirements.append(match.group(1).lower())
 
     assert "pytorch-lightning" in requirements
     assert "lightning" not in requirements
 
 
 def test_repo_source_no_longer_imports_lightning_namespace():
+    roots = [ROOT / "puresound", ROOT / "egs", ROOT / "test"]
     python_files = [
-        ROOT / "puresound/system/base.py",
-        ROOT / "puresound/system/curriculum.py",
-        ROOT / "puresound/system/runner.py",
-        ROOT / "egs/noise_suppression/main.py",
-        ROOT / "egs/speaker_embedding/main.py",
-        ROOT / "egs/target_speaker_extraction/main.py",
-        ROOT / "egs/voice_isolate/main.py",
-        ROOT / "test/test_system/test_curriculum.py",
+        path
+        for base in roots
+        for path in base.rglob("*.py")
+        if path != Path(__file__)
     ]
-
     contents = {path: path.read_text(encoding="utf-8") for path in python_files}
 
     assert any("pytorch_lightning" in text for text in contents.values())
