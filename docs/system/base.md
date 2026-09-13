@@ -6,7 +6,7 @@ Shared Lightning-module infrastructure that every PureSound training system (`En
 
 ## Class: `BaseLightningModule`
 
-Extends `lightning.pytorch.LightningModule`.
+Extends `pytorch_lightning.LightningModule`.
 
 ### Constructor
 

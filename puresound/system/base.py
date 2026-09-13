@@ -2,7 +2,7 @@ import logging
 from typing import Any, Callable, List, Optional
 
 import torch.nn as nn
-from lightning.pytorch import LightningModule
+from pytorch_lightning import LightningModule
 
 from .logger import Logging
 

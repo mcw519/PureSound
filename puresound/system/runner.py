@@ -34,10 +34,10 @@ import logging
 import argparse
 from typing import Callable, Dict, Optional, Tuple
 
-import lightning as L
+import pytorch_lightning as L
 import torch
-from lightning.pytorch.callbacks import LearningRateMonitor, ModelCheckpoint
-from lightning.pytorch.strategies import DDPStrategy
+from pytorch_lightning.callbacks import LearningRateMonitor, ModelCheckpoint
+from pytorch_lightning.strategies import DDPStrategy
 
 from puresound.audio.io import AudioIO
 from puresound.config import BaseRecipe

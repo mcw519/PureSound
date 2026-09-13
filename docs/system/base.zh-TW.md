@@ -6,7 +6,7 @@ English version: [`base.md`](base.md)
 
 ## Class: `BaseLightningModule`
 
-繼承自 `lightning.pytorch.LightningModule`。
+繼承自 `pytorch_lightning.LightningModule`。
 
 ### Constructor
 

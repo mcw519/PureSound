@@ -19,7 +19,7 @@ rir-generator
 plotly
 pandas
 kaleido
-lightning
+pytorch-lightning
 gradio
 onnx
 # requirements.txt is the CPU/CoreML profile. Use the `cuda` project extra

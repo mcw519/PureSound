@@ -262,7 +262,7 @@ def test_lightning_reaches_set_epoch_through_the_batch_sampler():
     recipe.
     """
     import torch
-    from lightning.fabric.utilities.data import _set_sampler_epoch
+    from lightning_fabric.utilities.data import _set_sampler_epoch
 
     sampler = _sampler(emit_epoch=True)
     loader = torch.utils.data.DataLoader(
