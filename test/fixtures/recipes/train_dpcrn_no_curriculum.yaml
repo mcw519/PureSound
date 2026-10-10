@@ -1,0 +1,295 @@
+# Test fixture: egs/voice_isolate/config/train_dpcrn.yaml without its curriculum -- each
+# scheduled knob held at its final value, and one RIR bank folder instead of the `banks:` union.
+schema_version: 2
+purpose: train
+task: voice_isolation
+
+dataset:
+  train_metafile: data/dns5-read.chapters.train.list
+  valid_metafile: data/dns5-read.chapters.dev.list
+  test_folder: data/test
+  proc_output_folder: proc
+  target_sample_rate: 16000
+  gain_normalized_to: -28
+  training_length_seconds: 6.0
+  filter_min_utterance_length: 2
+  filter_min_utterance_per_speaker: 1
+
+augmentation_speech:
+  used: true
+  is_target: false
+  prob: 0.7
+  add_n_cases: [1, 2]
+  snr_range: [-10, 10]
+  media_voice:
+    used: true
+    prob: 0.3
+    hp_cutoff_range: [200, 400]
+    lp_cutoff_range: [3500, 7000]
+    compress_power_range: [0.6, 0.9]
+  echo_playback:
+    used: false
+    prob: 0.2
+    distance_range: [0.2, 1.0]
+    erle_db_range: [20, 35]
+  overlap_control:
+    used: true
+    no_overlap_prob: 0.2
+    high_overlap_prob: 0.35
+    mid_overlap_range: [0.1, 0.5]
+    high_overlap_range: [0.5, 1.0]
+    fill_on_silent_range: [0.5, 0.8]
+    fade_samples: 400
+  mix_mode:
+    used: true
+    modes:
+    - {name: physical, prob: 0.4, physical: true}
+    - {name: distance_level, prob: 0.2, distance_level: true, jitter_db: [-3, 3]}
+    - {name: moderate, prob: 0.25, sir_range: [-3, 6]}
+    - {name: counter_level, prob: 0.15, sir_range: [-10, 0]}
+
+augmentation_target_absent:
+  used: false
+  prob: 0.2
+  force_interferer: true
+
+augmentation_realfar:
+  used: true
+  prob: 0.2
+  lone_far_prob: 0.15
+  pool_manifest: data/realfar_pool/voices.train.jsonl
+  stitch_to_length: true
+  turn_taking_prob: 0.3
+
+augmentation_realnear:
+  used: true
+  prob: 0.15
+  turn_taking_prob: 0.5
+  pool_manifest: data/realfar_pool/voices.near.train.jsonl
+  stitch_to_length: true
+
+augmentation_noise:
+  used: true
+  prob: 0.8
+  noise_folder: /path/to/audio/dns-5/datasets_fullband_16k/noise_fullband
+  snr_range: [0, 20]
+  prob_white_noise: 0.1
+  white_noise_snr_range: [10, 30]
+  room_coloring:
+    used: true
+    prob: 0.5
+  absolute_floor:
+    used: true
+    prob: 0.5
+    level_dbfs_range: [-55, -35]
+
+augmentation_reverb:
+  used: true
+  prob: 1.0
+  rir_folder: null
+  target_rir_type: early
+  simulator:
+    used: true
+    source_level: true
+    pregenerated:
+      used: true
+      folder: /path/to/puresound_exp/hybrid_rir_16k_levels/wide
+      near_labels: [near_0, near_1]
+      far_labels: [far_0, far_1, far_2]
+      drr_window_ms: 2.5
+      cache_size: 64
+
+augmentation_speed:
+  used: true
+  prob: 0.5
+  speed_range: [0.95, 1.05]
+
+augmentation_ir_response:
+  used: true
+  prob: 0.3
+
+augmentation_src:
+  used: true
+  prob: 0.5
+  src_range: [8000, 16000]
+  prob_each: [0.2, 0.8]
+
+augmentation_hpf:
+  used: true
+  prob: 0.25
+  cutoff: [100, 200, 300]
+  prob_each: [0.4, 0.4, 0.2]
+
+augmentation_volume:
+  used: true
+  prob: 0.5
+  perturbed_range: [0.4, 1.6]
+  clipping_prob: 0.0
+  clipping_range:
+    min: [0.0, 0.1]
+    max: [0.9, 1.0]
+
+augmentation_codec:
+  used: false
+  prob: 0.5
+  codecs: [libopus, g722]
+  prob_each: [0.7, 0.3]
+  bitrate_range:
+    libopus: [6000, 32000]
+
+augmentation_packet_loss:
+  used: false
+  prob: 0.3
+  packet_ms_choices: [20, 40, 60]
+  loss_rate_range: [0.01, 0.1]
+
+vad_label:
+  used: true
+  backend: energy
+  args:
+    frame_length: 400
+    hop_length: 160
+
+trainer:
+  lightning_trainer_args:
+    max_epochs: 120
+    gradient_clip_val: 5.0
+    accumulate_grad_batches: 2
+    precision: bf16-mixed
+  train_iter_per_epoch: 1000
+  valid_iter_per_epoch: 100
+  valid_seed: 1234
+  n_spk_per_batch: 12
+  length_schedule:
+  - {seconds: 3.0, n_spk: 20, prob: 0.25}
+  - {seconds: 6.0, n_spk: 12, prob: 0.3}
+  - {seconds: 12.0, n_spk: 6, prob: 0.25}
+  - {seconds: 30.0, n_spk: 2, prob: 0.2}
+  n_utt_per_speaker: 1
+  num_workers: 20
+  num_gpus: 2
+  find_unused_parameters: true
+  work_folder: exp/dpcrn_no_curriculum
+
+optimizer:
+  type: AdamW
+  learning_rate: 0.001
+  args:
+    weight_decay: 1.0e-05
+    betas: [0.9, 0.999]
+
+scheduler:
+  type: CosineAnnealingWarmRestarts
+  warmup_step: 250
+  args:
+    T_0: 20
+    T_mult: 1
+    eta_min: 1.0e-05
+
+loss_func:
+- type: SDRLoss
+  weighted: 1.0
+  args:
+    scaled: false
+    scale_dependent: true
+    zero_mean: true
+    source_aggregated: false
+    sdr_max: 50
+    threshold: -50
+- type: MultiResolutionSTFTLoss
+  weighted: 0.5
+  args:
+    fft_sizes: [512, 1024, 256]
+    hop_sizes: [128, 256, 64]
+    win_lengths: [512, 1024, 256]
+    window: hann_window
+    factor_sc: 0.5
+    factor_mag: 0.5
+- type: OverSuppressionLoss
+  weighted: 3.0
+  args:
+    p: 0.5
+    fft_size: 512
+    hop_size: 128
+    win_length: 512
+- type: ResidualReferenceLoss
+  weighted: 0.2
+  args:
+    reference_key: consistency_noise
+    loss: l1
+    target_present_only: true
+- type: ASRFeatureLoss
+  weighted: 1.0
+  args:
+    bundle: HUBERT_BASE
+    layers: [6, 9]
+    loss: cosine
+    crop_seconds: 6.0
+- type: ASRFeatureLoss
+  weighted: 1.0
+  args:
+    bundle: WAVLM_BASE_PLUS
+    layers: [6, 9]
+    loss: cosine
+    crop_seconds: 6.0
+- type: DistHeadRegressionLoss
+  weighted: 0.3
+  args:
+    drr_scale: 10.0
+    min_dist: 0.1
+    max_dist: 30.0
+
+model:
+  lightning_module:
+    type: EncDecMaskBase
+    module_args:
+      mask_type: complex
+      encoder_lr_factor: 0.1
+      feats_lr_factor: 0.1
+      backbone_lr_factor: 1.0
+      channel_consistency:
+        enabled: true
+        prob: 0.3
+        weight: 1.0
+        eq_db: 6.0
+        gain_db: 4.0
+        max_rows: 4
+  encoder:
+    type: ConvEncDec
+    encoder_args:
+      fft_length: 512
+      win_type: hann
+      win_length: 512
+      hop_length: 160
+      fmin: 0
+      fmax: 8000
+      sr: 16000
+      trainable: false
+  features:
+    feats_type: complex
+    drop_stft_first_bin: true
+    trainable: false
+    include_specaug: false
+  backbone:
+    type: DPCRN
+    backbone_args:
+      input_dim: 256
+      activation_type: PReLU
+      norm_type: bN2d
+      dropout: 0.05
+      channels: [2, 32, 64, 128]
+      transpose_t_size: 2
+      transpose_delay: false
+      skip_conv: false
+      kernel_t: [2, 2, 2]
+      stride_t: [1, 1, 1]
+      dilation_t: [1, 1, 1]
+      kernel_f: [5, 3, 3]
+      stride_f: [2, 2, 1]
+      dilation_f: [1, 1, 1]
+      delay: [1, 1, 1]
+      rnn_hidden: 96
+      spectral_compress: false
+      dist_head:
+        enabled: true
+        hidden: 128

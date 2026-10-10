@@ -1,0 +1,88 @@
+# Noise suppression inference: wider DPCRN-Mamba, 16 kHz.
+# Channels [2, 48, 96, 128], hidden size 128, 24 ERB temporal bands.
+# Model-only config for streaming export and checkpoint inference.
+schema_version: 2
+purpose: inference
+task: noise_suppression
+dataset:
+  target_sample_rate: 16000
+trainer:
+  work_folder: pretrained_ckpt
+model:
+  lightning_module:
+    type: EncDecMaskBase
+    module_args:
+      mask_type: complex
+      encoder_lr_factor: 0.1
+      feats_lr_factor: 0.1
+      backbone_lr_factor: 1.0
+  encoder:
+    type: ConvEncDec
+    encoder_args:
+      fft_length: 512
+      win_type: hann
+      win_length: 512
+      hop_length: 160
+      fmin: 0
+      fmax: 8000
+      sr: 16000
+      trainable: false
+  features:
+    feats_type: complex
+    drop_stft_first_bin: true
+    trainable: false
+    include_specaug: false
+  backbone:
+    type: DPCRN
+    backbone_args:
+      input_dim: 256
+      activation_type: PReLU
+      norm_type: bN2d
+      dropout: 0.05
+      channels:
+      - 2
+      - 48
+      - 96
+      - 128
+      transpose_t_size: 2
+      transpose_delay: false
+      skip_conv: false
+      kernel_t:
+      - 2
+      - 2
+      - 2
+      stride_t:
+      - 1
+      - 1
+      - 1
+      dilation_t:
+      - 1
+      - 1
+      - 1
+      kernel_f:
+      - 5
+      - 3
+      - 3
+      stride_f:
+      - 2
+      - 2
+      - 1
+      dilation_f:
+      - 1
+      - 1
+      - 1
+      delay:
+      - 1
+      - 1
+      - 1
+      rnn_hidden: 128
+      spectral_compress: false
+      inter_type: mamba_context
+      mamba_args:
+        d_state: 16
+        d_conv: 4
+        expand: 1
+      mamba_context:
+        n_bands: 24
+        scale: erb
+        sample_rate: 16000

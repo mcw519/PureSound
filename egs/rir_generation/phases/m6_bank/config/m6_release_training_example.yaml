@@ -1,0 +1,22 @@
+# M6 candidate-bank training example. Use split=validation/test in the
+# corresponding evaluation dataset; never reuse train there.
+augmentation_reverb:
+  used: true
+  prob: 1.0
+  rir_folder: null
+  target_rir_type: early
+  simulator:
+    used: true
+    source_level: true
+    pregenerated:
+      used: true
+      bank_type: release
+      folder: egs/rir_generation/exp/rir_realism/m6/training_pilot/pyroomacoustics_release
+      recipe_id: synthetic_calibrated
+      split: train
+      usage_role: train
+      require_production: false
+      near_labels: [near_0, near_1]
+      far_labels: [far_0, far_1, far_2]
+      drr_window_ms: 2.5
+      cache_size: 128

@@ -1,0 +1,333 @@
+# noise_suppression -- DPCRN-Mamba, curriculum stage 1 of 2 (warm-start from s0).
+#
+# Lineage of the released noise-suppression checkpoints (`pretrained_ckpt/`), run in order:
+#
+#   train_dpcrn_mamba_s0.yaml            from scratch       SNR [0, 20]   reverb 0.45   20 epochs
+#   train_dpcrn_mamba_s1.yaml            warm-start s0      SNR [-5, 15]  reverb 0.65   20 epochs
+#   train_dpcrn_mamba_activebin_ft.yaml  warm-start s1      + ActiveBinLogMagLoss, 2 epochs at LR 1e-4  -> dpcrn_mamba_v1
+#   train_dpcrn_mamba_metricgan_ft.yaml  warm-start ft      + MetricGAN critic,    4 epochs at LR 1e-4  -> dpcrn_mamba_v2
+#
+# Each warm-start takes the previous stage's last checkpoint (ep19 of a 20-epoch
+# stage, where the cosine schedule bottoms out) with --pretrained_ckpt_path.
+# Inside a stage the `curriculum:` block ramps the augmentation probabilities up
+# from the previous stage's values over the first 8 epochs, so a hand-off is a
+# slope rather than a cliff.
+#
+# Between stages only the SNR range, the augmentation probabilities (raised at
+# each stage), the added loss, the learning rate and the epoch count change;
+# model, the other losses, optimiser and data are identical. The comments below
+# say why each value is what it is.
+#
+# Run from the repository root:
+#   .venv/bin/python egs/noise_suppression/main.py egs/noise_suppression/config/<this file> \
+#       --training --set_seed 1234 [--pretrained_ckpt_path <previous stage ep19>]
+
+schema_version: 2
+
+purpose: train
+
+task: noise_suppression
+
+dataset:
+  train_metafile: ./egs/noise_suppression/data/dns5/dns5_train.csv
+  valid_metafile: ./egs/noise_suppression/data/dns5/dns5_valid.csv
+  test_folder: ./egs/noise_suppression/data/test
+  proc_output_folder: ./egs/noise_suppression/proc
+  target_sample_rate: 16000
+  gain_normalized_to:
+  training_length_seconds: 6.
+  filter_min_utterance_length: 4.
+  filter_min_utterance_per_speaker: 2
+
+# The SNR floor is deliberately below any comfortable operating point: a corpus
+# that only samples easy mixtures cannot teach a model what to do at 0 dB, and
+# cannot fail one that breaks there.
+augmentation_noise:
+  used: True
+  prob: 0.9
+  noise_folder: /path/to/audio/dns-5/datasets_fullband_16k/noise_fullband
+  # The effective SNR is lower than this range: with an `early` target the late
+  # reverb counts as something to remove, so it lands in `noisy - clean` too.
+  # The top of the range stays high because a corpus that is only hard teaches
+  # over-suppression (deleted words).
+  snr_range: [-5, 15]
+  prob_white_noise: 0.05
+  white_noise_snr_range: [10, 30]
+
+# Reverb is on from the first stage: training dry and deploying wet would build
+# in a domain gap. RIRs come from the pre-generated 16 kHz room banks rather than
+# a folder of raw RIRs: the DNS impulse_responses set is 48 kHz, and about 1% of
+# it is 30-channel captures with an unset channel layout that ffmpeg refuses to
+# open, which takes a dataloader worker down at a random point hours into a run.
+#
+# Both label groups are pooled into `near_labels`: the near/far split is a
+# voice-isolation concept, and noise suppression wants the whole distance range
+# on its one speaker, not the near end of it.
+augmentation_reverb:
+  used: True
+  prob: 0.65
+  rir_folder:
+  # "early": the target is the early-reflection speech, so the late tail is
+  # something to remove rather than something passthrough already matches.
+  target_rir_type: "early"
+  simulator:
+    used: True
+    source_level: True
+    pregenerated:
+      used: True
+      banks:
+        - name: wide          # simulated, every valid room the generator produced
+          weight: 0.6
+          bank_type: room
+          folder: /path/to/puresound_exp/hybrid_rir_16k_levels/wide
+          near_labels: [near_0, near_1, far_0, far_1, far_2]
+          far_labels: [far_0, far_1, far_2]
+          drr_window_ms: 2.5
+          cache_size: 64
+        - name: real          # measured rooms
+          weight: 0.4
+          bank_type: room
+          folder: /path/to/puresound_exp/real_rir_16k_train_view
+          near_labels: [near_0, near_1, far_0, far_1, far_2]
+          far_labels: [far_0, far_1, far_2]
+          drr_window_ms: 2.5
+          cache_size: 64
+
+# A second talker, quieter than the first, that is part of the TARGET: the
+# pipeline copies the mixture into the target when is_target is set
+# (`ns.py`, "treating all speech clips as target speech"). Noise suppression
+# keeps every voice, so this teaches the model that a quiet voice in the back
+# is speech to preserve, not noise to remove -- an anti-deletion axis.
+augmentation_speech:
+  used: True
+  is_target: True
+  prob: 0.2
+  add_n_cases: 1
+  snr_range: [10, 30]
+
+# The capture-chain axis: the task stays "remove the noise", because the
+# pipeline applies these to the clean target as well (`ns.py`, device chain
+# returns both). The model is asked to be robust to a codec, not to undo one.
+augmentation_src:
+  used: True
+  prob: 0.3
+  src_range: [8000, 16000, 24000, 32000, 44100, 48000]
+  prob_each: [0.25, 0.30, 0.15, 0.10, 0.10, 0.10]
+
+augmentation_hpf:
+  used: True
+  prob: 0.25
+  cutoff: [100, 200, 300, 600, 800]
+  prob_each: [0.2, 0.3, 0.3, 0.1, 0.1]
+
+augmentation_volume:
+  used: True
+  prob: 0.75
+  perturbed_range: [0.2, 1.2]
+  clipping_prob: 0.3
+  clipping_range:
+    min: [0., 0.1]
+    max: [0.9, 1.0]
+  # v1/v2 were trained with this; `mixture_level` is the library default.
+  target_clipping: own_quantile
+
+augmentation_codec:
+  used: True
+  prob: 0.2
+  codecs: [libopus, g722]
+  prob_each: [0.7, 0.3]
+  bitrate_range:
+    libopus: [12000, 64000]
+    g722: [48000, 64000]
+
+augmentation_packet_loss:
+  used: True
+  prob: 0.1
+  packet_ms_choices: [20, 40]
+  loss_rate_range: [0.01, 0.08]
+
+augmentation_ir_response:
+  used: True
+  prob: 0.25
+
+vad_label:
+  used: False
+
+loss_func:
+  # Separation. The scale flags are a tested pair; a wrong combination leaves
+  # the output level free and the model saturates to clipped noise.
+  - type: SDRLoss
+    weighted: 1.
+    args:
+      scaled: False
+      scale_dependent: False
+      zero_mean: True
+      source_aggregated: False
+      sdr_max: 50
+      threshold: -50
+
+  # Spectral fidelity, weighted to the same order as the SDR term on purpose:
+  # with small factors the term is nearly constant next to SDR and gives no
+  # useful gradient. Factors 1.0 with weight 2.0 make its contribution
+  # comparable to SDR's, with SDR still slightly leading.
+  - type: MultiResolutionSTFTLoss
+    weighted: 2.
+    args:
+      # The 128-point resolution (8 ms window, 2 ms hop) is there for
+      # transients: the 240-sample (15 ms) window with a 50-sample hop is too
+      # coarse to see a stop burst. 128/32 is the scale
+      # `evaluation.spectral.transient_correlation` reads.
+      fft_sizes: [1024, 2048, 512, 128]
+      hop_sizes: [120, 240, 50, 32]
+      win_lengths: [600, 1200, 240, 128]
+      window: hann_window
+      factor_sc: 1.0
+      factor_mag: 1.0
+
+  # Anti-deletion, on from the first stage: penalises only the bins where the
+  # output magnitude falls below the target's, so over-suppression is held down
+  # during training instead of only being caught by the gate's WER stage.
+  - type: OverSuppressionLoss
+    weighted: 1.
+    args:
+      p: 0.5
+      fft_size: 512
+      hop_size: 128
+      win_length: 512
+
+  # Intelligibility, through a frozen HuBERT's mid layers. Cropped to 2 s to
+  # keep its share of the step time small; a phonetic feature match does not
+  # need the whole utterance.
+  - type: ASRFeatureLoss
+    weighted: 0.3
+    args:
+      bundle: HUBERT_BASE
+      layers: [6, 9]
+      loss: l1
+      crop_seconds: 2.0
+
+curriculum:
+  used: True
+  tracks:
+    - path: "aug:augmentation_reverb.prob"
+      interp: linear
+      points: [[0, 0.45], [8, 0.65]]
+    - path: "aug:augmentation_speech.prob"
+      interp: linear
+      points: [[0, 0.15], [8, 0.2]]
+    - path: "aug:augmentation_src.prob"
+      interp: linear
+      points: [[0, 0.15], [8, 0.3]]
+    - path: "aug:augmentation_hpf.prob"
+      interp: linear
+      points: [[0, 0.15], [8, 0.25]]
+    - path: "aug:augmentation_codec.prob"
+      interp: linear
+      points: [[0, 0.1], [8, 0.2]]
+    - path: "aug:augmentation_packet_loss.prob"
+      interp: linear
+      points: [[0, 0.05], [8, 0.1]]
+    - path: "aug:augmentation_ir_response.prob"
+      interp: linear
+      points: [[0, 0.15], [8, 0.25]]
+trainer:
+  lightning_trainer_args:
+    max_epochs: 20
+    gradient_clip_val: 5.
+    accumulate_grad_batches: 1
+    precision: bf16-mixed
+  train_iter_per_epoch: 2000
+  valid_iter_per_epoch: 200
+  valid_seed: 1234
+  # Per GPU, not in total (DDP). At ch96 the intra LSTM's activations over 64
+  # frequency positions x 600 frames put 6x4 per card past 22 GiB, so it is
+  # 3x4 on each of two cards: an effective batch of 24.
+  n_spk_per_batch: 3
+  n_utt_per_speaker: 4
+  num_workers: 10
+  num_gpus: 2
+  find_unused_parameters: false
+  work_folder: ./egs/noise_suppression/exp/ns_dpcrn-mamba_curriculum_s1
+
+optimizer:
+  type: AdamW
+  learning_rate: 0.001
+  args:
+    weight_decay: 0.001
+    betas: [0.9, 0.999]
+
+# Warm restarts every T_0 epochs, the same schedule as `egs/voice_isolate`.
+# Each cycle ends in a trough where the LR has settled (the last epoch of the
+# cycle), which is a clean point to compare checkpoints at and what the "score a
+# block of the last checkpoints" protocol needs. Mid-cycle epochs are
+# LR-perturbed and are not comparable -- read the troughs.
+scheduler:
+  type: CosineAnnealingWarmRestarts
+  warmup_step: 250
+  args:
+    T_0: 20
+    T_mult: 1
+    eta_min: 0.00001
+
+model:
+  lightning_module:
+    type: EncDecMaskBase
+    module_args:
+      mask_type: complex
+      encoder_lr_factor: 0.1
+      feats_lr_factor: 0.1
+      backbone_lr_factor: 1.
+  encoder:
+    type: ConvEncDec
+    encoder_args:
+      fft_length: 512
+      win_type: "hann"
+      win_length: 512
+      hop_length: 160
+      fmin: 0
+      fmax: 8000
+      sr: 16000
+      trainable: False
+  features:
+    feats_type: complex
+    drop_stft_first_bin: True
+    trainable: False
+    include_specaug: False
+  backbone:
+    type: DPCRN
+    backbone_args:
+      input_dim: 256
+      activation_type: PReLU
+      norm_type: bN2d
+      dropout: 0.05
+      channels: [2, 32, 64, 96]
+      transpose_t_size: 2
+      transpose_delay: False
+      skip_conv: False
+      kernel_t: [2, 2, 2]
+      stride_t: [1, 1, 1]
+      dilation_t: [1, 1, 1]
+      kernel_f: [5, 3, 3]
+      stride_f: [2, 2, 1]
+      dilation_f: [1, 1, 1]
+      delay: [1, 1, 1]
+      rnn_hidden: 96
+      spectral_compress: False
+      inter_type: mamba_context
+      # `d_state` and `d_conv` at MambaInter's own defaults: they are the memory
+      # the temporal path has, and narrowing them costs quality. `expand` is 1,
+      # not the default 2: it is only inner width, and at 2 the selective scan's
+      # backward makes each training step several times slower. The RTF gate
+      # does not see that cost -- it times inference, forward only -- so training
+      # cost has to be measured separately.
+      mamba_args:
+        d_state: 16
+        d_conv: 4
+        expand: 1
+      mamba_context:
+        # 24 bands keeps ch96 with full-width mamba under the gate's 0.5 CPU
+        # RTF budget on the streaming graph, which 32 bands exceeds. Bands are
+        # the cheapest knob to give back; narrowing the mamba costs quality.
+        n_bands: 24
+        scale: erb
+        sample_rate: 16000

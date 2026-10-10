@@ -1,0 +1,6 @@
+file,start_s,end_s,duration_s,tag,label
+"clip_01.wav",0.1,0.9,0.8,"near / keep","hello"
+"clip_01.wav",1,2.2,1.2,"far / suppress",""
+"take 3.wav",0,1.235,1.235,"Keep this","=cmd"
+"take 3.wav",2,3,1,"suppressed far","tab	here"
+"take 3.wav",5.5,6.25,0.75,"noise","no role"

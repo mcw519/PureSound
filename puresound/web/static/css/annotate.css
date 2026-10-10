@@ -1,0 +1,116 @@
+/* Annotate: the span annotator's transport, stage, span lane and table.  The
+ * stage is dark in both themes, like the player; its canvases read their
+ * colours from the --an-* properties below. */
+
+.annotate-player { overflow: hidden; }
+.annotate-transport { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 18px; padding: 10px 12px; border-bottom: 1px solid var(--line); }
+.annotate-group { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.annotate-group .range { width: 92px; }
+.annotate-group output { min-width: 42px; color: var(--ink-2); font-size: 11.5px; }
+.annotate-label { color: var(--ink-2); font-size: var(--text-small); }
+.annotate-clock { margin-left: 4px; color: var(--ink-2); font-family: var(--font-mono); font-size: var(--text-small); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.annotate-group .button-icon.is-on { color: var(--on-primary); background: var(--primary); border-color: var(--primary); }
+.annotate-lim { min-height: 22px; padding: 0 6px; color: var(--ink-3); border-color: var(--line-strong); font-family: var(--font-mono); font-size: 10px; }
+.annotate-lim.is-warning { color: var(--warn); border-color: currentColor; }
+.annotate-lim.is-active { color: #ffffff; background: var(--accent); border-color: var(--accent); }
+.annotate-mode { margin-left: auto; }
+.annotate-meta { min-height: 28px; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; padding: 5px 12px; color: var(--ink-3); border-bottom: 1px solid var(--line); font-family: var(--font-mono); font-size: 11px; }
+.annotate-meta b { color: var(--ink); font-weight: 500; }
+.annotate-meta .is-selection { color: var(--accent); }
+.annotate-meta span:empty { display: none; }
+
+.annotate-stage {
+  --an-bg: #010120;
+  --an-bg2: #11122d;
+  --an-line: rgba(255, 255, 255, 0.14);
+  --an-line-soft: rgba(255, 255, 255, 0.06);
+  --an-wave: #c8f6f9;
+  --an-text: #ffffff;
+  --an-dim: rgba(255, 255, 255, 0.62);
+  --an-faint: rgba(255, 255, 255, 0.4);
+  --an-accent: #fc4c02;
+  --an-guide: #f2b54a;
+  position: relative;
+  height: clamp(300px, 52vh, 560px);
+  display: flex;
+  flex-direction: column;
+  background: var(--an-bg);
+  touch-action: pan-y;
+  user-select: none;
+}
+.annotate-pane { position: relative; min-height: 0; overflow: hidden; }
+.annotate-pane canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.annotate-pane.is-ruler { flex: 0 0 26px; }
+.annotate-pane.is-wave { flex: 1 1 auto; min-height: 60px; }
+.annotate-pane.is-spec, .annotate-pane.is-lane { flex: 0 0 auto; }
+.annotate-stage.is-spec-main .annotate-pane.is-spec { flex: 1 1 auto; height: auto !important; }
+.annotate-pane-tag { position: absolute; z-index: 5; top: 6px; left: 8px; padding: 2px 6px; color: rgba(255, 255, 255, 0.82); background: rgba(1, 1, 32, 0.74); border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 3px; font-family: var(--font-mono); font-size: 10px; pointer-events: none; }
+.annotate-pane-tag:empty { display: none; }
+.annotate-overlay { position: absolute; inset: 0; z-index: 4; width: 100%; height: 100%; pointer-events: none; }
+.annotate-gutter { flex: 0 0 5px; background: var(--an-bg2); border-block: 1px solid var(--an-line); cursor: row-resize; }
+.annotate-gutter:hover, .annotate-gutter.is-dragging { background: var(--an-accent); }
+.annotate-hscroll { position: relative; flex: 0 0 12px; background: rgba(255, 255, 255, 0.04); border-top: 1px solid var(--an-line); cursor: pointer; }
+.annotate-hthumb { position: absolute; top: 2px; bottom: 2px; min-width: 8px; background: rgba(255, 255, 255, 0.2); border-radius: 3px; }
+.annotate-hthumb.is-dragging { background: var(--periwinkle); }
+.annotate-hscroll.is-off .annotate-hthumb { opacity: 0; }
+.annotate-drop { position: absolute; z-index: 8; inset: 0; display: grid; place-items: center; padding: 24px; color: var(--on-nav); background: color-mix(in srgb, var(--an-bg) 94%, transparent); text-align: center; }
+.annotate-drop > div { display: grid; justify-items: center; gap: 10px; max-width: 480px; }
+.annotate-drop strong { font-size: var(--text-lead); font-weight: 600; }
+.annotate-drop p { margin: 0; color: var(--on-nav-2); font-size: var(--text-ui); }
+.annotate-drop small { color: var(--on-nav-3); font-size: 11.5px; line-height: 1.5; }
+.annotate-drop.is-gone { display: none; }
+.annotate-drop.is-over { outline: 2px dashed var(--accent); outline-offset: -12px; }
+.annotate-drop-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
+.annotate-drop .button-secondary { color: var(--on-nav); background: transparent; border-color: var(--nav-line); }
+.annotate-drop .button-secondary:hover:not(:disabled) { color: var(--on-nav); background: rgba(255, 255, 255, 0.08); border-color: var(--on-nav-3); }
+.annotate-busy { position: absolute; z-index: 9; right: 10px; bottom: 20px; padding: 4px 8px; color: var(--on-nav); background: rgba(1, 1, 32, 0.9); border: 1px solid var(--nav-line); border-radius: var(--radius-control); font-family: var(--font-mono); font-size: 11px; }
+
+.annotate-spans-title { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; }
+.annotate-count { display: inline-grid; place-items: center; min-width: 20px; height: 20px; padding: 0 6px; color: var(--ink-2); background: var(--sunken); border-radius: var(--radius-pill); font-family: var(--font-mono); font-size: 11px; font-weight: 500; vertical-align: 2px; }
+.annotate-spans-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.annotate-newtag { display: flex; align-items: center; gap: 6px; color: var(--ink-2); font-size: var(--text-small); }
+.annotate-tag-chip, .annotate-tag, .annotate-row-tag { --tag: #8b96a5; }
+.annotate-tag-chip { color: var(--ink); }
+.annotate-tag-dot { width: 8px; height: 8px; flex: none; border-radius: 50%; background: var(--tag); }
+.annotate-tag.is-active { color: var(--ink); border-color: var(--tag); box-shadow: inset 0 0 0 1px var(--tag); }
+.annotate-tag kbd { margin-left: 2px; }
+.annotate-table-wrap { max-height: 340px; overflow: auto; }
+.annotate-table td { padding: 4px 8px; vertical-align: middle; }
+.annotate-table td.num { font-size: var(--text-small); }
+.annotate-table .control { height: 28px; }
+.annotate-table select.control { width: auto; max-width: 180px; }
+.annotate-row-tag { display: flex; align-items: center; gap: 6px; }
+.annotate-table tbody tr { cursor: pointer; }
+.annotate-table tbody tr:hover td { background: var(--sunken); }
+.annotate-table tbody tr.is-selected td { background: var(--accent-soft); }
+
+.annotate-section-head { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.annotate-section-head .eyebrow { margin: 0; }
+.annotate-section-head .quiet { min-width: 0; flex: 1; overflow: hidden; font-size: var(--text-small); text-overflow: ellipsis; white-space: nowrap; }
+.annotate-files { display: grid; gap: 2px; max-height: 220px; margin-bottom: 10px; padding: 4px; overflow: auto; border: 1px solid var(--line); border-radius: var(--radius-panel); }
+.annotate-file { width: 100%; height: 28px; display: flex; align-items: center; gap: 8px; padding: 0 8px; color: var(--ink); background: transparent; border: 0; border-radius: var(--radius-control); font-size: 12.5px; text-align: left; }
+.annotate-file:hover { background: var(--sunken); }
+.annotate-file.is-current { background: var(--accent-soft); }
+.annotate-file-dot { width: 6px; height: 6px; flex: none; border-radius: 50%; }
+.annotate-file.is-dirty .annotate-file-dot { background: var(--warn); }
+.annotate-file-name { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.annotate-file-count { color: var(--ink-3); font-family: var(--font-mono); font-size: 11px; }
+.annotate-file-count.has-spans { color: var(--ink); }
+.annotate-files-empty { margin: 6px; font-size: var(--text-small); }
+.annotate-file-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.annotate-file-actions + .annotate-file-actions { margin-top: 6px; }
+.annotate-tags { display: flex; flex-wrap: wrap; gap: 6px; }
+.annotate-newtag-form { display: flex; gap: 6px; margin-top: 10px; }
+.annotate-formats button { padding: 0 8px; }
+.annotate-out { min-height: 150px; margin: 8px 0; font-family: var(--font-mono); font-size: 11px; line-height: 1.5; white-space: pre; }
+
+.annotate-keys { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: baseline; gap: 6px 12px; }
+.annotate-keys .eyebrow { grid-column: 1 / -1; margin-top: 8px; }
+.annotate-keys kbd { justify-self: start; }
+.annotate-ask-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+
+@media (max-width: 759px) {
+  .annotate-stage { height: 320px; }
+  .annotate-mode { margin-left: 0; }
+  .annotate-group .range { width: 72px; }
+}

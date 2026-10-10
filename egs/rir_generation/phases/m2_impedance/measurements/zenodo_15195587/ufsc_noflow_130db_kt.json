@@ -1,0 +1,59 @@
+{
+  "schema_version": "puresound.normalized_complex_impedance_measurement.v1",
+  "measurement_id": "zenodo_15195587_ufsc_noflow_130db_kt",
+  "method": "UFSC Kumaresan-Tufts direct impedance eduction",
+  "acoustic_field_geometry": "grazing_duct",
+  "phasor_convention": "exp(+i*omega*t)",
+  "conditions": {
+    "mean_flow_mach": 0.0,
+    "source_spl_db": 130.0,
+    "source_spl_reference": "incident plane-wave amplitude",
+    "facility": "UFSC Liner Impedance Test Rig",
+    "excitation": "stepped pure tone"
+  },
+  "sample": {
+    "material_label": "3D-printed single-degree-of-freedom perforate liner, UFSC sample",
+    "construction": "stereolithography chamber array with perforated facesheet and aluminum rigid backing",
+    "array_cells": [8, 33],
+    "chamber_internal_size_m": [0.0099, 0.0099],
+    "chamber_height_m": 0.0381,
+    "holes_per_chamber": 8,
+    "measured_hole_diameter_m": 0.00117,
+    "measured_hole_diameter_std_m": 0.00006,
+    "measured_facesheet_thickness_m": 0.00055,
+    "measured_facesheet_thickness_std_m": 0.00003,
+    "measured_open_area_ratio": 0.057,
+    "measured_rounding_radius_m": 0.000066,
+    "measured_rounding_radius_std_m": 0.00003,
+    "design_cell_wall_thickness_m": 0.00254,
+    "backing": "rigid aluminum plate",
+    "backing_thickness_m": 0.00635
+  },
+  "provenance": {
+    "source_url": "https://zenodo.org/records/15195587",
+    "article_url": "https://doi.org/10.2514/1.J065173",
+    "license": "CC-BY-4.0",
+    "attribution": "Quintino, Bonomo, Cordioli, Jones, Howerton, Nark, and Avallone (2025)",
+    "source_filename": "paper_data.hdf5",
+    "source_md5": "ba222c796afe37e4afe911f33df6a7c4",
+    "source_sha256": "ba4cf7cf293d2b20ed590eb78ed8c133484771acbd011c680466d289abdc1a72",
+    "source_group": "/Figure6",
+    "source_datasets": {
+      "frequency": "/Figure6/Frequency",
+      "resistance": "/Figure6/Resistance-UFSC-KT",
+      "reactance": "/Figure6/Reactance-UFSC-KT"
+    },
+    "retrieved_utc": "2026-07-30",
+    "transformations": [
+      "copied published dimensionless resistance and reactance without interpolation",
+      "retained the paper's common 500-2500 Hz comparison band",
+      "did not invent SI impedance or an unreported atmospheric normalization"
+    ]
+  },
+  "applicability": {
+    "scope": "pipeline_validation_only",
+    "automatic_scene_catalog_mapping": false,
+    "reason": "High-SPL perforated aircraft liner measured by grazing-duct impedance eduction; it is not representative of ordinary room finishes and is not a normal-incidence tube measurement.",
+    "local_reaction_note": "Use as an independent no-flow cross-rig comparison only; deployment requires matching sample construction, SPL, flow, and incidence assumptions."
+  }
+}

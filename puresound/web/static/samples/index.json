@@ -1,0 +1,74 @@
+{
+  "clips": [
+    {
+      "id": "two-talkers",
+      "file": "two-talkers.wav",
+      "task": "enhancement",
+      "title": "Two talkers",
+      "description": "Two LibriSpeech readers mixed at similar levels.",
+      "seconds": 5.86
+    },
+    {
+      "id": "near-and-far",
+      "file": "near-and-far.wav",
+      "task": "enhancement",
+      "title": "Near talker, far talker",
+      "description": "A dry near talker; a reverberant far talker (RT60 0.7 s) 9 dB down, starting first.",
+      "seconds": 6.0
+    },
+    {
+      "id": "noisy-speech",
+      "file": "noisy-speech.wav",
+      "task": "enhancement",
+      "title": "Speech in noise",
+      "description": "One reader over a fan band, mains hum and pink noise at 5 dB SNR.",
+      "seconds": 5.0
+    },
+    {
+      "id": "speaker-a-1",
+      "file": "speaker-a-1.wav",
+      "task": "speaker",
+      "title": "Speaker A, first half",
+      "description": "LibriSpeech reader 1272, first half of an utterance.",
+      "seconds": 2.3
+    },
+    {
+      "id": "speaker-a-2",
+      "file": "speaker-a-2.wav",
+      "task": "speaker",
+      "title": "Speaker A, second half",
+      "description": "The same reader, the other half of the utterance.",
+      "seconds": 2.3
+    },
+    {
+      "id": "speaker-b",
+      "file": "speaker-b.wav",
+      "task": "speaker",
+      "title": "Speaker B",
+      "description": "LibriSpeech reader 61.",
+      "seconds": 4.17
+    },
+    {
+      "id": "speaker-a-full",
+      "file": "speaker-a-full.wav",
+      "task": "world",
+      "title": "Speaker A, full utterance",
+      "description": "LibriSpeech reader 1272, the complete source utterance for acoustic scenes.",
+      "seconds": 4.59
+    }
+  ],
+  "speaker_pairs": [
+    {
+      "id": "same-speaker",
+      "title": "Same speaker",
+      "enrollment": "speaker-a-1",
+      "test": "speaker-a-2"
+    },
+    {
+      "id": "different-speakers",
+      "title": "Different speakers",
+      "enrollment": "speaker-a-1",
+      "test": "speaker-b"
+    }
+  ]
+}

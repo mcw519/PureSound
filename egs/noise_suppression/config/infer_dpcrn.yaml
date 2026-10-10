@@ -1,0 +1,76 @@
+# noise_suppression -- DPCRN inference config (default).
+#
+# Shared by the compact checkpoints in ../pretrained_ckpt/. Wider checkpoints
+# require infer_dpcrn_mamba_wide.yaml; select the matching checkpoint separately.
+# See ../pretrained_ckpt/README.md for what each version is.
+#
+# Model-only recipe: no dataset synthesis, augmentation, loss, optimizer or
+# scheduler belongs here. Used by scripts that only have to build the model --
+# the streaming ONNX export and one-off enhance scripts.
+#
+# Architecture: 16 kHz, STFT 512/160 (32 ms window, 10 ms hop), complex ratio
+# mask, DPCRN with a 3-frame (30 ms) look-ahead; the temporal (inter) path is a
+# selective state-space block over 24 ERB bands (`inter_type: mamba_context`).
+schema_version: 2
+purpose: inference
+task: noise_suppression
+
+dataset:
+  target_sample_rate: 16000
+
+trainer:
+  work_folder: pretrained_ckpt
+
+model:
+  lightning_module:
+    type: EncDecMaskBase
+    module_args:
+      mask_type: complex
+      encoder_lr_factor: 0.1
+      feats_lr_factor: 0.1
+      backbone_lr_factor: 1.
+  encoder:
+    type: ConvEncDec
+    encoder_args:
+      fft_length: 512
+      win_type: "hann"
+      win_length: 512
+      hop_length: 160
+      fmin: 0
+      fmax: 8000
+      sr: 16000
+      trainable: False
+  features:
+    feats_type: complex
+    drop_stft_first_bin: True
+    trainable: False
+    include_specaug: False
+  backbone:
+    type: DPCRN
+    backbone_args:
+      input_dim: 256
+      activation_type: PReLU
+      norm_type: bN2d
+      dropout: 0.05
+      channels: [2, 32, 64, 96]
+      transpose_t_size: 2
+      transpose_delay: False
+      skip_conv: False
+      kernel_t: [2, 2, 2]
+      stride_t: [1, 1, 1]
+      dilation_t: [1, 1, 1]
+      kernel_f: [5, 3, 3]
+      stride_f: [2, 2, 1]
+      dilation_f: [1, 1, 1]
+      delay: [1, 1, 1]
+      rnn_hidden: 96
+      spectral_compress: False
+      inter_type: mamba_context
+      mamba_args:
+        d_state: 16
+        d_conv: 4
+        expand: 1
+      mamba_context:
+        n_bands: 24
+        scale: erb
+        sample_rate: 16000

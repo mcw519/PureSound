@@ -1,0 +1,368 @@
+# Noise suppression training recipe.
+# Training order and checkpoint provenance: ../pretrained_ckpt/README.md.
+schema_version: 2
+purpose: train
+task: noise_suppression
+dataset:
+  train_metafile: ./egs/noise_suppression/data/dns5/dns5_train.csv
+  valid_metafile: ./egs/noise_suppression/data/dns5/dns5_valid.csv
+  test_folder: ./egs/noise_suppression/data/test
+  proc_output_folder: ./egs/noise_suppression/proc
+  target_sample_rate: 16000
+  gain_normalized_to: null
+  training_length_seconds: 6.0
+  filter_min_utterance_length: 4.0
+  filter_min_utterance_per_speaker: 2
+augmentation_noise:
+  used: true
+  prob: 0.9
+  noise_folder: /path/to/audio/dns-5/datasets_fullband_16k/noise_fullband
+  snr_range:
+  - 0
+  - 20
+  prob_white_noise: 0.05
+  white_noise_snr_range:
+  - 10
+  - 30
+augmentation_reverb:
+  used: true
+  prob: 0.45
+  rir_folder: null
+  target_rir_type: early
+  simulator:
+    used: true
+    source_level: true
+    pregenerated:
+      used: true
+      banks:
+      - name: wide
+        weight: 0.6
+        bank_type: room
+        folder: /path/to/puresound_exp/hybrid_rir_16k_levels/wide
+        near_labels:
+        - near_0
+        - near_1
+        - far_0
+        - far_1
+        - far_2
+        far_labels:
+        - far_0
+        - far_1
+        - far_2
+        drr_window_ms: 2.5
+        cache_size: 64
+      - name: real
+        weight: 0.4
+        bank_type: room
+        folder: /path/to/puresound_exp/real_rir_16k_train_view
+        near_labels:
+        - near_0
+        - near_1
+        - far_0
+        - far_1
+        - far_2
+        far_labels:
+        - far_0
+        - far_1
+        - far_2
+        drr_window_ms: 2.5
+        cache_size: 64
+augmentation_speech:
+  used: true
+  is_target: true
+  prob: 0.15
+  add_n_cases: 1
+  snr_range:
+  - 10
+  - 30
+augmentation_src:
+  used: true
+  prob: 0.15
+  src_range:
+  - 8000
+  - 16000
+  - 24000
+  - 32000
+  - 44100
+  - 48000
+  prob_each:
+  - 0.25
+  - 0.3
+  - 0.15
+  - 0.1
+  - 0.1
+  - 0.1
+augmentation_hpf:
+  used: true
+  prob: 0.15
+  cutoff:
+  - 100
+  - 200
+  - 300
+  - 600
+  - 800
+  prob_each:
+  - 0.2
+  - 0.3
+  - 0.3
+  - 0.1
+  - 0.1
+augmentation_volume:
+  used: true
+  prob: 0.75
+  perturbed_range:
+  - 0.2
+  - 1.2
+  clipping_prob: 0.3
+  clipping_range:
+    min:
+    - 0.0
+    - 0.1
+    max:
+    - 0.9
+    - 1.0
+  target_clipping: own_quantile
+augmentation_codec:
+  used: true
+  prob: 0.1
+  codecs:
+  - libopus
+  - g722
+  prob_each:
+  - 0.7
+  - 0.3
+  bitrate_range:
+    libopus:
+    - 12000
+    - 64000
+    g722:
+    - 48000
+    - 64000
+augmentation_packet_loss:
+  used: true
+  prob: 0.05
+  packet_ms_choices:
+  - 20
+  - 40
+  loss_rate_range:
+  - 0.01
+  - 0.08
+augmentation_ir_response:
+  used: true
+  prob: 0.15
+vad_label:
+  used: false
+loss_func:
+- type: SDRLoss
+  weighted: 1.0
+  args:
+    scaled: false
+    scale_dependent: false
+    zero_mean: true
+    source_aggregated: false
+    sdr_max: 50
+    threshold: -50
+- type: MultiResolutionSTFTLoss
+  weighted: 2.0
+  args:
+    fft_sizes:
+    - 1024
+    - 2048
+    - 512
+    - 128
+    hop_sizes:
+    - 120
+    - 240
+    - 50
+    - 32
+    win_lengths:
+    - 600
+    - 1200
+    - 240
+    - 128
+    window: hann_window
+    factor_sc: 1.0
+    factor_mag: 1.0
+- type: OverSuppressionLoss
+  weighted: 1.0
+  args:
+    p: 0.5
+    fft_size: 512
+    hop_size: 128
+    win_length: 512
+- type: ASRFeatureLoss
+  weighted: 0.3
+  args:
+    bundle: HUBERT_BASE
+    layers:
+    - 6
+    - 9
+    loss: l1
+    crop_seconds: 2.0
+curriculum:
+  used: true
+  tracks:
+  - path: aug:augmentation_noise.prob
+    interp: linear
+    points:
+    - - 0
+      - 0.7
+    - - 8
+      - 0.9
+  - path: aug:augmentation_reverb.prob
+    interp: linear
+    points:
+    - - 0
+      - 0.2
+    - - 8
+      - 0.45
+  - path: aug:augmentation_speech.prob
+    interp: linear
+    points:
+    - - 0
+      - 0.0
+    - - 8
+      - 0.15
+  - path: aug:augmentation_src.prob
+    interp: linear
+    points:
+    - - 0
+      - 0.0
+    - - 8
+      - 0.15
+  - path: aug:augmentation_hpf.prob
+    interp: linear
+    points:
+    - - 0
+      - 0.0
+    - - 8
+      - 0.15
+  - path: aug:augmentation_codec.prob
+    interp: linear
+    points:
+    - - 0
+      - 0.0
+    - - 8
+      - 0.1
+  - path: aug:augmentation_packet_loss.prob
+    interp: linear
+    points:
+    - - 0
+      - 0.0
+    - - 8
+      - 0.05
+  - path: aug:augmentation_ir_response.prob
+    interp: linear
+    points:
+    - - 0
+      - 0.0
+    - - 8
+      - 0.15
+trainer:
+  lightning_trainer_args:
+    max_epochs: 20
+    gradient_clip_val: 5.0
+    accumulate_grad_batches: 1
+    precision: bf16-mixed
+  train_iter_per_epoch: 2000
+  valid_iter_per_epoch: 200
+  valid_seed: 1234
+  n_spk_per_batch: 3
+  n_utt_per_speaker: 4
+  num_workers: 10
+  num_gpus: 2
+  find_unused_parameters: false
+  work_folder: ./egs/noise_suppression/exp/ns_dpcrn-mamba_capW_s0
+optimizer:
+  type: AdamW
+  learning_rate: 0.001
+  args:
+    weight_decay: 0.001
+    betas:
+    - 0.9
+    - 0.999
+scheduler:
+  type: CosineAnnealingWarmRestarts
+  warmup_step: 250
+  args:
+    T_0: 20
+    T_mult: 1
+    eta_min: 1.0e-05
+model:
+  lightning_module:
+    type: EncDecMaskBase
+    module_args:
+      mask_type: complex
+      encoder_lr_factor: 0.1
+      feats_lr_factor: 0.1
+      backbone_lr_factor: 1.0
+  encoder:
+    type: ConvEncDec
+    encoder_args:
+      fft_length: 512
+      win_type: hann
+      win_length: 512
+      hop_length: 160
+      fmin: 0
+      fmax: 8000
+      sr: 16000
+      trainable: false
+  features:
+    feats_type: complex
+    drop_stft_first_bin: true
+    trainable: false
+    include_specaug: false
+  backbone:
+    type: DPCRN
+    backbone_args:
+      input_dim: 256
+      activation_type: PReLU
+      norm_type: bN2d
+      dropout: 0.05
+      channels:
+      - 2
+      - 48
+      - 96
+      - 128
+      transpose_t_size: 2
+      transpose_delay: false
+      skip_conv: false
+      kernel_t:
+      - 2
+      - 2
+      - 2
+      stride_t:
+      - 1
+      - 1
+      - 1
+      dilation_t:
+      - 1
+      - 1
+      - 1
+      kernel_f:
+      - 5
+      - 3
+      - 3
+      stride_f:
+      - 2
+      - 2
+      - 1
+      dilation_f:
+      - 1
+      - 1
+      - 1
+      delay:
+      - 1
+      - 1
+      - 1
+      rnn_hidden: 128
+      spectral_compress: false
+      inter_type: mamba_context
+      mamba_args:
+        d_state: 16
+        d_conv: 4
+        expand: 1
+      mamba_context:
+        n_bands: 24
+        scale: erb
+        sample_rate: 16000

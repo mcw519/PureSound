@@ -1,0 +1,383 @@
+import logging
+from typing import Optional
+
+import torch
+import torch.nn as nn
+
+
+logger = logging.getLogger(__name__)
+
+
+class SDRLoss(nn.Module):
+    def __init__(
+        self,
+        scaled: bool = True,
+        scale_dependent: bool = False,
+        zero_mean: bool = True,
+        source_aggregated: bool = False,
+        sdr_max: int = None,
+        eps: float = 1e-8,
+        reduction: bool = True,
+        threshold: Optional[float] = None,
+        inactive_mode: str = "absolute",
+    ) -> None:
+        """
+        Signal SDR/SNR loss function and its variations.
+
+        Args:
+            scaled: if true, scaling the target signal
+            scale_dependent: whether the loss accounts for the volume scale
+            zero_mean: input normalize the mean to 0
+            source_aggregated: source aggregated SDR loss, this mode need different source such as target and interference speech
+            sdr_max: if not None, used Soft-maximum threshold, named t-SDR
+            eps: small value protect divide zero case
+            reduction: if False, return the per-row result
+            threshold: set SDR loss range (minimum)
+            inactive_mode: how target-absent rows are scored, see
+                ``inactive_sdr_loss``
+        """
+        super().__init__()
+        self.scaled = scaled
+        self.scale_dependent = scale_dependent
+        self.zero_mean = zero_mean
+        self.source_aggregated = source_aggregated
+        self.sdr_max = sdr_max
+        self.eps = eps
+        self.reduction = reduction
+        self.threshold = threshold
+        # How target-absent rows are scored; see inactive_sdr_loss. "absolute"
+        # is the default; "relative" scores the
+        # suppression achieved against the row's own mixture and therefore also
+        # needs the batch.
+        if inactive_mode not in ("absolute", "mean", "relative"):
+            raise ValueError(f"inactive_mode must be absolute|mean|relative, got {inactive_mode!r}")
+        self.inactive_mode = inactive_mode
+        # Ask the trainer for a per-row "inactive" mask derived from the
+        # reference. Active rows go through normal SDR; rows where the reference
+        # is silent (target-absent training samples) go through
+        # inactive_sdr_loss, which penalises output energy directly instead of
+        # computing 10*log10(0 / X).
+        self.required_inputs = ("enhanced", "target", "inactive_labels") + (
+            ("batch",) if inactive_mode == "relative" else ()
+        )
+
+    @classmethod
+    def init_mode(
+        cls,
+        loss_func: str = "sisnr",
+        reduction: bool = True,
+        threshold: Optional[float] = None,
+    ) -> None:
+        """
+        Init loss function module by alias name.\n
+        You can implemented different SDR loss here.
+
+        Args:
+            loss_func: loss name, include (sisnr, sdsdr, sdr, tsdr, sasdr, sasisnr, satsdr)
+
+        Raises:
+            NameError: if loss_func not in (sisnr, sdsdr, sdr, tsdr, sasdr, sasisnr, satsdr)
+        """
+        loss_func = loss_func.lower()
+
+        if loss_func not in (
+            "sisnr",
+            "sdsdr",
+            "sdr",
+            "tsdr",
+            "tsdr50",
+            "sasdr",
+            "sasisnr",
+            "satsdr",
+        ):
+            raise NameError
+
+        # Scale-invariant modes project the estimate onto the target before
+        # measuring error. `sdsdr` also needs the projection (it keeps the
+        # scale error in the noise term instead of discarding it).
+        if loss_func in ("sisnr", "sdsdr", "sasisnr"):
+            scaled = True
+        else:
+            scaled = False
+
+        if loss_func == "sdsdr":
+            scale_dependent = True
+        else:
+            scale_dependent = False
+
+        if loss_func == "sasdr" or loss_func == "sasisnr" or loss_func == "satsdr":
+            source_aggregated = True
+        else:
+            source_aggregated = False
+
+        if loss_func == "tsdr" or loss_func == "satsdr":
+            sdr_max = 30
+        elif loss_func == "tsdr50":
+            sdr_max = 50
+        else:
+            sdr_max = None
+
+        logger.info("init loss function: %s", loss_func)
+        return cls(
+            scaled=scaled,
+            scale_dependent=scale_dependent,
+            zero_mean=True,
+            source_aggregated=source_aggregated,
+            sdr_max=sdr_max,
+            eps=1e-8,
+            reduction=reduction,
+            threshold=threshold,
+        )
+
+    def forward(
+        self,
+        s1: torch.Tensor,
+        s2: torch.Tensor,
+        inactive_labels: Optional[torch.Tensor] = None,
+        batch: Optional[dict] = None,
+    ) -> torch.Tensor:
+        """
+        Compute SDR loss.
+        
+        Args:
+            s1: enhanced signal tensor
+            s2: reference signal tensor
+            inactive_labels: for inactive loss training
+        
+        Returns:
+            loss
+        """
+        self.check_input_shape(s1)
+        self.check_input_shape(s2)
+
+        if (
+            inactive_labels is not None
+            and torch.where(inactive_labels == True)[0].nelement() > 0
+        ):
+            active_idx = torch.where(inactive_labels == False)[0]
+            inactive_idx = torch.where(inactive_labels == True)[0]
+            inactive_s1 = s1[inactive_idx]
+            inactive_s2 = s2[inactive_idx]
+            s1 = s1[active_idx]
+            s2 = s2[active_idx]
+            noisy_ref = None
+            if self.inactive_mode == "relative":
+                mix = (batch or {}).get("noisy_speech")
+                if mix is None:
+                    raise ValueError("SDRLoss(inactive_mode='relative') needs batch['noisy_speech']")
+                mix = mix.reshape(mix.shape[0], -1)[..., : s1.shape[-1]]
+                noisy_ref = mix[inactive_idx].reshape(inactive_s1.shape[0], -1, mix.shape[-1]) \
+                    if inactive_s1.dim() == 3 else mix[inactive_idx]
+            inactive_loss = inactive_sdr_loss(
+                inactive_s1, inactive_s2, reduction=False,
+                mode=self.inactive_mode, noisy=noisy_ref,
+            )
+
+        else:
+            inactive_loss = None
+
+        if self.zero_mean:
+            s1 = self.apply_zero_mean(s1)
+            s2 = self.apply_zero_mean(s2)
+
+        s1_s2_norm = self.l2_norm(s1, s2)
+        s2_s2_norm = self.l2_norm(s2, s2)
+
+        if self.scaled:
+            s_target = s1_s2_norm / (s2_s2_norm + self.eps) * s2
+        else:
+            s_target = s2
+
+        if not self.scale_dependent:
+            e_noise = s1 - s_target
+        else:
+            e_noise = s1 - s2
+
+        target_norm = self.l2_norm(s_target, s_target)
+        noise_norm = self.l2_norm(e_noise, e_noise)
+
+        if self.sdr_max is not None:
+            tau = 10 ** (-self.sdr_max / 10)
+            noise_norm = noise_norm + tau * target_norm
+
+        if not self.source_aggregated:
+            snr = 10 * torch.log10((target_norm / (noise_norm + self.eps)) + self.eps)
+        else:
+            snr = 10 * torch.log10(
+                (target_norm.sum(dim=-1)) / (noise_norm.sum(dim=-1) + self.eps)
+                + self.eps
+            )
+
+        snr = -1 * snr
+
+        if self.threshold is not None:
+            # hard threshold
+            snr_to_keep = snr[snr > self.threshold]
+            if snr_to_keep.nelement() > 0:
+                snr = snr_to_keep.view(-1, 1)
+
+        if inactive_loss is not None:
+            snr = torch.cat([snr, inactive_loss.view(-1, 1)], dim=0)
+
+        if self.reduction:
+            return torch.mean(snr)
+        else:
+            return snr
+
+    def l2_norm(self, s1: torch.Tensor, s2: torch.Tensor) -> torch.Tensor:
+        """
+        The equation is || ||^2
+
+        Args:
+            s1: tensor with shape [batch, *, length]
+            s2: tensor with shape [batch, *, length]
+        
+        Returns:
+            the l2-norm in tenor's last dimension
+        """
+        norm = torch.sum(s1 * s2, -1, keepdim=True)
+
+        return norm
+
+    def apply_zero_mean(self, s: torch.Tensor) -> torch.Tensor:
+        """Zero-mean in last dimension"""
+        s_mean = torch.mean(s, dim=-1, keepdim=True)
+        s = s - s_mean
+
+        return s
+
+    def check_input_shape(self, s: torch.Tensor) -> None:
+        """Check input tensor shape meets the loss function setting"""
+        if self.source_aggregated:
+            assert s.dim() == 3, "source_aggregated need input dimension is 3"
+
+        else:
+            assert s.dim() == 2, "need input shape as (batch, length)"
+
+
+def attenuation_ratio(
+    s1: torch.Tensor, s2: torch.Tensor, mask: torch.Tensor, reduction: bool = True
+) -> torch.Tensor:
+    """
+    To judge how well the system can suppress speech where the output should be silent.
+
+    Args:
+        s1: enhanced signal, (N, L)
+        s2: noisy (unprocessed) signal, (N, L)
+        mask: target speaker mask, (N, L)
+        reduction: if False, return the per-row result
+    
+    Returns:
+        the attenuation ratio: the suppression level where the output should be close to silence.
+    """
+    batch_size = mask.shape[0]
+    score = []
+    for i in range(batch_size):
+        # compute only non-target speech part
+        _r = s1[i][mask[i] == 0].reshape(1, -1)  # [1, L]
+        _ref = s2[i][mask[i] == 0].reshape(1, -1)  # [1, L]
+        score.append(10 * torch.log10(l2_norm(_ref, _ref) / l2_norm(_r, _r)))
+
+    score = torch.tensor(score)
+    if reduction:
+        return torch.mean(score, dim=0)
+    else:
+        return torch.mean(score, keepdim=True)
+
+
+def l2_norm(s1: torch.Tensor, s2: torch.Tensor) -> torch.Tensor:
+    """
+    The equation is || ||^2
+
+    Args:
+        s1: tensor with shape [batch, *, length]
+        s2: tensor with shape [batch, *, length]
+    
+    Returns:
+        the l2-norm in tenor's last dimension
+    """
+    norm = torch.sum(s1 * s2, -1, keepdim=True)
+    return norm
+
+
+def si_snr(
+    s1: torch.Tensor, s2: torch.Tensor, eps: float = 1e-8, reduction: bool = True
+) -> torch.Tensor:
+    """
+    Single source SI-SNR\n
+    Si-SNR = 20 * log10(|| alpha * target_s || / || pred_s - alpha * s ||), || || is 2-norm\n
+    where alpha = <pred_s, target_s> / <target_s, target_s>,  < > is inner product\n
+    
+    Args:
+        s1: enhance signal, shape as (N, *, L)
+        s2: reference signal, shape as  (N, *, L)
+        eps: small value protect divide zero case
+        reduction: if False, return the per-row result
+    
+    Returns:
+        sisnr metric, if reduction is False, return batch result
+    """
+    # zero-mean
+    s1_mean = torch.mean(s1, dim=-1, keepdim=True)
+    s2_mean = torch.mean(s2, dim=-1, keepdim=True)
+    s1 = s1 - s1_mean
+    s2 = s2 - s2_mean
+
+    s1_s2_norm = l2_norm(s1, s2)
+    s2_s2_norm = l2_norm(s2, s2)
+    s_target = s1_s2_norm / (s2_s2_norm + eps) * s2
+    e_noise = s1 - s_target
+    target_norm = l2_norm(s_target, s_target)
+    noise_norm = l2_norm(e_noise, e_noise)
+    snr = 10 * torch.log10(
+        (target_norm) / (noise_norm + eps) + eps
+    )  # 20*log10(|| ||) == 20*1/2*log10(|| ||^2)
+
+    if reduction:
+        return torch.mean(snr)
+    else:
+        return snr
+
+
+def inactive_sdr_loss(
+    s1: torch.Tensor,
+    s2: torch.Tensor,
+    reduction: bool = True,
+    mode: str = "absolute",
+    noisy: Optional[torch.Tensor] = None,
+) -> torch.Tensor:
+    """Loss for rows whose reference is silence (target-absent / lone-far).
+
+    Args:
+        s1: enhanced signal, shape is (N, *, L)
+        s2: reference signal, shape is (N, *, L) -- all zeros on these rows
+        mode:
+          "absolute" (default): 10*log10(SUM(s1^2) + 0.01*SUM(s2^2) + 1e-8).
+              Two known defects: the eps floor is on a SUM, so in mean-power
+              terms it sits 10 dB apart between a 3 s and a 30 s row at 16 kHz
+              (-126.8 vs -136.8 dBFS); and the objective is absolute output
+              energy, so a quieter input earns a discount it did not work for.
+          "mean": same objective on MEAN power -- length-invariant floor, else
+              identical behaviour.
+          "relative": 10*log10(mean(s1^2)+eps) - 10*log10(mean(noisy^2)+eps) --
+              the suppression actually achieved, in dB, regardless of the row's
+              level or length. Needs ``noisy``.
+    """
+    # zero-mean
+    s1 = s1 - torch.mean(s1, dim=-1, keepdim=True)
+    s2 = s2 - torch.mean(s2, dim=-1, keepdim=True)
+
+    if mode == "absolute":
+        val = 10 * torch.log10(l2_norm(s1, s1) + 0.01 * l2_norm(s2, s2) + 1e-8)
+    elif mode == "mean":
+        val = 10 * torch.log10(s1.pow(2).mean(-1, keepdim=True)
+                               + 0.01 * s2.pow(2).mean(-1, keepdim=True) + 1e-8)
+    elif mode == "relative":
+        if noisy is None:
+            raise ValueError("inactive_sdr_loss(mode='relative') needs the noisy mixture")
+        noisy = noisy - torch.mean(noisy, dim=-1, keepdim=True)
+        val = 10 * torch.log10(s1.pow(2).mean(-1, keepdim=True) + 1e-10) \
+            - 10 * torch.log10(noisy.pow(2).mean(-1, keepdim=True) + 1e-10)
+    else:
+        raise ValueError(f"unknown inactive mode {mode!r}")
+    return torch.mean(val) if reduction else val

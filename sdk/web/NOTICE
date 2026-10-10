@@ -1,0 +1,16 @@
+PureSound
+Copyright 2026 Milo Wu and PureSound contributors
+
+Original PureSound source code, SDKs, configuration files, documentation, and
+model weights trained by Milo Wu or PureSound contributors (including the
+checkpoints and ONNX exports published in the PureSound model zoo) are licensed
+under the Apache License, Version 2.0. See LICENSE for the terms.
+
+Third-party code, including code adapted from other projects, dependencies,
+model weights, fonts, and other third-party assets remain subject to their respective
+licenses and copyright notices. This notice does not replace those terms
+or grant additional rights to third-party material.
+
+Datasets and audio recordings are excluded from this Apache-2.0 grant unless
+explicitly licensed otherwise. Consult their individual license and provenance
+information; absence of a separate license does not grant permission to reuse them.

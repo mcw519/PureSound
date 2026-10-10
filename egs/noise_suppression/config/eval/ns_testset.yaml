@@ -1,0 +1,137 @@
+# The frozen synthetic gate set (stage 1 of run_full_gate.sh).
+#
+# This drives the recipe's OWN synthesis pipeline with a fixed seed, so the set
+# tests the code path that trains rather than a separate mixer. It is scored
+# reference-based, so the target is the clean speech before any noise is added.
+#
+# Speakers come from the valid split, which is speaker-disjoint from training --
+# `puresound.dataset.corpus` enforces that when the metafiles are built.
+#
+# Build the set:
+#   uv run python -m puresound.evaluation.tools.build_eval_set \
+#       egs/noise_suppression/config/eval/ns_testset.yaml \
+#       --out-dir egs/noise_suppression/data_report/ns_testset --n 500 --seed 1234
+schema_version: 2
+purpose: train
+task: noise_suppression
+
+dataset:
+  train_metafile: ./egs/noise_suppression/data/dns5/dns5_train.csv
+  valid_metafile: ./egs/noise_suppression/data/dns5/dns5_valid.csv
+  test_folder: ./egs/noise_suppression/data/test
+  proc_output_folder: ./egs/noise_suppression/proc
+  target_sample_rate: 16000
+  gain_normalized_to:
+  training_length_seconds: 6.
+  filter_min_utterance_length: 4.
+  filter_min_utterance_per_speaker: 2
+
+# The SNR range spans the decision region the deployment cares about and the
+# hard end that exposes over-suppression. It is deliberately wider than a
+# comfortable operating point: a set that only samples easy SNRs cannot fail a
+# model that breaks at 0 dB, and the manifest bands every item by its MEASURED
+# SNR so that end stays visible rather than averaged away.
+augmentation_noise:
+  used: True
+  prob: 1.0
+  noise_folder: /path/to/audio/dns-5/datasets_fullband_16k/noise_fullband
+  snr_range: [-5, 20]
+  prob_white_noise: 0.05
+  white_noise_snr_range: [10, 30]
+
+augmentation_reverb:
+  used: False
+  prob: 0.0
+  rir_folder:
+  target_rir_type: "early"
+
+augmentation_speech:
+  used: False
+  is_target: False
+  prob: 0.0
+  add_n_cases: 1
+  snr_range: [0, 10]
+
+vad_label:
+  used: False
+
+trainer:
+  lightning_trainer_args:
+    max_epochs: 1
+  train_iter_per_epoch: 10
+  valid_iter_per_epoch: 500
+  n_spk_per_batch: 4
+  n_utt_per_speaker: 2
+  num_workers: 8
+  num_gpus: 1
+  work_folder: ./egs/noise_suppression/exp/testset
+
+optimizer:
+  type: AdamW
+  learning_rate: 0.001
+  args:
+    weight_decay: 0.001
+    betas: [0.9, 0.999]
+
+scheduler:
+  type: StepLR
+  warmup_step: 1
+  args:
+    step_size: 10
+    gamma: 0.5
+
+loss_func:
+  - type: SDRLoss
+    weighted: 1.
+    args:
+      scaled: False
+      scale_dependent: False
+      zero_mean: True
+      source_aggregated: False
+      sdr_max: 50
+      threshold: -50
+
+model:
+  lightning_module:
+    type: EncDecMaskBase
+    module_args:
+      mask_type: complex
+      encoder_lr_factor: 0.1
+      feats_lr_factor: 0.1
+      backbone_lr_factor: 1.
+  encoder:
+    type: ConvEncDec
+    encoder_args:
+      fft_length: 512
+      win_type: "hann"
+      win_length: 512
+      hop_length: 160
+      fmin: 0
+      fmax: 8000
+      sr: 16000
+      trainable: False
+  features:
+    feats_type: complex
+    drop_stft_first_bin: True
+    trainable: False
+    include_specaug: False
+  backbone:
+    type: DPCRN
+    backbone_args:
+      input_dim: 256
+      activation_type: PReLU
+      norm_type: bN2d
+      dropout: 0.05
+      channels: [2, 32, 64, 128]
+      transpose_t_size: 2
+      transpose_delay: False
+      skip_conv: False
+      kernel_t: [2, 2, 2]
+      stride_t: [1, 1, 1]
+      dilation_t: [1, 1, 1]
+      kernel_f: [5, 3, 3]
+      stride_f: [2, 2, 1]
+      dilation_f: [1, 1, 1]
+      delay: [1, 1, 1]
+      rnn_hidden: 96
+      spectral_compress: False

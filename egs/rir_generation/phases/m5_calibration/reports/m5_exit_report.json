@@ -1,0 +1,110 @@
+{
+  "schema_version": "puresound.m5_exit.v1",
+  "milestone": "M5.6",
+  "scope": "implementation_exit_with_separate_empirical_status",
+  "input_reports": {
+    "M5.1": "egs/rir_generation/phases/m5_calibration/reports/m5_measurement_contract_report.json",
+    "M5.2": "egs/rir_generation/phases/m5_calibration/reports/m5_synthetic_recovery_report.json",
+    "M5.2b": "egs/rir_generation/phases/m5_calibration/reports/m5_robust_recovery_report.json",
+    "M5.2c": "egs/rir_generation/phases/m5_calibration/reports/m5_m4_parameter_mapping_report.json",
+    "M5.2d": "egs/rir_generation/phases/m5_calibration/reports/m5_group_identifiability_report.json",
+    "M5.3i": "egs/rir_generation/phases/m5_calibration/reports/m5_measured_runner_validation_report.json",
+    "M5.3": "egs/rir_generation/phases/m5_calibration/reports/m5_measured_fit_status_report.json",
+    "M5.4": "egs/rir_generation/phases/m5_calibration/reports/m5_spatial_calibration_report.json",
+    "M5.5": "egs/rir_generation/phases/m5_calibration/reports/m5_constrained_residual_report.json"
+  },
+  "stage_identity": {
+    "M5.1": true,
+    "M5.2": true,
+    "M5.2b": true,
+    "M5.2c": true,
+    "M5.2d": true,
+    "M5.3i": true,
+    "M5.3": true,
+    "M5.4": true,
+    "M5.5": true
+  },
+  "stage_gates": {
+    "m5_1_measurement_loss_contract_passed": true,
+    "m5_2_noise_free_recovery_passed": true,
+    "m5_2b_robust_recovery_passed": true,
+    "m5_2c_actual_m4_profile_passed": true,
+    "m5_2d_group_identifiability_passed": true,
+    "m5_3_runner_executes_complete_campaign_fixture": true,
+    "m5_3_status_is_fail_closed_or_executed": true,
+    "m5_4_spatial_profile_implementation_passed": true,
+    "m5_5_constrained_residual_implementation_passed": true
+  },
+  "artifact_checks": {
+    "m5_2c_recovered": true,
+    "m5_2d_recovered": true,
+    "m5_3_runner_fixture_campaign": true,
+    "m5_4_selected_array": true,
+    "m5_5_physical": true,
+    "m5_5_residual": true,
+    "m5_5_combined": true
+  },
+  "artifact_paths": {
+    "m5_2c_recovered": "egs/rir_generation/exp/rir_realism/m5/rir_m5_m4_parameter_mapping/m5_2c_holdout_recovered.wav",
+    "m5_2d_recovered": "egs/rir_generation/exp/rir_realism/m5/rir_m5_group_identifiability/m5_2d_holdout_recovered.wav",
+    "m5_3_runner_fixture_campaign": "egs/rir_generation/exp/rir_realism/m5/rir_m5_measured_runner_fixture/campaign.json",
+    "m5_4_selected_array": "egs/rir_generation/exp/rir_realism/m5/rir_m5_spatial_calibration/m5_4_selected_candidate.wav",
+    "m5_5_physical": "egs/rir_generation/exp/rir_realism/m5/rir_m5_constrained_residual/m5_5_heldout_physical_only.wav",
+    "m5_5_residual": "egs/rir_generation/exp/rir_realism/m5/rir_m5_constrained_residual/m5_5_heldout_residual_only.wav",
+    "m5_5_combined": "egs/rir_generation/exp/rir_realism/m5/rir_m5_constrained_residual/m5_5_heldout_combined.wav"
+  },
+  "invariant_checks": {
+    "mono_absorption_scattering_ambiguity_not_hidden": true,
+    "measured_fit_claim_matches_campaign_readiness": true,
+    "measured_spatial_fit_not_falsely_claimed": true,
+    "measured_residual_training_not_falsely_claimed": true,
+    "production_default_unchanged": true
+  },
+  "implementation_exit": {
+    "passed": true,
+    "m5_1_through_m5_6_code_complete": true,
+    "measured_runner_available_and_current_status_valid": true
+  },
+  "empirical_report_paths": {
+    "controlled_listening": "egs/rir_generation/phases/m5_calibration/reports/m5_controlled_listening_report.json",
+    "downstream": "egs/rir_generation/phases/m5_calibration/reports/m5_downstream_report.json"
+  },
+  "empirical_checks": {
+    "controlled_campaign_ready": false,
+    "measured_room_fit_executed": false,
+    "heldout_positions_improved": false,
+    "heldout_physical_rooms_improved": false,
+    "measured_synchronized_spatial_calibration_complete": false,
+    "measured_residual_training_complete": false,
+    "controlled_listening_passed": false,
+    "room_disjoint_downstream_passed": false
+  },
+  "empirical_exit": {
+    "passed": false,
+    "missing_evidence": [
+      "controlled_campaign_ready",
+      "measured_room_fit_executed",
+      "heldout_positions_improved",
+      "heldout_physical_rooms_improved",
+      "measured_synchronized_spatial_calibration_complete",
+      "measured_residual_training_complete",
+      "controlled_listening_passed",
+      "room_disjoint_downstream_passed"
+    ]
+  },
+  "production_enablement": {
+    "ready": false,
+    "m5_renderer_default_enabled": false,
+    "reason": "implementation is complete, but production remains disabled until every controlled measured-room, listening, and room-disjoint downstream gate passes"
+  },
+  "next_action": {
+    "external_dependency": "acquire/ingest a qualifying repeated-ESS controlled campaign",
+    "then_run": [
+      "fit_m5_measured_campaign.py",
+      "measured synchronized M5.4 candidate profile",
+      "measured residual training and ablation",
+      "controlled listening and downstream evaluation",
+      "validate_m5_exit.py"
+    ]
+  }
+}

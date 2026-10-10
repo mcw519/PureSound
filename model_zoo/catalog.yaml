@@ -1,0 +1,253 @@
+schema_version: 1
+
+# The registry is intentionally metadata-only.  ONNX binaries and checkpoints
+# stay in their existing task directories; update the SHA256 whenever an
+# artifact is replaced in place.
+models:
+  - id: voice-isolate-dpcrn-v8
+    display_name: Voice Isolation DPCRN v8
+    task: voice_isolation
+    lifecycle: released
+    roles: [candidate]
+    description: "The previous default, kept as the conservative choice: shallower distant-talker suppression than curriculum-v1, but it does not attenuate the near talker on unfamiliar capture hardware."
+    inputs: [audio]
+    outputs: [audio]
+    audio: {sample_rate: 16000, channels: 1}
+    capabilities: {offline_file: true, realtime_streaming: true, auxiliary_heads: false}
+    preprocessing: {mono: true, resample: 16000}
+    postprocessing: {type: manifest_recommended, streaming_delay_alignment: true}
+    recommended_inference: {dry_blend: 0.9}
+    parameters:
+      dry_blend: {type: float, default: 0.9, minimum: 0.1, maximum: 1.0}
+      onset_guard: {type: bool, default: false, description: "Keep the input untouched until a talker has been heard for t_arm_s of speech; fewer deleted words, less suppression in the first second."}
+      onset_guard_t_arm_s: {type: float, default: 1.0, minimum: 0.3, maximum: 5.0, description: "Sustained speech that confirms a talker and hands the output over to the model."}
+      onset_guard_t_forget_s: {type: float, default: 5.0, minimum: 1.0, maximum: 60.0, description: "Quiet this long drops the anchor, so the next onset is protected again."}
+      onset_guard_tau_dn_s: {type: float, default: 2.0, minimum: 0.1, maximum: 10.0, description: "Release time constant from the untouched input back to the model output."}
+      onset_guard_margin_db: {type: float, default: 8.0, minimum: 3.0, maximum: 20.0, description: "How far over the tracked noise floor a frame counts as speech."}
+    source_checkpoint: egs/voice_isolate/pretrained_ckpt/dpcrn_v8.ckpt
+    source_config: egs/voice_isolate/config/infer_dpcrn.yaml
+    benchmark_references: [egs/voice_isolate/pretrained_ckpt/README.md]
+    artifacts:
+      - format: onnx
+        variant: default
+        path: egs/voice_isolate/pretrained_ckpt/streaming/dpcrn_v8.onnx
+        manifest: egs/voice_isolate/pretrained_ckpt/streaming/dpcrn_v8.json
+        processor: stft_frame_ort
+        sha256: 322a3e3f05db85ae0b11391c386047c051ff54a16e5eda245e6a11d12e3822c8
+
+  - id: voice-isolate-dpcrn-curriculum-v1
+    display_name: Voice Isolation DPCRN curriculum v1
+    task: voice_isolation
+    lifecycle: released
+    roles: [default]
+    description: Suppresses a distant talker further than any earlier version -- including from a cold start -- at no cost to the near talker, on the capture hardware it was tuned for. On other capture hardware it can attenuate the near talker; prefer dpcrn-v8 when the capture path is unknown.
+    inputs: [audio]
+    outputs: [audio]
+    audio: {sample_rate: 16000, channels: 1}
+    capabilities: {offline_file: true, realtime_streaming: true, auxiliary_heads: false}
+    preprocessing: {mono: true, resample: 16000}
+    postprocessing: {type: manifest_recommended}
+    recommended_inference: {dry_blend: 0.9}
+    parameters:
+      dry_blend: {type: float, default: 0.9, minimum: 0.1, maximum: 1.0}
+      onset_guard: {type: bool, default: false, description: "Keep the input untouched until a talker has been heard for t_arm_s of speech; fewer deleted words, less suppression in the first second."}
+      onset_guard_t_arm_s: {type: float, default: 1.0, minimum: 0.3, maximum: 5.0, description: "Sustained speech that confirms a talker and hands the output over to the model."}
+      onset_guard_t_forget_s: {type: float, default: 5.0, minimum: 1.0, maximum: 60.0, description: "Quiet this long drops the anchor, so the next onset is protected again."}
+      onset_guard_tau_dn_s: {type: float, default: 2.0, minimum: 0.1, maximum: 10.0, description: "Release time constant from the untouched input back to the model output."}
+      onset_guard_margin_db: {type: float, default: 8.0, minimum: 3.0, maximum: 20.0, description: "How far over the tracked noise floor a frame counts as speech."}
+    source_checkpoint: egs/voice_isolate/pretrained_ckpt/dpcrn_curriculum_v1.ckpt
+    source_config: egs/voice_isolate/config/infer_dpcrn.yaml
+    benchmark_references: [egs/voice_isolate/pretrained_ckpt/README.md]
+    artifacts:
+      - format: onnx
+        variant: default
+        path: egs/voice_isolate/pretrained_ckpt/streaming/dpcrn_curriculum_v1.onnx
+        manifest: egs/voice_isolate/pretrained_ckpt/streaming/dpcrn_curriculum_v1.json
+        processor: stft_frame_ort
+        sha256: bf69dfbf03d01415a6307f23d8a10fa985f101d34a2bb6fccfcdc4f3250ff84e
+
+  - id: voice-isolate-dpcrn-curriculum-v2
+    display_name: Voice Isolation DPCRN curriculum v2 (wide)
+    task: voice_isolation
+    lifecycle: released
+    roles: [candidate]
+    description: "A wider curriculum-v1: lower WER on reverberant speech and deeper suppression of a distant talker, including from a cold start, at 1.4x the CPU. Like v1 it can attenuate the near talker on unfamiliar capture hardware; prefer dpcrn-v8 there."
+    inputs: [audio]
+    outputs: [audio]
+    audio: {sample_rate: 16000, channels: 1}
+    capabilities: {offline_file: true, realtime_streaming: true, auxiliary_heads: false}
+    preprocessing: {mono: true, resample: 16000}
+    postprocessing: {type: manifest_recommended}
+    recommended_inference: {dry_blend: 0.9}
+    parameters:
+      dry_blend: {type: float, default: 0.9, minimum: 0.1, maximum: 1.0}
+      onset_guard: {type: bool, default: false, description: "Keep the input untouched until a talker has been heard for t_arm_s of speech; fewer deleted words, less suppression in the first second."}
+      onset_guard_t_arm_s: {type: float, default: 1.0, minimum: 0.3, maximum: 5.0, description: "Sustained speech that confirms a talker and hands the output over to the model."}
+      onset_guard_t_forget_s: {type: float, default: 5.0, minimum: 1.0, maximum: 60.0, description: "Quiet this long drops the anchor, so the next onset is protected again."}
+      onset_guard_tau_dn_s: {type: float, default: 2.0, minimum: 0.1, maximum: 10.0, description: "Release time constant from the untouched input back to the model output."}
+      onset_guard_margin_db: {type: float, default: 8.0, minimum: 3.0, maximum: 20.0, description: "How far over the tracked noise floor a frame counts as speech."}
+    source_checkpoint: egs/voice_isolate/pretrained_ckpt/dpcrn_curriculum_v2.ckpt
+    source_config: egs/voice_isolate/config/infer_dpcrn_wide.yaml
+    benchmark_references: [egs/voice_isolate/pretrained_ckpt/README.md]
+    artifacts:
+      - format: onnx
+        variant: default
+        path: egs/voice_isolate/pretrained_ckpt/streaming/dpcrn_curriculum_v2.onnx
+        manifest: egs/voice_isolate/pretrained_ckpt/streaming/dpcrn_curriculum_v2.json
+        processor: stft_frame_ort
+        sha256: 9a79e9eaeab9a6e288fec7216adb1c87a05b557948e8aa014f5f6096e1f375e4
+
+  - id: noise-suppression-dpcrn-mamba-v3
+    display_name: Noise Suppression DPCRN-Mamba v3
+    task: noise_suppression
+    lifecycle: released
+    roles: [candidate]
+    description: "Wider 16 kHz streaming DPCRN-Mamba with mixed-source coverage training and MetricGAN calibration. Higher PESQ and STOI than v2; lower DNSMOS OVR and slower CPU inference. Deletion gates remain unresolved, and hard-set WER is above the unprocessed input."
+    inputs: [audio]
+    outputs: [audio]
+    audio: {sample_rate: 16000, channels: 1}
+    capabilities: {offline_file: true, realtime_streaming: true, auxiliary_heads: false}
+    preprocessing: {mono: true, resample: 16000}
+    postprocessing: {type: manifest_recommended}
+    recommended_inference: {dry_blend: 1.0}
+    parameters:
+      dry_blend: {type: float, default: 1.0, minimum: 0.1, maximum: 1.0, description: "Records were scored at 1.0 (no relief); lower values cap the suppression depth and are unmeasured."}
+      onset_guard: {type: bool, default: false, description: "Keep the input untouched until a talker has been heard for t_arm_s of speech; fewer deleted words, less suppression in the first second."}
+      onset_guard_t_arm_s: {type: float, default: 1.0, minimum: 0.3, maximum: 5.0, description: "Sustained speech that confirms a talker and hands the output over to the model."}
+      onset_guard_t_forget_s: {type: float, default: 5.0, minimum: 1.0, maximum: 60.0, description: "Quiet this long drops the anchor, so the next onset is protected again."}
+      onset_guard_tau_dn_s: {type: float, default: 2.0, minimum: 0.1, maximum: 10.0, description: "Release time constant from the untouched input back to the model output."}
+      onset_guard_margin_db: {type: float, default: 8.0, minimum: 3.0, maximum: 20.0, description: "How far over the tracked noise floor a frame counts as speech."}
+    source_checkpoint: egs/noise_suppression/pretrained_ckpt/dpcrn_mamba_v3.ckpt
+    source_config: egs/noise_suppression/config/infer_dpcrn_mamba_wide.yaml
+    benchmark_references: [egs/noise_suppression/pretrained_ckpt/README.md, egs/noise_suppression/benchmarks/records/ns_dpcrn-mamba_capWL3_mg_ep3.json]
+    artifacts:
+      - format: onnx
+        variant: default
+        path: egs/noise_suppression/pretrained_ckpt/streaming/dpcrn_mamba_v3.onnx
+        manifest: egs/noise_suppression/pretrained_ckpt/streaming/dpcrn_mamba_v3.json
+        processor: stft_frame_ort
+        sha256: 8651656ab57af7ad33f0a67aa131df4c160767c56e8563043a59e77ea97dcfe9
+      - format: onnx
+        variant: flash
+        path: egs/noise_suppression/pretrained_ckpt/streaming/dpcrn_mamba_v3_flash.onnx
+        manifest: egs/noise_suppression/pretrained_ckpt/streaming/dpcrn_mamba_v3_flash.json
+        processor: stft_frame_ort
+        sha256: 2aab1b01855919e24b5b59d801bb9a655c617ea43208a0d1ac676888ffdb7dcf
+        description: "int8 weights for tight CPU budgets: about 20% less CPU time than the default graph, PESQ about 0.005 lower, no resolvable change in word deletions."
+
+  - id: noise-suppression-dpcrn-mamba-v2
+    display_name: Noise Suppression DPCRN-Mamba v2
+    task: noise_suppression
+    lifecycle: released
+    roles: [default]
+    description: Single-channel 16 kHz streaming noise suppression (DPCRN-Mamba), v1 fine-tuned with a MetricGAN PESQ critic. On VCTK-DEMAND PESQ-WB 2.57 and on DNS-5 DNSMOS OVR 2.83; on a harder WER set it deletes fewer words than v1, on VCTK-DEMAND slightly more -- prefer v1 if that matters.
+    inputs: [audio]
+    outputs: [audio]
+    audio: {sample_rate: 16000, channels: 1}
+    capabilities: {offline_file: true, realtime_streaming: true, auxiliary_heads: false}
+    preprocessing: {mono: true, resample: 16000}
+    postprocessing: {type: manifest_recommended}
+    recommended_inference: {dry_blend: 1.0}
+    parameters:
+      dry_blend: {type: float, default: 1.0, minimum: 0.1, maximum: 1.0, description: "Records were scored at 1.0 (no relief); lower values cap the suppression depth and are unmeasured."}
+      onset_guard: {type: bool, default: false, description: "Keep the input untouched until a talker has been heard for t_arm_s of speech; fewer deleted words, less suppression in the first second."}
+      onset_guard_t_arm_s: {type: float, default: 1.0, minimum: 0.3, maximum: 5.0, description: "Sustained speech that confirms a talker and hands the output over to the model."}
+      onset_guard_t_forget_s: {type: float, default: 5.0, minimum: 1.0, maximum: 60.0, description: "Quiet this long drops the anchor, so the next onset is protected again."}
+      onset_guard_tau_dn_s: {type: float, default: 2.0, minimum: 0.1, maximum: 10.0, description: "Release time constant from the untouched input back to the model output."}
+      onset_guard_margin_db: {type: float, default: 8.0, minimum: 3.0, maximum: 20.0, description: "How far over the tracked noise floor a frame counts as speech."}
+    source_checkpoint: egs/noise_suppression/pretrained_ckpt/dpcrn_mamba_v2.ckpt
+    source_config: egs/noise_suppression/config/infer_dpcrn.yaml
+    benchmark_references: [egs/noise_suppression/pretrained_ckpt/README.md, egs/noise_suppression/benchmarks/records/ns_dpcrn-mamba_metricgan_ft_ep3.json]
+    artifacts:
+      - format: onnx
+        variant: default
+        path: egs/noise_suppression/pretrained_ckpt/streaming/dpcrn_mamba_v2.onnx
+        manifest: egs/noise_suppression/pretrained_ckpt/streaming/dpcrn_mamba_v2.json
+        processor: stft_frame_ort
+        sha256: a28cc5c9736f415a5ed603bd97cc415d11d8088cb2e288d20334a0713f723c86
+
+  - id: noise-suppression-dpcrn-mamba-v1
+    display_name: Noise Suppression DPCRN-Mamba v1
+    task: noise_suppression
+    lifecycle: released
+    roles: [candidate]
+    description: "The previous default, kept as the conservative choice: v2 without its MetricGAN stage. Slightly lower PESQ and DNSMOS than v2, and the lowest word-deletion rate on VCTK-DEMAND."
+    inputs: [audio]
+    outputs: [audio]
+    audio: {sample_rate: 16000, channels: 1}
+    capabilities: {offline_file: true, realtime_streaming: true, auxiliary_heads: false}
+    preprocessing: {mono: true, resample: 16000}
+    postprocessing: {type: manifest_recommended}
+    recommended_inference: {dry_blend: 1.0}
+    parameters:
+      dry_blend: {type: float, default: 1.0, minimum: 0.1, maximum: 1.0, description: "Records were scored at 1.0 (no relief); lower values cap the suppression depth and are unmeasured."}
+      onset_guard: {type: bool, default: false, description: "Keep the input untouched until a talker has been heard for t_arm_s of speech; fewer deleted words, less suppression in the first second."}
+      onset_guard_t_arm_s: {type: float, default: 1.0, minimum: 0.3, maximum: 5.0, description: "Sustained speech that confirms a talker and hands the output over to the model."}
+      onset_guard_t_forget_s: {type: float, default: 5.0, minimum: 1.0, maximum: 60.0, description: "Quiet this long drops the anchor, so the next onset is protected again."}
+      onset_guard_tau_dn_s: {type: float, default: 2.0, minimum: 0.1, maximum: 10.0, description: "Release time constant from the untouched input back to the model output."}
+      onset_guard_margin_db: {type: float, default: 8.0, minimum: 3.0, maximum: 20.0, description: "How far over the tracked noise floor a frame counts as speech."}
+    source_checkpoint: egs/noise_suppression/pretrained_ckpt/dpcrn_mamba_v1.ckpt
+    source_config: egs/noise_suppression/config/infer_dpcrn.yaml
+    benchmark_references: [egs/noise_suppression/pretrained_ckpt/README.md, egs/noise_suppression/benchmarks/records/ns_dpcrn-mamba_activebin_ft_ep1.json]
+    artifacts:
+      - format: onnx
+        variant: default
+        path: egs/noise_suppression/pretrained_ckpt/streaming/dpcrn_mamba_v1.onnx
+        manifest: egs/noise_suppression/pretrained_ckpt/streaming/dpcrn_mamba_v1.json
+        processor: stft_frame_ort
+        sha256: eabdca9fa7b0cc66c839d41e2fe07e409c9c09ad476e4dd0681a7bc63f04bfab
+
+  - id: speaker-verification-ps-spk-v1
+    display_name: Speaker Verification PS-spk-v1
+    task: speaker_embedding
+    lifecycle: released
+    roles: [alternative]
+    description: 192-dimensional speaker embedding model (EER 1.10 in the release notes).
+    inputs: [enrollment, test]
+    outputs: [enrollment_embedding, test_embedding]
+    audio: {sample_rate: 16000, channels: 1, target_dbfs: -22.0}
+    capabilities: {offline_file: true, realtime_streaming: false, speaker_verification: true}
+    preprocessing: {mono: true, resample: 16000, target_dbfs: -22.0}
+    postprocessing: {type: cosine_similarity}
+    recommended_inference: {threshold: 0.8}
+    parameters:
+      threshold: {type: float, default: 0.8, minimum: 0.0, maximum: 1.0}
+      target_dbfs: {type: float, default: -22.0, minimum: -60.0, maximum: 0.0}
+    source_checkpoint: egs/speaker_embedding/pretrained/PS-spk-v1.ckpt
+    source_config: egs/speaker_embedding/conf/PS-spk-v1.yaml
+    benchmark_references: [egs/speaker_embedding/README.md]
+    artifacts:
+      - format: onnx
+        variant: default
+        path: egs/speaker_embedding/pretrained/PS-spk-v1.onnx
+        processor: waveform_embedding_ort
+        sha256: 327007fcf88e33af876efb750a75360dbb26229a805e6e65c73396d82b1ee1ac
+        input_names: [Audio]
+        output_names: [Embedding]
+  - id: speaker-verification-ps-spk-v1-1
+    display_name: Speaker Verification PS-spk-v1-1
+    task: speaker_embedding
+    lifecycle: released
+    roles: [default]
+    description: 192-dimensional speaker embedding release (EER 0.99 in the release notes).
+    inputs: [enrollment, test]
+    outputs: [enrollment_embedding, test_embedding]
+    audio: {sample_rate: 16000, channels: 1, target_dbfs: -22.0}
+    capabilities: {offline_file: true, realtime_streaming: false, speaker_verification: true}
+    preprocessing: {mono: true, resample: 16000, target_dbfs: -22.0}
+    postprocessing: {type: cosine_similarity}
+    recommended_inference: {threshold: 0.8}
+    parameters:
+      threshold: {type: float, default: 0.8, minimum: 0.0, maximum: 1.0}
+      target_dbfs: {type: float, default: -22.0, minimum: -60.0, maximum: 0.0}
+    source_checkpoint: egs/speaker_embedding/pretrained/PS-spk-v1-1.ckpt
+    source_config: egs/speaker_embedding/conf/PS-spk-v1-1.yaml
+    benchmark_references: [egs/speaker_embedding/README.md]
+    artifacts:
+      - format: onnx
+        variant: default
+        path: egs/speaker_embedding/pretrained/PS-spk-v1-1.onnx
+        processor: waveform_embedding_ort
+        sha256: 3b37a9133a1e1987b19b6eec8c5bb134e994849963929aff35ce9e7821280fd8
+        input_names: [Audio]
+        output_names: [Embedding]

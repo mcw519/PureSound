@@ -1,0 +1,587 @@
+{
+  "ort_version": "1.26.0",
+  "threads": 1,
+  "provider": "CPUExecutionProvider",
+  "sample": "puresound/web/static/samples/noisy-speech.wav",
+  "sample_sha256": "e48ddf9277066f70e12c0535b222b9b5e74cc2395cd0e63883bd38df3b102964",
+  "audio_seconds": 5.0,
+  "warmup": 2,
+  "repeats": 3,
+  "timing": "interleaved; STFT/model/OLA/flush included; load and warmup excluded",
+  "long_stream": {
+    "seconds": 30.0,
+    "chunk_samples": 317,
+    "input": "six repetitions of the same noisy-speech sample"
+  },
+  "weights_changed": false,
+  "models": {
+    "voice-isolate-dpcrn-v8": {
+      "original_sha256": "ddd7724eda31d160e7c9733b522c3c8da52997b9b972e800156b17e2f9a4857c",
+      "sha256": "322a3e3f05db85ae0b11391c386047c051ff54a16e5eda245e6a11d12e3822c8",
+      "checkpoint_sha256": "ffa3df7c4891b506d1e94a706b2255e82112454561797ce17e39fe273f7b304f",
+      "validation": {
+        "original": {
+          "rtf_repeats": [
+            0.3657089002430439,
+            0.3658602602779865,
+            0.3652005232870579
+          ],
+          "max_abs_error": 0.0,
+          "nrms": 0.0,
+          "median_rtf": 0.3657089002430439,
+          "reset": {
+            "max_abs_error": 0.0,
+            "nrms": 0.0
+          }
+        },
+        "portable": {
+          "rtf_repeats": [
+            0.25825230255723,
+            0.2640093944966793,
+            0.25803238302469256
+          ],
+          "max_abs_error": 2.0582228899002075e-07,
+          "nrms": 1.663158570863743e-07,
+          "median_rtf": 0.25825230255723,
+          "long_stream": {
+            "max_abs_error": 1.7881393432617188e-07,
+            "nrms": 1.4169731343827152e-07
+          },
+          "reset": {
+            "max_abs_error": 2.0582228899002075e-07,
+            "nrms": 1.663158570863743e-07
+          }
+        }
+      },
+      "graph_nodes": {
+        "original": 589,
+        "reexported": 400
+      }
+    },
+    "voice-isolate-dpcrn-curriculum-v1": {
+      "original_sha256": "e7c19b1769d26e474d0d4fd46e2fff55487bd794e867614183ab3701f473c936",
+      "sha256": "bf69dfbf03d01415a6307f23d8a10fa985f101d34a2bb6fccfcdc4f3250ff84e",
+      "checkpoint_sha256": "46aaef770fc3139fcc69e1ba406d8d93312fbf6a7933dd18dc824e5873716606",
+      "validation": {
+        "original": {
+          "rtf_repeats": [
+            0.3657856661826372,
+            0.365958609059453,
+            0.3660956438630819
+          ],
+          "max_abs_error": 0.0,
+          "nrms": 0.0,
+          "median_rtf": 0.365958609059453,
+          "reset": {
+            "max_abs_error": 0.0,
+            "nrms": 0.0
+          }
+        },
+        "portable": {
+          "rtf_repeats": [
+            0.259200282767415,
+            0.2582703895866871,
+            0.2577380288392305
+          ],
+          "max_abs_error": 2.2351741790771484e-07,
+          "nrms": 1.876257726962649e-07,
+          "median_rtf": 0.2582703895866871,
+          "long_stream": {
+            "max_abs_error": 2.1010637283325195e-06,
+            "nrms": 2.0552538160245604e-07
+          },
+          "reset": {
+            "max_abs_error": 2.2351741790771484e-07,
+            "nrms": 1.876257726962649e-07
+          }
+        }
+      },
+      "graph_nodes": {
+        "original": 589,
+        "reexported": 400
+      }
+    },
+    "noise-suppression-dpcrn-mamba-v3": {
+      "original_sha256": "b03045f9a125a01f588083fa433a64eba88da6242fca6bb112925862dac92ccf",
+      "sha256": "8651656ab57af7ad33f0a67aa131df4c160767c56e8563043a59e77ea97dcfe9",
+      "checkpoint_sha256": "16767d352c12c7f437c3ec872d48d7e6e603b13b8b983db6f21ad4aebf726507",
+      "validation": {
+        "original": {
+          "rtf_repeats": [
+            0.5714576166123152,
+            0.5715202119201421,
+            0.5787314761430025
+          ],
+          "max_abs_error": 0.0,
+          "nrms": 0.0,
+          "median_rtf": 0.5715202119201421,
+          "reset": {
+            "max_abs_error": 0.0,
+            "nrms": 0.0
+          }
+        },
+        "portable": {
+          "rtf_repeats": [
+            0.4462779685854912,
+            0.44493192322552205,
+            0.4454592656344175
+          ],
+          "max_abs_error": 0.0,
+          "nrms": 0.0,
+          "median_rtf": 0.4454592656344175,
+          "long_stream": {
+            "max_abs_error": 0.0,
+            "nrms": 0.0
+          },
+          "reset": {
+            "max_abs_error": 0.0,
+            "nrms": 0.0
+          }
+        },
+        "native": {
+          "rtf_repeats": [
+            0.39012743197381494,
+            0.3912176761776209,
+            0.38904469832777977
+          ],
+          "max_abs_error": 1.1920928955078125e-06,
+          "nrms": 1.319174884883978e-07,
+          "median_rtf": 0.39012743197381494,
+          "long_stream": {
+            "max_abs_error": 1.9073486328125e-06,
+            "nrms": 1.1345164097065208e-07
+          },
+          "reset": {
+            "max_abs_error": 1.1920928955078125e-06,
+            "nrms": 1.319174884883978e-07
+          }
+        }
+      },
+      "graph_nodes": {
+        "original": 654,
+        "reexported": 435
+      }
+    },
+    "noise-suppression-dpcrn-mamba-v2": {
+      "original_sha256": "d7c39109a50a67635853deee0ec19b879b1be82e2459fbe435ad9edf78d55548",
+      "sha256": "a28cc5c9736f415a5ed603bd97cc415d11d8088cb2e288d20334a0713f723c86",
+      "checkpoint_sha256": "036fa2ffe6aa54dc7126cd330d8827492607f05d03a39fa6ad4c0a370579fadb",
+      "validation": {
+        "original": {
+          "rtf_repeats": [
+            0.4058471959084272,
+            0.40749041438102723,
+            0.40606622137129306
+          ],
+          "max_abs_error": 0.0,
+          "nrms": 0.0,
+          "median_rtf": 0.40606622137129306,
+          "reset": {
+            "max_abs_error": 0.0,
+            "nrms": 0.0
+          }
+        },
+        "portable": {
+          "rtf_repeats": [
+            0.3106987487524748,
+            0.31133702024817467,
+            0.30864520780742166
+          ],
+          "max_abs_error": 0.0,
+          "nrms": 0.0,
+          "median_rtf": 0.3106987487524748,
+          "long_stream": {
+            "max_abs_error": 0.0,
+            "nrms": 0.0
+          },
+          "reset": {
+            "max_abs_error": 0.0,
+            "nrms": 0.0
+          }
+        },
+        "native": {
+          "rtf_repeats": [
+            0.26729306727647784,
+            0.26601506024599075,
+            0.2632712978869677
+          ],
+          "max_abs_error": 4.76837158203125e-07,
+          "nrms": 1.1826978862927717e-07,
+          "median_rtf": 0.26601506024599075,
+          "long_stream": {
+            "max_abs_error": 1.7434358596801758e-06,
+            "nrms": 1.1792175769187452e-07
+          },
+          "reset": {
+            "max_abs_error": 4.76837158203125e-07,
+            "nrms": 1.1826978862927717e-07
+          }
+        }
+      },
+      "graph_nodes": {
+        "original": 654,
+        "reexported": 435
+      }
+    },
+    "noise-suppression-dpcrn-mamba-v1": {
+      "original_sha256": "d734f7ddd653aa2e70f98685d19f3ee77fddcc237efb4abd7b56dc95ba33feed",
+      "sha256": "eabdca9fa7b0cc66c839d41e2fe07e409c9c09ad476e4dd0681a7bc63f04bfab",
+      "checkpoint_sha256": "01e1e48eba3f873a0a53a22b2f2fd3f2c13d919332f4aee720b0fb45ceadd482",
+      "validation": {
+        "original": {
+          "rtf_repeats": [
+            0.3935644801706076,
+            0.3931175239384174,
+            0.3934381205588579
+          ],
+          "max_abs_error": 0.0,
+          "nrms": 0.0,
+          "median_rtf": 0.3934381205588579,
+          "reset": {
+            "max_abs_error": 0.0,
+            "nrms": 0.0
+          }
+        },
+        "portable": {
+          "rtf_repeats": [
+            0.29889371283352373,
+            0.3001125331968069,
+            0.2986810602247715
+          ],
+          "max_abs_error": 0.0,
+          "nrms": 0.0,
+          "median_rtf": 0.29889371283352373,
+          "long_stream": {
+            "max_abs_error": 0.0,
+            "nrms": 0.0
+          },
+          "reset": {
+            "max_abs_error": 0.0,
+            "nrms": 0.0
+          }
+        },
+        "native": {
+          "rtf_repeats": [
+            0.2568421993404627,
+            0.25674645565450194,
+            0.25626931972801686
+          ],
+          "max_abs_error": 9.5367431640625e-07,
+          "nrms": 1.3180741120777384e-07,
+          "median_rtf": 0.25674645565450194,
+          "long_stream": {
+            "max_abs_error": 8.642673492431641e-07,
+            "nrms": 1.1076571126977797e-07
+          },
+          "reset": {
+            "max_abs_error": 9.5367431640625e-07,
+            "nrms": 1.3180741120777384e-07
+          }
+        }
+      },
+      "graph_nodes": {
+        "original": 654,
+        "reexported": 435
+      }
+    },
+    "speaker-verification-ps-spk-v1": {
+      "original_sha256": "349bfa8bbfaa180c3d865d73d2c87d1344514bffe0deb19abeb8a407a5c0ad12",
+      "sha256": "327007fcf88e33af876efb750a75360dbb26229a805e6e65c73396d82b1ee1ac",
+      "checkpoint_sha256": "a2e18b7aa5a5b790312ef2f72a237a47a7d69a280565430db480c8eb23eabd0c",
+      "validation": {
+        "dynamic_length_and_batch": [
+          {
+            "batch": 1,
+            "samples": 16000,
+            "max_abs_error": 9.083747863769531e-05,
+            "nrms": 6.3936836340872105e-06
+          },
+          {
+            "batch": 1,
+            "samples": 37360,
+            "max_abs_error": 0.00010335445404052734,
+            "nrms": 7.03504929333576e-06
+          },
+          {
+            "batch": 1,
+            "samples": 80000,
+            "max_abs_error": 9.72747802734375e-05,
+            "nrms": 8.14600116427755e-06
+          },
+          {
+            "batch": 2,
+            "samples": 32000,
+            "max_abs_error": 9.441375732421875e-05,
+            "nrms": 7.435430234181695e-06
+          }
+        ]
+      },
+      "graph_nodes": {
+        "original": 264,
+        "reexported": 266
+      }
+    },
+    "speaker-verification-ps-spk-v1-1": {
+      "original_sha256": "10200532046454608be0399c4dccaabc7fa9ff7ab0feec97697899b603fc08b2",
+      "sha256": "3b37a9133a1e1987b19b6eec8c5bb134e994849963929aff35ce9e7821280fd8",
+      "checkpoint_sha256": "1a59b778bf48a5e8690481f01872f941d8b1c404bc5dbdc82c86dd95a04c486a",
+      "validation": {
+        "dynamic_length_and_batch": [
+          {
+            "batch": 1,
+            "samples": 16000,
+            "max_abs_error": 0.0001010894775390625,
+            "nrms": 8.369410352315754e-06
+          },
+          {
+            "batch": 1,
+            "samples": 37360,
+            "max_abs_error": 0.00012302398681640625,
+            "nrms": 8.87579608388478e-06
+          },
+          {
+            "batch": 1,
+            "samples": 80000,
+            "max_abs_error": 0.00011205673217773438,
+            "nrms": 8.493105269735679e-06
+          },
+          {
+            "batch": 2,
+            "samples": 32000,
+            "max_abs_error": 0.00010037422180175781,
+            "nrms": 8.764271115069278e-06
+          }
+        ]
+      },
+      "graph_nodes": {
+        "original": 264,
+        "reexported": 266
+      }
+    }
+  },
+  "catalog_validation": {
+    "models": 7,
+    "artifacts": 7,
+    "ok": true
+  },
+  "hardware": {
+    "cpu": "Intel Xeon CPU @ 2.20GHz",
+    "environment": "KVM virtual machine",
+    "machine": "x86_64"
+  },
+  "deployment_validation": {
+    "noise-suppression-dpcrn-mamba-v1": {
+      "chunk_and_reset_bit_equal": true,
+      "facade_uses_optimized_graph": true,
+      "selected_graph": "egs/noise_suppression/pretrained_ckpt/streaming/dpcrn_mamba_v1.onnx",
+      "threads": 1,
+      "cpu_optimization": {
+        "version": 1,
+        "layout": "frequency_major",
+        "batch_size": 1,
+        "intra_op_num_threads": 1,
+        "inter_lstm": null,
+        "native_graph": "dpcrn_mamba_v1.native.onnx",
+        "native_sha256": "ddaa668d49ef652199d8b0c6d2628660d50dafe6b0597d71a2ed81d36fd90d3f",
+        "native_domain": "com.puresound",
+        "native_op_version": 1
+      }
+    },
+    "noise-suppression-dpcrn-mamba-v2": {
+      "chunk_and_reset_bit_equal": true,
+      "facade_uses_optimized_graph": true,
+      "selected_graph": "egs/noise_suppression/pretrained_ckpt/streaming/dpcrn_mamba_v2.onnx",
+      "threads": 1,
+      "cpu_optimization": {
+        "version": 1,
+        "layout": "frequency_major",
+        "batch_size": 1,
+        "intra_op_num_threads": 1,
+        "inter_lstm": null,
+        "native_graph": "dpcrn_mamba_v2.native.onnx",
+        "native_sha256": "b47fa2378ab57885463a08305741caf11ba192425f144392617c1089b5ec0426",
+        "native_domain": "com.puresound",
+        "native_op_version": 1
+      }
+    },
+    "noise-suppression-dpcrn-mamba-v3": {
+      "chunk_and_reset_bit_equal": true,
+      "facade_uses_optimized_graph": true,
+      "selected_graph": "egs/noise_suppression/pretrained_ckpt/streaming/dpcrn_mamba_v3.onnx",
+      "threads": 1,
+      "cpu_optimization": {
+        "version": 1,
+        "layout": "frequency_major",
+        "batch_size": 1,
+        "intra_op_num_threads": 1,
+        "inter_lstm": null,
+        "native_graph": "dpcrn_mamba_v3.native.onnx",
+        "native_sha256": "b7a7a7197fd9e38a51fd9984e8608e706d841200a9891fb5949f203088af638a",
+        "native_domain": "com.puresound",
+        "native_op_version": 1
+      }
+    },
+    "voice-isolate-dpcrn-curriculum-v1": {
+      "chunk_and_reset_bit_equal": true,
+      "facade_uses_optimized_graph": true,
+      "selected_graph": "egs/voice_isolate/pretrained_ckpt/streaming/dpcrn_curriculum_v1.onnx",
+      "threads": 1,
+      "cpu_optimization": {
+        "version": 1,
+        "layout": "frequency_major",
+        "batch_size": 1,
+        "intra_op_num_threads": 1,
+        "inter_lstm": "vectorized_gates"
+      }
+    },
+    "voice-isolate-dpcrn-v8": {
+      "chunk_and_reset_bit_equal": true,
+      "facade_uses_optimized_graph": true,
+      "selected_graph": "egs/voice_isolate/pretrained_ckpt/streaming/dpcrn_v8.onnx",
+      "threads": 1,
+      "cpu_optimization": {
+        "version": 1,
+        "layout": "frequency_major",
+        "batch_size": 1,
+        "intra_op_num_threads": 1,
+        "inter_lstm": "vectorized_gates"
+      }
+    }
+  },
+  "wasm_validation": {
+    "backend": "ORT Web 1.24.3 WASM on Node",
+    "threads": 1,
+    "models": {
+      "noise-suppression-dpcrn-mamba-v1": {
+        "nrms": 4.2268606714214797e-07,
+        "max_abs_error": 1.52587890625e-05,
+        "input_samples": 32000,
+        "output_samples": 32352,
+        "chunk_samples": 317,
+        "reset_bit_equal": true
+      },
+      "noise-suppression-dpcrn-mamba-v2": {
+        "nrms": 2.455613731738183e-07,
+        "max_abs_error": 1.1444091796875e-05,
+        "input_samples": 32000,
+        "output_samples": 32352,
+        "chunk_samples": 317,
+        "reset_bit_equal": true
+      },
+      "noise-suppression-dpcrn-mamba-v3": {
+        "nrms": 3.381476391488786e-07,
+        "max_abs_error": 2.6702880859375e-05,
+        "input_samples": 32000,
+        "output_samples": 32352,
+        "chunk_samples": 317,
+        "reset_bit_equal": true
+      },
+      "voice-isolate-dpcrn-curriculum-v1": {
+        "nrms": 4.285381862066702e-07,
+        "max_abs_error": 3.5762786865234375e-06,
+        "input_samples": 32000,
+        "output_samples": 32352,
+        "chunk_samples": 317,
+        "reset_bit_equal": true
+      },
+      "voice-isolate-dpcrn-v8": {
+        "nrms": 3.0510689913075106e-07,
+        "max_abs_error": 1.2498348951339722e-06,
+        "input_samples": 32000,
+        "output_samples": 32352,
+        "chunk_samples": 317,
+        "reset_bit_equal": true
+      }
+    }
+  },
+  "device_payload_version": "0c9ada3dd01c1b09",
+  "lstm_projection_probe": {
+    "full_model": {
+      "original": {
+        "rtf_repeats": [
+          0.3641769211739302,
+          0.36161073483526707,
+          0.36726277209818364
+        ],
+        "max_abs_error": 0.0,
+        "nrms": 0.0,
+        "median_rtf": 0.3641769211739302
+      },
+      "layout_sequence": {
+        "rtf_repeats": [
+          0.25722475685179236,
+          0.25562383979558945,
+          0.2664320502430201
+        ],
+        "max_abs_error": 0.0,
+        "nrms": 0.0,
+        "median_rtf": 0.25722475685179236
+      },
+      "layout_vectorized": {
+        "rtf_repeats": [
+          0.2569405548274517,
+          0.2732723902910948,
+          0.26070455126464365
+        ],
+        "max_abs_error": 2.0582228899002075e-07,
+        "nrms": 1.663158570863743e-07,
+        "median_rtf": 0.26070455126464365
+      }
+    },
+    "single_inter_step": {
+      "sequence": {
+        "per_step_ms": 0.17843865603208542,
+        "repeats_ms": [
+          0.17843865603208542,
+          0.1788944359868765,
+          0.17809053137898445,
+          0.1812013927847147,
+          0.17726902477443218
+        ]
+      },
+      "gates": {
+        "per_step_ms": 0.1720118224620819,
+        "repeats_ms": [
+          0.17226789891719818,
+          0.17244844883680344,
+          0.1720118224620819,
+          0.17127002961933613,
+          0.17127872817218304
+        ]
+      }
+    }
+  },
+  "native_deployment_validation": {
+    "noise-suppression-dpcrn-mamba-v1": {
+      "native_selected_by_facade": true,
+      "cached_session_native_metadata": true,
+      "reset_and_independent_stream_bit_equal": true,
+      "graph": "egs/noise_suppression/pretrained_ckpt/streaming/dpcrn_mamba_v1.native.onnx"
+    },
+    "noise-suppression-dpcrn-mamba-v2": {
+      "native_selected_by_facade": true,
+      "cached_session_native_metadata": true,
+      "reset_and_independent_stream_bit_equal": true,
+      "graph": "egs/noise_suppression/pretrained_ckpt/streaming/dpcrn_mamba_v2.native.onnx"
+    },
+    "noise-suppression-dpcrn-mamba-v3": {
+      "native_selected_by_facade": true,
+      "cached_session_native_metadata": true,
+      "reset_and_independent_stream_bit_equal": true,
+      "graph": "egs/noise_suppression/pretrained_ckpt/streaming/dpcrn_mamba_v3.native.onnx"
+    }
+  },
+  "repository_checks": {
+    "suite": "full",
+    "passed": 1511,
+    "skipped": 2,
+    "ruff": "passed",
+    "diff_whitespace": "passed",
+    "elapsed_seconds": 379.77
+  },
+  "packaging_validation": {
+    "wheel_built": true,
+    "recurrent_and_native_sources_included": true,
+    "web_payload_sha256_verified": true
+  }
+}

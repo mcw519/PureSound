@@ -1,0 +1,325 @@
+{
+  "groups": [
+    {"id": "source", "color": "#6fd3db", "title": {"en": "Source", "zh": "來源"}},
+    {"id": "room", "color": "#8f8cff", "title": {"en": "Room", "zh": "房間"}},
+    {"id": "scene", "color": "#ef2cc1", "title": {"en": "Scene", "zh": "場景"}},
+    {"id": "level", "color": "#e0a800", "title": {"en": "Level & time", "zh": "位準與時間"}},
+    {"id": "noise", "color": "#fc4c02", "title": {"en": "Noise", "zh": "噪音"}},
+    {"id": "device", "color": "#1e8d5b", "title": {"en": "Device chain", "zh": "裝置鏈"}},
+    {"id": "emit", "color": "#5b5f8a", "title": {"en": "Training pair", "zh": "訓練對"}}
+  ],
+  "stages": {
+    "source.load": {
+      "group": "source",
+      "title": {"en": "Load the foreground", "zh": "載入前景語音"},
+      "what": {
+        "en": "One utterance of the foreground talker, resampled to the dataset rate, RMS-levelled when the recipe sets a level, and cropped or zero-padded to the row length.",
+        "zh": "前景講者的一句話：重取樣到資料集取樣率，recipe 有設位準時做 RMS 正規化，再裁切或補零到列長。"
+      },
+      "model": {
+        "en": "Mixture and target are still the same signal. Every later stage is measured against this clean speech; the model's score here shows what it does to speech that needs nothing removed.",
+        "zh": "此時混音與 target 是同一個訊號。之後每一段都以這段乾淨語音為基準；模型在這裡的分數，代表它對「什麼都不該移除」的語音做了什麼。"
+      },
+      "doc": "docs/algorithms/augmentation/index.md"
+    },
+    "row.plan": {
+      "group": "source",
+      "title": {"en": "Plan the row", "zh": "決定列型"},
+      "what": {
+        "en": "Decided once, before anything is synthesised: whether this is a target-absent row (the near talker is removed at the end) and, in voice isolation, which row type it is. A plan may replace the foreground.",
+        "zh": "在合成任何東西之前一次決定：這列是不是 target-absent（最後會移除近講者），以及在 voice isolation 中屬於哪種列型。列型可以替換掉前景。"
+      },
+      "model": {
+        "en": "The plan fixes the label the model must produce. A target-absent row asks for silence: it is how the model learns not to pass a voice when nobody is near.",
+        "zh": "列型決定了模型要輸出的標籤。target-absent 列要求輸出靜音——模型就是從這裡學會「沒有近講者時不要放行聲音」。"
+      },
+      "doc": "docs/algorithms/augmentation/scene_construction.md"
+    },
+    "foreground.channel": {
+      "group": "room",
+      "title": {"en": "Foreground room channel", "zh": "前景房間通道"},
+      "what": {
+        "en": "The foreground is convolved with a room impulse response from a near channel of the row's room: the full response for the mixture, the target window for the target (early = direct peak + 50 ms). Each response is peak-normalised, so distance survives as DRR and tail shape, not as level.",
+        "zh": "前景與該列房間的近場通道脈衝響應卷積：混音用完整響應，target 用 target 視窗（early = 直達峰 + 50 ms）。每個響應都做峰值正規化，所以距離是以 DRR 與殘響尾巴形狀保留，而不是音量。"
+      },
+      "model": {
+        "en": "Nothing is added, yet the effective SNR drops: with an early target the late reverberation is now something the model is asked to remove.",
+        "zh": "沒有加入任何東西，有效 SNR 卻下降了：target 是 early 時，晚期殘響就成了模型要移除的東西。"
+      },
+      "doc": "docs/algorithms/augmentation/room_acoustics.md"
+    },
+    "interferers.sample": {
+      "group": "scene",
+      "title": {"en": "Other talkers", "zh": "其他講者"},
+      "what": {
+        "en": "One or more speakers other than the foreground. Some become media sources (band-limited, lightly compressed, as a TV or loudspeaker plays them); each gets a far channel of the same room, or is only aligned when there is no source-level reverb.",
+        "zh": "一位或多位前景以外的講者。部分會變成媒體聲源（像電視或喇叭播放一樣做頻寬限制與輕度壓縮）；每位都拿到同一房間的遠場通道，沒有 source-level 殘響時則只做對齊。"
+      },
+      "model": {
+        "en": "Only the interferer bus changes here; the pair is untouched until mixing. Listen to the Interferers track.",
+        "zh": "這一步只有干擾者音軌在變，pair 要到混合時才改變。可以聽「Interferers」這一軌。"
+      },
+      "doc": "docs/algorithms/augmentation/scene_construction.md"
+    },
+    "interferers.gate": {
+      "group": "scene",
+      "title": {"en": "Overlap gating", "zh": "重疊閘控"},
+      "what": {
+        "en": "Decides who talks when, on the VAD frame grid. By default each interferer draws an overlap regime (none, mid or high) and is gated frame by frame, with extra fill in the target's pauses; with turn-taking, near and far alternate in turns. Edges are smoothed with a Hann envelope.",
+        "zh": "在 VAD 幀格上決定誰在什麼時候說話。預設每位干擾者抽一種重疊程度（無、中、高）並逐幀閘控，在 target 停頓處另外補上；開啟 turn-taking 時近遠講者輪流說話。邊緣用 Hann 包絡平滑。"
+      },
+      "model": {
+        "en": "Sets how much double-talk the model sees versus interferers alone in the target's pauses. A short foreground can leave an interferer with almost nowhere to talk.",
+        "zh": "決定模型看到多少雙講，以及多少「干擾者在 target 停頓時單獨說話」。前景很短時，干擾者可能幾乎沒有能說話的地方。"
+      },
+      "doc": "docs/algorithms/augmentation/scene_construction.md"
+    },
+    "interferers.mix": {
+      "group": "scene",
+      "title": {"en": "Mix at an SIR", "zh": "依 SIR 混合"},
+      "what": {
+        "en": "The summed interferer bus is scaled so that foreground-to-interferer energy over the whole row equals the drawn SIR (voice isolation may use a mix mode instead). With is_target, the mixed speech becomes the target.",
+        "zh": "把加總後的干擾者音軌縮放，使整列的前景對干擾者能量比等於抽到的 SIR（voice isolation 可改用 mix mode）。設定 is_target 時，混合後的語音整個成為 target。"
+      },
+      "model": {
+        "en": "Noise suppression keeps every voice (is_target): the second talker is target and the effective SNR does not move. Voice isolation must remove it: here the effective SNR falls.",
+        "zh": "noise suppression 保留所有人聲（is_target）：第二位講者屬於 target，有效 SNR 不變。voice isolation 必須移除它：有效 SNR 在這裡下降。"
+      },
+      "doc": "docs/algorithms/augmentation/scene_construction.md"
+    },
+    "row.target_absent": {
+      "group": "scene",
+      "title": {"en": "Remove the near talker", "zh": "移除近講者"},
+      "what": {
+        "en": "On a target-absent row the foreground's own contribution is subtracted from the mixture and the target is zeroed. The scene was built with the foreground as its level reference, so interferer levels stay distributed as on other rows.",
+        "zh": "在 target-absent 列上，從混音中減去前景自己的貢獻，並把 target 歸零。場景是以前景為位準基準建出來的，所以干擾者的位準分佈與其他列一致。"
+      },
+      "model": {
+        "en": "The right output is silence, so there is no ratio to report; the model is judged by how far it lowers the level.",
+        "zh": "正確輸出是靜音，所以沒有比值可報；模型以它把音量壓低多少來評斷。"
+      },
+      "doc": "docs/algorithms/augmentation/scene_construction.md"
+    },
+    "echo.playback": {
+      "group": "scene",
+      "title": {"en": "Residual echo", "zh": "殘留回音"},
+      "what": {
+        "en": "Another utterance through a near channel of the same room, added ERLE dB below the mixture: what an upstream echo canceller would leave of the device's own playback.",
+        "zh": "另一句話經過同一房間的近場通道，以低於混音 ERLE dB 的位準加入：模擬上游回音消除後，裝置自己播放聲留下的殘餘。"
+      },
+      "model": {
+        "en": "Echo is never in the target: the model learns to remove the device's own loudspeaker.",
+        "zh": "回音永遠不在 target 裡：模型因此學會移除裝置自己的喇叭聲。"
+      },
+      "doc": "docs/algorithms/augmentation/scene_construction.md"
+    },
+    "level.peak_guard": {
+      "group": "level",
+      "title": {"en": "Peak guard", "zh": "峰值保護"},
+      "what": {
+        "en": "If the mixture or the target peaks above 1.0, both are divided by the same factor.",
+        "zh": "若混音或 target 的峰值超過 1.0，兩者除以同一個係數。"
+      },
+      "model": {
+        "en": "A level change only: the ratio between mixture and target is kept.",
+        "zh": "只改變音量：混音與 target 的比例不變。"
+      },
+      "doc": "docs/algorithms/augmentation/level_dynamics.md"
+    },
+    "speed.perturb": {
+      "group": "level",
+      "title": {"en": "Speed perturbation", "zh": "語速擾動"},
+      "what": {
+        "en": "The pair is reinterpreted at sr × speed and resampled back: duration scales by 1/speed and pitch by speed together. The speed comes from a 0.05 grid over the recipe's range.",
+        "zh": "把 pair 當成 sr × speed 重新解讀再重取樣回來：長度乘以 1/speed、音高乘以 speed，兩者同時變。speed 取自 recipe 範圍上間隔 0.05 的格點。"
+      },
+      "model": {
+        "en": "Widens pitch and speaking-rate coverage; mixture and target move together, so the task itself is unchanged.",
+        "zh": "擴大音高與語速的覆蓋；混音與 target 一起變，所以任務本身不變。"
+      },
+      "doc": "docs/algorithms/augmentation/spectral_channel.md"
+    },
+    "reverb.whole_mix": {
+      "group": "room",
+      "title": {"en": "Whole-mixture reverb", "zh": "整體混音殘響"},
+      "what": {
+        "en": "On rows without source-level reverb, the whole mixture is convolved with one impulse response and the target with that response's target window.",
+        "zh": "在沒有 source-level 殘響的列上，整個混音與同一個脈衝響應卷積，target 則用該響應的 target 視窗。"
+      },
+      "model": {
+        "en": "Every source shares one room position, so there is no distance contrast between talkers to learn from.",
+        "zh": "所有聲源共用同一個房間位置，講者之間沒有距離差異可以學。"
+      },
+      "doc": "docs/algorithms/augmentation/room_acoustics.md"
+    },
+    "ambient.lead": {
+      "group": "level",
+      "title": {"en": "Ambient lead", "zh": "開頭環境音"},
+      "what": {
+        "en": "Every speech component is silenced over the first seconds of the row, with a raised-cosine edge, so the noise stage fills the lead with room sound only.",
+        "zh": "把列開頭幾秒的所有語音成分靜音（邊緣用 raised-cosine 漸變），讓噪音階段在這段只填入房間聲。"
+      },
+      "model": {
+        "en": "A stream start: the model hears the room before anyone talks. Applied to keep and suppress rows alike, so the lead carries no label.",
+        "zh": "模擬串流開頭：模型在有人說話前先聽到房間聲。保留列與抑制列都會套用，所以開頭本身不帶標籤資訊。"
+      },
+      "doc": "docs/algorithms/augmentation/scene_construction.md"
+    },
+    "noise.recorded": {
+      "group": "noise",
+      "title": {"en": "Recorded noise", "zh": "錄製噪音"},
+      "what": {
+        "en": "A noise clip scaled to the drawn SNR against the current mixture's whole-row level. Sometimes two clips are spliced (dynamic type); optionally the clip first goes through a channel of the same room. Mixture only.",
+        "zh": "把一段噪音縮放到抽到的 SNR（相對於目前混音的整列位準）。有時會把兩段接起來（dynamic type）；也可以先經過同一房間的通道。只加在混音上。"
+      },
+      "model": {
+        "en": "The main thing a noise-suppression model removes. The target never carries it: noise in the target would ask the model to reproduce it.",
+        "zh": "noise suppression 模型主要要移除的東西。target 永遠不含噪音：如果 target 有噪音，就等於要求模型把噪音做出來。"
+      },
+      "doc": "docs/algorithms/augmentation/scene_construction.md"
+    },
+    "noise.white": {
+      "group": "noise",
+      "title": {"en": "White noise", "zh": "白噪音"},
+      "what": {
+        "en": "Gaussian noise at an SNR relative to the mixture that already holds the recorded noise; only on rows without the dynamic type.",
+        "zh": "高斯噪音，SNR 相對於已含錄製噪音的混音；只出現在非 dynamic type 的列。"
+      },
+      "model": {
+        "en": "Cheap broadband cover that recorded scenes do not always provide.",
+        "zh": "便宜的寬頻覆蓋，補足錄製場景不一定有的頻段。"
+      },
+      "doc": "docs/algorithms/augmentation/scene_construction.md"
+    },
+    "noise.floor": {
+      "group": "noise",
+      "title": {"en": "Capture floor", "zh": "擷取底噪"},
+      "what": {
+        "en": "Gaussian noise at an absolute dBFS level that does not follow the speech: microphone self-noise and room tone.",
+        "zh": "位準固定（dBFS）、不隨語音縮放的高斯噪音：麥克風自噪與房間底噪。"
+      },
+      "model": {
+        "en": "A floor that stays put when the talker gets quiet. It is added before the device chain, so it takes on the device's response like the speech does.",
+        "zh": "講者變小聲時仍在原位的底噪。它在裝置鏈之前加入，所以和語音一樣會帶上裝置的頻率響應。"
+      },
+      "doc": "docs/algorithms/augmentation/scene_construction.md"
+    },
+    "chain.src": {
+      "group": "device",
+      "title": {"en": "Sample-rate conversion", "zh": "取樣率轉換"},
+      "what": {
+        "en": "Down to a lower rate and back up (sox or torchaudio resampler, 50/50), mixture and target through the same filter.",
+        "zh": "降到較低的取樣率再升回來（sox 或 torchaudio 重取樣器各半），混音與 target 經過同一個濾波器。"
+      },
+      "model": {
+        "en": "Band limiting the model has to work through. The target is band-limited too, so the model is not asked to invent the missing band.",
+        "zh": "模型必須在頻寬受限下工作。target 也同樣被限頻，所以不會要求模型「生出」消失的頻段。"
+      },
+      "doc": "docs/algorithms/augmentation/device_chain.md"
+    },
+    "chain.iir": {
+      "group": "device",
+      "title": {"en": "Transducer response", "zh": "換能器響應"},
+      "what": {
+        "en": "A random stable second-order pole/zero filter, the same coefficients on mixture and target.",
+        "zh": "隨機的穩定二階極零點濾波器，混音與 target 用同一組係數。"
+      },
+      "model": {
+        "en": "Microphone colouration the model must be robust to, not remove.",
+        "zh": "麥克風音色：模型要對它穩健，而不是把它去掉。"
+      },
+      "doc": "docs/algorithms/augmentation/device_chain.md"
+    },
+    "chain.hpf": {
+      "group": "device",
+      "title": {"en": "High-pass", "zh": "高通濾波"},
+      "what": {
+        "en": "An RBJ high-pass at a drawn cutoff, Q from N(0.707, 0.1) clipped to [0.3, 1.3], the same on both signals.",
+        "zh": "RBJ 高通濾波，截止頻率抽樣決定，Q 取自 N(0.707, 0.1) 並截在 [0.3, 1.3]，兩個訊號相同。"
+      },
+      "model": {
+        "en": "A capture chain's rumble filter; the target goes through it too.",
+        "zh": "擷取鏈的低頻濾波；target 也一起經過。"
+      },
+      "doc": "docs/algorithms/augmentation/device_chain.md"
+    },
+    "chain.volume": {
+      "group": "device",
+      "title": {"en": "Gain or overload", "zh": "增益或過載"},
+      "what": {
+        "en": "Either a plain gain drawn from the range, or clipping at quantile thresholds of the mixture (the target is clipped as target_clipping says).",
+        "zh": "二選一：從範圍抽一個純增益，或依混音的分位數門檻削波（target 依 target_clipping 的設定削波）。"
+      },
+      "model": {
+        "en": "Before the converter, levels are sound pressure and may exceed 1.0. Clipping is the one nonlinearity the model is asked to live with; on a clipped row the target is no longer exactly the near component.",
+        "zh": "在轉換器之前，位準代表聲壓，可以超過 1.0。削波是模型唯一需要承受的非線性；削波的列上，target 不再恰好等於近場成分。"
+      },
+      "doc": "docs/algorithms/augmentation/device_chain.md"
+    },
+    "chain.compressor": {
+      "group": "device",
+      "title": {"en": "Compressor", "zh": "壓縮器"},
+      "what": {
+        "en": "A gain curve computed from the mixture (threshold, ratio, attack, release) and applied to both signals.",
+        "zh": "由混音計算出的增益曲線（門檻、比例、attack、release），同時套用到兩個訊號。"
+      },
+      "model": {
+        "en": "Flattens envelopes, which can make a distant talker read as a near one. The target follows, so it is a channel, not damage.",
+        "zh": "把包絡壓平，可能讓遠處講者聽起來像近講者。target 一起變，所以它是通道特性而不是損傷。"
+      },
+      "doc": "docs/algorithms/augmentation/device_chain.md"
+    },
+    "chain.adc": {
+      "group": "device",
+      "title": {"en": "A/D gain staging", "zh": "A/D 增益分級"},
+      "what": {
+        "en": "If either signal peaks above 1.0, both are divided by their shared peak: the one place in synthesis where full scale exists.",
+        "zh": "若任一訊號峰值超過 1.0，兩者一起除以共同峰值：這是整個合成流程中唯一存在「滿刻度」的地方。"
+      },
+      "model": {
+        "en": "After this stage the pair is what a converter delivers; the model never sees levels above full scale.",
+        "zh": "這一步之後的 pair 就是轉換器輸出的樣子；模型永遠看不到超過滿刻度的位準。"
+      },
+      "doc": "docs/algorithms/augmentation/device_chain.md"
+    },
+    "chain.codec": {
+      "group": "device",
+      "title": {"en": "Codec", "zh": "編解碼器"},
+      "what": {
+        "en": "A real encode and decode round trip, Opus at a drawn bitrate or G.722, mixture only.",
+        "zh": "真實的編碼再解碼往返（Opus 用抽到的位元率，或 G.722），只作用在混音。"
+      },
+      "model": {
+        "en": "Transmission damage the model should repair; the target stays clean.",
+        "zh": "模型應該修復的傳輸損傷；target 保持乾淨。"
+      },
+      "doc": "docs/algorithms/augmentation/device_chain.md"
+    },
+    "chain.packet_loss": {
+      "group": "device",
+      "title": {"en": "Packet loss", "zh": "封包遺失"},
+      "what": {
+        "en": "Packets of 20 to 60 ms dropped independently with probability loss_rate and zero-filled, mixture only.",
+        "zh": "20 到 60 ms 的封包各自以 loss_rate 機率遺失並補零，只作用在混音。"
+      },
+      "model": {
+        "en": "Audio that is genuinely missing, which the model has to cope with.",
+        "zh": "真正缺失的音訊，模型必須應付。"
+      },
+      "doc": "docs/algorithms/augmentation/device_chain.md"
+    },
+    "row.emit": {
+      "group": "emit",
+      "title": {"en": "Training pair", "zh": "訓練對"},
+      "what": {
+        "en": "Cropped to the row length. This mixture is the model's input and this target is what the loss compares its output with.",
+        "zh": "裁切到列長。這個混音就是模型的輸入，這個 target 就是 loss 拿來和輸出比較的對象。"
+      },
+      "model": {
+        "en": "Everything between target and mixture here is what the model is trained to remove.",
+        "zh": "此時混音與 target 之間的所有差異，就是模型被訓練去移除的東西。"
+      },
+      "doc": "docs/algorithms/augmentation/engineering_contract.md"
+    }
+  }
+}

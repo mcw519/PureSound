@@ -1,0 +1,57 @@
+# Test fixture: egs/voice_isolate/config/infer_dpcrn.yaml made fully causal
+# (delay [0, 0, 0]), so the streaming tests cover the zero-latency path.
+schema_version: 2
+purpose: inference
+task: voice_isolation
+
+dataset:
+  target_sample_rate: 16000
+
+trainer:
+  work_folder: pretrained_ckpt
+
+model:
+  lightning_module:
+    type: EncDecMaskBase
+    module_args:
+      mask_type: complex   # DPCRN emits a complex ratio mask applied to the noisy STFT
+      encoder_lr_factor: 0.1
+      feats_lr_factor: 0.1
+      backbone_lr_factor: 1.
+  encoder:
+    type: ConvEncDec
+    encoder_args:
+      fft_length: 512
+      win_type: "hann"
+      win_length: 512
+      hop_length: 160
+      fmin: 0
+      fmax: 8000
+      sr: 16000
+      trainable: False
+  features:
+    feats_type: complex
+    drop_stft_first_bin: True
+    trainable: False
+    include_specaug: False
+  backbone:
+    # DPCRN (dual-path conv-recurrent, complex mask), 16k-native: fft 512 -> 256 bins.
+    type: DPCRN
+    backbone_args:
+      input_dim: 256
+      activation_type: PReLU
+      norm_type: bN2d
+      dropout: 0.05
+      channels: [2, 32, 64, 128]
+      transpose_t_size: 2
+      transpose_delay: False
+      skip_conv: False
+      kernel_t: [2, 2, 2]
+      stride_t: [1, 1, 1]
+      dilation_t: [1, 1, 1]
+      kernel_f: [5, 3, 3]
+      stride_f: [2, 2, 1]
+      dilation_f: [1, 1, 1]
+      delay: [0, 0, 0]      # causal: no look-ahead, zero algorithmic latency
+      rnn_hidden: 96
+      spectral_compress: False

@@ -1,0 +1,42 @@
+{
+  "file": "near-and-far.wav",
+  "sample_rate": 16000,
+  "duration_s": 6.021,
+  "spans": [
+    {
+      "start_s": 0.412,
+      "end_s": 1.9,
+      "duration_s": 1.488,
+      "tag": "near / keep",
+      "label": null
+    },
+    {
+      "start_s": 2.001,
+      "end_s": 3.25,
+      "duration_s": 1.249,
+      "tag": "far / suppress",
+      "label": "door \"slam\""
+    },
+    {
+      "start_s": 3.3,
+      "end_s": 4,
+      "duration_s": 0.7,
+      "tag": "double-talk",
+      "label": "a, b, c"
+    },
+    {
+      "start_s": 4.1,
+      "end_s": 4.45,
+      "duration_s": 0.35,
+      "tag": "exclude",
+      "label": "cough"
+    },
+    {
+      "start_s": 4.5,
+      "end_s": 6,
+      "duration_s": 1.5,
+      "tag": "laughter, loud",
+      "label": null
+    }
+  ]
+}

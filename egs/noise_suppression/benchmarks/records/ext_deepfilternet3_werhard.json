@@ -1,0 +1,151 @@
+{
+  "checkpoint": "external: DeepFilterNet3 v0.5.6 (deepFilter CLI)",
+  "recipe": null,
+  "chain_commit": "99c8bb5",
+  "inference": {
+    "note": "published model, defaults"
+  },
+  "stages": [
+    {
+      "name": "wer_hard.wer",
+      "metric": "wer",
+      "role": "gate",
+      "n": 500,
+      "value": 0.2681964859997498,
+      "baseline": 0.12250757853231256,
+      "difference": {
+        "point": 0.1456889074674372,
+        "ci_low": 0.069551263972084,
+        "ci_high": 0.25315874153899326
+      },
+      "verdict": "fail",
+      "direction": "lower_is_better",
+      "notes": "libritts_demand_hard, large-v3, reference = corpus transcript",
+      "extra": {
+        "set_provenance": {
+          "set": "libritts_demand_hard",
+          "items": 500,
+          "snr_range_db": [
+            -10.0,
+            5.0
+          ],
+          "min_duration_s": 8.0,
+          "speech_dir": "/path/to/audio/LibriTTS/test-clean",
+          "noise_dir": "egs/noise_suppression/data/demand_noise",
+          "seed": 1234,
+          "manifest_sha256": "cf2010e8b0df5575974d029e3037c1e6c62211fa19406d79e11d3e7f650e0391",
+          "build_chain_commit": "9690fd0+dirty"
+        }
+      }
+    },
+    {
+      "name": "wer_hard.del",
+      "metric": "del",
+      "role": "gate",
+      "n": 500,
+      "value": 0.06532634783473616,
+      "baseline": 0.042345911244775825,
+      "difference": {
+        "point": 0.022980436589960344,
+        "ci_low": 0.011945098294379383,
+        "ci_high": 0.03439725456779278
+      },
+      "verdict": "fail",
+      "direction": "lower_is_better",
+      "notes": "libritts_demand_hard, large-v3, reference = corpus transcript",
+      "extra": {
+        "set_provenance": {
+          "set": "libritts_demand_hard",
+          "items": 500,
+          "snr_range_db": [
+            -10.0,
+            5.0
+          ],
+          "min_duration_s": 8.0,
+          "speech_dir": "/path/to/audio/LibriTTS/test-clean",
+          "noise_dir": "egs/noise_suppression/data/demand_noise",
+          "seed": 1234,
+          "manifest_sha256": "cf2010e8b0df5575974d029e3037c1e6c62211fa19406d79e11d3e7f650e0391",
+          "build_chain_commit": "9690fd0+dirty"
+        }
+      }
+    },
+    {
+      "name": "wer_hard.ins",
+      "metric": "ins",
+      "role": "monitor",
+      "n": 500,
+      "value": 0.11026966188767878,
+      "baseline": 0.01049405420311139,
+      "difference": {
+        "point": 0.09977560768456738,
+        "ci_low": 0.025532017416081517,
+        "ci_high": 0.20644161439723632
+      },
+      "verdict": "fail",
+      "direction": "lower_is_better",
+      "notes": "libritts_demand_hard, large-v3, reference = corpus transcript",
+      "extra": {
+        "set_provenance": {
+          "set": "libritts_demand_hard",
+          "items": 500,
+          "snr_range_db": [
+            -10.0,
+            5.0
+          ],
+          "min_duration_s": 8.0,
+          "speech_dir": "/path/to/audio/LibriTTS/test-clean",
+          "noise_dir": "egs/noise_suppression/data/demand_noise",
+          "seed": 1234,
+          "manifest_sha256": "cf2010e8b0df5575974d029e3037c1e6c62211fa19406d79e11d3e7f650e0391",
+          "build_chain_commit": "9690fd0+dirty"
+        }
+      }
+    },
+    {
+      "name": "wer_hard.sub",
+      "metric": "sub",
+      "role": "monitor",
+      "n": 500,
+      "value": 0.09260047627733485,
+      "baseline": 0.06966761308442536,
+      "difference": {
+        "point": 0.02293286319290951,
+        "ci_low": 0.013085313669088936,
+        "ci_high": 0.03265750866295304
+      },
+      "verdict": "fail",
+      "direction": "lower_is_better",
+      "notes": "libritts_demand_hard, large-v3, reference = corpus transcript",
+      "extra": {
+        "set_provenance": {
+          "set": "libritts_demand_hard",
+          "items": 500,
+          "snr_range_db": [
+            -10.0,
+            5.0
+          ],
+          "min_duration_s": 8.0,
+          "speech_dir": "/path/to/audio/LibriTTS/test-clean",
+          "noise_dir": "egs/noise_suppression/data/demand_noise",
+          "seed": 1234,
+          "manifest_sha256": "cf2010e8b0df5575974d029e3037c1e6c62211fa19406d79e11d3e7f650e0391",
+          "build_chain_commit": "9690fd0+dirty"
+        }
+      }
+    }
+  ],
+  "notes": "WER stage scored on the libritts_demand_hard set (NS_WERSET), not the VCTK cuts. Not a full gate run: stages 1-3 and RTF are not included.",
+  "lineage": {
+    "lineage": "external",
+    "variable": "DeepFilterNet3 v0.5.6, published model",
+    "same_checkpoint_as": "ext_deepfilternet3"
+  },
+  "tag": "ext_deepfilternet3_werhard",
+  "verdict": {
+    "wer_hard.wer": "fail",
+    "wer_hard.del": "fail",
+    "wer_hard.ins": "fail",
+    "wer_hard.sub": "fail"
+  }
+}

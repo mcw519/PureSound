@@ -1,0 +1,748 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#010120" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <title>PureSound</title>
+    <link rel="stylesheet" href="/css/tokens.css" />
+    <link rel="stylesheet" href="/css/base.css" />
+    <link rel="stylesheet" href="/css/components.css" />
+    <link rel="stylesheet" href="/css/shell.css" />
+    <link rel="stylesheet" href="/css/screens.css" />
+    <link rel="stylesheet" href="/css/deck.css" />
+    <link rel="stylesheet" href="/css/world.css" />
+    <link rel="stylesheet" href="/css/annotate.css" />
+    <script type="importmap">{"imports": {"three": "/vendor/three/three.module.min.js", "three/addons/": "/vendor/three/addons/"}}</script>
+    <script>
+      // Theme and language before first paint, so a dark page never flashes
+      // white and the page is announced in the language it will show.
+      (() => {
+        let choice = "auto";
+        let lang = null;
+        try { choice = localStorage.getItem("puresound.theme") || "auto"; lang = localStorage.getItem("puresound.lang"); } catch { /* storage may be disabled */ }
+        const dark = choice === "dark" || (choice === "auto" && matchMedia("(prefers-color-scheme: dark)").matches);
+        document.documentElement.dataset.theme = dark ? "dark" : "light";
+        const zh = lang ? lang === "zh-TW" : String(navigator.language || "").toLowerCase().startsWith("zh");
+        document.documentElement.lang = zh ? "zh-Hant-TW" : "en";
+      })();
+    </script>
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="mobile-bar">
+        <button class="button button-ghost button-icon mobile-menu" id="nav-toggle" type="button" aria-controls="sidebar" aria-expanded="false" aria-label="Open navigation" data-i18n-attr="aria-label">☰</button>
+        <span class="mobile-brand"><img src="/favicon.svg" alt="" /><span>PureSound</span></span>
+        <span class="mobile-title" id="mobile-title"></span>
+      </header>
+      <div class="nav-backdrop" id="nav-backdrop" hidden></div>
+
+      <aside class="sidebar" id="sidebar" aria-label="Primary navigation" data-i18n-attr="aria-label">
+        <div class="brand">
+          <span class="brand-mark" aria-hidden="true">
+            <img src="/favicon.svg" alt="" />
+          </span>
+          <span class="brand-name">PureSound</span>
+          <button class="sidebar-toggle" id="sidebar-toggle" type="button" aria-label="Collapse navigation" aria-expanded="true">‹</button>
+        </div>
+
+        <nav class="nav" aria-label="Screens" data-i18n-attr="aria-label">
+          <div class="nav-group">
+            <p class="nav-group-title" data-i18n>Run</p>
+            <a class="nav-link" href="#/playground" data-screen="playground" title="Playground" data-i18n-attr="title"><span class="nav-icon" aria-hidden="true">▷</span><span class="nav-label" data-i18n>Playground</span></a>
+            <a class="nav-link" href="#/verify" data-screen="verify" title="Verify" data-i18n-attr="title"><span class="nav-icon" aria-hidden="true">◌</span><span class="nav-label" data-i18n>Verify</span></a>
+            <a class="nav-link" href="#/compare" data-screen="compare" title="Compare" data-i18n-attr="title"><span class="nav-icon" aria-hidden="true">⌁</span><span class="nav-label" data-i18n>Compare</span></a>
+          </div>
+          <div class="nav-group">
+            <p class="nav-group-title" data-i18n>Data</p>
+            <a class="nav-link" href="#/annotate" data-screen="annotate" title="Annotate" data-i18n-attr="title"><span class="nav-icon" aria-hidden="true">▤</span><span class="nav-label" data-i18n>Annotate</span></a>
+            <a class="nav-link" href="#/world" data-screen="world"><span class="nav-icon" aria-hidden="true">◎</span><span class="nav-label" data-i18n>Acoustic world</span></a>
+            <a class="nav-link" href="#/pipeline" data-screen="pipeline" title="Pipeline" data-i18n-attr="title"><span class="nav-icon" aria-hidden="true">≋</span><span class="nav-label" data-i18n>Pipeline</span></a>
+          </div>
+          <div class="nav-group">
+            <p class="nav-group-title" data-i18n>Library</p>
+            <a class="nav-link" href="#/models" data-screen="models" title="Models" data-i18n-attr="title"><span class="nav-icon" aria-hidden="true">◈</span><span class="nav-label" data-i18n>Models</span></a>
+            <a class="nav-link" href="#/history" data-screen="history" title="History" data-i18n-attr="title"><span class="nav-icon" aria-hidden="true">◷</span><span class="nav-label" data-i18n>History</span></a>
+          </div>
+        </nav>
+
+        <div class="sidebar-spacer"></div>
+        <div class="sidebar-footer">
+          <div class="runtime" title="Local runtime" data-i18n-attr="title">
+            <span class="status-dot" id="runtime-dot" aria-hidden="true"></span>
+            <span class="runtime-text"><span class="runtime-value" id="runtime-status" data-i18n>Connecting…</span><span class="runtime-meta" id="runtime-meta"></span></span>
+          </div>
+          <div class="sidebar-controls">
+            <div class="nav-switch" role="group" aria-label="Language" data-i18n-attr="aria-label">
+              <button type="button" data-lang="en" aria-pressed="true">EN</button>
+              <button type="button" data-lang="zh-TW" aria-pressed="false">中</button>
+            </div>
+            <div class="nav-switch" role="group" aria-label="Theme" data-i18n-attr="aria-label">
+              <button type="button" data-theme-choice="auto" aria-pressed="true" data-i18n>Auto</button>
+              <button type="button" data-theme-choice="light" aria-pressed="false" data-i18n>Light</button>
+              <button type="button" data-theme-choice="dark" aria-pressed="false" data-i18n>Dark</button>
+            </div>
+          </div>
+          <div class="sidebar-meta">
+            <a href="https://github.com/mcw519/PureSound" target="_blank" rel="noreferrer"><span data-i18n>Docs</span> <span aria-hidden="true">↗</span></a>
+            <span class="version-label">v0.1</span>
+          </div>
+        </div>
+      </aside>
+
+      <main class="main-content" id="main">
+        <!-- Playground: one recording through one enhancement model. -->
+        <section class="screen" id="screen-playground" data-screen-panel="playground">
+          <header class="page-header">
+            <div class="page-heading">
+              <h1 class="page-title" data-i18n>Playground</h1>
+              <p class="page-desc" data-i18n>Run a recording through an enhancement model and hear what it changed.</p>
+            </div>
+            <div class="page-actions">
+              <button class="button button-ghost" data-clear="voice" type="button" title="Remove the input and the result from the page" data-i18n-attr="title" hidden><span data-i18n>Clear</span></button>
+              <button class="button button-secondary" id="voice-cancel" type="button" hidden><span data-i18n>Cancel</span></button>
+              <button class="button button-ghost" data-help="playground" type="button"><span data-i18n>Help</span></button>
+              <button class="button button-secondary" data-inspector-toggle="playground" aria-controls="inspector-playground" aria-expanded="true" type="button"><span data-i18n>Settings</span></button>
+              <button class="button button-primary" id="voice-run" data-run="voice" type="button" title="Run (Ctrl+Enter)" data-i18n-attr="title"><span class="button-spinner" aria-hidden="true"></span><span data-i18n>Run</span></button>
+            </div>
+            <div class="page-state" data-state-for="playground" hidden><span class="state" data-state-chip></span><span class="page-state-label" data-state-label></span><span class="page-state-percent" data-state-percent></span><div class="page-state-bar" data-state-bar><span></span></div></div>
+          </header>
+          <div class="workbench">
+            <div class="workbench-main">
+              <div class="panel panel-pad input-panel">
+                <div class="panel-title">
+                  <h2 id="voice-input-title" data-i18n>Upload a noisy recording</h2>
+                  <div class="segmented input-modes" role="tablist" aria-label="Input source" data-i18n-attr="aria-label"><button type="button" role="tab" class="is-active" aria-selected="true" data-input-mode="file" data-i18n>File</button><button type="button" role="tab" aria-selected="false" data-input-mode="record" data-i18n>Record</button><button type="button" role="tab" aria-selected="false" data-input-mode="live" data-i18n>Live</button></div>
+                </div>
+                <div data-input-panel="file">
+                  <label class="dropzone" id="voice-dropzone" for="voice-audio">
+                    <input id="voice-audio" type="file" accept="audio/*,.wav,.flac,.mp3,.m4a" />
+                    <span class="upload-icon" aria-hidden="true">↑</span>
+                    <strong data-dropzone-title data-i18n>Drop audio here</strong>
+                    <span data-dropzone-hint data-i18n>or click to browse · any rate, prepared to mono 16 kHz</span>
+                  </label>
+                  <div class="sample-row" id="voice-samples" hidden></div>
+                </div>
+                <div data-input-panel="record" hidden>
+                  <div class="recorder-host" id="voice-recorder"></div>
+                </div>
+                <div data-input-panel="live" hidden>
+                  <div class="live-panel">
+                    <div class="live-controls">
+                      <button class="button button-secondary" id="live-toggle" type="button"><span class="record-dot" aria-hidden="true"></span><span data-live-label data-i18n>Start live</span></button>
+                      <div class="monitor-control"><span class="monitor-label" data-i18n>Listen to</span><div class="segmented" role="radiogroup" aria-label="What you hear while live" data-i18n-attr="aria-label"><button type="button" role="radio" aria-checked="true" class="is-active" data-monitor="off" data-i18n>Nothing</button><button type="button" role="radio" aria-checked="false" data-monitor="model" data-i18n>Model output</button><button type="button" role="radio" aria-checked="false" data-monitor="raw" data-i18n>Raw microphone</button></div></div>
+                    </div>
+                    <p class="monitor-explain" id="monitor-explain"></p>
+                    <label class="mic-select"><span data-i18n>Microphone</span><select class="control" data-mic-select aria-label="Microphone" data-i18n-attr="aria-label"><option value="" data-i18n>System default</option></select></label>
+                    <div class="level-meter" aria-hidden="true"><span id="live-level"></span></div>
+                    <dl class="live-stats" id="live-stats"><div><dt data-i18n>Status</dt><dd data-i18n>Idle</dd></div></dl>
+                    <p class="form-note" id="live-note"></p>
+                  </div>
+                </div>
+                <div class="audio-preview" id="voice-input-preview" hidden>
+                  <div class="audio-preview-head"><span id="voice-file-name">input.wav</span><span class="audio-meta" id="voice-file-meta">—</span></div>
+                  <div class="preview-deck" id="voice-input-audio" data-wave-color="#c8f6f9"></div>
+                </div>
+                <div class="run-line" id="voice-run-bar">
+                  <p class="run-summary" id="voice-run-summary">—</p>
+                  <p class="form-note" id="voice-form-note" data-i18n>Select an audio file to begin.</p>
+                </div>
+              </div>
+
+              <div class="panel panel-pad result-panel" id="voice-result" hidden>
+                <div class="panel-title">
+                  <div><h2 data-i18n>Result</h2><p class="panel-help" id="voice-alignment-note">Aligned to the input.</p></div>
+                  <details class="menu">
+                    <summary class="button button-secondary button-small"><span data-i18n>Export</span> <span aria-hidden="true">▾</span></summary>
+                    <div class="menu-list">
+                      <a id="voice-download" href="#" download="enhanced.wav"><span data-i18n>Output WAV</span></a>
+                      <a id="voice-download-raw" href="#" download="enhanced_stream.wav" title="The runtime's stream as emitted: streaming latency at the front, flush tail at the end" data-i18n-attr="title"><span data-i18n>Raw stream WAV</span></a>
+                      <a id="voice-download-removed" href="#" download="removed.wav" title="Input minus output: what the model took out" data-i18n-attr="title"><span data-i18n>Removed WAV</span></a>
+                      <a data-export="zip" id="voice-export-zip" href="#" hidden title="Every audio output of this run, plus report.json" data-i18n-attr="title"><span data-i18n>Everything (ZIP)</span></a>
+                      <a data-export="report" id="voice-export-report" href="#" hidden title="One HTML page with the settings, the scores and the audio embedded, to send on" data-i18n-attr="title"><span data-i18n>Report (HTML)</span></a>
+                    </div>
+                  </details>
+                </div>
+                <div class="audio-preview audio-preview-output">
+                  <div class="audio-preview-head"><span id="voice-result-name">enhanced.wav</span><span class="audio-meta" id="voice-result-meta">—</span></div>
+                  <div id="voice-deck"></div>
+                </div>
+                <div class="metric-row" id="voice-metrics"></div>
+                <p class="applied-settings" id="voice-applied">—</p>
+                <p class="measurement-inline-note" id="voice-measurement-note"></p>
+                <div class="transcribe-host" id="voice-transcribe"></div>
+              </div>
+            </div>
+
+            <aside class="inspector" id="inspector-playground" aria-label="Playground settings" data-i18n-attr="aria-label">
+              <div class="inspector-head"><h2 data-i18n>Settings</h2><button class="button button-ghost button-icon button-small" data-inspector-close type="button" aria-label="Close settings" data-i18n-attr="aria-label">×</button></div>
+              <div class="inspector-body">
+                <section class="inspector-section">
+                  <p class="eyebrow" data-i18n>Model</p>
+                  <div class="field runner-field"><span class="field-name" id="voice-runner-label" data-i18n>Runs on</span><div class="segmented" role="radiogroup" aria-labelledby="voice-runner-label"><button type="button" role="radio" aria-checked="true" class="is-active" data-runner="server" data-i18n>Server</button><button type="button" role="radio" aria-checked="false" data-runner="device" disabled data-i18n>This device</button></div><small id="voice-runner-hint" data-i18n>Checking whether this browser can run models…</small></div>
+                  <div class="field"><label for="voice-model" data-i18n>Model</label><select class="control" id="voice-model" data-inspector-focus></select><small id="voice-model-hint" hidden></small></div>
+                  <div class="field"><label for="voice-stage" data-i18n>Run first</label><select class="control" id="voice-stage"><option value="" data-i18n>Nothing — the input as it is</option></select><small id="voice-stage-hint" data-i18n>Another enhancement model ahead of this one; file and recording runs only.</small></div>
+                  <div class="field" id="voice-variant-field"><label for="voice-variant" data-i18n>Artifact variant</label><select class="control" id="voice-variant"></select></div>
+                  <div class="field" id="voice-provider-field"><label for="voice-provider" data-i18n>Provider</label><select class="control" id="voice-provider"><option value="auto">Auto · CUDA / CoreML / CPU</option><option value="cpu">CPU</option><option value="cuda">CUDA</option><option value="mps">Apple MPS · CoreML</option></select></div>
+                </section>
+                <section class="inspector-section">
+                  <p class="eyebrow" data-i18n>Output</p>
+                  <div class="field-label range-label"><label for="voice-dry-blend" data-i18n>Dry blend</label><output id="voice-dry-output">0.90</output></div>
+                  <input class="range" id="voice-dry-blend" type="range" min="0.1" max="1" step="0.05" value="0.9" />
+                  <div class="range-hint"><span data-i18n>mostly input</span><span data-i18n>model only</span></div>
+                  <p class="toggle-hint" data-i18n>Share of the model output in the mix; 1.00 is the model alone.</p>
+                  <label class="toggle-row"><input id="voice-onset-guard" type="checkbox" /><span class="toggle-ui"></span><span data-i18n>Onset guard</span></label>
+                  <p class="toggle-hint" data-i18n>Leaves the input untouched until a talker has been heard for 1 s: fewer deleted words, less suppression at the start.</p>
+                  <fieldset class="knob-grid" id="voice-onset-knobs" disabled>
+                    <legend data-i18n>Guard knobs</legend>
+                    <label><span data-i18n>Arm · s</span><input class="control" id="voice-onset-t-arm" type="number" min="0.2" max="5" step="0.1" value="1" /></label>
+                    <label><span data-i18n>Forget · s</span><input class="control" id="voice-onset-t-forget" type="number" min="1" max="60" step="0.5" value="5" /></label>
+                    <label><span data-i18n>Release · s</span><input class="control" id="voice-onset-tau-dn" type="number" min="0.1" max="10" step="0.1" value="2" /></label>
+                    <label><span data-i18n>Margin · dB</span><input class="control" id="voice-onset-margin" type="number" min="3" max="20" step="0.5" value="8" /></label>
+                  </fieldset>
+                  <label class="toggle-row" id="voice-collect-extras-row" hidden><input id="voice-collect-extras" type="checkbox" /><span class="toggle-ui"></span><span data-i18n>Collect VAD heads</span></label>
+                </section>
+                <section class="inspector-section">
+                  <p class="eyebrow" data-i18n>Contract</p>
+                  <div class="contract-list"><div><span data-i18n>Sample rate</span><strong id="voice-sample-rate">16 kHz</strong></div><div><span data-i18n>Channels</span><strong id="voice-channels">Mono</strong></div><div><span data-i18n>Streaming latency</span><strong id="voice-delay">Removed on display</strong></div></div>
+                </section>
+              </div>
+            </aside>
+          </div>
+        </section>
+
+        <!-- Verify: are two recordings the same speaker? -->
+        <section class="screen" id="screen-verify" data-screen-panel="verify">
+          <header class="page-header">
+            <div class="page-heading">
+              <h1 class="page-title" data-i18n>Verify</h1>
+              <p class="page-desc" data-i18n>Check whether two recordings are the same speaker.</p>
+            </div>
+            <div class="page-actions">
+              <button class="button button-ghost" data-clear="sv" type="button" title="Remove both recordings and the result from the page" data-i18n-attr="title" hidden><span data-i18n>Clear</span></button>
+              <button class="button button-secondary" id="sv-cancel" type="button" hidden><span data-i18n>Cancel</span></button>
+              <button class="button button-ghost" data-help="verify" type="button"><span data-i18n>Help</span></button>
+              <button class="button button-secondary" data-inspector-toggle="verify" aria-controls="inspector-verify" aria-expanded="true" type="button"><span data-i18n>Settings</span></button>
+              <button class="button button-primary" id="sv-run" data-run="sv" type="button" title="Verify (Ctrl+Enter)" data-i18n-attr="title"><span class="button-spinner" aria-hidden="true"></span><span data-i18n>Verify</span></button>
+            </div>
+            <div class="page-state" data-state-for="verify" hidden><span class="state" data-state-chip></span><span class="page-state-label" data-state-label></span><span class="page-state-percent" data-state-percent></span><div class="page-state-bar" data-state-bar><span></span></div></div>
+          </header>
+          <div class="workbench">
+            <div class="workbench-main">
+              <div class="sv-input-grid">
+                <div class="panel panel-pad input-panel sv-card">
+                  <div class="panel-title"><h2 data-i18n>Reference voice</h2><span class="contract-label contract-purple" data-i18n>enrollment</span></div>
+                  <label class="dropzone compact-dropzone" for="sv-enrollment"><input id="sv-enrollment" type="file" accept="audio/*,.wav,.flac,.mp3,.m4a" /><span class="upload-icon" aria-hidden="true">↑</span><strong data-dropzone-title data-i18n>Drop enrollment audio</strong><span data-dropzone-hint data-i18n>one clear speech sample</span></label><div class="recorder-host is-compact" data-recorder-for="sv-enrollment"></div>
+                  <div class="audio-preview" id="sv-enrollment-preview" hidden><div class="audio-preview-head"><span id="sv-enrollment-name">enrollment.wav</span><span class="audio-meta" id="sv-enrollment-meta">—</span></div><div class="preview-deck" id="sv-enrollment-audio" data-wave-color="#bdbbff"></div></div>
+                </div>
+                <div class="panel panel-pad input-panel sv-card">
+                  <div class="panel-title"><h2 data-i18n>Test voice</h2><span class="contract-label contract-purple" data-i18n>test</span></div>
+                  <label class="dropzone compact-dropzone" for="sv-test"><input id="sv-test" type="file" accept="audio/*,.wav,.flac,.mp3,.m4a" /><span class="upload-icon" aria-hidden="true">↑</span><strong data-dropzone-title data-i18n>Drop test audio</strong><span data-dropzone-hint data-i18n>same speaker or impostor</span></label><div class="recorder-host is-compact" data-recorder-for="sv-test"></div>
+                  <div class="audio-preview" id="sv-test-preview" hidden><div class="audio-preview-head"><span id="sv-test-name">test.wav</span><span class="audio-meta" id="sv-test-meta">—</span></div><div class="preview-deck" id="sv-test-audio" data-wave-color="#ef2cc1"></div></div>
+                </div>
+              </div>
+              <div class="sample-row" id="sv-samples" hidden></div>
+              <div class="run-line">
+                <p class="run-summary" id="sv-run-summary">—</p>
+                <p class="form-note" id="sv-form-note" data-i18n>Select enrollment and test audio.</p>
+              </div>
+              <div class="panel panel-pad result-panel sv-result-panel" id="sv-result" hidden>
+                <div class="panel-title"><h2 data-i18n>Result</h2><span class="result-time" id="sv-result-time">—</span></div>
+                <div class="sv-result-body"><div class="score-gauge" id="sv-score-gauge"><span class="gauge-value" id="sv-score">—</span><span class="gauge-label" data-i18n>similarity</span></div><div class="decision-copy"><span class="eyebrow" data-i18n>Verdict</span><strong class="verdict" id="sv-verdict">—</strong><p><span data-i18n>Threshold</span> <b id="sv-threshold-result">0.80</b> · <span id="sv-verdict-note">—</span></p></div></div>
+                <div class="metric-row" id="sv-metrics"></div>
+              </div>
+            </div>
+            <aside class="inspector" id="inspector-verify" aria-label="Verify settings" data-i18n-attr="aria-label">
+              <div class="inspector-head"><h2 data-i18n>Settings</h2><button class="button button-ghost button-icon button-small" data-inspector-close type="button" aria-label="Close settings" data-i18n-attr="aria-label">×</button></div>
+              <div class="inspector-body">
+                <section class="inspector-section">
+                  <p class="eyebrow" data-i18n>Model</p>
+                  <div class="field"><label for="sv-model" data-i18n>Model</label><select class="control" id="sv-model" data-inspector-focus></select></div>
+                  <div class="field"><label for="sv-provider" data-i18n>Provider</label><select class="control" id="sv-provider"><option value="auto">Auto · CUDA / CoreML / CPU</option><option value="cpu">CPU</option><option value="cuda">CUDA</option><option value="mps">Apple MPS · CoreML</option></select></div>
+                </section>
+                <section class="inspector-section">
+                  <p class="eyebrow" data-i18n>Decision</p>
+                  <div class="field-label range-label"><label for="sv-threshold" data-i18n>Cosine threshold</label><output id="sv-threshold-output">0.80</output></div>
+                  <input class="range" id="sv-threshold" type="range" min="0" max="1" step="0.01" value="0.8" />
+                  <div class="range-hint"><span data-i18n>lenient</span><span data-i18n>strict</span></div>
+                  <p class="toggle-hint" data-i18n>Higher rejects more impostors, and more true speakers.</p>
+                </section>
+                <section class="inspector-section">
+                  <p class="eyebrow" data-i18n>Contract</p>
+                  <div class="contract-list"><div><span data-i18n>Sample rate</span><strong>16 kHz</strong></div><div><span data-i18n>Embedding</span><strong>192 dim</strong></div><div><span data-i18n>Decision</span><strong data-i18n>Cosine similarity</strong></div></div>
+                </section>
+              </div>
+            </aside>
+          </div>
+        </section>
+
+        <!-- Compare: several models on the same recordings. -->
+        <section class="screen" id="screen-compare" data-screen-panel="compare">
+          <header class="page-header">
+            <div class="page-heading">
+              <h1 class="page-title" data-i18n>Compare</h1>
+              <p class="page-desc" data-i18n>Run the same recordings through several models and compare each with the untouched input.</p>
+            </div>
+            <div class="page-actions">
+              <button class="button button-ghost" data-clear="measure" type="button" title="Remove this report from the page; the recordings and models stay" data-i18n-attr="title" hidden><span data-i18n>Clear</span></button>
+              <details class="menu" id="measure-export-menu" hidden>
+                <summary class="button button-secondary"><span data-i18n>Export</span> <span aria-hidden="true">▾</span></summary>
+                <div class="menu-list">
+                  <a id="measure-export-zip" href="#" hidden title="Every output of every clip, plus report.json" data-i18n-attr="title"><span data-i18n>Everything (ZIP)</span></a>
+                  <a id="measure-export-report" href="#" hidden title="One HTML page with the tables and every output embedded, to send on" data-i18n-attr="title"><span data-i18n>Report (HTML)</span></a>
+                  <button id="measure-export-json" type="button" hidden><span data-i18n>Scores (JSON)</span></button>
+                  <button id="measure-export-csv" type="button" hidden><span data-i18n>Scores (CSV)</span></button>
+                </div>
+              </details>
+              <button class="button button-secondary" id="measure-cancel" type="button" hidden><span data-i18n>Cancel</span></button>
+              <button class="button button-ghost" data-help="compare" type="button"><span data-i18n>Help</span></button>
+              <button class="button button-secondary" data-inspector-toggle="compare" aria-controls="inspector-compare" aria-expanded="true" type="button"><span data-i18n>Settings</span></button>
+              <button class="button button-primary" id="measure-run" data-run="measure" type="button" title="Run comparison (Ctrl+Enter)" data-i18n-attr="title"><span class="button-spinner" aria-hidden="true"></span><span data-i18n>Run comparison</span></button>
+            </div>
+            <div class="page-state" data-state-for="compare" hidden><span class="state" data-state-chip></span><span class="page-state-label" data-state-label></span><span class="page-state-percent" data-state-percent></span><div class="page-state-bar" data-state-bar><span></span></div></div>
+          </header>
+          <div class="workbench">
+            <div class="workbench-main">
+              <div class="panel panel-pad measurement-results" id="measurement-results">
+                <div class="panel-title"><div><h2 data-i18n>Results</h2><p class="panel-help" id="measurement-result-summary"></p></div><span class="result-time" id="measurement-result-time"></span></div>
+                <div class="measurement-summary" id="measurement-summary"><button class="empty-state" id="measurement-empty-configure" type="button" data-open-inspector="compare"><strong data-i18n>Start a comparison</strong><span data-i18n>Choose recordings and at least one model in Settings, then Run comparison.</span></button></div>
+                <div class="measurement-report-content" id="measurement-report-content" hidden>
+                  <div class="measurement-aggregate" id="measurement-aggregate" hidden>
+                    <p class="eyebrow" data-i18n>Across clips · paired</p>
+                    <p class="panel-help" id="measurement-aggregate-help"></p>
+                    <div class="measurement-table-wrap"><table class="table measurement-table aggregate-table"><thead><tr><th data-i18n>Candidate</th><th class="num" data-i18n>Clips</th><th class="num">RTF</th><th class="num">Δ DNSMOS OVR</th><th class="num">Δ SI-SDR</th><th class="num">Δ STOI</th><th class="num">Δ PESQ</th></tr></thead><tbody id="measurement-aggregate-body"></tbody></table></div>
+                    <div class="clip-tabs" id="measurement-clip-tabs" role="tablist" aria-label="Clip" data-i18n-attr="aria-label"></div>
+                  </div>
+                  <p class="applied-settings" id="measurement-applied">—</p>
+                  <div class="measurement-table-wrap"><table class="table measurement-table"><thead><tr><th data-i18n>Model</th><th class="num"><abbr title="Real-time factor">RTF</abbr></th><th class="num" data-i18n>Level</th><th class="num" data-i18n>Peak</th><th class="num" data-i18n>Clipped</th><th class="num">DNSMOS <abbr title="Overall quality score">OVR</abbr></th><th class="num">SI-SDR</th><th class="num">STOI</th><th class="num">PESQ</th></tr></thead><tbody id="measurement-table-body"></tbody></table></div>
+                  <div class="measurement-listen"><div class="measurement-listen-head"><p class="eyebrow" data-i18n>Listen · same timeline</p><p class="panel-help" data-i18n>Every output against the unprocessed input on one transport: switch with 1–9 while it plays.</p></div><div id="measurement-deck"></div><div class="transcribe-host" id="measurement-transcribe"></div></div>
+                </div>
+              </div>
+            </div>
+            <aside class="inspector" id="inspector-compare" aria-label="Compare settings" data-i18n-attr="aria-label">
+              <div class="inspector-head"><h2 data-i18n>Settings</h2><button class="button button-ghost button-icon button-small" data-inspector-close type="button" aria-label="Close settings" data-i18n-attr="aria-label">×</button></div>
+              <div class="inspector-body">
+                <section class="inspector-section">
+                  <p class="eyebrow" data-i18n>Recordings</p>
+                  <div class="measurement-input-grid">
+                    <label class="measure-file"><span class="field-name"><span data-i18n>Noisy recordings</span> <em data-i18n>required · one or more</em></span><input id="measure-audio" type="file" multiple accept="audio/*,.wav,.flac,.mp3,.m4a" data-inspector-focus /><strong data-measure-name="audio" data-i18n>Choose recordings</strong><small data-measure-meta="audio" data-i18n>Five or more give a paired interval.</small></label>
+                    <label class="measure-file"><span class="field-name"><span data-i18n>Clean references</span> <em data-i18n>optional · matched by file name</em></span><input id="measure-reference" type="file" multiple accept="audio/*,.wav,.flac,.mp3,.m4a" /><strong data-measure-name="reference" data-i18n>Choose references</strong><small data-measure-meta="reference" data-i18n>Adds SI-SDR, STOI and PESQ.</small></label>
+                    <button class="button button-secondary button-small" id="measure-use-samples" type="button" hidden>Use the sample clips</button>
+                  </div>
+                </section>
+                <section class="inspector-section">
+                  <div class="measure-model-heading"><p class="eyebrow" data-i18n>Models to compare</p><output id="measure-model-count">0 selected</output></div>
+                  <p class="toggle-hint" data-i18n>+ adds another setting of the same model. A blank blend uses the model's release value.</p>
+                  <div class="measure-model-list" id="measure-model-list"><span class="measure-empty" data-i18n>Loading models…</span></div>
+                </section>
+                <section class="inspector-section">
+                  <p class="eyebrow" data-i18n>Onset guard</p>
+                  <label class="toggle-row"><input id="measure-onset-guard" type="checkbox" /><span class="toggle-ui"></span><span data-i18n>On by default</span></label>
+                  <p class="toggle-hint" data-i18n>For rows set to “default”; a row set to on or off overrides it.</p>
+                  <fieldset class="knob-grid" id="measure-onset-knobs" disabled>
+                    <legend data-i18n>Guard knobs</legend>
+                    <label><span data-i18n>Arm · s</span><input class="control" id="measure-onset-t-arm" type="number" min="0.2" max="5" step="0.1" value="1" /></label>
+                    <label><span data-i18n>Forget · s</span><input class="control" id="measure-onset-t-forget" type="number" min="1" max="60" step="0.5" value="5" /></label>
+                    <label><span data-i18n>Release · s</span><input class="control" id="measure-onset-tau-dn" type="number" min="0.1" max="10" step="0.1" value="2" /></label>
+                    <label><span data-i18n>Margin · dB</span><input class="control" id="measure-onset-margin" type="number" min="3" max="20" step="0.5" value="8" /></label>
+                  </fieldset>
+                </section>
+                <section class="inspector-section">
+                  <p class="eyebrow" data-i18n>Timing</p>
+                  <div class="field"><label for="measure-timing-repeats" data-i18n>Timed runs per model</label><select class="control" id="measure-timing-repeats"><option value="1" data-i18n>1 · fastest</option><option value="3" data-i18n>3 · median</option><option value="5" data-i18n>5 · median</option></select><small data-i18n>One RTF is one draw; repeats report the median.</small></div>
+                </section>
+                <p class="form-note" id="measure-form-note"></p>
+              </div>
+            </aside>
+          </div>
+        </section>
+
+        <!-- Annotate: the span annotator. -->
+        <section class="screen" id="screen-annotate" data-screen-panel="annotate">
+          <header class="page-header">
+            <div class="page-heading">
+              <h1 class="page-title" data-i18n>Annotate</h1>
+              <p class="page-desc" data-i18n>Mark which stretches of a recording to keep and which to suppress, then export the spans.</p>
+            </div>
+            <div class="page-actions">
+              <button class="button button-secondary" type="button" data-act="openFiles" title="Open audio (⌘/Ctrl O)" data-i18n-attr="title"><span data-i18n>Open audio</span></button>
+              <button class="button button-ghost" data-help="annotate" type="button"><span data-i18n>Help</span></button>
+              <button class="button button-secondary" data-inspector-toggle="annotate" aria-controls="inspector-annotate" aria-expanded="true" type="button"><span data-i18n>Settings</span></button>
+              <button class="button button-primary" id="annotate-download" type="button" disabled title="Download the export (⌘/Ctrl E)" data-i18n-attr="title"><span data-i18n>Download export</span></button>
+            </div>
+            <div class="page-state" data-state-for="annotate" hidden><span class="state" data-state-chip></span><span class="page-state-label" data-state-label></span><span class="page-state-percent" data-state-percent></span><div class="page-state-bar" data-state-bar><span></span></div></div>
+          </header>
+          <div class="workbench">
+            <div class="workbench-main" id="annotate-main"></div>
+            <aside class="inspector" id="inspector-annotate" aria-label="Annotate settings" data-i18n-attr="aria-label">
+              <div class="inspector-head"><h2 data-i18n>Settings</h2><button class="button button-ghost button-icon button-small" data-inspector-close type="button" aria-label="Close settings" data-i18n-attr="aria-label">×</button></div>
+              <div class="inspector-body" id="annotate-inspector"></div>
+            </aside>
+          </div>
+        </section>
+
+        <!-- Pipeline: one training row, stage by stage. -->
+        <!-- Acoustic world: keyframed talkers in a room, rendered as one microphone. -->
+        <section class="screen" id="screen-world" data-screen-panel="world">
+          <header class="page-header">
+            <div class="page-heading">
+              <h1 class="page-title" data-i18n>Acoustic world</h1>
+              <p class="page-desc" data-i18n>Move talkers through a room, hear what the microphone picks up and find where a model stops coping.</p>
+            </div>
+            <div class="page-actions">
+              <button class="button button-secondary" id="world-cancel" type="button" hidden><span data-i18n>Cancel</span></button>
+              <button class="button button-ghost" data-help="world" type="button"><span data-i18n>Help</span></button>
+              <button class="button button-secondary" data-inspector-toggle="world" aria-controls="inspector-world" aria-expanded="true" type="button"><span data-i18n>Settings</span></button>
+              <button class="button button-primary" id="world-run" type="button" title="Render (Ctrl+Enter)" data-i18n-attr="title"><span class="button-spinner" aria-hidden="true"></span><span id="world-run-label" data-i18n>Render scene</span></button>
+            </div>
+            <div class="page-state" data-state-for="world" hidden><span class="state" data-state-chip></span><span class="page-state-label" data-state-label></span><span class="page-state-percent" data-state-percent></span><div class="page-state-bar" data-state-bar><span></span></div></div>
+          </header>
+          <div class="panel panel-pad" id="world-unavailable" hidden></div>
+          <div class="workbench" id="world-layout">
+            <div class="workbench-main">
+              <div class="segmented world-tabs" role="tablist" aria-label="View" data-i18n-attr="aria-label">
+                <button type="button" role="tab" id="world-tab-scene" data-world-tab="scene" aria-selected="true" aria-controls="world-scene" class="is-active" data-i18n>Scene</button>
+                <button type="button" role="tab" id="world-tab-map" data-world-tab="map" aria-selected="false" aria-controls="world-map-view" data-i18n>Limit map</button>
+              </div>
+              <div class="world-tab-panel" id="world-scene" role="tabpanel" aria-labelledby="world-tab-scene">
+                <section class="panel world-stage">
+                  <div class="world-panel-head">
+                    <p class="eyebrow" id="world-stage-title" data-i18n>Room · seen from above</p>
+                    <div class="segmented" id="world-view" role="group" aria-label="Room view" data-i18n-attr="aria-label"><button type="button" data-world-view="plan" aria-pressed="true" data-i18n>Floor plan</button><button type="button" data-world-view="3d" aria-pressed="false">3-D</button></div>
+                    <p class="panel-help" id="world-stage-help" data-i18n>Drag a numbered keyframe or the microphone. Double-click the floor to put the selected source there at the timeline's time.</p>
+                  </div>
+                  <div class="world-view">
+                    <svg id="world-plan" role="group" aria-label="Floor plan with source paths" data-i18n-attr="aria-label" viewBox="0 0 640 440"></svg>
+                    <div class="world-3d pipe-room-view" id="world-3d" hidden></div>
+                  </div>
+                  <div class="world-transport">
+                    <button class="button button-secondary button-icon button-small" id="world-play" type="button" aria-label="Play" data-i18n-attr="aria-label" disabled>▶</button>
+                    <div class="world-timeline"><input class="range" id="world-timeline" type="range" min="0" max="10" step="0.01" value="0" aria-label="Scene time" data-i18n-attr="aria-label" /><div class="world-ticks" id="world-ticks" aria-hidden="true"></div></div>
+                    <output class="world-clock" id="world-clock">0.00 s</output>
+                  </div>
+                  <div class="world-readout" id="world-readout"></div>
+                  <ul class="world-issues" id="world-issues" role="status" hidden></ul>
+                </section>
+                <button class="empty-state" id="world-empty" type="button"><strong data-i18n>Render to hear the microphone</strong><span data-i18n>The render traces every path through the room as the talkers move, then runs the model you picked in Settings.</span></button>
+                <section class="panel world-results" id="world-results" hidden>
+                  <div class="world-panel-head">
+                    <div><p class="eyebrow" data-i18n>Result</p><h2 class="world-result-title" id="world-result-title"></h2></div>
+                    <div class="world-result-actions">
+                      <button class="button button-secondary button-small" id="world-device" type="button" hidden><span class="button-spinner" aria-hidden="true"></span><span data-i18n>Run on this device</span></button>
+                      <a class="button button-secondary button-small" id="world-package" download hidden><span data-i18n>Scene package</span> ↓</a>
+                    </div>
+                  </div>
+                  <div class="world-cell-banner" id="world-cell-banner" hidden></div>
+                  <div id="world-deck"></div>
+                  <div class="world-comparison" id="world-comparison" hidden></div>
+                  <details class="world-evaluation">
+                  <summary data-i18n>Scores and reference policy</summary>
+                  <div class="world-policy-row"><span class="world-policy-label" data-i18n>Score against</span><div class="segmented" data-world-policy role="radiogroup" aria-label="Score against" data-i18n-attr="aria-label"></div></div>
+                  <p class="panel-help" id="world-policy-help"></p>
+                  <div class="world-stats" id="world-stats"></div>
+                  <p class="form-note" id="world-result-note"></p>
+                  </details>
+                  <div id="world-transcribe"></div>
+                </section>
+              </div>
+              <div class="world-tab-panel" id="world-map-view" role="tabpanel" aria-labelledby="world-tab-map" hidden>
+                <section class="panel world-map-panel">
+                  <div class="world-panel-head">
+                    <div><p class="eyebrow" data-i18n>Limit map</p><h2 class="world-result-title" id="world-map-title"></h2></div>
+                    <div class="world-policy-row"><span class="world-policy-label" data-i18n>Score against</span><div class="segmented" data-world-policy role="radiogroup" aria-label="Score against" data-i18n-attr="aria-label"></div></div>
+                    <p class="panel-help" data-i18n>Each cell renders the scene once with the model and shows the output's SI-SDR against the chosen target. Shading only compares cells within this map. Open a cell to listen to it.</p>
+                  </div>
+                  <button class="empty-state" id="world-map-empty" type="button" data-open-inspector="world"><strong data-i18n>No map yet</strong><span data-i18n>Pick two parameters and their values in Settings, then run the sweep.</span></button>
+                  <label class="field" id="world-map-provider-row" hidden><span data-i18n>Map comparison</span><select class="control" id="world-map-provider"><option value="puresound">PureSound</option><option value="aicoustics">ai-coustics</option><option value="difference" data-i18n>ai-coustics − PureSound</option></select></label>
+                  <div class="world-map" id="world-map" hidden></div>
+                  <div class="world-map-legend" id="world-map-legend" hidden></div>
+                </section>
+              </div>
+            </div>
+            <aside class="inspector" id="inspector-world" aria-label="Acoustic world settings" data-i18n-attr="aria-label">
+              <div class="inspector-head"><h2 data-i18n>Settings</h2><button class="button button-ghost button-icon button-small" data-inspector-close type="button" aria-label="Close settings" data-i18n-attr="aria-label">×</button></div>
+              <div class="inspector-body world-settings" id="world-settings"></div>
+            </aside>
+          </div>
+        </section>
+        <section class="screen" id="screen-pipeline" data-screen-panel="pipeline">
+          <header class="page-header">
+            <div class="page-heading">
+              <h1 class="page-title" data-i18n>Pipeline</h1>
+              <p class="page-desc" data-i18n>Build one training row from your own audio and follow it through every synthesis stage.</p>
+            </div>
+            <div class="page-actions">
+              <button class="button button-secondary" id="pipe-cancel" type="button" hidden><span data-i18n>Cancel</span></button>
+              <button class="button button-ghost" data-help="pipeline" type="button"><span data-i18n>Help</span></button>
+              <button class="button button-secondary" data-inspector-toggle="pipeline" aria-controls="inspector-pipeline" aria-expanded="true" type="button"><span data-i18n>Settings</span></button>
+              <button class="button button-primary" id="pipe-run" type="submit" form="pipe-setup" title="Build and trace (Ctrl+Enter)" data-i18n-attr="title"><span class="button-spinner" aria-hidden="true"></span><span data-i18n>Build and trace</span></button>
+            </div>
+            <div class="page-state" data-state-for="pipeline" hidden><span class="state" data-state-chip></span><span class="page-state-label" data-state-label></span><span class="page-state-percent" data-state-percent></span><div class="page-state-bar" data-state-bar><span></span></div></div>
+          </header>
+          <div class="panel panel-pad pipe-unavailable" id="pipe-unavailable" hidden></div>
+          <div class="workbench" id="pipe-layout">
+            <div class="workbench-main pipe-work">
+              <button class="empty-state pipe-empty" id="pipe-empty" type="button" data-open-inspector="pipeline"><strong data-i18n>One row, every stage</strong><span data-i18n>Pick a recipe and some audio in Settings — the samples work — then Build and trace.</span></button>
+              <div class="pipe-result" id="pipe-result" hidden>
+                <div class="panel pipe-summary" id="pipe-summary"></div>
+                <div class="panel pipe-rail-panel">
+                  <div class="pipe-panel-head"><p class="eyebrow" data-i18n>Stages · synthesis order</p><p class="panel-help" data-i18n>Solid stages acted on this row. Pick one to see what it drew and to listen before and after it; ← → step through them.</p></div>
+                  <div class="pipe-rail" id="pipe-rail" role="tablist" aria-label="Synthesis stages" data-i18n-attr="aria-label"></div>
+                </div>
+                <div class="panel pipe-chart">
+                  <div class="pipe-panel-head"><p class="eyebrow" data-i18n>Effective SNR · what is left to remove</p><p class="panel-help" data-i18n>Target energy against everything else in the mixture after each stage that acted. Lower means more for the model to remove.</p></div>
+                  <div class="pipe-chart-body" id="pipe-esnr-chart"></div>
+                  <div class="pipe-panel-head is-second"><p class="eyebrow" data-i18n>Model · how it copes at each stage</p><div class="segmented pipe-metric" id="pipe-metric" role="group" aria-label="Score" data-i18n-attr="aria-label"></div><p class="panel-help" data-i18n>The pair after each stage, fed to the model as if training stopped there. Grey: the mixture against the target; orange: the model's output against the target.</p></div>
+                  <div class="pipe-chart-body" id="pipe-model-chart"></div>
+                </div>
+                <div class="panel pipe-detail" id="pipe-detail">
+                  <div class="pipe-detail-head" id="pipe-detail-head"></div>
+                  <div class="pipe-detail-grid"><div class="pipe-explain" id="pipe-explain"></div><div class="pipe-tables" id="pipe-tables"></div></div>
+                  <div class="pipe-listen"><p class="eyebrow" data-i18n>Listen · before and after this stage</p><div id="pipe-deck"></div></div>
+                </div>
+                <div class="panel pipe-room-panel" id="pipe-room-panel" hidden>
+                  <div class="pipe-panel-head"><p class="eyebrow" data-i18n>Room · where each source stands</p><div class="segmented pipe-metric" id="pipe-room-mode" role="group" aria-label="Room view" data-i18n-attr="aria-label"><button type="button" data-room-mode="3d" aria-pressed="true">3-D</button><button type="button" data-room-mode="plan" aria-pressed="false" data-i18n>Floor plan</button></div><p class="panel-help" id="pipe-room-help"></p></div>
+                  <div class="pipe-room-grid"><div class="pipe-room-view" id="pipe-room-view"></div><div class="pipe-rirs" id="pipe-rirs"></div></div>
+                </div>
+              </div>
+            </div>
+            <aside class="inspector" id="inspector-pipeline" aria-label="Pipeline settings" data-i18n-attr="aria-label">
+              <div class="inspector-head"><h2 data-i18n>Settings</h2><button class="button button-ghost button-icon button-small" data-inspector-close type="button" aria-label="Close settings" data-i18n-attr="aria-label">×</button></div>
+              <form class="inspector-body pipe-setup" id="pipe-setup" autocomplete="off" novalidate>
+                <section class="inspector-section">
+                  <p class="eyebrow" data-i18n>Recipe</p>
+                  <div class="field"><label for="pipe-recipe" data-i18n>Training recipe</label><select class="control" id="pipe-recipe" data-inspector-focus></select><small class="pipe-hint" id="pipe-recipe-hint"></small></div>
+                  <div class="pipe-row-grid">
+                    <label class="field"><span class="field-name" data-i18n>Rows</span><select class="control" id="pipe-role"><option value="train" data-i18n>training</option><option value="validation" data-i18n>validation</option></select></label>
+                    <label class="field"><span class="field-name" data-i18n>Seed</span><span class="pipe-seed"><input class="control" id="pipe-seed" type="number" min="0" max="2147483647" step="1" value="1234" /><button class="button button-icon" id="pipe-seed-roll" type="button" title="Another seed" aria-label="Another seed" data-i18n-attr="title,aria-label">⚄</button></span></label>
+                    <label class="field"><span class="field-name" data-i18n>Length · s</span><input class="control" id="pipe-seconds" type="number" min="1" max="20" step="0.5" value="6" /></label>
+                    <label class="field" id="pipe-epoch-field" hidden><span class="field-name" data-i18n>Epoch</span><input class="control" id="pipe-epoch" type="number" min="0" max="10000" step="1" value="0" /></label>
+                  </div>
+                </section>
+                <section class="inspector-section">
+                  <p class="eyebrow" data-i18n>Audio</p>
+                  <fieldset class="pipe-source">
+                    <legend><span data-i18n>Foreground talker</span> <em data-i18n>the voice the target is built from</em></legend>
+                    <select class="control" id="pipe-foreground-sample" aria-label="Foreground talker" data-i18n-attr="aria-label"></select>
+                    <div class="pipe-files" data-files="foreground"></div>
+                    <label class="pipe-file"><input type="file" id="pipe-foreground-file" accept="audio/*,.wav,.flac" /><span data-i18n>Upload a clip instead…</span></label>
+                  </fieldset>
+                  <fieldset class="pipe-source">
+                    <legend><span data-i18n>Other talkers</span> <em data-i18n>interferers, echo, a quieter second voice</em></legend>
+                    <div class="pipe-checks" id="pipe-talkers"></div>
+                    <div class="pipe-files" data-files="talkers"></div>
+                    <label class="pipe-file"><input type="file" id="pipe-talker-files" multiple accept="audio/*,.wav,.flac" /><span data-i18n>Add clips (one talker each)…</span></label>
+                  </fieldset>
+                  <fieldset class="pipe-source">
+                    <legend><span data-i18n>Noise</span> <em data-i18n>the pool the noise stage draws from</em></legend>
+                    <div class="pipe-checks" id="pipe-noises"></div>
+                    <div class="pipe-files" data-files="noises"></div>
+                    <label class="pipe-file"><input type="file" id="pipe-noise-files" multiple accept="audio/*,.wav,.flac" /><span data-i18n>Add noise clips…</span></label>
+                  </fieldset>
+                  <fieldset class="pipe-source">
+                    <legend><span data-i18n>Room</span> <em data-i18n>where the impulse responses come from</em></legend>
+                    <div class="pipe-segment" role="radiogroup" aria-label="Impulse responses" data-i18n-attr="aria-label">
+                      <label><input type="radio" name="pipe-rir" value="samples" checked /><span data-i18n>Sample rooms</span></label>
+                      <label><input type="radio" name="pipe-rir" value="upload" /><span data-i18n>Upload</span></label>
+                      <label><input type="radio" name="pipe-rir" value="none" /><span data-i18n>None</span></label>
+                    </div>
+                    <div class="pipe-checks" id="pipe-rooms"></div>
+                    <div class="pipe-rir-upload" id="pipe-rir-upload" hidden>
+                      <div class="pipe-files" data-files="rirs"></div>
+                      <label class="pipe-file"><input type="file" id="pipe-rir-files" multiple accept="audio/*,.wav,.flac" /><span data-i18n>Impulse responses (applied to the whole mixture)…</span></label>
+                    </div>
+                  </fieldset>
+                </section>
+                <section class="inspector-section">
+                  <p class="eyebrow" data-i18n>Score</p>
+                  <div class="field"><label for="pipe-model" data-i18n>Score every stage with</label><select class="control" id="pipe-model"></select><small data-i18n>Optional; runs on the CPU.</small></div>
+                </section>
+                <p class="form-note" id="pipe-note"></p>
+              </form>
+            </aside>
+          </div>
+        </section>
+
+        <!-- Models: the catalog. -->
+        <section class="screen" id="screen-models" data-screen-panel="models">
+          <header class="page-header">
+            <div class="page-heading">
+              <h1 class="page-title" data-i18n>Models</h1>
+              <p class="page-desc" data-i18n>Every model in the catalog: its task, lifecycle, files and benchmark records.</p>
+            </div>
+            <div class="page-actions">
+              <button class="button button-secondary" id="compare-records" type="button" hidden title="The released gate records of several models, stage by stage" data-i18n-attr="title"><span data-i18n>Compare gate records</span></button>
+              <button class="button button-secondary" id="refresh-button" type="button"><span data-i18n>Refresh</span></button>
+              <button class="button button-ghost" data-help="models" type="button"><span data-i18n>Help</span></button>
+            </div>
+          </header>
+          <div class="toolbar">
+            <label class="search-field"><span aria-hidden="true">⌕</span><input id="model-search" type="search" placeholder="Search models" aria-label="Search models" data-i18n-attr="placeholder,aria-label" autocomplete="off" /></label>
+            <select class="control toolbar-select" id="task-filter" aria-label="Task" data-i18n-attr="aria-label"><option value="all" data-i18n>All tasks</option><option value="voice_isolation" data-i18n>Voice isolation</option><option value="noise_suppression" data-i18n>Noise suppression</option><option value="speaker_embedding" data-i18n>Speaker verification</option></select>
+            <select class="control toolbar-select" id="lifecycle-filter" aria-label="Lifecycle" data-i18n-attr="aria-label"><option value="all" data-i18n>All lifecycles</option><option value="released" data-i18n>Released</option><option value="candidate" data-i18n>Candidate</option><option value="reference" data-i18n>Reference</option><option value="experimental" data-i18n>Experimental</option></select>
+            <span class="toolbar-count" id="model-count">…</span>
+          </div>
+          <div class="model-grid" id="model-grid" aria-live="polite">
+            <div class="empty-state"><span data-i18n>Loading models…</span></div>
+          </div>
+          <details class="catalog-check panel">
+            <summary><span class="catalog-check-summary"><strong data-i18n>Catalog integrity</strong><span data-i18n>ONNX files, hashes, sidecars and graph contracts. It does not judge audio quality.</span></span><span class="catalog-check-chevron" aria-hidden="true">+</span></summary>
+            <div class="catalog-check-body"><div class="validation-panel"><div class="validation-status" id="validation-status"><span class="status-icon">✓</span><div><strong data-i18n>The check has not run</strong><span data-i18n>A CPU graph and SHA256 check of the local catalog.</span></div></div><div class="validation-summary" id="validation-summary"></div><pre class="validation-errors" id="validation-errors" hidden></pre><div class="catalog-check-actions"><button class="button button-secondary" id="validate-button" type="button"><span data-i18n>Run the check</span></button></div></div></div>
+          </details>
+        </section>
+
+        <!-- History: runs this server kept. -->
+        <section class="screen" id="screen-history" data-screen-panel="history">
+          <header class="page-header">
+            <div class="page-heading">
+              <h1 class="page-title" data-i18n>History</h1>
+              <p class="page-desc" id="history-lede" data-i18n>Runs and comparisons from this machine. Open one to listen to it again.</p>
+            </div>
+            <div class="page-actions">
+              <div class="segmented history-filters" role="group" aria-label="Filter runs" data-i18n-attr="aria-label"><button type="button" class="is-active" data-history-filter="all" data-i18n>All</button><button type="button" data-history-filter="enhancement" data-i18n>Enhancement</button><button type="button" data-history-filter="speaker" data-i18n>Speaker</button><button type="button" data-history-filter="measurement" data-i18n>Comparisons</button><button type="button" data-history-filter="live" data-i18n>Live</button></div>
+              <button class="button button-secondary" id="history-refresh" type="button"><span data-i18n>Refresh</span></button>
+              <button class="button button-ghost" data-help="history" type="button"><span data-i18n>Help</span></button>
+            </div>
+          </header>
+          <p class="list-count" id="history-count">—</p>
+          <div id="job-history" class="job-history"><div class="empty-state"><span data-i18n>No runs yet.</span></div></div>
+        </section>
+      </main>
+    </div>
+    <div class="inspector-backdrop" id="inspector-backdrop" hidden></div>
+    <div class="toast" id="toast" role="status" aria-live="polite" popover="manual"></div>
+
+    <dialog class="dialog model-dialog" id="model-dialog" aria-labelledby="dialog-title">
+      <div class="dialog-head"><h2 id="dialog-title" data-i18n>Model details</h2><button class="button button-ghost button-icon button-small" id="dialog-close" type="button" aria-label="Close" data-i18n-attr="aria-label">×</button></div>
+      <div class="dialog-body" id="dialog-body"></div>
+    </dialog>
+
+    <dialog class="dialog help-dialog" id="help-playground" aria-labelledby="help-playground-title">
+      <div class="dialog-head"><h2 id="help-playground-title" data-i18n>About Playground</h2><button class="button button-ghost button-icon button-small" data-dialog-close type="button" aria-label="Close" data-i18n-attr="aria-label">×</button></div>
+      <div class="dialog-body">
+        <p data-i18n>The recording is prepared as mono 16 kHz, streamed through the model 20 ms at a time as it would be on a device, and aligned back to the input so the two play in step.</p>
+        <h3 data-i18n>Input</h3>
+        <ul>
+          <li data-i18n>File: drop or pick a recording, or try one of the samples.</li>
+          <li data-i18n>Record: records at 16 kHz with the browser's echo cancellation, noise suppression and gain control off, so the model hears your capture chain as it is.</li>
+          <li data-i18n>Live: streams the microphone through the model and the settings, 20 ms at a time. Listen to changes only what you hear; when you stop, the session opens as a comparison.</li>
+        </ul>
+        <h3 data-i18n>Listening</h3>
+        <p data-i18n>The player puts the input and every output on one transport. Space plays or pauses, 1–9 switch tracks while it plays, drag to select a region, L loops it and Z zooms to it. Removed is the input minus the output: what the model took out.</p>
+        <h3 data-i18n>Settings</h3>
+        <ul>
+          <li data-i18n>Runs on: the server, or this device, where the model runs in this browser and the audio is not uploaded. A device run takes a model with a device build, cannot chain Run first, has no DNSMOS and is not kept in History.</li>
+          <li data-i18n>Run first chains another enhancement model ahead of this one, for example noise suppression before voice isolation.</li>
+          <li data-i18n>Dry blend mixes the untouched input back in; 1.00 is the model alone.</li>
+          <li data-i18n>Onset guard leaves the input untouched until a talker has been heard for a second: fewer deleted words, less suppression at the start.</li>
+        </ul>
+        <p class="quiet" data-i18n>Ctrl+Enter runs.</p>
+      </div>
+    </dialog>
+    <dialog class="dialog help-dialog" id="help-verify" aria-labelledby="help-verify-title">
+      <div class="dialog-head"><h2 id="help-verify-title" data-i18n>About Verify</h2><button class="button button-ghost button-icon button-small" data-dialog-close type="button" aria-label="Close" data-i18n-attr="aria-label">×</button></div>
+      <div class="dialog-body">
+        <p data-i18n>The speaker model turns each recording into a 192-dimensional embedding and compares the two with cosine similarity. The pair matches when the similarity is above the threshold.</p>
+        <ul>
+          <li data-i18n>Reference voice: one clear speech sample of the speaker.</li>
+          <li data-i18n>Test voice: the recording to check, the same speaker or an impostor.</li>
+          <li data-i18n>A higher threshold rejects more impostors, and more true speakers too.</li>
+        </ul>
+        <p class="quiet" data-i18n>Ctrl+Enter verifies.</p>
+      </div>
+    </dialog>
+    <dialog class="dialog help-dialog" id="help-compare" aria-labelledby="help-compare-title">
+      <div class="dialog-head"><h2 id="help-compare-title" data-i18n>About Compare</h2><button class="button button-ghost button-icon button-small" data-dialog-close type="button" aria-label="Close" data-i18n-attr="aria-label">×</button></div>
+      <div class="dialog-body">
+        <p data-i18n>Every selected model runs on the same recordings, next to the unprocessed input's own scores. One clip shows what happens; five or more give a paired interval that can tell a real difference from noise.</p>
+        <h3 data-i18n>Steps</h3>
+        <ol>
+          <li data-i18n>Choose recordings: one or more noisy clips, or the samples. A clean reference with the same file name adds SI-SDR, STOI and PESQ.</li>
+          <li data-i18n>Choose models: each row is a model and its settings; + adds another setting of the same model, for example two dry blends.</li>
+          <li data-i18n>Read and listen: scores sit against the unprocessed row, and every output plays on one transport.</li>
+        </ol>
+        <h3 data-i18n>Reading the table</h3>
+        <ul>
+          <li data-i18n>Speed: RTF below 1 is faster than real time. Identical runs spread by 20–30% on a busy host; repeats report the median.</li>
+          <li data-i18n>Level: RMS and peak describe loudness and headroom; they are level checks, not quality scores.</li>
+          <li data-i18n>Quality: the small number under each score is the change from the unprocessed input. DNSMOS needs no reference.</li>
+        </ul>
+        <p class="quiet" data-i18n>A difference of a few hundredths in DNSMOS or STOI on a single recording is not a ranking.</p>
+      </div>
+    </dialog>
+    <dialog class="dialog help-dialog" id="help-annotate" aria-labelledby="help-annotate-title">
+      <div class="dialog-head"><h2 id="help-annotate-title" data-i18n>About Annotate</h2><button class="button button-ghost button-icon button-small" data-dialog-close type="button" aria-label="Close" data-i18n-attr="aria-label">×</button></div>
+      <div class="dialog-body" id="help-annotate-body"></div>
+    </dialog>
+    <dialog class="dialog help-dialog" id="help-world" aria-labelledby="help-world-title">
+      <div class="dialog-head"><h2 id="help-world-title" data-i18n>About Acoustic world</h2><button class="button button-ghost button-icon button-small" data-dialog-close type="button" aria-label="Close" data-i18n-attr="aria-label">×</button></div>
+      <div class="dialog-body">
+        <h3 data-i18n>Build a scene</h3>
+        <p data-i18n>Start from a preset, then add talkers and noise sources under Settings › Sources — up to eight — and give each a role: target talker, other talker or noise. A source either stays still or follows its keyframes: a time, a position and the direction it faces. Drag the numbered points on the floor plan or type the values; double-click the floor to put the selected source there at the timeline's time — as a new keyframe, or by moving the one already at that time.</p>
+        <p data-i18n>Problems show up while you edit — a keyframe outside the room, too close to the microphone or inside an obstacle, or a path faster than walking pace — and Render stays off until they are fixed.</p>
+        <h3 data-i18n>What is rendered</h3>
+        <p data-i18n>Every path from a source to the microphone — the direct sound and reflections up to second order — follows the motion continuously, with Doppler shift, a talker's measured directivity, wall absorption and sound bending around obstacles. The reverberant tail is matched to the room's materials. The renderer and its limits are described in docs/algorithms/audio/dynamic_scene.md.</p>
+        <h3 data-i18n>References and scores</h3>
+        <ul>
+          <li data-i18n>Target talkers: every talker whose role is Target.</li>
+          <li data-i18n>All speech: every talker, target or not; the default for noise-suppression models.</li>
+          <li data-i18n>Near region: every talker inside the near radius, faded out across 0.2 m at its edge, silent while nobody is inside; the default for voice-isolation models.</li>
+        </ul>
+        <p data-i18n>Settings › Scene › Reference sets what a reference keeps of each talker's sound: Early, the direct sound and 50 ms of reflections (the default, as in training); Direct, 6 ms; Full, with reverberation; Anechoic, the dry clip. Switching between the three references re-scores the same render; another reference type needs a new render. Without a model the output is the microphone itself, so the scores describe the input.</p>
+        <h3 data-i18n>Limit map</h3>
+        <p data-i18n>Pick two parameters and their values; a parameter changes every source of its kind by the same amount, and each cell renders the scene once with the model. Open a cell to listen to it, and retry a failed or cancelled one.</p>
+        <h3 data-i18n>Files</h3>
+        <p data-i18n>Scene JSON keeps the scene and references to its audio. The scene package also carries the audio, the renders and the report; importing it reproduces the render.</p>
+      </div>
+    </dialog>
+    <dialog class="dialog help-dialog" id="help-pipeline" aria-labelledby="help-pipeline-title">
+      <div class="dialog-head"><h2 id="help-pipeline-title" data-i18n>About Pipeline</h2><button class="button button-ghost button-icon button-small" data-dialog-close type="button" aria-label="Close" data-i18n-attr="aria-label">×</button></div>
+      <div class="dialog-body">
+        <p data-i18n>The recipe supplies its augmentation knobs only. The audio is what you choose in Settings; the training corpora are never read.</p>
+        <ol>
+          <li data-i18n>Build a row: pick a recipe and some audio, and optionally a model to score with.</li>
+          <li data-i18n>Follow the stages: each shows what it drew and how the pair changed; a skipped stage says why.</li>
+          <li data-i18n>Read the model: effective SNR is what is left to remove, and the model's score at each stage is how it copes.</li>
+        </ol>
+        <p data-i18n>Effective SNR counts as interference everything that is not the target: noise, other talkers, late reverberation past an early target, and transmission damage.</p>
+        <p class="quiet" data-i18n>← → step through the stages; Ctrl+Enter builds.</p>
+      </div>
+    </dialog>
+    <dialog class="dialog help-dialog" id="help-models" aria-labelledby="help-models-title">
+      <div class="dialog-head"><h2 id="help-models-title" data-i18n>About Models</h2><button class="button button-ghost button-icon button-small" data-dialog-close type="button" aria-label="Close" data-i18n-attr="aria-label">×</button></div>
+      <div class="dialog-body">
+        <p data-i18n>Each card is one catalog entry. Default is the release preset for its task; candidate, reference, experimental and diagnostic say how far a model is from release.</p>
+        <ul>
+          <li data-i18n>Details lists the files, their hashes and the benchmark records that name the model.</li>
+          <li data-i18n>Compare gate records puts the released gate records of several models side by side.</li>
+          <li data-i18n>The integrity check verifies ONNX files, hashes, sidecars and graph contracts; it does not judge audio quality.</li>
+        </ul>
+      </div>
+    </dialog>
+    <dialog class="dialog help-dialog" id="help-history" aria-labelledby="help-history-title">
+      <div class="dialog-head"><h2 id="help-history-title" data-i18n>About History</h2><button class="button button-ghost button-icon button-small" data-dialog-close type="button" aria-label="Close" data-i18n-attr="aria-label">×</button></div>
+      <div class="dialog-body">
+        <p data-i18n>Every playground run, speaker check, comparison and live session this server kept. Open a run to show it again on its own screen.</p>
+        <p data-i18n>Audio is kept for a bounded number of runs, so an old run may have lost its audio.</p>
+      </div>
+    </dialog>
+
+    <script src="/i18n-zh.js" defer></script>
+    <script src="/i18n.js" defer></script>
+    <script src="/routes.js" defer></script>
+    <script src="/shell.js" defer></script>
+    <script src="/audio-view.js" defer></script>
+    <script src="/compare-deck.js" defer></script>
+    <script src="/transcribe.js" defer></script>
+    <script src="/capture.js" defer></script>
+    <script src="/device/device.js" defer></script>
+    <script src="/pipeline-model.js" defer></script>
+    <script src="/pipeline.js" defer></script>
+    <script src="/world-model.js" defer></script>
+    <script src="/world.js" defer></script>
+    <script src="/annotate-model.js" defer></script>
+    <script src="/annotate.js" defer></script>
+    <script src="/app.js" defer></script>
+  </body>
+</html>

@@ -1,0 +1,119 @@
+{
+  "talkers": [
+    {
+      "id": "reader-61",
+      "title": "Reader 61",
+      "description": "LibriSpeech reader 61, one utterance.",
+      "files": [
+        "../speaker-b.wav"
+      ]
+    },
+    {
+      "id": "reader-1272",
+      "title": "Reader 1272",
+      "description": "LibriSpeech reader 1272, two halves of one utterance.",
+      "files": [
+        "../speaker-a-1.wav",
+        "../speaker-a-2.wav"
+      ]
+    }
+  ],
+  "noises": [
+    {
+      "id": "pink",
+      "file": "noise/pink.wav",
+      "title": "Pink noise",
+      "description": "Steady broadband noise, power falling 3 dB per octave.",
+      "seconds": 5.0
+    },
+    {
+      "id": "rumble",
+      "file": "noise/rumble.wav",
+      "title": "Traffic rumble",
+      "description": "Low-frequency rumble below 250 Hz with a slow swell.",
+      "seconds": 5.0
+    },
+    {
+      "id": "hum",
+      "file": "noise/hum.wav",
+      "title": "Mains hum",
+      "description": "60 Hz and its harmonics over a faint noise bed.",
+      "seconds": 5.0
+    },
+    {
+      "id": "fan",
+      "file": "noise/fan.wav",
+      "title": "Fan",
+      "description": "A band around 900 Hz over low broadband noise.",
+      "seconds": 5.0
+    },
+    {
+      "id": "babble",
+      "file": "noise/babble.wav",
+      "title": "Babble",
+      "description": "The two talker samples, six overlapping copies time-reversed so no word is intelligible, in a diffuse room. With a reader as the foreground, its own reversed voice is in this noise.",
+      "seconds": 5.0
+    },
+    {
+      "id": "clatter",
+      "file": "noise/clatter.wav",
+      "title": "Clatter",
+      "description": "Short bright bursts at random times: dishes, keys.",
+      "seconds": 5.0
+    }
+  ],
+  "rooms": [
+    {
+      "id": "room_000030_000000",
+      "file": "rooms/items/room_000030_000000.wav",
+      "title": "7.7 × 4.6 × 2.8 m, RT60 0.27 s",
+      "rt60": 0.269,
+      "room_dim": [
+        7.67,
+        4.57,
+        2.81
+      ],
+      "sources": 5,
+      "obstacles": 4
+    },
+    {
+      "id": "room_000015_000000",
+      "file": "rooms/items/room_000015_000000.wav",
+      "title": "4.1 × 5.0 × 3.2 m, RT60 0.47 s",
+      "rt60": 0.474,
+      "room_dim": [
+        4.1,
+        4.98,
+        3.23
+      ],
+      "sources": 5,
+      "obstacles": 6
+    },
+    {
+      "id": "room_000029_000000",
+      "file": "rooms/items/room_000029_000000.wav",
+      "title": "6.5 × 6.7 × 2.8 m, RT60 0.63 s",
+      "rt60": 0.629,
+      "room_dim": [
+        6.55,
+        6.65,
+        2.81
+      ],
+      "sources": 5,
+      "obstacles": 6
+    },
+    {
+      "id": "room_000020_000000",
+      "file": "rooms/items/room_000020_000000.wav",
+      "title": "5.8 × 5.3 × 3.1 m, RT60 0.85 s",
+      "rt60": 0.85,
+      "room_dim": [
+        5.81,
+        5.28,
+        3.07
+      ],
+      "sources": 5,
+      "obstacles": 5
+    }
+  ]
+}

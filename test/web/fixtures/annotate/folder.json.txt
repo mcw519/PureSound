@@ -1,0 +1,59 @@
+{
+  "folder": "session-a",
+  "annotated_files": 2,
+  "spans_total": 5,
+  "generated_by": "Span",
+  "files": [
+    {
+      "file": "clip_01.wav",
+      "path": "session-a/clip_01.wav",
+      "sample_rate": 48000,
+      "duration_s": 2.5,
+      "spans": [
+        {
+          "start_s": 0.1,
+          "end_s": 0.9,
+          "duration_s": 0.8,
+          "tag": "near / keep",
+          "label": "hello"
+        },
+        {
+          "start_s": 1,
+          "end_s": 2.2,
+          "duration_s": 1.2,
+          "tag": "far / suppress",
+          "label": null
+        }
+      ]
+    },
+    {
+      "file": "take 3.wav",
+      "path": "session-a/take 3.wav",
+      "sample_rate": 16000,
+      "duration_s": 9.877,
+      "spans": [
+        {
+          "start_s": 0,
+          "end_s": 1.235,
+          "duration_s": 1.235,
+          "tag": "Keep this",
+          "label": "=cmd"
+        },
+        {
+          "start_s": 2,
+          "end_s": 3,
+          "duration_s": 1,
+          "tag": "suppressed far",
+          "label": "tab\there"
+        },
+        {
+          "start_s": 5.5,
+          "end_s": 6.25,
+          "duration_s": 0.75,
+          "tag": "noise",
+          "label": "no role"
+        }
+      ]
+    }
+  ]
+}

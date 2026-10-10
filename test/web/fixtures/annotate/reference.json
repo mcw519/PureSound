@@ -1,0 +1,412 @@
+{
+  "single.json": {
+    "name": "near-and-far.spans.json",
+    "parsed": {
+      "near-and-far": [
+        {
+          "a": 0.412,
+          "b": 1.9,
+          "tag": "near / keep",
+          "label": ""
+        },
+        {
+          "a": 2.001,
+          "b": 3.25,
+          "tag": "far / suppress",
+          "label": "door \"slam\""
+        },
+        {
+          "a": 3.3,
+          "b": 4,
+          "tag": "double-talk",
+          "label": "a, b, c"
+        },
+        {
+          "a": 4.1,
+          "b": 4.45,
+          "tag": "exclude",
+          "label": "cough"
+        },
+        {
+          "a": 4.5,
+          "b": 6,
+          "tag": "laughter, loud",
+          "label": ""
+        }
+      ]
+    }
+  },
+  "single.csv": {
+    "name": "near-and-far.spans.csv",
+    "parsed": {
+      "near-and-far": [
+        {
+          "a": 0.412,
+          "b": 1.9,
+          "tag": "near / keep",
+          "label": ""
+        },
+        {
+          "a": 2.001,
+          "b": 3.25,
+          "tag": "far / suppress",
+          "label": "door \"slam\""
+        },
+        {
+          "a": 3.3,
+          "b": 4,
+          "tag": "double-talk",
+          "label": "a, b, c"
+        },
+        {
+          "a": 4.1,
+          "b": 4.45,
+          "tag": "exclude",
+          "label": "cough"
+        },
+        {
+          "a": 4.5,
+          "b": 6,
+          "tag": "laughter, loud",
+          "label": ""
+        }
+      ]
+    }
+  },
+  "single.windows": {
+    "name": "windows.json",
+    "parsed": {
+      "near-and-far": [
+        {
+          "a": 0.412,
+          "b": 1.9,
+          "tag": "near / keep",
+          "label": ""
+        },
+        {
+          "a": 3.3,
+          "b": 4,
+          "tag": "near / keep",
+          "label": ""
+        },
+        {
+          "a": 2.001,
+          "b": 3.25,
+          "tag": "far / suppress",
+          "label": ""
+        }
+      ]
+    }
+  },
+  "single.audacity": {
+    "name": "near-and-far.txt",
+    "parsed": {
+      "near-and-far": [
+        {
+          "a": 0.412,
+          "b": 1.9,
+          "tag": "near / keep",
+          "label": "near / keep"
+        },
+        {
+          "a": 2.001,
+          "b": 3.25,
+          "tag": "near / keep",
+          "label": "door \"slam\""
+        },
+        {
+          "a": 3.3,
+          "b": 4,
+          "tag": "near / keep",
+          "label": "a, b, c"
+        },
+        {
+          "a": 4.1,
+          "b": 4.45,
+          "tag": "near / keep",
+          "label": "cough"
+        },
+        {
+          "a": 4.5,
+          "b": 6,
+          "tag": "near / keep",
+          "label": "laughter, loud"
+        }
+      ]
+    }
+  },
+  "folder.json": {
+    "name": "session-a.spans.json",
+    "parsed": {
+      "clip_01": [
+        {
+          "a": 0.1,
+          "b": 0.9,
+          "tag": "near / keep",
+          "label": "hello"
+        },
+        {
+          "a": 1,
+          "b": 2.2,
+          "tag": "far / suppress",
+          "label": ""
+        }
+      ],
+      "take 3": [
+        {
+          "a": 0,
+          "b": 1.235,
+          "tag": "Keep this",
+          "label": "=cmd"
+        },
+        {
+          "a": 2,
+          "b": 3,
+          "tag": "suppressed far",
+          "label": "tab\there"
+        },
+        {
+          "a": 5.5,
+          "b": 6.25,
+          "tag": "noise",
+          "label": "no role"
+        }
+      ]
+    }
+  },
+  "folder.csv": {
+    "name": "session-a.spans.csv",
+    "parsed": {
+      "clip_01": [
+        {
+          "a": 0.1,
+          "b": 0.9,
+          "tag": "near / keep",
+          "label": "hello"
+        },
+        {
+          "a": 1,
+          "b": 2.2,
+          "tag": "far / suppress",
+          "label": ""
+        }
+      ],
+      "take 3": [
+        {
+          "a": 0,
+          "b": 1.235,
+          "tag": "Keep this",
+          "label": "=cmd"
+        },
+        {
+          "a": 2,
+          "b": 3,
+          "tag": "suppressed far",
+          "label": "tab\there"
+        },
+        {
+          "a": 5.5,
+          "b": 6.25,
+          "tag": "noise",
+          "label": "no role"
+        }
+      ]
+    }
+  },
+  "folder.windows": {
+    "name": "windows.json",
+    "parsed": {
+      "clip_01": [
+        {
+          "a": 0.1,
+          "b": 0.9,
+          "tag": "near / keep",
+          "label": ""
+        },
+        {
+          "a": 1,
+          "b": 2.2,
+          "tag": "far / suppress",
+          "label": ""
+        }
+      ],
+      "take 3": [
+        {
+          "a": 0,
+          "b": 1.235,
+          "tag": "near / keep",
+          "label": ""
+        },
+        {
+          "a": 2,
+          "b": 3,
+          "tag": "far / suppress",
+          "label": ""
+        }
+      ]
+    }
+  },
+  "folder.audacity": {
+    "name": "take 3.txt",
+    "parsed": {
+      "take 3": [
+        {
+          "a": 0,
+          "b": 1.235,
+          "tag": "near / keep",
+          "label": "=cmd"
+        },
+        {
+          "a": 2,
+          "b": 3,
+          "tag": "near / keep",
+          "label": "tab"
+        },
+        {
+          "a": 5.5,
+          "b": 6.25,
+          "tag": "near / keep",
+          "label": "no role"
+        }
+      ]
+    }
+  },
+  "empty.json": {
+    "name": "silence.spans.json",
+    "parsed": null
+  },
+  "empty.csv": {
+    "name": "silence.spans.csv",
+    "parsed": null
+  },
+  "empty.windows": {
+    "name": "windows.json",
+    "parsed": null
+  },
+  "empty.audacity": {
+    "name": "silence.txt",
+    "parsed": null
+  },
+  "read.audacity": {
+    "parsed": {
+      "input": [
+        {
+          "a": 0.5,
+          "b": 1.25,
+          "tag": "near / keep",
+          "label": "speech"
+        },
+        {
+          "a": 2,
+          "b": 3,
+          "tag": "near / keep",
+          "label": ""
+        }
+      ]
+    }
+  },
+  "read.csvNoFile": {
+    "parsed": {
+      "input": [
+        {
+          "a": 1,
+          "b": 2,
+          "tag": "far / suppress",
+          "label": "quote \"x\""
+        },
+        {
+          "a": 3,
+          "b": 4,
+          "tag": "near / keep",
+          "label": ""
+        }
+      ]
+    }
+  },
+  "read.csvWithFile": {
+    "parsed": {
+      "a b": [
+        {
+          "a": 0,
+          "b": 1,
+          "tag": "near",
+          "label": ""
+        }
+      ],
+      "c": [
+        {
+          "a": 1,
+          "b": 2,
+          "tag": "near / keep",
+          "label": ""
+        }
+      ]
+    }
+  },
+  "read.bareArray": {
+    "parsed": {
+      "input": [
+        {
+          "a": 1,
+          "b": 2,
+          "tag": "t",
+          "label": ""
+        },
+        {
+          "a": 3,
+          "b": 4,
+          "tag": "near / keep",
+          "label": ""
+        },
+        {
+          "a": 5,
+          "b": 6,
+          "tag": "near / keep",
+          "label": "l"
+        }
+      ]
+    }
+  },
+  "read.windows": {
+    "parsed": {
+      "clip": [
+        {
+          "a": 0,
+          "b": 1,
+          "tag": "near / keep",
+          "label": ""
+        },
+        {
+          "a": 2,
+          "b": 3,
+          "tag": "far / suppress",
+          "label": ""
+        }
+      ]
+    }
+  },
+  "read.junk": {
+    "parsed": null
+  },
+  "read.emptyText": {
+    "parsed": null
+  },
+  "read.badJson": {
+    "parsed": null
+  },
+  "splitCsv": [
+    [
+      "a",
+      "b,c",
+      "d"
+    ],
+    [
+      "x \"y\"",
+      "",
+      "z"
+    ],
+    [
+      ""
+    ]
+  ]
+}

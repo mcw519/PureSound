@@ -1,0 +1,22 @@
+{
+  "_comment": "Spans annotated in Span. keep = near speech that must survive (preservation ~0 dB); suppress = >1 m voice that must be attenuated. Tags matching neither are omitted.",
+  "near-and-far": {
+    "role": "annotated in Span",
+    "keep": [
+      [
+        0.412,
+        1.9
+      ],
+      [
+        3.3,
+        4
+      ]
+    ],
+    "suppress": [
+      [
+        2.001,
+        3.25
+      ]
+    ]
+  }
+}

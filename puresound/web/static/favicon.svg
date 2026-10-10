@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title desc">
+  <title id="title">PureSound</title>
+  <desc id="desc">A waveform crossing through an open infinity loop from input to enhanced output.</desc>
+  <defs>
+    <linearGradient id="signal" x1="6" y1="25" x2="58" y2="39" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#9f91ff"/>
+      <stop offset="0.48" stop-color="#c7c9ff"/>
+      <stop offset="0.78" stop-color="#b8fbfa"/>
+      <stop offset="1" stop-color="#88f0e8"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="15" fill="#010120"/>
+  <g fill="none" stroke="url(#signal)" stroke-width="4.25" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M6 32h7c2.5 0 2.7-4 4.8-4 2.4 0 2.3 8 4.9 8 3 0 2.8-10.5 5.8-10.5 2.2 0 2.6 5.5 4.1 7.5"/>
+    <path d="M12 22c5-8 13-8 20 10s15 18 20 10"/>
+    <path d="M12 42c4.7 7.5 12.4 8 17.5 1.2"/>
+    <path d="M34.5 20.8C39.6 14 47.3 14.5 52 22"/>
+    <path d="M52 32h6"/>
+  </g>
+  <circle cx="6" cy="32" r="3.25" fill="#9f91ff"/>
+  <circle cx="58" cy="32" r="3.25" fill="#fc4c02"/>
+</svg>
