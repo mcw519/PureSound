@@ -463,7 +463,9 @@ class EncDecMaskBase(BaseLightningModule):
             total_loss = total_loss + pair_loss
 
         if self.metric_gan is not None:
-            total_loss = total_loss + self._metric_gan_loss(clean_speech, enhanced_speech)
+            total_loss = total_loss + self._metric_gan_loss(
+                clean_speech, enhanced_speech, noisy=noisy_speech
+            )
 
         # Channel-perturbation mask consistency (see __init__): the clean-view
         # mask is the (detached) teacher; the perturbed view learns to produce
@@ -518,10 +520,13 @@ class EncDecMaskBase(BaseLightningModule):
         self.puresound_logging.update({"epoch_train_loss": total_loss.item()})
         return {"loss": total_loss}
 
-    def _metric_gan_loss(self, clean: torch.Tensor, enhanced: torch.Tensor) -> torch.Tensor:
+    def _metric_gan_loss(
+        self, clean: torch.Tensor, enhanced: torch.Tensor, noisy: Optional[torch.Tensor] = None
+    ) -> torch.Tensor:
         """Discriminator term every step; generator term after the warm-up.
 
         Target-absent rows (silent clean) have no PESQ and are left out of both.
+        ``noisy`` feeds the replay too when the config asks for noisy pairs.
         """
         from .metric_gan import PesqReplay, discriminator_loss, generator_loss
 
@@ -537,6 +542,8 @@ class EncDecMaskBase(BaseLightningModule):
 
         replay.harvest()
         replay.submit(clean_a, enhanced_a)
+        if cfg.noisy_pairs and noisy is not None:
+            replay.submit(clean_a, noisy[..., :n][active])
         # The real term needs at least one row even on an all-absent batch, so
         # every critic parameter still gets a gradient on this rank.
         reference = clean_a if clean_a.shape[0] else clean[:1]

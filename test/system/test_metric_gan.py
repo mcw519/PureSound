@@ -152,6 +152,25 @@ def test_a_training_step_trains_both_sides():
     assert "train_metric_gan_d_loss" in system.logged
 
 
+def test_noisy_pairs_reach_the_replay_with_their_own_pesq():
+    """With noisy_pairs each step replays the (clean, noisy input) pair next to
+    the (clean, enhanced) one, so the critic also learns PESQ of the input. The
+    stub's output is the input scaled, which PESQ ignores, so the check is on
+    the stored waveforms rather than the labels."""
+    batch = _batch()
+    plain = _wired(weight=0.0, noisy_pairs=False)
+    plain.training_step(batch, 0)
+    paired = _wired(weight=0.0, noisy_pairs=True)
+    paired.training_step(batch, 0)
+    assert len(plain._pesq_replay.buffer) == 2
+    assert len(paired._pesq_replay.buffer) == 4
+    noisy = batch["noisy_speech"][0]
+    stored = [row[1] for row in paired._pesq_replay.buffer]
+    assert sum(torch.equal(est, noisy) for est in stored) == 2, "noisy input rows missing"
+    assert sum(torch.allclose(est, noisy * 0.9) for est in stored) == 2, "enhanced rows missing"
+    assert all(np.isfinite(row[2]) and 0.0 <= row[2] <= 1.0 for row in paired._pesq_replay.buffer)
+
+
 def test_an_all_absent_batch_still_gives_every_critic_parameter_a_gradient():
     """DDP needs every parameter used on every rank, every step."""
     system = _wired(weight=0.05, warmup_steps=0)
