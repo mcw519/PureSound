@@ -403,6 +403,12 @@ WAV，因為轉換器之前的階段可能超過滿刻度。一次只合成一�
 `latency_samples`。server 約每秒音訊送一次 `{"type": "stats"}`；`{"type": "stop"}` 結束
 連線。單次連線上限 30 分鐘。
 
+## PCS 後濾
+
+噪音抑制的請求可以設 `pcs: true`，對增強後的頻譜做 perceptual contrast stretching（逐幀套用，
+不增加延遲）：共振峰更銳利、PESQ 更高，代價是 DNSMOS 語音品質下降、重噪音下插入字變多。
+預設關；model card 記錄兩面。
+
 ## Onset guard
 
 Voice-isolation request 可覆寫：

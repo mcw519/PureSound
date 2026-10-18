@@ -96,6 +96,37 @@ int8 kernels differ by ISA, measure on the target CPU. Browser/WASM payloads kee
 the float graph. Deletion rates used Whisper large-v3 in `int8_float16`, so they
 are not comparable with the table above.
 
+## PCS post-filter (optional)
+
+`pcs: true` applies perceptual contrast stretching (Chao et al., Interspeech
+2022) to the enhanced spectrum before the inverse STFT: a fixed per-band gamma
+of 1.0-1.4 on the log1p magnitude, largest over 400-4400 Hz, phase untouched.
+It is a request parameter, off by default, applied per frame by the streaming
+runtime with no added latency (`--param pcs=true` on the CLI; `pcs` in the web
+UI). Each column below is the streaming ONNX output of v3 on the same items
+(records `ns_dpcrn-mamba_capWL3_mg_ep3_ort` and `..._ort_pcs`).
+
+| Measure | v3 | v3 + PCS | Paired difference (95% CI) |
+|---|---|---|---|
+| frozen synthetic PESQ-WB | 2.508 | **2.713** | +0.204 (+0.192, +0.218) |
+| VCTK-DEMAND PESQ-WB | 2.629 | **3.020** | +0.391 (+0.380, +0.402) |
+| VCTK-DEMAND harmonic contrast gap (dB) | −0.15 | **+0.41** | +0.553 (+0.524, +0.582) |
+| VCTK-DEMAND STOI / ESTOI | 0.931 / 0.837 | 0.928 / 0.834 | −0.0032 / −0.0034 |
+| DNS-5 dev DNSMOS SIG | 3.191 | 3.063 | −0.128 (−0.137, −0.119) |
+| DNS-5 dev DNSMOS BAK | 3.802 | 3.785 | −0.017 (−0.025, −0.008) |
+| DNS-5 dev DNSMOS OVR | 2.808 | 2.705 | −0.102 (−0.111, −0.094) |
+| DNS-5 dev DNSMOS P.808 | 3.409 | 3.319 | −0.089 (−0.102, −0.077) |
+| VCTK-DEMAND WER / deletion rate | 0.040 / 0.0082 | 0.039 / 0.0081 | no resolvable change |
+| hard-set raw WER / insertion rate | 0.149 / 0.018 | 0.163 / 0.039 | +0.015 / +0.020 |
+
+What it buys: sharper formant peaks, which PESQ and the harmonic-contrast gap
+reward strongly -- v3 + PCS scores above every model in this table on PESQ. What
+it costs: every DNSMOS scale is resolvably lower (speech quality most), STOI
+slips a little, and on the hard set the recognizer inserts twice as many words.
+SI-SDR is not listed because the stretch is non-linear and the metric no longer
+measures distortion. Turn it on when PESQ is the number being compared; leave
+it off for listening and for ASR.
+
 ## Reproduce v3
 
 Run these recipes in order with seed 1234, warm-starting each stage from the

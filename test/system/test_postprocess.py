@@ -137,6 +137,7 @@ def test_the_two_calling_conventions_cannot_be_mixed_and_the_manifest_records_th
     assert manifest == {
         "dry_blend": 0.9,
         "spec_floor": 0.1,
+        "pcs": False,
         "suppression_ceiling_db": pytest.approx(-20.0),
     }
 
@@ -193,3 +194,23 @@ def test_a_spectral_floor_is_refused_where_it_cannot_be_applied(mask_type):
 
     with pytest.raises(ValueError, match=mask_type):
         module(torch.randn(1, 800), spec_floor=0.2)
+
+
+def test_pcs_stretches_the_enhanced_magnitude_and_keeps_its_phase():
+    """A fixed gamma per bin on the log1p magnitude; the phase is the model's."""
+    from puresound.audio.pcs import pcs_gamma, stretch_magnitude
+
+    torch.manual_seed(0)
+    enh = torch.randn(2, 2, 257, 9) * 3.0
+    out = Postprocessor(pcs=True).stretch_spectrum(enh, 16000)
+    real, imag = torch.chunk(enh, 2, dim=1)
+    o_real, o_imag = torch.chunk(out, 2, dim=1)
+    magnitude = torch.sqrt(real ** 2 + imag ** 2 + 1e-8)
+    expected = stretch_magnitude(magnitude, torch.as_tensor(pcs_gamma(512, 16000), dtype=enh.dtype).view(1, 1, 257, 1))
+    assert torch.allclose(torch.sqrt(o_real ** 2 + o_imag ** 2), expected, rtol=1e-4, atol=1e-5)
+    assert torch.allclose(torch.atan2(o_imag, o_real), torch.atan2(imag, real), atol=1e-5)
+    assert torch.equal(Postprocessor().stretch_spectrum(enh, 16000), enh)
+    assert Postprocessor(pcs=True).enabled
+    assert Postprocessor(pcs=True).as_manifest()["pcs"] is True
+    with pytest.raises(ValueError, match="not both"):
+        resolve(Postprocessor(pcs=True), 1.0, 0.0, pcs=True)

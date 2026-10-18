@@ -17,6 +17,7 @@ export interface Manifest {
     dry_blend?: number;
     spec_floor?: number;
     mix_phase?: boolean;
+    pcs?: boolean;
   };
 }
 type Backend = typeof import("onnxruntime-web");
@@ -237,6 +238,7 @@ export class PureSoundStreamingRuntime {
     if (
       p.spec_floor ||
       p.mix_phase ||
+      p.pcs ||
       !Number.isFinite(blend) ||
       blend <= 0 ||
       blend > 1

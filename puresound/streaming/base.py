@@ -32,6 +32,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from puresound.audio.pcs import pcs_gamma, stretch_magnitude_np
 from puresound.system.onset_guard import OnsetGuard
 from puresound.system.postprocess import IDENTITY, Postprocessor
 from puresound.utils import load_hparam
@@ -580,7 +581,7 @@ class StreamingOrt:
         # catalog carries the section; the convention is for third-party ones.
         postprocess = dict(self.manifest.get(Postprocessor.MANIFEST_KEY) or {})
         if postprocess_overrides:
-            unknown = set(postprocess_overrides) - {"dry_blend", "spec_floor"}
+            unknown = set(postprocess_overrides) - {"dry_blend", "spec_floor", "pcs"}
             if unknown:
                 raise ValueError(
                     "unsupported postprocess override(s): "
@@ -612,6 +613,16 @@ class StreamingOrt:
             raise ValueError(
                 f"manifest dry_blend must be in (0, 1], got {self.dry_blend}"
             )
+        # Perceptual contrast stretching on each enhanced frame's magnitude
+        # (`puresound.audio.pcs`): memoryless per frame, so no latency, and the
+        # same bins the graph already produced.
+        pcs = postprocess.get("pcs", False)
+        if not isinstance(pcs, bool):
+            raise ValueError(f"manifest pcs must be a boolean, got {pcs!r}")
+        self.pcs = pcs
+        self.pcs_gamma = (
+            pcs_gamma(self.fft_length, self.sample_rate).astype(np.float32) if pcs else None
+        )
         # The overlap-add is index-aligned, so this is purely the graph's own
         # look-ahead latency: its output at a given index carries the input from
         # this many samples earlier, and the blend has to match or it mixes in a
@@ -921,6 +932,11 @@ class StreamingOrt:
         noisy_frame = np.stack([spec.real, spec.imag], axis=-1).reshape(1, self.freq_bins, 2).astype(np.float32)
         enhanced = self.run_frame(noisy_frame)[0]
         enhanced_complex = enhanced[:, 0] + 1j * enhanced[:, 1]
+        if self.pcs_gamma is not None:
+            magnitude = np.abs(enhanced_complex)
+            enhanced_complex = enhanced_complex * (
+                stretch_magnitude_np(magnitude, self.pcs_gamma) / np.maximum(magnitude, 1e-8)
+            )
         wav = np.fft.irfft(enhanced_complex, n=self.fft_length).astype(np.float32)[: self.win_length]
         return wav * self.window
 

@@ -129,6 +129,7 @@ def test_onset_guard_request_hands_back_the_input_until_it_releases():
         ({"onset_guard": True, "onset_guard_margin_db": 1.0}, "onset_guard_margin_db"),
         ({"onset_guard": True, "onset_guard_margin_db": "loud"}, "onset_guard_margin_db"),
         ({"onset_guard": "yes"}, "onset_guard must be a boolean"),
+        ({"pcs": "yes"}, "pcs must be a boolean"),
     ],
 )
 def test_onset_guard_rejects_values_outside_the_allowed_range(parameters, message):

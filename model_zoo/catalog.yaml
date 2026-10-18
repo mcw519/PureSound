@@ -117,9 +117,10 @@ models:
       onset_guard_t_forget_s: {type: float, default: 5.0, minimum: 1.0, maximum: 60.0, description: "Quiet this long drops the anchor, so the next onset is protected again."}
       onset_guard_tau_dn_s: {type: float, default: 2.0, minimum: 0.1, maximum: 10.0, description: "Release time constant from the untouched input back to the model output."}
       onset_guard_margin_db: {type: float, default: 8.0, minimum: 3.0, maximum: 20.0, description: "How far over the tracked noise floor a frame counts as speech."}
+      pcs: {type: bool, default: false, description: "Perceptual contrast stretching of the enhanced spectrum: sharper formants and a higher PESQ, at a cost in DNSMOS signal quality and in inserted words on hard noise; see the model card."}
     source_checkpoint: egs/noise_suppression/pretrained_ckpt/dpcrn_mamba_v3.ckpt
     source_config: egs/noise_suppression/config/infer_dpcrn_mamba_wide.yaml
-    benchmark_references: [egs/noise_suppression/pretrained_ckpt/README.md, egs/noise_suppression/benchmarks/records/ns_dpcrn-mamba_capWL3_mg_ep3.json]
+    benchmark_references: [egs/noise_suppression/pretrained_ckpt/README.md, egs/noise_suppression/benchmarks/records/ns_dpcrn-mamba_capWL3_mg_ep3.json, egs/noise_suppression/benchmarks/records/ns_dpcrn-mamba_capWL3_mg_ep3_ort.json, egs/noise_suppression/benchmarks/records/ns_dpcrn-mamba_capWL3_mg_ep3_ort_pcs.json]
     artifacts:
       - format: onnx
         variant: default

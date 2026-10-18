@@ -483,6 +483,13 @@ offline runtime's does. The server sends `{"type": "stats"}` about once per
 second of audio; `{"type": "stop"}` ends the session. A session ends after
 30 minutes.
 
+## PCS post-filter
+
+Noise-suppression requests may set `pcs: true` to apply perceptual contrast
+stretching to the enhanced spectrum (per frame, no added latency): sharper
+formants and a higher PESQ, at a cost in DNSMOS signal quality and in inserted
+words on hard noise. Off by default; the model card records both sides.
+
 ## Onset guard
 
 Voice-isolation requests may override these parameters:

@@ -156,6 +156,7 @@ class EncDecMaskBase(BaseLightningModule):
         wav: torch.Tensor,
         dry_blend: float = 1.0,
         spec_floor: float = 0.0,
+        pcs: bool = False,
         postprocess: Optional[Postprocessor] = None,
         presence_gate: Optional[PresenceGate] = None,
         onset_guard: Optional[OnsetGuard] = None,
@@ -171,7 +172,10 @@ class EncDecMaskBase(BaseLightningModule):
             spec_floor: inference-only spectral floor in ``[0, 1)``. ``0.0``
                 (default) is a no-op. Complex-mask models only; the other mask
                 types raise.
-            postprocess: a built `Postprocessor`, as an alternative to the two
+            pcs: inference-only perceptual contrast stretching of the enhanced
+                spectrum (`Postprocessor.stretch_spectrum`). ``False`` (default)
+                is a no-op.
+            postprocess: a built `Postprocessor`, as an alternative to the
                 keywords above. Not both.
             presence_gate: a built `PresenceGate`, applied to the finished
                 waveform. Needs a backbone that stashes its bottleneck, which
@@ -185,7 +189,7 @@ class EncDecMaskBase(BaseLightningModule):
         Returns:
             Enhanced waveform clamped to ``[-1, 1]``.
         """
-        post = resolve_postprocess(postprocess, dry_blend, spec_floor)
+        post = resolve_postprocess(postprocess, dry_blend, spec_floor, pcs)
         if presence_gate is not None and not hasattr(self.backbone, "last_bottleneck"):
             raise ValueError(
                 f"presence_gate needs a backbone that exposes last_bottleneck; "
@@ -260,6 +264,7 @@ class EncDecMaskBase(BaseLightningModule):
                 "complex, deepfilter, wiener, mvdr, mapping."
             )
 
+        enh = post.stretch_spectrum(enh, self.encoder.sr)
         enh = self._spec_to_wav(enh)
         enh = post.blend_waveform(enh, wav)
         if presence_gate is not None:

@@ -17,6 +17,12 @@ NS v3 also ships a `flash` variant: the same weights with int8 LSTM and
 matrix-product weights, for tighter CPU budgets. Select it with `--variant flash`
 (or `variant="flash"` in `load_model`); the default variant is unchanged.
 
+NS v3 also takes a `pcs` request parameter (perceptual contrast stretching of the
+enhanced spectrum, off by default): a higher PESQ and sharper formants, paid for
+in DNSMOS signal quality and inserted words on hard noise. Both sides are on the
+[model card](../egs/noise_suppression/pretrained_ckpt/README.md), from the
+records `ns_dpcrn-mamba_capWL3_mg_ep3_ort` (pcs off) and `..._ort_pcs` (on).
+
 The default ONNX graphs use standard operators and run without a custom library.
 For native CPU SSM execution, build locally and set `PURESOUND_ORT_SSM_LIBRARY`:
 

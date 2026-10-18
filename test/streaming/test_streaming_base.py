@@ -381,3 +381,35 @@ def test_the_runtime_asks_for_cuda_then_falls_back_to_cpu(tmp_path, monkeypatch)
     runtime = StreamingOrt(onnx_path, provider="cuda")
 
     assert runtime.providers == ["CUDAExecutionProvider", "CPUExecutionProvider"]
+
+
+def test_pcs_scales_each_enhanced_bin_by_its_gamma_before_the_inverse_fft(tmp_path):
+    """The request knob reaches `_process_frame`, where it multiplies the graph's
+    own bins (no second STFT, no latency); off, the frame is untouched."""
+    from puresound.audio.pcs import pcs_gamma, stretch_magnitude_np
+
+    enhanced = np.zeros((1, 5, 2), np.float32)
+    enhanced[0, :, 0], enhanced[0, :, 1] = [0.5, 4.0, 9.0, 2.0, 1.0], [0.0, 3.0, 0.0, -2.0, 0.5]
+
+    def runtime(**overrides):
+        onnx_path = tmp_path / "m.onnx"
+        onnx_path.write_bytes(b"fake")
+        onnx_path.with_suffix(".json").write_text(json.dumps({
+            "sample_rate": 16000, "fft_length": 8, "win_length": 8, "hop_length": 4, "freq_bins": 5,
+            "output_names": ["enhanced_frame", "next_s0"], "extra_output_names": [],
+            "state_input_names": ["s0"], "state_shapes": {"s0": [1, 2]},
+        }))
+        return StreamingOrt(onnx_path, provider="cpu", session=_Session([enhanced, np.zeros((1, 2))]), **overrides)
+
+    frame = np.linspace(-0.5, 0.5, 8).astype(np.float32)
+    off = runtime()
+    on = runtime(postprocess_overrides={"pcs": True})
+    assert off.pcs_gamma is None and np.allclose(on.pcs_gamma, pcs_gamma(8, 16000))
+
+    spectrum = enhanced[0, :, 0] + 1j * enhanced[0, :, 1]
+    plain = np.fft.irfft(spectrum, n=8).astype(np.float32) * off.window
+    stretched = spectrum * stretch_magnitude_np(np.abs(spectrum), on.pcs_gamma) / np.abs(spectrum)
+    expected = np.fft.irfft(stretched, n=8).astype(np.float32) * on.window
+    assert np.allclose(off._process_frame(frame), plain, atol=1e-6)
+    assert np.allclose(on._process_frame(frame), expected, atol=1e-6)
+    assert not np.allclose(expected, plain)

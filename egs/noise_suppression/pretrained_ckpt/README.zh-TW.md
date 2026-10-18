@@ -86,6 +86,32 @@ v3 另有 int8 的 `flash` variant，適合 CPU 預算吃緊時使用，見 [v3 
 瀏覽器／WASM 仍使用浮點圖。刪字率使用 `int8_float16` 的 Whisper large-v3，不能與上方表格
 直接比較。
 
+## PCS 後濾（可選）
+
+`pcs: true` 在逆 STFT 之前對增強後的頻譜做 perceptual contrast stretching（Chao 等，
+Interspeech 2022）：log1p 幅度逐帶乘上固定的 γ 1.0–1.4，400–4400 Hz 最大，相位不動。
+它是請求參數，預設關，串流 runtime 逐幀套用、不增加延遲（CLI 用 `--param pcs=true`；
+web UI 有 `pcs` 開關）。下表兩欄都是 v3 在同一批輸入上的串流 ONNX 輸出（紀錄
+`ns_dpcrn-mamba_capWL3_mg_ep3_ort` 與 `..._ort_pcs`）。
+
+| 量測 | v3 | v3 + PCS | 配對差（95% CI） |
+|---|---|---|---|
+| frozen 合成集 PESQ-WB | 2.508 | **2.713** | +0.204（+0.192, +0.218） |
+| VCTK-DEMAND PESQ-WB | 2.629 | **3.020** | +0.391（+0.380, +0.402） |
+| VCTK-DEMAND 諧波對比間隙（dB） | −0.15 | **+0.41** | +0.553（+0.524, +0.582） |
+| VCTK-DEMAND STOI / ESTOI | 0.931 / 0.837 | 0.928 / 0.834 | −0.0032 / −0.0034 |
+| DNS-5 dev DNSMOS SIG | 3.191 | 3.063 | −0.128（−0.137, −0.119） |
+| DNS-5 dev DNSMOS BAK | 3.802 | 3.785 | −0.017（−0.025, −0.008） |
+| DNS-5 dev DNSMOS OVR | 2.808 | 2.705 | −0.102（−0.111, −0.094） |
+| DNS-5 dev DNSMOS P.808 | 3.409 | 3.319 | −0.089（−0.102, −0.077） |
+| VCTK-DEMAND WER / 刪字率 | 0.040 / 0.0082 | 0.039 / 0.0081 | 無可解析變化 |
+| hard 集原始 WER / 插入字率 | 0.149 / 0.018 | 0.163 / 0.039 | +0.015 / +0.020 |
+
+它買到的：共振峰更銳利，PESQ 和諧波對比間隙對此獎勵很大——v3 + PCS 的 PESQ 高於本頁
+所有模型。它付出的：DNSMOS 每個尺度都可解析地較低（語音品質掉最多），STOI 小退，hard 集
+上辨識器插入的字變成兩倍。SI-SDR 不列，因為拉伸是非線性的，該指標不再量失真。要比
+PESQ 數字時開；聆聽與 ASR 用途請關。
+
 ## 重現 v3
 
 使用 seed 1234 依序執行，每階用前一階最後一顆 checkpoint warm-start。

@@ -298,6 +298,14 @@ class StreamingRuntimeConfig:
                 "manifest requests mix_phase=true, which this runtime does not "
                 "implement. Re-export with mix_phase=false or add it here."
             )
+        if bool(postprocess.get("pcs", False)):
+            # Perceptual contrast stretching (puresound.audio.pcs) is a request
+            # knob of the in-repo runtime; an export that records it would need
+            # the stage copied here first.
+            raise ValueError(
+                "manifest requests pcs=true, which this runtime does not "
+                "implement. Re-export with pcs=false or add it here."
+            )
         dry_blend = float(postprocess.get("dry_blend", 1.0))
         if not 0.0 < dry_blend <= 1.0:
             raise ValueError(f"manifest dry_blend must be in (0, 1], got {dry_blend}")
