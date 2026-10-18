@@ -555,3 +555,40 @@ picked by `prob` and the SNR drawn uniformly inside it -- a piecewise-uniform
 distribution, so the range can reach high SNRs without thinning the hard
 mixtures. `snr_range` stays as the envelope: every band must lie inside it, each
 band needs `high > low`, and the probabilities must sum to 1.
+
+### Noise level: `augmentation_noise.level_reference`
+
+```yaml
+augmentation_noise:
+  level_reference: segment      # default: clip
+  min_segment_level_db: -10     # default: None (any window)
+  segment_redraws: 10
+```
+
+A noise longer than the row is cut to a random row-length window. With `clip`
+the level the drawn SNR refers to is measured over the whole file before the
+cut. A steady noise looks the same either way, but a bursty one (barking, a
+door, typing) can land its window between the events, and the row's real SNR
+is then well above the drawn one -- more often the shorter the row. `segment` measures the level over the window that is mixed in, so
+the drawn SNR is the row's -- the way the paired evaluation sets are mixed.
+`min_segment_level_db` redraws a window more than that many dB below the whole
+file's level, at most `segment_redraws` draws in all, so a quiet stretch
+between events is not raised to the drawn level as a steady hiss. Both default
+off and draw nothing, so an existing recipe regenerates the same rows.
+
+### Two noises at once: `augmentation_noise.prob_overlay`
+
+```yaml
+augmentation_noise:
+  prob_overlay: 0.3             # default: None (never)
+  overlay_level_db: [-15, 0]    # the second noise relative to the first
+```
+
+The dynamic type (`prob / 4` of the recorded-noise rows) plays two noises one
+after the other, so a short row usually hears only one of them. An overlay is a
+second noise heard at the same time as the first -- a fan under the typing, a
+hum under the dishes. On `prob_overlay` of the recorded-noise rows that did not
+take the dynamic type, a second file is drawn the same way as the first, cut to
+its own window, and laid over it at a level drawn uniformly from
+`overlay_level_db`; the drawn SNR then refers to the sum, under either
+`level_reference`. Off by default and drawing nothing when off.

@@ -19,7 +19,7 @@ def test_background_noise_is_resampled_to_the_speech_rate(monkeypatch):
         assert target_sr == 16000
         return torch.full((1, 16000), 2.0), 16000
 
-    def fake_add_bg_noise(wav, noise, snr_list):
+    def fake_add_bg_noise(wav, noise, snr_list, **level):
         captured["noise_shape"] = noise[0].shape
         captured["noise_mean"] = noise[0].mean().item()
         return [wav], noise

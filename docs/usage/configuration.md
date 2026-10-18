@@ -94,7 +94,7 @@ trainer:
   long.
 - `speaker_source_weights` chooses each corpus's share of the batches by spkid
   prefix instead of leaving it to speaker counts. Its rules, and the noise and
-  SNR knobs `augmentation_noise.noise_sources` and `snr_bands`, are in
+  SNR knobs `augmentation_noise.noise_sources`, `snr_bands`, `level_reference` and `prob_overlay`, are in
   [data_preparation.md](data_preparation.md#recipe-knobs-these-feed).
 - `train_sampler: coverage` (default `speaker`) draws training batches from
   shuffled queues: each source visits its speakers before repeating, and each

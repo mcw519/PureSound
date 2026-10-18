@@ -474,3 +474,33 @@ augmentation_noise:
 沒有 `snr_bands` 時，SNR 在 `snr_range` 上均勻分布。有的話，先依 `prob` 選一個帶，再在帶內
 均勻抽 SNR——一個分段均勻分布，讓範圍可以延伸到高 SNR，又不會稀釋困難的混音。
 `snr_range` 仍是外框：每個帶都必須落在它裡面，每個帶都要 `high > low`，機率總和必須是 1。
+
+### 噪音位準：`augmentation_noise.level_reference`
+
+```yaml
+augmentation_noise:
+  level_reference: segment      # 預設：clip
+  min_segment_level_db: -10     # 預設：None（任何窗口都接受）
+  segment_redraws: 10
+```
+
+比一列長的噪音會被隨機切成一列長度的窗口。`clip` 是在切之前用整個檔案量位準，抽到的 SNR
+就是相對於這個位準。持續型噪音兩種量法一樣，但突發型噪音（狗叫、關門、打字）的窗口可能
+落在事件之間，這一列實際的 SNR 會遠高於抽到的值，列越短越常發生。`segment` 用實際混進去的窗口量位準，抽到的 SNR 就是這一列的 SNR——配對評測集
+也是這樣混的。`min_segment_level_db` 會重抽比整個檔案位準低超過該 dB 數的窗口，總共最多
+`segment_redraws` 次，避免把事件之間的安靜片段拉到抽到的位準、變成一段持續的嘶聲。兩者預設
+關閉、不消耗亂數，既有配方產生的列不變。
+
+### 同時兩種噪音：`augmentation_noise.prob_overlay`
+
+```yaml
+augmentation_noise:
+  prob_overlay: 0.3             # 預設：None（不使用）
+  overlay_level_db: [-15, 0]    # 第二種噪音相對第一種的位準
+```
+
+dynamic 類型（錄製噪音列中的 `prob / 4`）是把兩種噪音前後接起來播，短的列通常只聽得到其中
+一種。overlay 則是第二種噪音跟第一種**同時**出現——打字聲底下有風扇、洗碗聲底下有嗡嗡聲。在
+沒有走 dynamic 類型的錄製噪音列中，有 `prob_overlay` 的比例會用同樣方式再抽一個檔案、切自己
+的窗口，以 `overlay_level_db` 內均勻抽出的位準疊在第一種噪音上；抽到的 SNR 改為相對於兩者
+的總和，`level_reference` 兩種設定都適用。預設關閉，關閉時不消耗亂數。

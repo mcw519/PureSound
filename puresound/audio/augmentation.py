@@ -493,6 +493,10 @@ class AudioEffectAugmentor:
         dynamic_type: bool = False,
         noise_id: Optional[List[str]] = None,
         noise_transform=None,
+        level_reference: str = "clip",
+        min_segment_level_db: Optional[float] = None,
+        segment_redraws: int = 10,
+        overlay_db: Optional[float] = None,
     ):
         """
         Injected additive background noise with a SNR list.\n
@@ -509,6 +513,12 @@ class AudioEffectAugmentor:
                 waveform BEFORE the SNR mixing (e.g. convolve it with a room
                 channel so the noise shares the speech's acoustic space).
                 None = the noise is mixed as loaded (dry).
+            level_reference, min_segment_level_db, segment_redraws: where the
+                noise level the SNR refers to is measured, and which windows of a
+                longer noise are accepted; see ``puresound.audio.noise.add_bg_noise``.
+            overlay_db: when set, a second noise drawn the same way is heard at
+                the same time as the first, this many dB relative to it, and the
+                SNR refers to the sum. Its draw comes after the first's.
 
         Returns:
             List of waveform has been add noise background
@@ -527,36 +537,43 @@ class AudioEffectAugmentor:
             else:
                 noise_id = random.sample(list(self.bg_noise.keys()), k=1)[0]
 
-        noise = []
         if dynamic_type:
-            for i in range(len(noise_id)):
-                bg_noise, noise_sr = AudioIO.open(
-                    f_path=self.bg_noise[noise_id[i]]["wav_path"], normalized=False
-                )
-                if noise_sr != sr:
-                    bg_noise, noise_sr = wav_resampling(
-                        wav=bg_noise, origin_sr=noise_sr, target_sr=sr, backend="sox"
-                    )
-
-                noise.append(bg_noise)
+            noise = [self._load_noise(i, sr) for i in noise_id]
         else:
-            single_id = noise_id[0] if isinstance(noise_id, list) else noise_id
-            bg_noise, noise_sr = AudioIO.open(
-                f_path=self.bg_noise[single_id]["wav_path"], normalized=False
-            )
-            if noise_sr != sr:
-                bg_noise, noise_sr = wav_resampling(
-                    wav=bg_noise, origin_sr=noise_sr, target_sr=sr, backend="sox"
-                )
-            noise.append(bg_noise)
-
+            noise = [self._load_noise(noise_id[0] if isinstance(noise_id, list) else noise_id, sr)]
         if noise_transform is not None:
             noise = [noise_transform(n) for n in noise]
 
+        overlay = None
+        if overlay_db is not None:
+            overlay_id = (
+                self._draw_noise_id()
+                if self.bg_noise_groups is not None
+                else random.sample(list(self.bg_noise.keys()), k=1)[0]
+            )
+            overlay = [self._load_noise(overlay_id, sr)]
+            if noise_transform is not None:
+                overlay = [noise_transform(n) for n in overlay]
+
         noisy_speech, added_noise = add_bg_noise(
-            wav=wav, noise=noise, snr_list=snr_list
+            wav=wav,
+            noise=noise,
+            snr_list=snr_list,
+            level_reference=level_reference,
+            min_segment_level_db=min_segment_level_db,
+            segment_redraws=segment_redraws,
+            overlay=overlay,
+            overlay_db=overlay_db if overlay_db is not None else 0.0,
         )
         return noisy_speech, (added_noise, noise_id, snr_list)
+
+    def _load_noise(self, noise_id: str, sr: int) -> torch.Tensor:
+        bg_noise, noise_sr = AudioIO.open(f_path=self.bg_noise[noise_id]["wav_path"], normalized=False)
+        if noise_sr != sr:
+            bg_noise, noise_sr = wav_resampling(
+                wav=bg_noise, origin_sr=noise_sr, target_sr=sr, backend="sox"
+            )
+        return bg_noise
 
     def add_bg_white_noise(
         self,
