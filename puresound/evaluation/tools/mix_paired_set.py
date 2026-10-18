@@ -50,7 +50,7 @@ import torch
 from puresound.audio.io import AudioIO
 from puresound.audio.noise import add_bg_noise
 from puresound.dataset.corpus.paired import read_transcript, write_pair
-from puresound.evaluation.records import chain_commit
+from puresound.evaluation.records import chain_commit, repo_relative
 
 AUDIO_SUFFIXES = (".wav", ".flac")
 
@@ -175,9 +175,9 @@ def mix_set(
                 "kind": "mixed",
                 "source": source,
                 "chain_commit": chain_commit(),
-                "speech_dir": str(speech_dir),
+                "speech_dir": repo_relative(str(speech_dir)),
                 "transcript_suffix": transcript_suffix,
-                "noise_dir": str(noise_dir),
+                "noise_dir": repo_relative(str(noise_dir)),
                 "noise_tracks": [p.stem for p in tracks],
                 "snr_range_db": [low, high],
                 "min_duration_s": min_duration,

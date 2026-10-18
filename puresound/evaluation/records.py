@@ -38,9 +38,36 @@ ROLES = ("gate", "monitor")
 VERDICTS = ("pass", "fail", "no-resolution")
 
 
+#: The source tree this module lives in; paths under it are written repo-relative.
+REPO_ROOT = Path(__file__).resolve().parents[2]
+
+
+def repo_relative(value: Any, repo_root: str | Path | None = None) -> Any:
+    """``value`` with every absolute path under the repository made repo-relative.
+
+    Records and eval-set provenance are committed, and a path such as
+    ``/home/<user>/<clone>/egs/.../ns_testset.yaml`` says where one person's
+    clone sits, not which file was used. Strings, and strings nested in dicts
+    and lists, lose the repository prefix wherever it occurs; anything outside
+    the repository (a corpus on a data disk, a scratch directory) is kept as
+    given, since it names something the repository does not contain.
+    """
+    root = Path(repo_root) if repo_root else REPO_ROOT
+    prefixes = {str(root) + "/", str(root.resolve()) + "/"}
+    if isinstance(value, str):
+        for prefix in prefixes:
+            value = value.replace(prefix, "")
+        return value
+    if isinstance(value, dict):
+        return {key: repo_relative(item, root) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [repo_relative(item, root) for item in value]
+    return value
+
+
 def chain_commit(repo_root: str | Path | None = None, paths: Sequence[str] = (".",)) -> str:
     """``<short sha>`` of the source tree, ``+dirty`` if selected paths changed."""
-    root = Path(repo_root) if repo_root else Path(__file__).resolve().parents[2]
+    root = Path(repo_root) if repo_root else REPO_ROOT
 
     def git(*args: str) -> str | None:
         try:
@@ -160,7 +187,9 @@ class GateRecord:
         ]
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        """The committed form: paths under the repository are repo-relative
+        (:func:`repo_relative`), whichever way the stages were invoked."""
+        return repo_relative({
             "tag": self.tag,
             "checkpoint": self.checkpoint,
             "recipe": self.recipe,
@@ -169,7 +198,7 @@ class GateRecord:
             "verdict": self.verdict,
             "unresolved_gates": self.unresolved,
             "stages": [asdict(stage) for stage in self.stages],
-        }
+        })
 
     def write(self, path: str | Path) -> Path:
         path = Path(path)

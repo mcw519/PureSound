@@ -36,7 +36,7 @@ from puresound.dataset.corpus.paired import (  # noqa: F401 -- re-exported for c
     measured_snr_db,
     rms_dbfs,
 )
-from puresound.evaluation.records import chain_commit
+from puresound.evaluation.records import chain_commit, repo_relative
 
 
 def recipe_sha256(path: str | Path) -> str:
@@ -134,7 +134,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     provenance = {
         "chain_commit": chain_commit(),
-        "recipe": str(Path(args.config_path).expanduser().resolve()),
+        "recipe": repo_relative(str(Path(args.config_path).expanduser().resolve())),
         "recipe_sha256": recipe_sha256(args.config_path),
         "seed": args.seed,
         "sample_rate": sample_rate,
