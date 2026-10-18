@@ -4,6 +4,7 @@ import torch.nn as nn
 from .active_bins import ActiveBinLogMagLoss
 from .asr_feature import ASRFeatureLoss
 from .dist import DistHeadRegressionLoss
+from .dnsmos import DNSMOSLoss
 from .identity import IdentityContrastiveLoss
 from .inherit import AnchorInheritanceLoss
 from .proximity import RelativeProximityLoss
@@ -27,6 +28,7 @@ __all__ = [
     "AnchorInheritanceLoss",
     "BackgroundVADHeadBCELoss",
     "DistHeadRegressionLoss",
+    "DNSMOSLoss",
     "F1_loss",
     "GE2ELoss",
     "IdentityContrastiveLoss",

@@ -26,6 +26,7 @@ backbone 的 side output（`vad_logits`、`dist_preds`、`identity_emb`、
 | [sdr](sdr.zh-TW.md) | `SDRLoss` | active | 時域 SDR 系列（SI-SNR、SD-SDR、SA-SDR、t-SDR 等），target-absent rows 另走專門路徑 |
 | [stft_loss](stft_loss.zh-TW.md) | `MultiResolutionSTFTLoss`、`SpectralLoss`、`OverSuppressionLoss` | active | 頻譜距離；`OverSuppressionLoss` 是只懲罰被去掉之 target 能量的單邊項 |
 | [active_bins](active_bins.zh-TW.md) | `ActiveBinLogMagLoss` | active | 逐 bin 的 log 幅度誤差，只算在 clean target 有語音的 bin 上 |
+| [dnsmos](dnsmos.zh-TW.md) | `DNSMOSLoss` | active | 把 DNSMOS P.835（SIG / BAK / OVRL）當可微分裁判；不需要 clean 參考 |
 | [asr_feature](asr_feature.zh-TW.md) | `ASRFeatureLoss` | active | 透過凍結的自監督語音模型做 feature matching，作為字錯誤的可微分 proxy |
 | [residual](residual.zh-TW.md) | `ResidualReferenceLoss` | active | 把 `noisy - enhanced` 監督到參考殘差上 |
 | [dist](dist.zh-TW.md) | `DistHeadRegressionLoss` | active | 給 `DistHead` 用、NaN-masked 的距離 / DRR regression |

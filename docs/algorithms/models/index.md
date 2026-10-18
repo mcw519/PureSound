@@ -41,6 +41,7 @@ to it.
 | Page | What it holds |
 | --- | --- |
 | [Activation functions](lobe/activation.md) | `get_activation`, activation lookup by name |
+| [ONNX module](lobe/onnx_module.md) | `OnnxModule`, runs a small ONNX graph (a published judge) as a differentiable torch module |
 | [Attention](lobe/attention.md) | positional encoding, masked multi-head attention and a Transformer encoder layer |
 | [Frequency banding](lobe/banding.md) | ERB / mel band edges, triangular band matrices and `BandBottleneck` |
 | [CNN blocks](lobe/cnn.md) | depthwise-separable convolution and fast Fourier convolution |
