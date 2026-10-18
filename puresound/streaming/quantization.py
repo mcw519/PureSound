@@ -20,8 +20,14 @@ QUANTIZED_OPS = ("LSTM", "MatMul", "Gemm")
 INT8_MAX_RELATIVE_ERROR = 0.1
 
 
-def quantize_int8(path: str | Path) -> dict[str, Any]:
-    """Replace the float graph at ``path`` with its dynamic int8 version."""
+def quantize_int8(path: str | Path, per_channel: bool = False) -> dict[str, Any]:
+    """Replace the float graph at ``path`` with its dynamic int8 version.
+
+    ``per_channel`` gives every output channel of a weight its own scale
+    instead of one scale per tensor: the same graph size and operators, a
+    finer fit. The wide voice-isolation graph needs it to stay inside the
+    sanity bound; the narrow graphs do not.
+    """
     from onnx import TensorProto
     from onnxruntime.quantization import QuantType, quantize_dynamic
 
@@ -30,7 +36,7 @@ def quantize_int8(path: str | Path) -> dict[str, Any]:
     try:
         # A custom operator's outputs carry no inferred type; they are float.
         quantize_dynamic(path, staged, op_types_to_quantize=list(QUANTIZED_OPS),
-                         weight_type=QuantType.QInt8,
+                         weight_type=QuantType.QInt8, per_channel=bool(per_channel),
                          extra_options={"DefaultTensorType": TensorProto.FLOAT})
         os.replace(staged, path)
     finally:
@@ -39,6 +45,7 @@ def quantize_int8(path: str | Path) -> dict[str, Any]:
         "type": "dynamic_int8",
         "op_types": list(QUANTIZED_OPS),
         "weight_type": "QInt8",
+        "per_channel": bool(per_channel),
         "activations": "uint8, per tensor, computed at run time",
     }
 

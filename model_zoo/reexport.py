@@ -4,7 +4,7 @@ Run from the repository root with a locally built SSM library:
   uv run python model_zoo/reexport.py --native-library /path/libpuresound_ssm.so
 All graphs are staged first. Primary graphs use standard ONNX operators; Mamba
 models also get a hashed native companion. A variant whose sidecar records int8
-quantization is re-quantized. Checkpoint weights are unchanged.
+quantization is re-quantized the same way (per tensor or per channel). Checkpoint weights are unchanged.
 """
 
 import argparse
@@ -165,12 +165,13 @@ def reexport(library, report_path):
                 inter_type = config["model"]["backbone"]["backbone_args"].get("inter_type", "lstm")
                 guard_config = previous.get("onset_guard")
                 guard = OnsetGuard.from_manifest(guard_config) if guard_config else None
-                quantized = (previous.get("quantization") or {}).get("type") == "dynamic_int8"
+                record = previous.get("quantization") or {}
+                quantized = record.get("type") == "dynamic_int8"
                 manifest = export_streaming_dpcrn_onnx(
                     ROOT / model["source_config"], ROOT / model["source_checkpoint"], output,
                     postprocess=Postprocessor(dry_blend=float(previous["recommended_inference"]["dry_blend"])),
                     onset_guard=guard, optimization="cpu" if inter_type.startswith("mamba") else "portable",
-                    native_library=library, quantization="int8" if quantized else "none",
+                    native_library=library, quantization=("int8-per-channel" if record.get("per_channel") else "int8") if quantized else "none",
                 )
                 validation = stream_check(destination, ROOT / artifact["manifest"], output, library, samples)
                 manifest["onnx_path"] = artifact["path"]

@@ -70,13 +70,16 @@ Records: [v3](../benchmarks/records/ns_dpcrn-mamba_capWL3_mg_ep3.json),
   trade-off recorded in its benchmark lineage. v1 remains available for its
   lower VCTK deletion rate.
 
-## v3 flash (int8)
+## flash (int8) variants
 
-`flash` is an artifact variant of v3, not a new checkpoint: the same weights, with
-the LSTM and matrix-product weights stored as int8 and activations quantized at
-run time (`export --quantize int8`). Select it with `--variant flash`. Each column
-below is the streaming ONNX output on the same items, scored as paired
-differences; the v3 column therefore differs slightly from the checkpoint record.
+`flash` is an artifact variant of each version, not a new checkpoint: the same
+weights, with the LSTM and matrix-product weights stored as int8 and activations
+quantized at run time (`export --quantize int8`), in both the standard graph and
+the native companion. Select it with `--variant flash`. Each column below is the
+streaming ONNX output on the same items, scored as paired differences; the float
+columns therefore differ slightly from the checkpoint records.
+
+### v3
 
 | Measure | v3 | v3 flash | Paired difference (95% CI) |
 |---|---|---|---|
@@ -95,6 +98,23 @@ noisy-speech sample, one thread on an AVX-512 Xeon; read the ratios, and since
 int8 kernels differ by ISA, measure on the target CPU. Browser/WASM payloads keep
 the float graph. Deletion rates used Whisper large-v3 in `int8_float16`, so they
 are not comparable with the table above.
+
+### v1 and v2
+
+| Measure | v1 float → flash | Paired difference (95% CI) | v2 float → flash | Paired difference (95% CI) |
+|---|---|---|---|---|
+| CPU RTF, 1 thread, standard / native graph | 0.312 / 0.256 → 0.276 / 0.224 | −12% / −12% | 0.310 / 0.258 → 0.278 / 0.228 | −10% / −12% |
+| frozen synthetic PESQ-WB | 2.433 → 2.428 | −0.0054 (−0.0064, −0.0045) | 2.490 → 2.491 | +0.0015 (+0.0006, +0.0023) |
+| VCTK-DEMAND PESQ-WB | 2.553 → 2.550 | −0.0032 (−0.0050, −0.0016) | 2.572 → 2.568 | −0.0039 (−0.0081, −0.0009) |
+| VCTK-DEMAND SI-SDR (dB) | 18.41 → 18.38 | −0.031 (−0.036, −0.027) | 18.14 → 18.13 | −0.005 (−0.010, +0.000) |
+| DNS-5 dev DNSMOS OVR | 2.808 → 2.807 | −0.0009 (−0.0016, −0.0001) | 2.828 → 2.828 | −0.0002 (−0.0009, +0.0005) |
+| VCTK-DEMAND deletion rate | 0.0077 → 0.0076 | −0.0001 (−0.0003, +0.0000) | 0.0077 → 0.0077 | +0.0000 |
+| VCTK-DEMAND WER | 0.0359 → 0.0349 | −0.0002 (−0.0017, +0.0019) | 0.0338 → 0.0352 | +0.0018 (−0.0001, +0.0044) |
+
+The same picture as v3, a little smaller on CPU: quality moves by thousandths and
+words do not move resolvably. Timings are medians of three interleaved rounds on
+the same 5-second sample and CPU as v3's; word rates here used Whisper large-v3 in
+`float16`.
 
 ## PCS post-filter (optional)
 

@@ -123,7 +123,9 @@ uv run python sdk/web/tools/build_assets.py
 companion 中 LSTM 與矩陣乘法的權重存成 int8，activation 在執行時才量化。匯出仍先嚴格驗證
 浮點圖；int8 圖只檢查輸出有限且在合理範圍內，量到的誤差寫進 manifest 的 `quantization`。
 這個範圍不代表品質：int8 輸出會隨圖或 kernel 的任何變動而改變，所以每次 int8 匯出都要
-重跑閘門。NS v3 以 `flash` variant 發布（`--variant flash`）。
+重跑閘門。`--quantize int8-per-channel` 讓權重的每個輸出通道有自己的 scale：運算子與大小相同，擬合更細；
+寬的 voice-isolation 圖需要它才能留在界線內。catalog 裡每個 DPCRN 模型都以 `flash` variant
+發布 int8 圖（`--variant flash`）。
 
 ## 支援的設定
 

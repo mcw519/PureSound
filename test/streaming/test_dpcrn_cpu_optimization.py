@@ -433,6 +433,7 @@ def test_int8_export_quantizes_both_graphs_and_records_it(tmp_path, native_libra
                                           native_library=native_library, quantization="int8")
     record = manifest["quantization"]
     assert record["type"] == "dynamic_int8" and set(record["relative_error"]) == {"primary", "native"}
+    assert record["per_channel"] is False
     native_path = path.with_name(manifest["cpu_optimization"]["native_graph"])
     for graph in (path, native_path):
         ops = {node.op_type for node in onnx.load(graph).graph.node}
@@ -445,3 +446,17 @@ def test_int8_export_quantizes_both_graphs_and_records_it(tmp_path, native_libra
         assert np.isfinite(np.concatenate([runtime.process_samples(samples), runtime.flush()])).all()
     with pytest.raises(ValueError, match="CPU deployment"):
         export_streaming_dpcrn_onnx(config, checkpoint, tmp_path / "plain.onnx", quantization="int8")
+
+
+def test_per_channel_int8_is_recorded_and_still_quantizes_the_graph(tmp_path):
+    """Per-channel weight scales are the same operators at the same size; the
+    manifest has to say which fit a deployed graph carries."""
+    config, checkpoint = _mamba_checkpoint(tmp_path)
+    path = tmp_path / "flash_pc.onnx"
+    manifest = export_streaming_dpcrn_onnx(config, checkpoint, path, optimization="portable",
+                                          quantization="int8-per-channel")
+    record = manifest["quantization"]
+    assert record["per_channel"] is True and record["relative_error"]["primary"] < 0.1
+    assert {"DynamicQuantizeLSTM", "MatMulInteger"} <= {node.op_type for node in onnx.load(path).graph.node}
+    with pytest.raises(ValueError, match="int8-per-channel"):
+        export_streaming_dpcrn_onnx(config, checkpoint, tmp_path / "x.onnx", optimization="portable", quantization="int4")

@@ -268,8 +268,9 @@ def build_parser() -> argparse.ArgumentParser:
                    help="portable: fixed batch + frequency-major + single-step LSTM; cpu: also export Mamba SSM companion")
     p.add_argument("--native-library", type=Path, default=None,
                    help="required to validate the native companion for --optimization cpu")
-    p.add_argument("--quantize", choices=("none", "int8"), default="none",
-                   help="int8: dynamic int8 LSTM/MatMul/Gemm weights for CPU; lossy, so gate the result")
+    p.add_argument("--quantize", choices=("none", "int8", "int8-per-channel"), default="none",
+                   help="int8: dynamic int8 LSTM/MatMul/Gemm weights for CPU; lossy, so gate the result. "
+                        "int8-per-channel: one scale per weight channel, same size, finer fit")
     p.add_argument(
         "--dry-blend",
         dest="dry_blend",

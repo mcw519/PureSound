@@ -331,8 +331,8 @@ def export_streaming_onnx(
         raise ValueError("optimization must be none, portable, or cpu")
     if optimization == "cpu" and native_library is None:
         raise ValueError("CPU export needs native_library for native graph validation")
-    if quantization not in {"none", "int8"}:
-        raise ValueError("quantization must be none or int8")
+    if quantization not in {"none", "int8", "int8-per-channel"}:
+        raise ValueError("quantization must be none, int8 or int8-per-channel")
     if quantization != "none" and optimization == "none":
         raise ValueError("int8 quantization is a CPU deployment option; export with optimization")
     frame_model = load_streaming_model(variant, config_path, checkpoint_path)
@@ -416,10 +416,11 @@ def export_streaming_onnx(
     _check_rollout("exported ONNX", _rollout(_ort_step(session, input_names), frames, initial_state, n_outputs),
                    reference, output_names)
     quantization_record = None
-    if quantization == "int8":
+    if quantization != "none":
         from puresound.streaming.quantization import check_int8_rollout, quantize_int8
 
-        quantization_record = quantize_int8(onnx_path)
+        per_channel = quantization == "int8-per-channel"
+        quantization_record = quantize_int8(onnx_path, per_channel=per_channel)
         session = onnxruntime.InferenceSession(str(onnx_path), sess_options=options, providers=providers)
         quantization_record["relative_error"] = {"primary": check_int8_rollout(
             "int8 ONNX", _rollout(_ort_step(session, input_names), frames, initial_state, n_outputs),
@@ -490,7 +491,7 @@ def export_streaming_onnx(
                        _rollout(_ort_step(native_session, input_names), frames, initial_state, n_outputs),
                        reference, output_names)
         if quantization_record is not None:
-            quantize_int8(native_path)
+            quantize_int8(native_path, per_channel=per_channel)
             native_session = onnxruntime.InferenceSession(
                 str(native_path), sess_options=native_options, providers=["CPUExecutionProvider"],
             )

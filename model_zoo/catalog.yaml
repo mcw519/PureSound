@@ -34,6 +34,13 @@ models:
         manifest: egs/voice_isolate/pretrained_ckpt/streaming/dpcrn_v8.json
         processor: stft_frame_ort
         sha256: 322a3e3f05db85ae0b11391c386047c051ff54a16e5eda245e6a11d12e3822c8
+      - format: onnx
+        variant: flash
+        path: egs/voice_isolate/pretrained_ckpt/streaming/dpcrn_v8_flash.onnx
+        manifest: egs/voice_isolate/pretrained_ckpt/streaming/dpcrn_v8_flash.json
+        processor: stft_frame_ort
+        sha256: 41a9bdb54c3a60f6e3424506ae3914891b10fa93e4eff420088a856ac17ce59a
+        description: "int8 weights for tight CPU budgets: about 15% less CPU time, no resolvable change in WER or deletions on the moderate-reverb set."
 
   - id: voice-isolate-dpcrn-curriculum-v1
     display_name: Voice Isolation DPCRN curriculum v1
@@ -65,6 +72,13 @@ models:
         manifest: egs/voice_isolate/pretrained_ckpt/streaming/dpcrn_curriculum_v1.json
         processor: stft_frame_ort
         sha256: bf69dfbf03d01415a6307f23d8a10fa985f101d34a2bb6fccfcdc4f3250ff84e
+      - format: onnx
+        variant: flash
+        path: egs/voice_isolate/pretrained_ckpt/streaming/dpcrn_curriculum_v1_flash.onnx
+        manifest: egs/voice_isolate/pretrained_ckpt/streaming/dpcrn_curriculum_v1_flash.json
+        processor: stft_frame_ort
+        sha256: 2e18e847d75fdaa3fcf6c185c81289a0eeeb36002dd950eeebf13215ccf2506b
+        description: "int8 weights for tight CPU budgets: about 15% less CPU time, no resolvable change in WER or deletions on the moderate-reverb set."
 
   - id: voice-isolate-dpcrn-curriculum-v2
     display_name: Voice Isolation DPCRN curriculum v2 (wide)
@@ -96,6 +110,13 @@ models:
         manifest: egs/voice_isolate/pretrained_ckpt/streaming/dpcrn_curriculum_v2.json
         processor: stft_frame_ort
         sha256: 9a79e9eaeab9a6e288fec7216adb1c87a05b557948e8aa014f5f6096e1f375e4
+      - format: onnx
+        variant: flash
+        path: egs/voice_isolate/pretrained_ckpt/streaming/dpcrn_curriculum_v2_flash.onnx
+        manifest: egs/voice_isolate/pretrained_ckpt/streaming/dpcrn_curriculum_v2_flash.json
+        processor: stft_frame_ort
+        sha256: b73a0046e62d3e91d50d2f86b4dfadbd4f9c68bb5e073f1f21ace20bd140ca11
+        description: "int8 weights (per channel) for tight CPU budgets: about 17% less CPU time, no resolvable change in WER or deletions on the moderate-reverb set."
 
   - id: noise-suppression-dpcrn-mamba-v3
     display_name: Noise Suppression DPCRN-Mamba v3
@@ -166,6 +187,13 @@ models:
         manifest: egs/noise_suppression/pretrained_ckpt/streaming/dpcrn_mamba_v2.json
         processor: stft_frame_ort
         sha256: a28cc5c9736f415a5ed603bd97cc415d11d8088cb2e288d20334a0713f723c86
+      - format: onnx
+        variant: flash
+        path: egs/noise_suppression/pretrained_ckpt/streaming/dpcrn_mamba_v2_flash.onnx
+        manifest: egs/noise_suppression/pretrained_ckpt/streaming/dpcrn_mamba_v2_flash.json
+        processor: stft_frame_ort
+        sha256: f576fb207853571df3307370a0a4920fc623fa93d2c252873166f3e3f0114098
+        description: "int8 weights for tight CPU budgets: about 11% less CPU time, PESQ within 0.004, no resolvable change in word deletions."
 
   - id: noise-suppression-dpcrn-mamba-v1
     display_name: Noise Suppression DPCRN-Mamba v1
@@ -197,6 +225,13 @@ models:
         manifest: egs/noise_suppression/pretrained_ckpt/streaming/dpcrn_mamba_v1.json
         processor: stft_frame_ort
         sha256: eabdca9fa7b0cc66c839d41e2fe07e409c9c09ad476e4dd0681a7bc63f04bfab
+      - format: onnx
+        variant: flash
+        path: egs/noise_suppression/pretrained_ckpt/streaming/dpcrn_mamba_v1_flash.onnx
+        manifest: egs/noise_suppression/pretrained_ckpt/streaming/dpcrn_mamba_v1_flash.json
+        processor: stft_frame_ort
+        sha256: ecb4e7c12aaef4b5f024494b67487c7d1b8a1d938f4ba9e3888fd278a3b82791
+        description: "int8 weights for tight CPU budgets: about 12% less CPU time, PESQ about 0.004 lower, no resolvable change in word deletions."
 
   - id: speaker-verification-ps-spk-v1
     display_name: Speaker Verification PS-spk-v1

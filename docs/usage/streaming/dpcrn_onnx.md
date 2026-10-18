@@ -141,7 +141,10 @@ the float graph strictly first. It then checks only that the int8 graph is finit
 and within a sanity bound, and records the measured error in the manifest's
 `quantization` section. That bound does not decide quality: int8 output shifts
 with any change to the graph or kernel, so gate every int8 export again.
-NS v3 ships this as the `flash` variant (`--variant flash`).
+`--quantize int8-per-channel` gives each output channel of a weight its own scale:
+the same operators and size, a finer fit; the wide voice-isolation graph needs
+it to stay inside the bound. Every DPCRN model in the catalog ships its int8 graph
+as the `flash` variant (`--variant flash`).
 
 ## Supported configuration
 
