@@ -108,7 +108,8 @@ correct but much slower.
 `noise-suppression-dpcrn-mamba-v3` uses a wider model and a separate training
 chain: `train_dpcrn_mamba_capW_s0.yaml` → `train_dpcrn_mamba_capWL3_s1.yaml` →
 `train_dpcrn_mamba_capWL3_ft.yaml` → `train_dpcrn_mamba_capWL3_mg.yaml`.
-Training snapshots, warm-start checkpoints and release measurements are in
+The final stage calibrates against a PESQ critic and the DNSMOS P.835 judge
+(`DNSMOSLoss`). Training snapshots, warm-start checkpoints and release measurements are in
 [`pretrained_ckpt/README.md`](pretrained_ckpt/README.md#reproduce-v3).
 v3 needs `config/infer_dpcrn_mamba_wide.yaml` for export; `infer_dpcrn.yaml`
 continues to serve v1/v2. The default remains v2.

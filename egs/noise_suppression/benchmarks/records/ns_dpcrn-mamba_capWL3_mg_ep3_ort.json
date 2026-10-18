@@ -35,7 +35,7 @@
       "extra": {
         "set_provenance": {
           "chain_commit": "cd981f1+dirty",
-          "recipe": "/home/milowu/A4Audio/PureSound/egs/noise_suppression/config/eval/ns_testset.yaml",
+          "recipe": "egs/noise_suppression/config/eval/ns_testset.yaml",
           "recipe_sha256": "02dee78f7ad05e8f9e808cf7f284461a3ccb0e309a53204ae2aaf1496810c7a1",
           "seed": 1234,
           "sample_rate": 16000,
@@ -62,7 +62,7 @@
       "extra": {
         "set_provenance": {
           "chain_commit": "cd981f1+dirty",
-          "recipe": "/home/milowu/A4Audio/PureSound/egs/noise_suppression/config/eval/ns_testset.yaml",
+          "recipe": "egs/noise_suppression/config/eval/ns_testset.yaml",
           "recipe_sha256": "02dee78f7ad05e8f9e808cf7f284461a3ccb0e309a53204ae2aaf1496810c7a1",
           "seed": 1234,
           "sample_rate": 16000,
@@ -89,7 +89,7 @@
       "extra": {
         "set_provenance": {
           "chain_commit": "cd981f1+dirty",
-          "recipe": "/home/milowu/A4Audio/PureSound/egs/noise_suppression/config/eval/ns_testset.yaml",
+          "recipe": "egs/noise_suppression/config/eval/ns_testset.yaml",
           "recipe_sha256": "02dee78f7ad05e8f9e808cf7f284461a3ccb0e309a53204ae2aaf1496810c7a1",
           "seed": 1234,
           "sample_rate": 16000,
@@ -116,7 +116,7 @@
       "extra": {
         "set_provenance": {
           "chain_commit": "cd981f1+dirty",
-          "recipe": "/home/milowu/A4Audio/PureSound/egs/noise_suppression/config/eval/ns_testset.yaml",
+          "recipe": "egs/noise_suppression/config/eval/ns_testset.yaml",
           "recipe_sha256": "02dee78f7ad05e8f9e808cf7f284461a3ccb0e309a53204ae2aaf1496810c7a1",
           "seed": 1234,
           "sample_rate": 16000,
@@ -143,7 +143,7 @@
       "extra": {
         "set_provenance": {
           "chain_commit": "cd981f1+dirty",
-          "recipe": "/home/milowu/A4Audio/PureSound/egs/noise_suppression/config/eval/ns_testset.yaml",
+          "recipe": "egs/noise_suppression/config/eval/ns_testset.yaml",
           "recipe_sha256": "02dee78f7ad05e8f9e808cf7f284461a3ccb0e309a53204ae2aaf1496810c7a1",
           "seed": 1234,
           "sample_rate": 16000,
@@ -170,7 +170,7 @@
       "extra": {
         "set_provenance": {
           "chain_commit": "cd981f1+dirty",
-          "recipe": "/home/milowu/A4Audio/PureSound/egs/noise_suppression/config/eval/ns_testset.yaml",
+          "recipe": "egs/noise_suppression/config/eval/ns_testset.yaml",
           "recipe_sha256": "02dee78f7ad05e8f9e808cf7f284461a3ccb0e309a53204ae2aaf1496810c7a1",
           "seed": 1234,
           "sample_rate": 16000,
@@ -582,6 +582,7 @@
     ],
     "released_as": "noise-suppression-dpcrn-mamba-v3",
     "release_note": "The shipped path scored as a precomputed system so the PCS operating point has a paired baseline; frozen PESQ is 0.06 above the checkpoint record on this path, every other stage matches it.",
-    "previously_recorded_as": "v3_ort_pcs_off"
+    "previously_recorded_as": "v3_ort_pcs_off",
+    "superseded": "2026-10-18: noise-suppression-dpcrn-mamba-v3 now ships the ns_dpcrn-mamba_v3dm_mg ep3 weights (same model and ladder, DNSMOS P.835 term added to this stage). These weights are kept under pretrained_ckpt/backup/, not in the zoo."
   }
 }

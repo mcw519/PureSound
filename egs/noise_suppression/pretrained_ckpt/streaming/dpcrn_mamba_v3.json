@@ -1,7 +1,7 @@
 {
   "model_type": "dpcrn_streaming_frame",
   "processor": "stft_frame_ort",
-  "created_at": 1791120198,
+  "created_at": 1792286080,
   "onnx_path": "egs/noise_suppression/pretrained_ckpt/streaming/dpcrn_mamba_v3.onnx",
   "sample_rate": 16000,
   "fft_length": 512,
@@ -178,6 +178,7 @@
   "recommended_inference": {
     "dry_blend": 1.0,
     "spec_floor": 0.0,
+    "pcs": false,
     "suppression_ceiling_db": -Infinity,
     "note": "no post-graph relief; the runtime applies the graph output as-is."
   },
@@ -188,7 +189,7 @@
     "intra_op_num_threads": 1,
     "inter_lstm": null,
     "native_graph": "dpcrn_mamba_v3.native.onnx",
-    "native_sha256": "b7a7a7197fd9e38a51fd9984e8608e706d841200a9891fb5949f203088af638a",
+    "native_sha256": "090d227b9fb29d7e4cdc637b01911b481302a95cf9a05ae01e69d7787b0579f3",
     "native_domain": "com.puresound",
     "native_op_version": 1
   }

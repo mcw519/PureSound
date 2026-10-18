@@ -20,7 +20,7 @@ v3 必須使用 [`../config/infer_dpcrn_mamba_wide.yaml`](../config/infer_dpcrn_
 
 | 版本 | zoo id / 角色 | 訓練 | 適用情況 |
 |---|---|---|---|
-| `dpcrn_mamba_v3.ckpt` | `noise-suppression-dpcrn-mamba-v3`，已發布候選 | 加寬模型、多來源 coverage 訓練、ActiveBin、MetricGAN | 在意較高 PESQ 與 STOI；DNSMOS、辨識與 CPU 取捨見下 |
+| `dpcrn_mamba_v3.ckpt` | `noise-suppression-dpcrn-mamba-v3`，已發布候選 | 加寬模型、多來源 coverage 訓練、ActiveBin、MetricGAN 加 DNSMOS P.835 項 | 在意較高 PESQ、STOI 與 DNSMOS；辨識與 CPU 取捨見下 |
 | **`dpcrn_mamba_v2.ckpt`** | `noise-suppression-dpcrn-mamba-v2`，**預設** | v1 加 PESQ critic 微調 4 epoch | 平衡音質與 CPU 成本 |
 | `dpcrn_mamba_v1.ckpt` | `noise-suppression-dpcrn-mamba-v1`，候選 | 小模型 curriculum 加 ActiveBin 校準 | 最在意乾淨朗讀語音的刪字率 |
 | `dpcrn_mamba_v0.ckpt` | 已退役（`backup/`，不進版控） | 小模型 curriculum | -- |
@@ -33,32 +33,36 @@ v3 另有 int8 的 `flash` variant，適合 CPU 預算吃緊時使用，見 [v3 
 
 | 資料集 | 指標 | 未處理 | v1 | v2 | v3 |
 |---|---|---|---|---|---|
-| VCTK-DEMAND（n=824） | PESQ-WB | 1.968 | 2.551 | 2.567 | **2.631** |
-| | STOI | 0.9210 | 0.9213 | 0.9231 | **0.9310** |
-| | SI-SDR（dB） | 8.45 | **18.38** | 18.04 | 17.13 |
-| | 刪字率（Whisper large-v3） | 0.00744 | **0.00643** | 0.00870 | 0.00825 |
-| 凍結合成集（500 段；PESQ n=499） | PESQ-WB | 1.471 | 2.354 | 2.409 | **2.449** |
-| DNS-5 dev（n=921） | DNSMOS SIG / BAK / OVR / P.808 | 2.99 / 2.56 / 2.21 / 2.91 | 3.18 / 3.82 / 2.81 / 3.38 | 3.19 / 3.85 / 2.83 / 3.42 | 3.19 / 3.80 / 2.81 / 3.41 |
-| 困難 WER 集（n=500） | 原始 WER，含辨識器重複轉寫 | 0.12251 | -- | 0.16006 | 0.17651 |
-| | 刪字率 | 0.04235 | -- | 0.04728 | 0.04838 |
-| -- | CPU RTF，單執行緒（checkpoint 關卡） | -- | 0.171 | 0.164 | 0.242 |
+| VCTK-DEMAND（n=824） | PESQ-WB | 1.968 | 2.551 | 2.567 | **2.600** |
+| | STOI | 0.9210 | 0.9213 | 0.9231 | **0.9295** |
+| | SI-SDR（dB） | 8.45 | **18.38** | 18.04 | 16.79 |
+| | 刪字率（Whisper large-v3） | 0.00744 | **0.00643** | 0.00870 | 0.00721 |
+| 凍結合成集（500 段；PESQ n=499） | PESQ-WB | 1.471 | 2.354 | 2.409 | **2.440** |
+| DNS-5 dev（n=921） | DNSMOS SIG / BAK / OVR / P.808 | 2.99 / 2.56 / 2.21 / 2.91 | 3.18 / 3.82 / 2.81 / 3.38 | 3.19 / 3.85 / 2.83 / 3.42 | **3.24 / 3.89 / 2.88 / 3.44** |
+| 困難 WER 集（n=500） | 原始 WER，含辨識器重複轉寫 | 0.12251 | -- | 0.16006 | 0.17482 |
+| | 刪字率 | 0.04235 | -- | 0.04728 | 0.04669 |
+| -- | CPU RTF，單執行緒（checkpoint 關卡） | -- | 0.171 | 0.164 | 0.249 |
 | -- | CPU RTF，單執行緒（原始串流 ONNX，10 秒探測） | -- | -- | 0.408 | 0.570 |
 | -- | CPU RTF，單執行緒（目前最佳化 ONNX，5 秒語音） | -- | 0.299 | 0.311 | 0.446 |
 | -- | CPU RTF，單執行緒（目前 native SSM companion，5 秒語音） | -- | 0.257 | 0.266 | 0.390 |
 | -- | Graph look-ahead（ms） | -- | 30 | 30 | 30 |
 | -- | 串流演算法緩衝延遲（ms，不含運算） | -- | 52–62 | 52–62 | 52–62 |
 
-紀錄：[v3](../benchmarks/records/ns_dpcrn-mamba_capWL3_mg_ep3.json)、
+紀錄：[v3](../benchmarks/records/ns_dpcrn-mamba_v3dm_mg_ep3.json)、
 [v2](../benchmarks/records/ns_dpcrn-mamba_metricgan_ft_ep3.json)、
 [v1](../benchmarks/records/ns_dpcrn-mamba_activebin_ft_ep1.json)。
 
 ## 發版決定
 
-- v3 發布為可選候選，v2 維持預設。v3 的兩個 PESQ 關卡與 checkpoint CPU 預算通過，
+- v3 於 2026-10-18 更新：同一個加寬模型與訓練階梯，最後一階在 PESQ critic 旁加入 DNSMOS P.835 項
+  （run `ns_dpcrn-mamba_v3dm_mg`）。與前一版 v3 權重在 DNS-5 dev 配對：SIG +0.050、BAK +0.090、
+  OVR +0.076、P.808 +0.028，皆可解析且每個噪音類別都升；VCTK-DEMAND PESQ −0.031、SI-SDR −0.34 dB；
+  刪字在解析度內沒變。前一版權重留在 `backup/`（不進版控）。
+- v3 仍為可選候選，v2 維持預設。v3 的兩個 PESQ 關卡與 checkpoint CPU 預算通過，
   但兩個刪字護欄皆為 `no-resolution`（信賴區間跨零）；這不能證明沒有退步或保字能力改善。
-- v3 困難集有 7 段辨識器重複轉寫，未處理輸入有 1 段。任一側的假設字數超過參考字數
-  1.5 倍就排除該配對，留下 493 段：模型 WER **0.144154**、輸入 **0.120800**、
-  差 **+0.023354**。這個子集與先前版本不同，不能當成 v3 對 v2 的配對排名；
+- v3 困難集有 6 段辨識器重複轉寫，未處理輸入有 1 段。任一側的假設字數超過參考字數
+  1.5 倍就排除該配對，留下 493 段：模型 WER **0.143382**、輸入 **0.116340**、
+  差 **+0.027042**。這個子集與先前版本不同，不能當成 v3 對 v2 的配對排名；
   重複轉寫失敗也應另外保留為部署指標。
 - v2 曾在 VCTK 刪字護欄勉強未過時發布，接受的取捨記在其 benchmark lineage。
   v1 繼續提供較低的 VCTK 刪字率。
@@ -75,18 +79,18 @@ v3 另有 int8 的 `flash` variant，適合 CPU 預算吃緊時使用，見 [v3 
 | 量測 | v3 | v3 flash | 配對差（95% CI） |
 |---|---|---|---|
 | CPU RTF，單執行緒，標準 / native 圖 | 0.454 / 0.387 | 0.370 / 0.304 | −18.5% / −21.5% |
-| frozen 合成集 PESQ-WB | 2.508 | 2.504 | −0.0044（−0.0054, −0.0035） |
-| VCTK-DEMAND PESQ-WB | 2.629 | 2.624 | −0.0053（−0.0065, −0.0041） |
-| VCTK-DEMAND SI-SDR（dB） | 17.14 | 17.10 | −0.038（−0.047, −0.028） |
-| DNS-5 dev DNSMOS OVR | 2.808 | 2.805 | −0.0024（−0.0035, −0.0013） |
-| VCTK-DEMAND 刪字率 | 0.0086 | 0.0084 | −0.0002（−0.0019, +0.0013） |
-| hard 集刪字率（排除迴圈） | 0.0434 | 0.0434 | +0.0000（−0.0025, +0.0025） |
+| frozen 合成集 PESQ-WB | 2.499 | 2.496 | −0.0028（−0.0038, −0.0019） |
+| VCTK-DEMAND PESQ-WB | 2.598 | 2.591 | −0.0070（−0.0097, −0.0051） |
+| VCTK-DEMAND SI-SDR（dB） | 16.79 | 16.77 | −0.016（−0.027, −0.006） |
+| DNS-5 dev DNSMOS OVR | 2.884 | 2.883 | −0.0004（−0.0014, +0.0005） |
+| VCTK-DEMAND 刪字率 | 0.0061 | 0.0061 | +0.0000（+0.0000, +0.0000） |
+| hard 集刪字率 | 0.0451 | 0.0439 | −0.0009（−0.0043, +0.0025） |
 
-所有品質指標都可解析地較低，幅度約為 v3 相對 v2 PESQ 進步的十分之一；刪字沒有可解析的
-變化。適合 CPU 預算吃緊時使用。計時是在 AVX-512 Xeon 上以單執行緒處理 5 秒含噪語音、
-九次交錯測量的中位數；請看比例，且 int8 kernel 的效率因指令集而異，請在目標 CPU 上實測。
-瀏覽器／WASM 仍使用浮點圖。刪字率使用 `int8_float16` 的 Whisper large-v3，不能與上方表格
-直接比較。
+PESQ 與 SI-SDR 可解析地低千分之幾；DNSMOS OVR 與刪字沒有可解析的變化。適合 CPU 預算吃緊時使用。
+計時是在 AVX-512 Xeon 上以單執行緒處理 5 秒含噪語音、九次交錯測量的中位數，量的是 2026-10-05 的匯出；
+2026-10-18 的權重跑在形狀與運算數相同的圖上。請看比例，且 int8 kernel 的效率因指令集而異，
+請在目標 CPU 上實測。瀏覽器／WASM 仍使用浮點圖。字錯率使用 `float16` 的 Whisper large-v3
+（這次沒有辨識器重複轉寫），不能與上方表格直接比較。
 
 ### v1 與 v2
 
@@ -109,24 +113,24 @@ v3 另有 int8 的 `flash` variant，適合 CPU 預算吃緊時使用，見 [v3 
 Interspeech 2022）：log1p 幅度逐帶乘上固定的 γ 1.0–1.4，400–4400 Hz 最大，相位不動。
 它是請求參數，預設關，串流 runtime 逐幀套用、不增加延遲（CLI 用 `--param pcs=true`；
 web UI 有 `pcs` 開關）。下表兩欄都是 v3 在同一批輸入上的串流 ONNX 輸出（紀錄
-`ns_dpcrn-mamba_capWL3_mg_ep3_ort` 與 `..._ort_pcs`）。
+`ns_dpcrn-mamba_v3dm_mg_ep3_ort` 與 `..._ort_pcs`）。
 
 | 量測 | v3 | v3 + PCS | 配對差（95% CI） |
 |---|---|---|---|
-| frozen 合成集 PESQ-WB | 2.508 | **2.713** | +0.204（+0.192, +0.218） |
-| VCTK-DEMAND PESQ-WB | 2.629 | **3.020** | +0.391（+0.380, +0.402） |
-| VCTK-DEMAND 諧波對比間隙（dB） | −0.15 | **+0.41** | +0.553（+0.524, +0.582） |
-| VCTK-DEMAND STOI / ESTOI | 0.931 / 0.837 | 0.928 / 0.834 | −0.0032 / −0.0034 |
-| DNS-5 dev DNSMOS SIG | 3.191 | 3.063 | −0.128（−0.137, −0.119） |
-| DNS-5 dev DNSMOS BAK | 3.802 | 3.785 | −0.017（−0.025, −0.008） |
-| DNS-5 dev DNSMOS OVR | 2.808 | 2.705 | −0.102（−0.111, −0.094） |
-| DNS-5 dev DNSMOS P.808 | 3.409 | 3.319 | −0.089（−0.102, −0.077） |
-| VCTK-DEMAND WER / 刪字率 | 0.040 / 0.0082 | 0.039 / 0.0081 | 無可解析變化 |
-| hard 集原始 WER / 插入字率 | 0.149 / 0.018 | 0.163 / 0.039 | +0.015 / +0.020 |
+| frozen 合成集 PESQ-WB | 2.499 | **2.703** | +0.204（+0.192, +0.218） |
+| VCTK-DEMAND PESQ-WB | 2.598 | **2.994** | +0.397（+0.385, +0.409） |
+| VCTK-DEMAND 諧波對比間隙（dB） | −0.24 | **+0.31** | +0.556（+0.528, +0.586） |
+| VCTK-DEMAND STOI / ESTOI | 0.929 / 0.837 | 0.926 / 0.834 | −0.0031 / −0.0034 |
+| DNS-5 dev DNSMOS SIG | 3.241 | 3.118 | −0.123（−0.131, −0.114） |
+| DNS-5 dev DNSMOS BAK | 3.891 | 3.864 | −0.028（−0.035, −0.021） |
+| DNS-5 dev DNSMOS OVR | 2.884 | 2.778 | −0.106（−0.115, −0.097） |
+| DNS-5 dev DNSMOS P.808 | 3.437 | 3.347 | −0.089（−0.102, −0.077） |
+| VCTK-DEMAND WER / 刪字率 | 0.041 / 0.0070 | 0.041 / 0.0071 | +0.000（−0.003, +0.003）／ +0.0002（−0.0010, +0.0012） |
+| hard 集原始 WER / 插入字率 | 0.157 / 0.024 | 0.158 / 0.026 | +0.001（−0.013, +0.018）／ +0.002（−0.012, +0.018） |
 
 它買到的：共振峰更銳利，PESQ 和諧波對比間隙對此獎勵很大——v3 + PCS 的 PESQ 高於本頁
-所有模型。它付出的：DNSMOS 每個尺度都可解析地較低（語音品質掉最多），STOI 小退，hard 集
-上辨識器插入的字變成兩倍。SI-SDR 不列，因為拉伸是非線性的，該指標不再量失真。要比
+所有模型。它付出的：DNSMOS 每個尺度都可解析地較低（語音品質掉最多），STOI 小退。前一版 v3 權重上
+PCS 還讓 hard 集的辨識器插入字變成兩倍；目前的權重上這個變化已無法解析。SI-SDR 不列，因為拉伸是非線性的，該指標不再量失真。要比
 PESQ 數字時開；聆聽與 ASR 用途請關。
 
 ## 重現 v3
@@ -139,17 +143,17 @@ run 保留實驗名稱，v3 只用於已發布的模型。
 | [`train_dpcrn_mamba_capW_s0.yaml`](../config/train_dpcrn_mamba_capW_s0.yaml) | 從零開始；DNS-5、SNR [0,20] | 20／ep19、step40000 |
 | [`train_dpcrn_mamba_capWL3_s1.yaml`](../config/train_dpcrn_mamba_capWL3_s1.yaml) | capW_s0 ep19；多來源語音／噪音、coverage sampler、SNR [-10,40]、4 秒片段 | 20／ep19、step80000 |
 | [`train_dpcrn_mamba_capWL3_ft.yaml`](../config/train_dpcrn_mamba_capWL3_ft.yaml) | capWL3_s1 ep19；ActiveBin 校準 | 2／ep1、step4000 |
-| [`train_dpcrn_mamba_capWL3_mg.yaml`](../config/train_dpcrn_mamba_capWL3_mg.yaml) | capWL3_ft ep1；PESQ MetricGAN | 4／ep3、step8000 |
+| [`train_dpcrn_mamba_capWL3_mg.yaml`](../config/train_dpcrn_mamba_capWL3_mg.yaml) | capWL3_ft ep1；PESQ MetricGAN 加 DNSMOS P.835 項（`DNSMOSLoss`） | 4／ep3、step8000 |
 
 配方保存這次使用的設定；語料與 RIR 路徑須指向自己的副本，短階段使用已移除全靜音檔的池。
 `target_clipping: own_quantile` 保留訓練時的值。發布的 checkpoint 包含推論權重與來源資訊，
-移除 critic、loss、optimizer 與 sampler 狀態；推論權重與 `ns_dpcrn-mamba_capWL3_mg` ep3 相同。
+移除 critic、loss、optimizer 與 sampler 狀態；推論權重與 `ns_dpcrn-mamba_v3dm_mg` ep3 相同。
 
 ## 匯出驗證
 
 隨機輸入、凍結 NS 混音、困難集混音三段測試中，發布模型的推論輸出與來源 checkpoint
-逐位相同。CPU ONNX 串流對齊 480 樣本的 look-ahead 延遲後，一致性為
-92.2／116.7／111.6 dB，最大樣本誤差低於 5e-7。
+逐位相同。CPU ONNX 串流對齊 480 樣本的 look-ahead 延遲後，在匯出驗證探測上一致性為
+103.1 dB，最大樣本誤差低於 7e-7（2026-10-18 匯出；圖形狀與 2026-10-04 重新匯出相同，計時沿用）。
 
 較早一次發布環境測量使用原始串流 ONNX runtime：CPU 單執行緒、10 秒輸入、兩次暖機、
 三次交錯測量，v2 RTF **0.408**、v3 **0.570**。當時的原始 v3 匯出超過 **0.5** 的串流預算。

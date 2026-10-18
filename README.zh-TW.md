@@ -18,7 +18,7 @@ runtime 執行的 model zoo。
 | 人聲分離 | `voice-isolate-dpcrn-curriculum-v1` | default | 保留靠近麥克風的說話者，壓制遠處的說話者與噪音；在調校時用的收音硬體上效果最強 |
 | 人聲分離 | `voice-isolate-dpcrn-curriculum-v2` | candidate | 加寬的 curriculum 模型：WER 比 v1 低、遠處講話者壓得更深，CPU 成本是 v1 的 1.4 倍 |
 | 人聲分離 | `voice-isolate-dpcrn-v8` | candidate | 收音硬體未知時的保守選擇 |
-| 降噪 | `noise-suppression-dpcrn-mamba-v3` | candidate | 較寬的串流模型，PESQ 與 STOI 較高；刪字護欄仍未定論 |
+| 降噪 | `noise-suppression-dpcrn-mamba-v3` | candidate | 較寬的串流模型，PESQ、STOI 與 DNSMOS 較高；刪字護欄仍未定論 |
 | 降噪 | `noise-suppression-dpcrn-mamba-v2` | default | 串流降噪，平衡音質與 CPU 成本 |
 | 降噪 | `noise-suppression-dpcrn-mamba-v1` | candidate | 同一個模型、少了最後的音質微調；在乾淨朗讀語音上刪字較少 |
 | 語者驗證 | `speaker-verification-ps-spk-v1-1` | default | 192 維語者 embedding |

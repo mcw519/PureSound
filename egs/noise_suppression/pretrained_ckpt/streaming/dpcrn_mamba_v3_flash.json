@@ -1,7 +1,7 @@
 {
   "model_type": "dpcrn_streaming_frame",
   "processor": "stft_frame_ort",
-  "created_at": 1791161208,
+  "created_at": 1792286090,
   "onnx_path": "egs/noise_suppression/pretrained_ckpt/streaming/dpcrn_mamba_v3_flash.onnx",
   "sample_rate": 16000,
   "fft_length": 512,
@@ -178,6 +178,7 @@
   "recommended_inference": {
     "dry_blend": 1.0,
     "spec_floor": 0.0,
+    "pcs": false,
     "suppression_ceiling_db": -Infinity,
     "note": "no post-graph relief; the runtime applies the graph output as-is."
   },
@@ -188,7 +189,7 @@
     "intra_op_num_threads": 1,
     "inter_lstm": null,
     "native_graph": "dpcrn_mamba_v3_flash.native.onnx",
-    "native_sha256": "7b7351a9f728709bc174d67dbf6df7e65a43f235970697cc4742b6adf82a2ffa",
+    "native_sha256": "ac2ca4749f1fcdcb27b4802921a0112b840850b98661e3886bf327b28681c97b",
     "native_domain": "com.puresound",
     "native_op_version": 1
   },
@@ -200,10 +201,11 @@
       "Gemm"
     ],
     "weight_type": "QInt8",
+    "per_channel": false,
     "activations": "uint8, per tensor, computed at run time",
     "relative_error": {
-      "primary": 0.03825884312391281,
-      "native": 0.0382588766515255
+      "primary": 0.03470340371131897,
+      "native": 0.03470342233777046
     }
   }
 }

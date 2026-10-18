@@ -97,6 +97,7 @@ uv run python egs/noise_suppression/main.py \
 `noise-suppression-dpcrn-mamba-v3` 使用較寬模型與獨立訓練鏈：
 `train_dpcrn_mamba_capW_s0.yaml` → `train_dpcrn_mamba_capWL3_s1.yaml` →
 `train_dpcrn_mamba_capWL3_ft.yaml` → `train_dpcrn_mamba_capWL3_mg.yaml`。
+最後一階同時以 PESQ critic 與 DNSMOS P.835 裁判（`DNSMOSLoss`）校準。
 配方快照、warm-start checkpoint 與發布量測見
 [`pretrained_ckpt/README.zh-TW.md`](pretrained_ckpt/README.zh-TW.md#重現-v3)。
 v3 匯出使用 `config/infer_dpcrn_mamba_wide.yaml`，`infer_dpcrn.yaml` 繼續供 v1/v2 使用。
