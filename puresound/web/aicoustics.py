@@ -20,6 +20,8 @@ import numpy as np
 
 SDK_VERSION = "3.3.0"
 MODELS = {
+    "quail-l-16khz": ("Quail · L", "noise_suppression"),
+    "quail-s-16khz": ("Quail · S", "noise_suppression"),
     "quail-vf-2.2-l-16khz": ("Quail Voice Focus · L", "voice_isolation"),
     "quail-vf-2.2-s-16khz": ("Quail Voice Focus · S", "voice_isolation"),
     "quail-ms-l-16khz": ("Quail Multi Speaker · L", "noise_suppression"),
