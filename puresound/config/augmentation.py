@@ -86,6 +86,12 @@ class SpeechAugmentation(StrictConfig):
     is_target: StrictBool | None = None
     add_n_cases: int | tuple[int, int] | None = None
     snr_range: FloatRange | None = None
+    # With is_target, which interferers count as target: only those whose
+    # realized SIR (foreground over interferers, dB) falls inside this range.
+    # The rest stay in the mixture as something to remove, so a quieter,
+    # more distant voice is treated as background. None = every interferer
+    # is target.
+    target_sir_range: FloatRange | None = None
     media_voice: MediaVoiceConfig | None = None
     echo_playback: EchoPlaybackConfig | None = None
     overlap_control: OverlapControlConfig | None = None
@@ -106,6 +112,8 @@ class SpeechAugmentation(StrictConfig):
             and self.add_n_cases[0] > self.add_n_cases[1]
         ):
             raise ValueError("add_n_cases lower bound must not exceed upper bound")
+        if self.target_sir_range is not None and not self.is_target:
+            raise ValueError("target_sir_range selects which interferers are target; it needs is_target: true")
         return self
 
 

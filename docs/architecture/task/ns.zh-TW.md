@@ -60,7 +60,7 @@ keyword arguments 傳入，只接受 class 屬性 `AUGMENTATION_BLOCKS` 列出�
 
 | keyword | config model | 作用 |
 | --- | --- | --- |
-| `augmentation_speech_args`（基底） | `SpeechAugmentation` | 干擾者：`prob`、`add_n_cases`、`snr_range`、`is_target`、`media_voice`、`echo_playback`、`overlap_control` |
+| `augmentation_speech_args`（基底） | `SpeechAugmentation` | 干擾者：`prob`、`add_n_cases`、`snr_range`、`is_target`、`target_sir_range`、`media_voice`、`echo_playback`、`overlap_control`。搭配 `is_target` 時，`target_sir_range: [low, high]` 只把實際 SIR（前景對干擾者，dB）落在範圍內的干擾者放進目標；更小聲的留在混音裡當作要去掉的東西。未設定時所有干擾者都是目標 |
 | `augmentation_noise_args`（基底） | `NoiseAugmentation` | 錄製噪音（`noise_folder` 或加權的 `noise_sources`）、SNR 範圍或分段、白噪音、`room_coloring`、`absolute_floor` |
 | `augmentation_reverb_args`（基底） | `ReverbAugmentation` | room simulator、pre-generated bank 或 RIR 資料夾；`target_rir_type`；source-level 或 whole-mix |
 | `augmentation_speed_args`（基底） | `ContinuousSpeedAugmentation` | 在 `speed_range` 內以 0.05 為步距的 speed perturbation，兩端都包含 |
