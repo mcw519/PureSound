@@ -243,6 +243,21 @@ def test_the_sdk_opens_its_own_session_and_speaks_int16(tmp_path, monkeypatch):
     assert sdk.flush_int16().dtype == np.int16
 
 
+@pytest.mark.parametrize("available", [
+    ["CoreMLExecutionProvider", "CPUExecutionProvider"],
+    ["CUDAExecutionProvider", "CoreMLExecutionProvider", "CPUExecutionProvider"],
+])
+@pytest.mark.parametrize("provider", ["auto", "coreml", "cuda", "cpu"])
+def test_the_sdk_resolves_providers_like_the_module(monkeypatch, available, provider):
+    from puresound.inference import resolve_providers
+
+    monkeypatch.syspath_prepend(str(SDK_ROOT))
+    from puresound_streaming import PureSoundStreamingRuntime
+
+    assert PureSoundStreamingRuntime.resolve_providers(provider, available) == (
+        resolve_providers(provider, available, frame_graph=True))
+
+
 @pytest.mark.parametrize(
     "manifest_kwargs,match,kinds",
     [

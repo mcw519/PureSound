@@ -15,11 +15,15 @@ embedding exports retain dynamic waveform length and batch size.
 
 Every DPCRN model (voice isolation v8, curriculum-v1, curriculum-v2; noise
 suppression v1, v2, v3) also ships a `flash` variant: the same weights with int8
-LSTM and matrix-product weights, 11-21% less single-thread CPU time, quality
-changes of a few thousandths and no resolvable change in words. Select it with
-`--variant flash` (or `variant="flash"` in `load_model`); the default variant is
-unchanged. Each model card has its paired measurements. Browser/WASM assets keep
-the float graphs.
+LSTM and matrix-product weights, 11-21% less single-thread CPU time on an x86
+Xeon, quality changes of a few thousandths and no resolvable change in words.
+Select it with `--variant flash` (or `variant="flash"` in `load_model`); the
+default variant is unchanged. Each model card has its paired measurements.
+Browser/WASM assets keep the float graphs. The saving depends on the CPU: on an
+Apple M4 with ONNX Runtime 1.26, which runs float matrix products on the SME
+unit, flash is no faster than the default and 9-12% slower for the wide models
+(curriculum-v2, NS v3), so keep the default there
+([measurements](benchmarks/apple_m4_ort_20261020.json)).
 
 NS v3 also takes a `pcs` request parameter (perceptual contrast stretching of the
 enhanced spectrum, off by default): a higher PESQ and sharper formants, paid for
@@ -44,9 +48,9 @@ uv run python sdk/web/tools/build_assets.py
 
 The [re-export report](benchmarks/onnx_reexport_20261004.json) records original and
 new hashes, unchanged checkpoint hashes, per-model timing repeats, long streaming
-checks, and dynamic-length embedding parity. The native library selects its
-AVX2 or AVX-512 kernel at load time on x86-64 Linux; deployment hosts need a
-compatible C library. Browser/WASM uses the standard primary graphs and the
+checks, and dynamic-length embedding parity. The native library builds on
+Linux and macOS. On x86-64 Linux it selects its AVX2 or AVX-512 kernel at load
+time, and deployment hosts need a compatible C library; on arm64 it uses NEON. Browser/WASM uses the standard primary graphs and the
 generated web payload.
 
 Validate the checkout on CPU with:

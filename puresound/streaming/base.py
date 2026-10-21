@@ -405,9 +405,11 @@ def export_streaming_onnx(
 
         eliminate_singleton_transposes(onnx_path)
 
-    # Use the same provider policy as inference so an export validation run on
-    # macOS can exercise CoreML, while CUDA remains preferred on NVIDIA hosts.
-    providers = resolve_providers("auto", onnxruntime.get_available_providers())
+    # Use the same provider policy as inference, so CUDA remains preferred on
+    # NVIDIA hosts and macOS validates on the CPU its `auto` streams run on.
+    providers = resolve_providers(
+        "auto", onnxruntime.get_available_providers(), frame_graph=True
+    )
     options = onnxruntime.SessionOptions()
     if optimization != "none":
         providers = ["CPUExecutionProvider"]
@@ -692,7 +694,7 @@ class StreamingOrt:
 
     @staticmethod
     def _resolve_providers(provider: str, available: Sequence[str]) -> list[str]:
-        return resolve_providers(provider, available)
+        return resolve_providers(provider, available, frame_graph=True)
 
     def reset(self, batch_size: int = 1) -> None:
         if batch_size != 1:

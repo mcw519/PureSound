@@ -222,8 +222,10 @@ Ctrl/⌘ + O / I / S / E；*說明* 裡有完整列表）只在這個畫面上�
 
 ## Providers
 
-`auto` 依序嘗試 CUDA、CoreML、CPU。也可指定 `cpu`、`cuda`、`coreml`
-或 `mps`；`mps` 是 CoreML 的 alias。Response 會回報實際執行模型的 provider。
+`auto` 依序嘗試 CUDA、CoreML、CPU；串流增強模型（voice isolation 與 noise
+suppression）例外，依序嘗試 CUDA、CPU：它們的圖每次呼叫只跑一幀，CoreML 派送一次的
+時間比單一 CPU 執行緒算完這一幀還久。也可指定 `cpu`、`cuda`、`coreml` 或 `mps`；
+`mps` 是 CoreML 的 alias。Response 會回報實際執行模型的 provider。
 
 ## API
 

@@ -257,7 +257,8 @@
         option.textContent = available ? label : `${label} · ${t("unavailable")}`;
       });
     });
-    const preferred = capabilities.cuda ? "CUDA" : capabilities.coreml ? "CoreML" : "CPU";
+    // What `auto` picks for the streaming enhancement models, which skip CoreML.
+    const preferred = capabilities.cuda ? "CUDA" : "CPU";
     $("#runtime-meta").textContent = [state.runtimeMeta, preferred].filter(Boolean).join(" · ");
   }
 

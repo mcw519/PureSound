@@ -383,6 +383,32 @@ def test_the_runtime_asks_for_cuda_then_falls_back_to_cpu(tmp_path, monkeypatch)
     assert runtime.providers == ["CUDAExecutionProvider", "CPUExecutionProvider"]
 
 
+def test_auto_runs_a_frame_graph_on_the_cpu_even_where_coreml_exists(tmp_path, monkeypatch):
+    class FakeSession(_Session):
+        def __init__(self, path, providers):
+            self.providers = providers
+
+        def get_providers(self):
+            return self.providers
+
+    monkeypatch.setitem(sys.modules, "onnxruntime", SimpleNamespace(
+        get_available_providers=lambda: ["CoreMLExecutionProvider", "CPUExecutionProvider"],
+        InferenceSession=FakeSession,
+    ))
+    onnx_path = tmp_path / "m.onnx"
+    onnx_path.write_bytes(b"fake")
+    onnx_path.with_suffix(".json").write_text(json.dumps({
+        "sample_rate": 16000, "fft_length": 512, "win_length": 512, "hop_length": 128,
+        "freq_bins": 257, "state_input_names": ["state"], "state_output_names": ["next_state"],
+        "output_names": ["enhanced_frame", "next_state"], "state_shapes": {"state": [1, 1, 1, 1]},
+    }))
+
+    # One hop per call: CoreML's dispatch costs more than the frame's work.
+    assert StreamingOrt(onnx_path).providers == ["CPUExecutionProvider"]
+    assert StreamingOrt(onnx_path, provider="coreml").providers == [
+        "CoreMLExecutionProvider", "CPUExecutionProvider"]
+
+
 def test_pcs_scales_each_enhanced_bin_by_its_gamma_before_the_inverse_fft(tmp_path):
     """The request knob reaches `_process_frame`, where it multiplies the graph's
     own bins (no second STFT, no latency); off, the frame is untouched."""

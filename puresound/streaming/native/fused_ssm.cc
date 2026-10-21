@@ -14,7 +14,7 @@ struct Kernel { const OrtApi* api; };
 // x86-64 host; only this loop is cloned, and the loader's ifunc resolver picks
 // the widest variant the running CPU supports. Never build with -march=native:
 // a host without that ISA would die of SIGILL inside Run, where no fallback
-// can catch it.
+// can catch it. arm64 needs no clones: its baseline already has NEON.
 #if defined(__x86_64__) && (defined(__GNUC__) || defined(__clang__))
 #define PURESOUND_ISA_CLONES __attribute__((target_clones("avx512f", "avx2", "default")))
 #else
@@ -54,11 +54,19 @@ LANES_INLINE vf16 exp16(vf16 x) {
   return p * (vf16)((n + 127) << 23);
 }
 
+// The same lane permutation in GCC's and Clang's spelling, so both compilers
+// add the lanes in one order.
+#if defined(__clang__)
+#define SHUFFLE16(v, ...) __builtin_shufflevector(v, v, __VA_ARGS__)
+#else
+#define SHUFFLE16(v, ...) __builtin_shuffle(v, vi16{__VA_ARGS__})
+#endif
+
 LANES_INLINE float sum16(vf16 v) {
-  v += __builtin_shuffle(v, vi16{8, 9, 10, 11, 12, 13, 14, 15, 0, 1, 2, 3, 4, 5, 6, 7});
-  v += __builtin_shuffle(v, vi16{4, 5, 6, 7, 0, 1, 2, 3, 12, 13, 14, 15, 8, 9, 10, 11});
-  v += __builtin_shuffle(v, vi16{2, 3, 0, 1, 6, 7, 4, 5, 10, 11, 8, 9, 14, 15, 12, 13});
-  v += __builtin_shuffle(v, vi16{1, 0, 3, 2, 5, 4, 7, 6, 9, 8, 11, 10, 13, 12, 15, 14});
+  v += SHUFFLE16(v, 8, 9, 10, 11, 12, 13, 14, 15, 0, 1, 2, 3, 4, 5, 6, 7);
+  v += SHUFFLE16(v, 4, 5, 6, 7, 0, 1, 2, 3, 12, 13, 14, 15, 8, 9, 10, 11);
+  v += SHUFFLE16(v, 2, 3, 0, 1, 6, 7, 4, 5, 10, 11, 8, 9, 14, 15, 12, 13);
+  v += SHUFFLE16(v, 1, 0, 3, 2, 5, 4, 7, 6, 9, 8, 11, 10, 13, 12, 15, 14);
   return v[0];
 }
 

@@ -84,12 +84,17 @@ def test_lstm_supports_portable_but_refuses_ssm_fusion():
         frame.enable_cpu_optimization(native_ssm=True)
 
 
-@pytest.fixture(scope="module")
-def native_library(tmp_path_factory):
+def _skip_without_compiler():
     import sys
 
-    if not sys.platform.startswith("linux") or not shutil.which("g++"):
-        pytest.skip("optional native library requires Linux and g++")
+    compiler = "clang++" if sys.platform == "darwin" else "g++"
+    if not sys.platform.startswith(("linux", "darwin")) or not shutil.which(compiler):
+        pytest.skip(f"optional native library requires Linux or macOS and {compiler}")
+
+
+@pytest.fixture(scope="module")
+def native_library(tmp_path_factory):
+    _skip_without_compiler()
     root = tmp_path_factory.mktemp("ssm-library")
     return build_library(root / "libpuresound_ssm.so")
 
@@ -400,8 +405,7 @@ def test_export_holds_the_optimized_graph_to_the_original_model(tmp_path, monkey
 
 
 def test_rebuild_replaces_a_loaded_library_without_rewriting_it(tmp_path):
-    if not shutil.which("g++"):
-        pytest.skip("requires g++")
+    _skip_without_compiler()
     path = build_library(tmp_path / "libpuresound_ssm.so")
     loaded = os.stat(path).st_ino
     assert build_library(path) == path

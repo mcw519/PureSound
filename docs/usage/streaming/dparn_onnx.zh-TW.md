@@ -78,8 +78,9 @@ tail = runtime.flush()
 ```
 
 `process_samples()` 接受任意 chunk 大小，輸出已完成的 overlap-add 部分。`flush()` 補零並
-排空剩下的音訊。provider 可為 `auto`（CUDA、macOS 上再 CoreML，否則 CPU）、`cuda`、
-`coreml`、`mps`（CoreML 的別名）與 `cpu`。DPCRN 命令列工具的 `infer` 與 `benchmark` 子指令
+排空剩下的音訊。provider 可為 `auto`（CUDA，否則 CPU）、`cuda`、`coreml`、`mps`
+（CoreML 的別名）與 `cpu`。`auto` 不選 CoreML：逐幀圖每次呼叫只跑一個 hop，每次呼叫的
+派送成本比這一幀的計算還高。DPCRN 命令列工具的 `infer` 與 `benchmark` 子指令
 只讀 ONNX 檔與它的 manifest，所以也能跑 DPARN 的匯出：
 
 ```bash

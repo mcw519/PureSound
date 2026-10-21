@@ -15,13 +15,15 @@ installing the full PureSound training repository. It only needs:
 Choose exactly one ONNX Runtime extra:
 
 ```bash
-python -m pip install "sdk/python[cpu]"   # CPU or macOS CoreML
+python -m pip install "sdk/python[cpu]"   # CPU (includes CoreML on macOS)
 python -m pip install "sdk/python[cuda]"  # NVIDIA CUDA 12.x
 ```
 
 The runtime accepts `auto`, `cpu`, `cuda`, `coreml`, and `mps`. `auto` prefers
-CUDA, then CoreML, then CPU; `mps` is an alias for CoreML because ONNX Runtime
-does not have a native MPS execution provider. Confirm the active provider
+CUDA, then CPU. It skips CoreML because the graph runs one frame per call, which
+CoreML dispatches more slowly than one CPU thread computes it; request `coreml`
+to use it anyway. `mps` is an alias for CoreML because ONNX Runtime does not
+have a native MPS execution provider. Confirm the active provider
 with `onnxruntime.get_available_providers()`.
 
 ## Install From This Folder

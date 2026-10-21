@@ -72,7 +72,7 @@ with one combined input/hidden projection and standard ONNX gate operations;
 the intra frequency LSTM retains its trained bidirectional recurrence.
 The native companion option requires a Mamba inter path.
 
-Build the optional library on Linux, then export:
+Build the optional library on Linux or macOS, then export:
 
 ```bash
 uv run python -m puresound.streaming.native.build \
@@ -89,10 +89,12 @@ uv run python egs/voice_isolate/scripts/streaming_onnx.py benchmark \
     --warmup 2 --repeats 3
 ```
 
-The build requires a C++17 compiler (`g++` or `CXX`) and performs no downloads.
-It is compiled for the baseline x86-64 ISA and picks its AVX2 or AVX-512 kernel
-when loaded, so one build runs on any x86-64 Linux host with a compatible C
-library. Rebuilding replaces the file atomically, so running sessions keep the
+The build requires a C++17 compiler (`CXX`, else `g++` on Linux and `clang++`
+on macOS) and performs no downloads. On x86-64 it is compiled for the baseline
+ISA and picks its AVX2 or AVX-512 kernel when loaded, so one build runs on any
+x86-64 Linux host with a compatible C library. On arm64 (Apple Silicon, or
+aarch64 Linux) NEON is the baseline; on an Apple M4 the native companion took
+7-11% less time end to end than the portable graph for NS v1-v3. Rebuilding replaces the file atomically, so running sessions keep the
 copy they loaded.
 Only the fused kernel uses reassociated FP32 arithmetic, so small numerical
 differences are expected. The primary ONNX is portable and needs no compiler or
@@ -144,7 +146,9 @@ with any change to the graph or kernel, so gate every int8 export again.
 `--quantize int8-per-channel` gives each output channel of a weight its own scale:
 the same operators and size, a finer fit; the wide voice-isolation graph needs
 it to stay inside the bound. Every DPCRN model in the catalog ships its int8 graph
-as the `flash` variant (`--variant flash`).
+as the `flash` variant (`--variant flash`). Whether int8 saves time depends on the
+CPU: on an Apple M4 with ONNX Runtime 1.24+, float matrix products run on the SME
+unit and the float graph is as fast as flash or faster.
 
 ## Supported configuration
 
@@ -249,8 +253,10 @@ tail = runtime.flush()
   the stream ends with exactly `input length + streaming_delay_frames *
   hop_length` samples: the whole input, that many samples late. The partially
   covered overlap-add remainder past it maps to padding and is dropped.
-- `provider` is `auto` (CUDA, then CoreML, then CPU), `cpu`, `cuda`, `coreml`, or
-  `mps` (an alias for CoreML).
+- `provider` is `auto` (CUDA, then CPU), `cpu`, `cuda`, `coreml`, or `mps` (an
+  alias for CoreML). `auto` skips CoreML: a frame graph runs one hop per call,
+  and on an Apple M4 every catalog DPCRN ran 1.7-4.7x slower under CoreML than on
+  one CPU thread. Ask for `coreml` explicitly to use it anyway.
 
 ## Post-graph stages the runtime applies
 

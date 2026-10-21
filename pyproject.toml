@@ -56,8 +56,12 @@ puresound = "puresound.cli:main"
 [project.optional-dependencies]
 cpu = [
   "onnxruntime>=1.24,<2; sys_platform != 'darwin'",
-  # ORT 1.24+ arm64 wheels require macOS 14; keep macOS 13 compatible.
-  "onnxruntime==1.23.2; sys_platform == 'darwin'",
+  # ORT 1.24+ ships macOS wheels only for arm64 on macOS 14 (Darwin 23) and
+  # later. Those builds run fp32 matrix products on the SME unit of Apple M4
+  # and later chips: 1.5-2.5x faster on the streaming graphs. Intel Macs and
+  # macOS 13 keep 1.23.2.
+  "onnxruntime>=1.24,<2; sys_platform == 'darwin' and platform_machine == 'arm64' and platform_release >= '23'",
+  "onnxruntime==1.23.2; sys_platform == 'darwin' and (platform_machine != 'arm64' or platform_release < '23')",
 ]
 cuda = [
   "onnxruntime-gpu==1.24.1; sys_platform != 'darwin'",

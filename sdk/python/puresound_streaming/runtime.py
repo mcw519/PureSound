@@ -715,9 +715,11 @@ class PureSoundStreamingRuntime:
         if choice == "coreml":
             return ([_COREML_PROVIDER, _CPU_PROVIDER]
                     if _COREML_PROVIDER in available else [_CPU_PROVIDER])
-        for candidate in (_CUDA_PROVIDER, _COREML_PROVIDER):
-            if candidate in available:
-                return [candidate, _CPU_PROVIDER]
+        # `auto` skips CoreML: a frame graph runs one hop per call, and the
+        # per-call dispatch outweighs that frame (1.7-4.7x slower than one CPU
+        # thread on an Apple M4). An explicit `coreml` request still gets it.
+        if _CUDA_PROVIDER in available:
+            return [_CUDA_PROVIDER, _CPU_PROVIDER]
         return [_CPU_PROVIDER]
 
     def reset(self, batch_size: int = 1) -> None:

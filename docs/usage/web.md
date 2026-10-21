@@ -278,9 +278,12 @@ frequency and level. A model with auxiliary heads can return them with
 
 ## Providers
 
-`auto` tries CUDA, CoreML, then CPU. Explicit values are `cpu`, `cuda`,
-`coreml`, and `mps`; `mps` is an alias for CoreML. Responses report the
-provider that actually ran the model.
+`auto` tries CUDA, CoreML, then CPU, except for the streaming enhancement
+models (voice isolation and noise suppression), where it tries CUDA, then CPU:
+their graphs run one frame per call, which CoreML dispatches more slowly than
+one CPU thread computes it. Explicit values are `cpu`, `cuda`, `coreml`, and
+`mps`; `mps` is an alias for CoreML. Responses report the provider that
+actually ran the model.
 
 ## API
 
