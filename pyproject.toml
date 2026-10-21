@@ -109,6 +109,13 @@ constraint-dependencies = [
   "urllib3>=2.8.0",
   "werkzeug>=3.1.9",
 ]
+# gradio (6.30.0 and earlier) caps pillow below 13, but Pillow 13.0.0 is the first
+# release with the fixes for GHSA-58r4-6rv3-gfh8 and GHSA-65qm-jvmh-6pqg, and
+# nothing gradio, matplotlib or tensorboard calls was removed in 13. Drop this
+# once gradio accepts Pillow 13.
+override-dependencies = [
+  "pillow>=13.0.0",
+]
 conflicts = [
   [{ extra = "cpu" }, { extra = "cuda" }],
   [{ extra = "asr" }, { extra = "cuda" }],
