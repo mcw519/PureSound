@@ -188,7 +188,8 @@ def seed_worker(worker_id: int) -> None:
     Lightning adds its seeding initialiser only to a loader that has none, so
     this one runs it whenever ``seed_everything(..., workers=True)`` asked for
     it. The rank comes from Lightning's rank reference, which the strategy sets
-    before the workers are forked.
+    before the workers are forked; a spawned worker (macOS) re-imports Lightning
+    and takes it from the launcher's ``RANK``/``LOCAL_RANK`` environment.
     """
     if int(os.environ.get("PL_SEED_WORKERS", 0) or 0):
         pl_worker_init_function(worker_id)

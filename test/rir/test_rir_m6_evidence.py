@@ -329,6 +329,8 @@ def _protocol(participant_count=24):
 @pytest.fixture(scope="module")
 def release(tmp_path_factory):
     """A release with both a synthetic and a measured variant, built once."""
+    # The synthetic variant renders its high band with the `hybrid-rir` extra.
+    pytest.importorskip("pyroomacoustics")
     from egs.rir_generation.phases.m6_bank.scripts.validate_m6_reproducible_generation import (
         _run_generator,
     )

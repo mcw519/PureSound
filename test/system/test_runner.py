@@ -135,8 +135,11 @@ class _UnseededDraws(torch.utils.data.Dataset):
 
 
 def _worker_draws_on_rank(rank, monkeypatch):
-    # seed_everything leaves the same main-process seed on every rank.
+    # seed_everything leaves the same main-process seed on every rank. A forked
+    # worker inherits the strategy's rank reference; a spawned one (macOS)
+    # re-imports Lightning and reads it from the launcher's environment.
     monkeypatch.setattr(lightning_seed.rank_zero_only, "rank", rank)
+    monkeypatch.setenv("RANK", str(rank))
     torch.manual_seed(1234)
     loader = torch.utils.data.DataLoader(
         _UnseededDraws(), batch_size=None, num_workers=2, worker_init_fn=runner.seed_worker

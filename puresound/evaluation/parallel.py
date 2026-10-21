@@ -18,6 +18,7 @@ a pool per core and the machine spends its time in the scheduler.
 from __future__ import annotations
 
 import os
+import pickle
 from concurrent.futures import ProcessPoolExecutor
 from typing import Any, Callable, Iterable, Sequence
 
@@ -51,6 +52,10 @@ def map_items(
 
     ``jobs=1`` runs inline with no pool -- what you want under a debugger, and
     what keeps a unit test from paying for process startup.
+
+    With a pool, ``function`` and ``builder`` must pickle: macOS and Windows
+    spawn their workers and send both across. Pass module-level functions or a
+    ``functools.partial`` of one, not a lambda or closure.
     """
     if jobs is None:
         jobs = max(1, (os.cpu_count() or 2) // 2)
@@ -67,6 +72,16 @@ def map_items(
             progress(len(items), len(items))
         return results
 
+    # Checked here on every platform: a forking Linux host would accept a
+    # lambda that a spawning Mac then fails on inside a worker.
+    for name, value in (("function", function), ("builder", builder)):
+        try:
+            pickle.dumps(value)
+        except Exception as exc:
+            raise TypeError(
+                f"map_items {name} must pickle to reach spawned workers; use a "
+                "module-level function or functools.partial, not a lambda"
+            ) from exc
     payloads: Iterable[tuple[Callable[..., Any], Any]] = ((function, item) for item in items)
     results = []
     with ProcessPoolExecutor(

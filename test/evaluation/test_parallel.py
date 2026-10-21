@@ -1,6 +1,7 @@
 """Worker-parallel scoring: same answers, in the same order, from one loader."""
 
 import os
+from functools import partial
 
 import pytest
 
@@ -40,8 +41,15 @@ def test_results_come_back_in_input_order(items, jobs):
 def test_the_builder_runs_once_per_worker_and_its_state_reaches_the_function():
     """The model is built in the initialiser rather than shipped per item --
     a checkpoint is tens of megabytes and the work is milliseconds."""
-    out = map_items(_needs_state, [1, 2], jobs=2, builder=lambda: {"greeting": "hi"})
+    out = map_items(_needs_state, [1, 2], jobs=2, builder=partial(dict, greeting="hi"))
     assert out == ["hi1", "hi2"]
+
+
+def test_a_builder_that_cannot_reach_a_spawned_worker_is_refused_everywhere():
+    """macOS spawns its workers, so the builder is pickled; Linux forks and
+    would let a lambda through that then fails on a Mac."""
+    with pytest.raises(TypeError, match="functools.partial"):
+        map_items(_needs_state, [1, 2], jobs=2, builder=lambda: {"greeting": "hi"})
 
 
 def test_progress_reports_the_final_count():
