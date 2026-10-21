@@ -20,8 +20,9 @@ python -m pip install "sdk/python[cuda]"  # NVIDIA CUDA 12.x
 ```
 
 Runtime 接受 `auto`、`cpu`、`cuda`、`coreml` 與 `mps`。`auto` 依序偏好 CUDA、
-CoreML、CPU；因為 ONNX Runtime 沒有原生 MPS execution provider，`mps` 是 CoreML
-的 alias。可用 `onnxruntime.get_available_providers()` 確認目前實際 provider。
+CPU，不選 CoreML：模型每次呼叫只跑一幀，CoreML 派送一次的時間比單一 CPU 執行緒算完
+這一幀還久；要用 CoreML 請明確指定 `coreml`。因為 ONNX Runtime 沒有原生 MPS
+execution provider，`mps` 是 CoreML 的 alias。可用 `onnxruntime.get_available_providers()` 確認目前實際 provider。
 
 ## 從這個資料夾安裝
 

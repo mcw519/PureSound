@@ -65,7 +65,7 @@ uv run python egs/voice_isolate/scripts/streaming_onnx.py export \
 一起計算，合併 input／hidden projection 並使用標準 ONNX gate 運算；intra 的
 雙向頻率 recurrence 沿用原本訓練公式。native companion 選項適用於 Mamba inter。
 
-在 Linux 上編譯 library，再匯出：
+在 Linux 或 macOS 上編譯 library，再匯出：
 
 ```bash
 uv run python -m puresound.streaming.native.build \
@@ -82,9 +82,11 @@ uv run python egs/voice_isolate/scripts/streaming_onnx.py benchmark \
     --warmup 2 --repeats 3
 ```
 
-編譯需要 C++17 compiler（`g++` 或 `CXX`），不下載依賴。產物以 x86-64 基線指令集編譯，
-載入時才依 CPU 選用 AVX2 或 AVX-512 kernel，同一份 build 可用於任何 C library 相容的
-x86-64 Linux 主機。重新編譯以原子替換寫入，執行中的 session 仍使用原本載入的檔案。融合 kernel 會重排 FP32 加總，因此允許微小數值差異。
+編譯需要 C++17 compiler（`CXX`，未設定時 Linux 用 `g++`、macOS 用 `clang++`），不下載
+依賴。在 x86-64 上以基線指令集編譯，載入時才依 CPU 選用 AVX2 或 AVX-512 kernel，同一份
+build 可用於任何 C library 相容的 x86-64 Linux 主機。在 arm64（Apple Silicon 或 aarch64
+Linux）上以 NEON 為基線；在 Apple M4 上跑 NS v1–v3，native companion 的端到端時間比
+標準主圖少 7–11%。重新編譯以原子替換寫入，執行中的 session 仍使用原本載入的檔案。融合 kernel 會重排 FP32 加總，因此允許微小數值差異。
 主 ONNX 不需要 compiler 或 custom library；瀏覽器／WASM 使用主圖，manifest
 透過既有 web asset builder 準備。
 
@@ -123,7 +125,10 @@ uv run python sdk/web/tools/build_assets.py
 companion 中 LSTM 與矩陣乘法的權重存成 int8，activation 在執行時才量化。匯出仍先嚴格驗證
 浮點圖；int8 圖只檢查輸出有限且在合理範圍內，量到的誤差寫進 manifest 的 `quantization`。
 這個範圍不代表品質：int8 輸出會隨圖或 kernel 的任何變動而改變，所以每次 int8 匯出都要
-重跑閘門。NS v3 以 `flash` variant 發布（`--variant flash`）。
+重跑閘門。`--quantize int8-per-channel` 讓權重的每個輸出通道有自己的 scale：運算子與大小相同，擬合更細；
+寬的 voice-isolation 圖需要它才能留在界線內。catalog 裡每個 DPCRN 模型都以 `flash` variant
+發布 int8 圖（`--variant flash`）。int8 是否省時取決於 CPU：在 Apple M4 搭配 ONNX Runtime
+1.24 以上時，浮點矩陣乘法跑在 SME 單元上，浮點圖與 flash 一樣快或更快。
 
 ## 支援的設定
 
@@ -210,8 +215,10 @@ tail = runtime.flush()
 - **`flush()`** 持續餵零幀直到模型的 look-ahead 排空，串流總長恰為
   `輸入長度 + streaming_delay_frames * hop_length`：完整的輸入、晚這麼多樣本。之後
   overlap-add 只有部分覆蓋的剩餘部分對應到補零，直接丟棄。
-- `provider` 可以是 `auto`（CUDA、再 CoreML、再 CPU）、`cpu`、`cuda`、`coreml`，或
-  `mps`（CoreML 的別名）。
+- `provider` 可以是 `auto`（CUDA、再 CPU）、`cpu`、`cuda`、`coreml`，或 `mps`
+  （CoreML 的別名）。`auto` 不選 CoreML：逐幀圖每次呼叫只跑一個 hop，在 Apple M4 上
+  catalog 裡每個 DPCRN 用 CoreML 都比單一 CPU 執行緒慢 1.7–4.7 倍。明確指定 `coreml`
+  仍會使用它。
 
 ## runtime 套用的 graph 後處理
 

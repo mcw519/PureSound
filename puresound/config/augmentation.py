@@ -86,6 +86,12 @@ class SpeechAugmentation(StrictConfig):
     is_target: StrictBool | None = None
     add_n_cases: int | tuple[int, int] | None = None
     snr_range: FloatRange | None = None
+    # With is_target, which interferers count as target: only those whose
+    # realized SIR (foreground over interferers, dB) falls inside this range.
+    # The rest stay in the mixture as something to remove, so a quieter,
+    # more distant voice is treated as background. None = every interferer
+    # is target.
+    target_sir_range: FloatRange | None = None
     media_voice: MediaVoiceConfig | None = None
     echo_playback: EchoPlaybackConfig | None = None
     overlap_control: OverlapControlConfig | None = None
@@ -106,6 +112,8 @@ class SpeechAugmentation(StrictConfig):
             and self.add_n_cases[0] > self.add_n_cases[1]
         ):
             raise ValueError("add_n_cases lower bound must not exceed upper bound")
+        if self.target_sir_range is not None and not self.is_target:
+            raise ValueError("target_sir_range selects which interferers are target; it needs is_target: true")
         return self
 
 
@@ -173,9 +181,28 @@ class NoiseAugmentation(StrictConfig):
     white_noise_snr_range: FloatRange | None = None
     room_coloring: RoomColoringConfig | None = None
     absolute_floor: AbsoluteFloorConfig | None = None
+    # Where the noise level that the drawn SNR refers to is measured, when a
+    # row-length window is cut from a longer noise. "clip": over the whole file
+    # before the cut, so a bursty file's window can fall between its events and
+    # the row's real SNR is far above the drawn one. "segment": over the window
+    # mixed in, as the paired evaluation sets are mixed.
+    level_reference: Literal["clip", "segment"] = "clip"
+    # Redraw a window more than this many dB below its whole noise's level, at
+    # most `segment_redraws` draws in all. None = any window is accepted.
+    min_segment_level_db: Annotated[float, Field(le=0.0)] | None = None
+    segment_redraws: Annotated[int, Field(ge=1)] = 10
+    # A second noise heard at the same time as the first, on this share of the
+    # recorded-noise rows that did not take the dynamic type (which plays two
+    # noises one after the other): its own file and window, at a level drawn from
+    # `overlay_level_db` relative to the first, and the drawn SNR applies to the
+    # sum. None = never.
+    prob_overlay: Probability | None = None
+    overlay_level_db: FloatRange | None = None
 
     @model_validator(mode="after")
     def enabled_contract(self):
+        if self.prob_overlay and self.overlay_level_db is None:
+            raise ValueError("prob_overlay needs overlay_level_db")
         if self.noise_folder is not None and self.noise_sources is not None:
             raise ValueError("give noise_folder or noise_sources, not both")
         if self.noise_sources is not None:

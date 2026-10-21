@@ -156,6 +156,7 @@ class EncDecMaskBase(BaseLightningModule):
         wav: torch.Tensor,
         dry_blend: float = 1.0,
         spec_floor: float = 0.0,
+        pcs: bool = False,
         postprocess: Optional[Postprocessor] = None,
         presence_gate: Optional[PresenceGate] = None,
         onset_guard: Optional[OnsetGuard] = None,
@@ -171,7 +172,10 @@ class EncDecMaskBase(BaseLightningModule):
             spec_floor: inference-only spectral floor in ``[0, 1)``. ``0.0``
                 (default) is a no-op. Complex-mask models only; the other mask
                 types raise.
-            postprocess: a built `Postprocessor`, as an alternative to the two
+            pcs: inference-only perceptual contrast stretching of the enhanced
+                spectrum (`Postprocessor.stretch_spectrum`). ``False`` (default)
+                is a no-op.
+            postprocess: a built `Postprocessor`, as an alternative to the
                 keywords above. Not both.
             presence_gate: a built `PresenceGate`, applied to the finished
                 waveform. Needs a backbone that stashes its bottleneck, which
@@ -185,7 +189,7 @@ class EncDecMaskBase(BaseLightningModule):
         Returns:
             Enhanced waveform clamped to ``[-1, 1]``.
         """
-        post = resolve_postprocess(postprocess, dry_blend, spec_floor)
+        post = resolve_postprocess(postprocess, dry_blend, spec_floor, pcs)
         if presence_gate is not None and not hasattr(self.backbone, "last_bottleneck"):
             raise ValueError(
                 f"presence_gate needs a backbone that exposes last_bottleneck; "
@@ -260,6 +264,7 @@ class EncDecMaskBase(BaseLightningModule):
                 "complex, deepfilter, wiener, mvdr, mapping."
             )
 
+        enh = post.stretch_spectrum(enh, self.encoder.sr)
         enh = self._spec_to_wav(enh)
         enh = post.blend_waveform(enh, wav)
         if presence_gate is not None:
@@ -463,7 +468,9 @@ class EncDecMaskBase(BaseLightningModule):
             total_loss = total_loss + pair_loss
 
         if self.metric_gan is not None:
-            total_loss = total_loss + self._metric_gan_loss(clean_speech, enhanced_speech)
+            total_loss = total_loss + self._metric_gan_loss(
+                clean_speech, enhanced_speech, noisy=noisy_speech
+            )
 
         # Channel-perturbation mask consistency (see __init__): the clean-view
         # mask is the (detached) teacher; the perturbed view learns to produce
@@ -518,10 +525,13 @@ class EncDecMaskBase(BaseLightningModule):
         self.puresound_logging.update({"epoch_train_loss": total_loss.item()})
         return {"loss": total_loss}
 
-    def _metric_gan_loss(self, clean: torch.Tensor, enhanced: torch.Tensor) -> torch.Tensor:
+    def _metric_gan_loss(
+        self, clean: torch.Tensor, enhanced: torch.Tensor, noisy: Optional[torch.Tensor] = None
+    ) -> torch.Tensor:
         """Discriminator term every step; generator term after the warm-up.
 
         Target-absent rows (silent clean) have no PESQ and are left out of both.
+        ``noisy`` feeds the replay too when the config asks for noisy pairs.
         """
         from .metric_gan import PesqReplay, discriminator_loss, generator_loss
 
@@ -537,6 +547,8 @@ class EncDecMaskBase(BaseLightningModule):
 
         replay.harvest()
         replay.submit(clean_a, enhanced_a)
+        if cfg.noisy_pairs and noisy is not None:
+            replay.submit(clean_a, noisy[..., :n][active])
         # The real term needs at least one row even on an all-absent batch, so
         # every critic parameter still gets a gradient on this rank.
         reference = clean_a if clean_a.shape[0] else clean[:1]

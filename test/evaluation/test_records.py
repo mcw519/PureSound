@@ -14,6 +14,7 @@ from puresound.evaluation.records import (
     chain_commit,
     merge_stage_files,
     read_record,
+    repo_relative,
     write_stage,
 )
 from puresound.evaluation.statistics import paired_bootstrap_ci, verdict
@@ -70,6 +71,22 @@ def test_the_record_round_trips_with_everything_a_comparison_needs(tmp_path):
     assert isinstance(payload["chain_commit"], str) and payload["chain_commit"]
     assert payload["stages"][0]["n"] == 200
     assert payload["stages"][0]["difference"]["ci_low"] == -0.03
+
+
+def test_paths_under_the_repository_are_written_repo_relative(tmp_path):
+    """A committed record says which file was used, not where one person's
+    clone sits; a corpus outside the repository is named as given."""
+    inside = str(REPO / "egs/noise_suppression/config/eval/ns_testset.yaml")
+    outside = "/data/audio/vctk_demand/clean_testset_wav"
+    stage = _stage(extra={"set_provenance": {"recipe": inside, "speech_dir": outside, "dirs": [inside]}})
+    record = GateRecord("t", str(REPO / "egs/x/exp/run") + " (precomputed)", inside, "abc1234", stages=[stage])
+    data = read_record(record.write(tmp_path / "t.json"))
+    assert data["recipe"] == "egs/noise_suppression/config/eval/ns_testset.yaml"
+    assert data["checkpoint"] == "egs/x/exp/run (precomputed)"
+    provenance = data["stages"][0]["extra"]["set_provenance"]
+    assert provenance["recipe"] == data["recipe"] and provenance["dirs"] == [data["recipe"]]
+    assert provenance["speech_dir"] == outside
+    assert repo_relative({"n": 3, "v": [1.5, None]}) == {"n": 3, "v": [1.5, None]}
 
 
 def test_a_bad_role_or_verdict_is_rejected_at_construction():
@@ -133,7 +150,9 @@ def test_a_record_is_named_by_its_tag_and_says_what_it_was_testing(path):
     """The tag is the filename, the lineage names the variable under test, and a
     run name never carries `vN`: a version is assigned when a checkpoint is
     promoted and lives in `lineage.released_as` and the catalog."""
-    record = json.loads(path.read_text(encoding="utf-8"))
+    text = path.read_text(encoding="utf-8")
+    assert str(REPO) + "/" not in text, "an absolute path into this clone; records carry repo-relative paths"
+    record = json.loads(text)
     assert record.get("tag") == path.stem
     lineage = record.get("lineage")
     assert lineage and lineage.get("variable"), "lineage names no variable under test"

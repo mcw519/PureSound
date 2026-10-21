@@ -88,8 +88,8 @@ trainer:
   走，因為 activation 記憶體就是跟著長度走；機率總和必須是 1。長的列需要語句本身就那麼
   長的語料。
 - `speaker_source_weights` 依 spkid 前綴決定每個語料佔 batch 的比例，而不是交給語者數
-  決定。它的規則，以及噪音與 SNR 旋鈕 `augmentation_noise.noise_sources`、`snr_bands`，
-  見 [data_preparation.zh-TW.md](data_preparation.zh-TW.md#這些工具餵給哪些-recipe-旋鈕)。
+  決定。它的規則，以及噪音與 SNR 旋鈕 `augmentation_noise.noise_sources`、`snr_bands`、
+  `level_reference`、`prob_overlay`，見 [data_preparation.zh-TW.md](data_preparation.zh-TW.md#這些工具餵給哪些-recipe-旋鈕)。
 - `train_sampler: coverage`（預設 `speaker`）讓訓練 batch 從洗牌後的佇列依序取：每個
   來源的語者都輪過才會重複，每位語者也輪完該列長的合格句子才會重複，長列只取夠長的
   句子。Checkpoint 保存抽樣位置，可在 epoch 邊界 resume 或接續 warm-start 的下一階；

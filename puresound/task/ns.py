@@ -333,6 +333,24 @@ class NoiseSuppressionDataset(DynamicBaseDataset):
         )
         return noisy_speech[0], interfered_speech[0], "legacy", sir
 
+    def _interferer_is_target(self, sir: Optional[float]) -> bool:
+        """Whether the interferers just mixed in belong to the target.
+
+        ``is_target`` alone makes every interferer target. With
+        ``target_sir_range`` only a talker whose realized SIR (foreground over
+        interferers, dB) lies inside the range is; a quieter one stays in the
+        mixture to be removed.
+        """
+        args = self.augmentation_speech_args
+        if not args.is_target:
+            return False
+        if args.target_sir_range is None:
+            return True
+        if sir is None:
+            raise ValueError("target_sir_range needs the realized SIR, and this mix mode did not report one")
+        low, high = args.target_sir_range
+        return low <= float(sir) <= high
+
     def __getitem__(self, target_speaker: Tuple):
         # The key carries whatever the run asked the sampler for: a per-item seed
         # (which reseeds every RNG this path uses, so the row regenerates
@@ -460,14 +478,16 @@ class NoiseSuppressionDataset(DynamicBaseDataset):
                 )
             )
 
-            # Treating all speech clips as target speech
-            if self.augmentation_speech_args.is_target:
+            # Interfering speech as target: all of it, or only the talkers
+            # loud enough relative to the foreground (target_sir_range).
+            interferer_is_target = self._interferer_is_target(realized_speech_sir)
+            if interferer_is_target:
                 target_speech = noisy_speech.clone()
             self._tap(
                 "interferers.mix", noisy_speech, target_speech,
                 signals={"interferers": background_speech_reference},
                 sir_db=realized_speech_sir, mix_mode=mix_mode_name,
-                far_count=far_count, is_target=bool(self.augmentation_speech_args.is_target),
+                far_count=far_count, is_target=interferer_is_target,
             )
 
         # Target-absent gating: strip the foreground contribution from the

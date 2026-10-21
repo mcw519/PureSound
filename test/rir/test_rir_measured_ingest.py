@@ -336,6 +336,8 @@ def measured_bank(tmp_path_factory):
 @pytest.fixture(scope="module")
 def synthetic_bank(tmp_path_factory):
     """A QC'd synthetic bank from the reproducible generator, built once."""
+    # The generator renders its high band with the `hybrid-rir` extra.
+    pytest.importorskip("pyroomacoustics")
     root = tmp_path_factory.mktemp("synthetic") / "synth"
     _run_generator(root, workers=1)
     run_rir_bank_qc(root)

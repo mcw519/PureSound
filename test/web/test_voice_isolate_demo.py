@@ -145,7 +145,9 @@ def test_models_and_runtimes_are_cached_per_key(demo, tmp_path, monkeypatch):
     config_path = _write_config(tmp_path)
     ckpt_path = _touch(tmp_path / "exp" / "work" / "model.ckpt")
     loads = []
-    monkeypatch.setattr(demo.torch.cuda, "is_available", lambda: False)
+    # Pin the device: a Mac would otherwise resolve to MPS. Device choice has
+    # its own tests; this one is about the cache key.
+    monkeypatch.setattr(demo, "default_torch_device", lambda: "cpu")
     monkeypatch.setattr(demo, "load_model_from_checkpoint",
                         lambda config, ckpt, device: loads.append(ckpt) or IdentityModel())
     demo.MODEL_CACHE.clear()

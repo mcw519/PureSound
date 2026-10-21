@@ -17,6 +17,8 @@ pytestmark = pytest.mark.slow
 @pytest.fixture(scope="module")
 def release(tmp_path_factory):
     """A validated variant release, built once and treated as read-only."""
+    # Its synthetic bank renders the high band with the `hybrid-rir` extra.
+    pytest.importorskip("pyroomacoustics")
     report = validate_m6_variant_release.build_report(
         tmp_path_factory.mktemp("release") / "fixture"
     )

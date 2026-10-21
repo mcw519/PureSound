@@ -278,9 +278,12 @@ frequency and level. A model with auxiliary heads can return them with
 
 ## Providers
 
-`auto` tries CUDA, CoreML, then CPU. Explicit values are `cpu`, `cuda`,
-`coreml`, and `mps`; `mps` is an alias for CoreML. Responses report the
-provider that actually ran the model.
+`auto` tries CUDA, CoreML, then CPU, except for the streaming enhancement
+models (voice isolation and noise suppression), where it tries CUDA, then CPU:
+their graphs run one frame per call, which CoreML dispatches more slowly than
+one CPU thread computes it. Explicit values are `cpu`, `cuda`, `coreml`, and
+`mps`; `mps` is an alias for CoreML. Responses report the provider that
+actually ran the model.
 
 ## API
 
@@ -482,6 +485,13 @@ The reply stream carries the model's output `latency_samples` late, as the
 offline runtime's does. The server sends `{"type": "stats"}` about once per
 second of audio; `{"type": "stop"}` ends the session. A session ends after
 30 minutes.
+
+## PCS post-filter
+
+Noise-suppression requests may set `pcs: true` to apply perceptual contrast
+stretching to the enhanced spectrum (per frame, no added latency): sharper
+formants and a higher PESQ, at a cost in DNSMOS signal quality and in inserted
+words on hard noise. Off by default; the model card records both sides.
 
 ## Onset guard
 

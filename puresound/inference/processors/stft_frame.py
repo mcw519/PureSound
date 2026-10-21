@@ -115,6 +115,7 @@ class VoiceIsolationRuntime:
         allowed = {
             "dry_blend",
             "spec_floor",
+            "pcs",
             "collect_extras",
             "return_heads",
             "include_heads",
@@ -162,6 +163,8 @@ class VoiceIsolationRuntime:
             if not 0.0 < dry_blend <= 1.0:
                 raise ValueError("dry_blend must be in (0, 1]")
             parameters["dry_blend"] = dry_blend
+        if "pcs" in parameters and not isinstance(parameters["pcs"], bool):
+            raise ValueError("pcs must be a boolean")
         if "spec_floor" in parameters:
             try:
                 spec_floor = float(parameters["spec_floor"])

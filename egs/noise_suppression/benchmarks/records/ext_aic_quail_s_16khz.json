@@ -1,0 +1,571 @@
+{
+  "tag": "ext_aic_quail_s_16khz",
+  "checkpoint": "<locally precomputed outputs>",
+  "recipe": "precomputed (outputs not archived; regenerate with the vendor SDK through puresound.web.aicoustics)",
+  "chain_commit": "dc4762f+dirty",
+  "inference": {
+    "precomputed": true
+  },
+  "verdict": "no-resolution",
+  "unresolved_gates": [
+    "wer.del"
+  ],
+  "stages": [
+    {
+      "name": "frozen_testset.pesq_wb",
+      "metric": "pesq_wb",
+      "role": "gate",
+      "n": 499,
+      "value": 1.7083701984676904,
+      "baseline": 1.470602793062856,
+      "difference": {
+        "point": 0.23776740540483432,
+        "ci_low": 0.22255480402337763,
+        "ci_high": 0.25370587786596144
+      },
+      "verdict": "pass",
+      "direction": "higher_is_better",
+      "notes": "frozen set ns_testset",
+      "extra": {
+        "set_provenance": {
+          "chain_commit": "cd981f1+dirty",
+          "recipe": "egs/noise_suppression/config/eval/ns_testset.yaml",
+          "recipe_sha256": "02dee78f7ad05e8f9e808cf7f284461a3ccb0e309a53204ae2aaf1496810c7a1",
+          "seed": 1234,
+          "sample_rate": 16000,
+          "requested_items": 500,
+          "saved_items": 500
+        }
+      }
+    },
+    {
+      "name": "frozen_testset.stoi",
+      "metric": "stoi",
+      "role": "monitor",
+      "n": 500,
+      "value": 0.8974076824701723,
+      "baseline": 0.8664851286745748,
+      "difference": {
+        "point": 0.03092255379559739,
+        "ci_low": 0.029057543015406858,
+        "ci_high": 0.032859561931202944
+      },
+      "verdict": "pass",
+      "direction": "higher_is_better",
+      "notes": "frozen set ns_testset",
+      "extra": {
+        "set_provenance": {
+          "chain_commit": "cd981f1+dirty",
+          "recipe": "egs/noise_suppression/config/eval/ns_testset.yaml",
+          "recipe_sha256": "02dee78f7ad05e8f9e808cf7f284461a3ccb0e309a53204ae2aaf1496810c7a1",
+          "seed": 1234,
+          "sample_rate": 16000,
+          "requested_items": 500,
+          "saved_items": 500
+        }
+      }
+    },
+    {
+      "name": "frozen_testset.estoi",
+      "metric": "estoi",
+      "role": "monitor",
+      "n": 500,
+      "value": 0.7746953676912055,
+      "baseline": 0.726009420717013,
+      "difference": {
+        "point": 0.0486859469741926,
+        "ci_low": 0.04648555109341734,
+        "ci_high": 0.050876939609899904
+      },
+      "verdict": "pass",
+      "direction": "higher_is_better",
+      "notes": "frozen set ns_testset",
+      "extra": {
+        "set_provenance": {
+          "chain_commit": "cd981f1+dirty",
+          "recipe": "egs/noise_suppression/config/eval/ns_testset.yaml",
+          "recipe_sha256": "02dee78f7ad05e8f9e808cf7f284461a3ccb0e309a53204ae2aaf1496810c7a1",
+          "seed": 1234,
+          "sample_rate": 16000,
+          "requested_items": 500,
+          "saved_items": 500
+        }
+      }
+    },
+    {
+      "name": "frozen_testset.sisdr",
+      "metric": "sisdr",
+      "role": "monitor",
+      "n": 500,
+      "value": 12.027028089091182,
+      "baseline": 8.32084546237439,
+      "difference": {
+        "point": 3.7061826267167928,
+        "ci_low": 3.5304892948413267,
+        "ci_high": 3.8680515388155357
+      },
+      "verdict": "pass",
+      "direction": "higher_is_better",
+      "notes": "frozen set ns_testset",
+      "extra": {
+        "set_provenance": {
+          "chain_commit": "cd981f1+dirty",
+          "recipe": "egs/noise_suppression/config/eval/ns_testset.yaml",
+          "recipe_sha256": "02dee78f7ad05e8f9e808cf7f284461a3ccb0e309a53204ae2aaf1496810c7a1",
+          "seed": 1234,
+          "sample_rate": 16000,
+          "requested_items": 500,
+          "saved_items": 500
+        }
+      }
+    },
+    {
+      "name": "frozen_testset.harmonic_gap_db",
+      "metric": "harmonic_gap_db",
+      "role": "monitor",
+      "n": 500,
+      "value": -1.2205627656980835,
+      "baseline": -1.6421980033114656,
+      "difference": {
+        "point": 0.4216352376133821,
+        "ci_low": 0.3868228053980253,
+        "ci_high": 0.4567751440243995
+      },
+      "verdict": "pass",
+      "direction": "higher_is_better",
+      "notes": "frozen set ns_testset",
+      "extra": {
+        "set_provenance": {
+          "chain_commit": "cd981f1+dirty",
+          "recipe": "egs/noise_suppression/config/eval/ns_testset.yaml",
+          "recipe_sha256": "02dee78f7ad05e8f9e808cf7f284461a3ccb0e309a53204ae2aaf1496810c7a1",
+          "seed": 1234,
+          "sample_rate": 16000,
+          "requested_items": 500,
+          "saved_items": 500
+        }
+      }
+    },
+    {
+      "name": "frozen_testset.transient_corr",
+      "metric": "transient_corr",
+      "role": "monitor",
+      "n": 500,
+      "value": 0.6431995507031679,
+      "baseline": 0.6303281410932541,
+      "difference": {
+        "point": 0.012871409609913826,
+        "ci_low": 0.012147683549672364,
+        "ci_high": 0.013612416518479586
+      },
+      "verdict": "pass",
+      "direction": "higher_is_better",
+      "notes": "frozen set ns_testset",
+      "extra": {
+        "set_provenance": {
+          "chain_commit": "cd981f1+dirty",
+          "recipe": "egs/noise_suppression/config/eval/ns_testset.yaml",
+          "recipe_sha256": "02dee78f7ad05e8f9e808cf7f284461a3ccb0e309a53204ae2aaf1496810c7a1",
+          "seed": 1234,
+          "sample_rate": 16000,
+          "requested_items": 500,
+          "saved_items": 500
+        }
+      }
+    },
+    {
+      "name": "vctk_demand.pesq_wb",
+      "metric": "pesq_wb",
+      "role": "gate",
+      "n": 824,
+      "value": 2.368933985100209,
+      "baseline": 1.9684604954661675,
+      "difference": {
+        "point": 0.40047348963404167,
+        "ci_low": 0.382758054390405,
+        "ci_high": 0.41958918830072417
+      },
+      "verdict": "pass",
+      "direction": "higher_is_better",
+      "notes": "frozen set vctk_demand_test",
+      "extra": {
+        "set_provenance": {
+          "kind": "imported",
+          "source": "vctk_demand",
+          "noisy_dir": "/data/audio/vctk_demand/noisy_testset_wav",
+          "clean_dir": "/data/audio/vctk_demand/clean_testset_wav",
+          "transcript_dir": "/data/audio/vctk_demand/testset_txt",
+          "sample_rate": 16000,
+          "items": 824,
+          "skipped_unpaired": 0,
+          "missing_transcript": 0,
+          "manifest_sha256": "5b4679eae80096d8bd5d43f6eef27a7937238163cd54e4076732bd52d8da2288",
+          "imported_at": "2026-09-14T04:03:46+00:00"
+        }
+      }
+    },
+    {
+      "name": "vctk_demand.stoi",
+      "metric": "stoi",
+      "role": "monitor",
+      "n": 824,
+      "value": 0.9316392851634904,
+      "baseline": 0.9210456748794998,
+      "difference": {
+        "point": 0.010593610283990272,
+        "ci_low": 0.009704624259617866,
+        "ci_high": 0.011491343722249695
+      },
+      "verdict": "pass",
+      "direction": "higher_is_better",
+      "notes": "frozen set vctk_demand_test",
+      "extra": {
+        "set_provenance": {
+          "kind": "imported",
+          "source": "vctk_demand",
+          "noisy_dir": "/data/audio/vctk_demand/noisy_testset_wav",
+          "clean_dir": "/data/audio/vctk_demand/clean_testset_wav",
+          "transcript_dir": "/data/audio/vctk_demand/testset_txt",
+          "sample_rate": 16000,
+          "items": 824,
+          "skipped_unpaired": 0,
+          "missing_transcript": 0,
+          "manifest_sha256": "5b4679eae80096d8bd5d43f6eef27a7937238163cd54e4076732bd52d8da2288",
+          "imported_at": "2026-09-14T04:03:46+00:00"
+        }
+      }
+    },
+    {
+      "name": "vctk_demand.estoi",
+      "metric": "estoi",
+      "role": "monitor",
+      "n": 824,
+      "value": 0.817314228200647,
+      "baseline": 0.7866917302237313,
+      "difference": {
+        "point": 0.030622497976915672,
+        "ci_low": 0.028990199793114235,
+        "ci_high": 0.03228004500048808
+      },
+      "verdict": "pass",
+      "direction": "higher_is_better",
+      "notes": "frozen set vctk_demand_test",
+      "extra": {
+        "set_provenance": {
+          "kind": "imported",
+          "source": "vctk_demand",
+          "noisy_dir": "/data/audio/vctk_demand/noisy_testset_wav",
+          "clean_dir": "/data/audio/vctk_demand/clean_testset_wav",
+          "transcript_dir": "/data/audio/vctk_demand/testset_txt",
+          "sample_rate": 16000,
+          "items": 824,
+          "skipped_unpaired": 0,
+          "missing_transcript": 0,
+          "manifest_sha256": "5b4679eae80096d8bd5d43f6eef27a7937238163cd54e4076732bd52d8da2288",
+          "imported_at": "2026-09-14T04:03:46+00:00"
+        }
+      }
+    },
+    {
+      "name": "vctk_demand.sisdr",
+      "metric": "sisdr",
+      "role": "monitor",
+      "n": 824,
+      "value": 13.171071934468538,
+      "baseline": 8.445528877387614,
+      "difference": {
+        "point": 4.725543057080923,
+        "ci_low": 4.665394621935108,
+        "ci_high": 4.783087280715219
+      },
+      "verdict": "pass",
+      "direction": "higher_is_better",
+      "notes": "frozen set vctk_demand_test",
+      "extra": {
+        "set_provenance": {
+          "kind": "imported",
+          "source": "vctk_demand",
+          "noisy_dir": "/data/audio/vctk_demand/noisy_testset_wav",
+          "clean_dir": "/data/audio/vctk_demand/clean_testset_wav",
+          "transcript_dir": "/data/audio/vctk_demand/testset_txt",
+          "sample_rate": 16000,
+          "items": 824,
+          "skipped_unpaired": 0,
+          "missing_transcript": 0,
+          "manifest_sha256": "5b4679eae80096d8bd5d43f6eef27a7937238163cd54e4076732bd52d8da2288",
+          "imported_at": "2026-09-14T04:03:46+00:00"
+        }
+      }
+    },
+    {
+      "name": "vctk_demand.harmonic_gap_db",
+      "metric": "harmonic_gap_db",
+      "role": "monitor",
+      "n": 824,
+      "value": -0.6851062981249322,
+      "baseline": -1.0550770457980172,
+      "difference": {
+        "point": 0.36997074767308497,
+        "ci_low": 0.3461084794924242,
+        "ci_high": 0.3937717094038699
+      },
+      "verdict": "pass",
+      "direction": "higher_is_better",
+      "notes": "frozen set vctk_demand_test",
+      "extra": {
+        "set_provenance": {
+          "kind": "imported",
+          "source": "vctk_demand",
+          "noisy_dir": "/data/audio/vctk_demand/noisy_testset_wav",
+          "clean_dir": "/data/audio/vctk_demand/clean_testset_wav",
+          "transcript_dir": "/data/audio/vctk_demand/testset_txt",
+          "sample_rate": 16000,
+          "items": 824,
+          "skipped_unpaired": 0,
+          "missing_transcript": 0,
+          "manifest_sha256": "5b4679eae80096d8bd5d43f6eef27a7937238163cd54e4076732bd52d8da2288",
+          "imported_at": "2026-09-14T04:03:46+00:00"
+        }
+      }
+    },
+    {
+      "name": "vctk_demand.transient_corr",
+      "metric": "transient_corr",
+      "role": "monitor",
+      "n": 824,
+      "value": 0.7114241632623869,
+      "baseline": 0.6967274406834424,
+      "difference": {
+        "point": 0.014696722578944511,
+        "ci_low": 0.014053489867760574,
+        "ci_high": 0.015346758650362637
+      },
+      "verdict": "pass",
+      "direction": "higher_is_better",
+      "notes": "frozen set vctk_demand_test",
+      "extra": {
+        "set_provenance": {
+          "kind": "imported",
+          "source": "vctk_demand",
+          "noisy_dir": "/data/audio/vctk_demand/noisy_testset_wav",
+          "clean_dir": "/data/audio/vctk_demand/clean_testset_wav",
+          "transcript_dir": "/data/audio/vctk_demand/testset_txt",
+          "sample_rate": 16000,
+          "items": 824,
+          "skipped_unpaired": 0,
+          "missing_transcript": 0,
+          "manifest_sha256": "5b4679eae80096d8bd5d43f6eef27a7937238163cd54e4076732bd52d8da2288",
+          "imported_at": "2026-09-14T04:03:46+00:00"
+        }
+      }
+    },
+    {
+      "name": "dns_devset.dnsmos_sig",
+      "metric": "dnsmos_sig",
+      "role": "monitor",
+      "n": 921,
+      "value": 3.188775848090258,
+      "baseline": 2.9880601250908194,
+      "difference": {
+        "point": 0.20071572299943857,
+        "ci_low": 0.17593985415689922,
+        "ci_high": 0.22636066243371114
+      },
+      "verdict": "pass",
+      "direction": "higher_is_better",
+      "notes": "no-reference; a passthrough scores well by not distorting anything",
+      "extra": {}
+    },
+    {
+      "name": "dns_devset.dnsmos_bak",
+      "metric": "dnsmos_bak",
+      "role": "monitor",
+      "n": 921,
+      "value": 2.947519676665242,
+      "baseline": 2.559195850544719,
+      "difference": {
+        "point": 0.38832382612052246,
+        "ci_low": 0.3677432600668267,
+        "ci_high": 0.4090661553374199
+      },
+      "verdict": "pass",
+      "direction": "higher_is_better",
+      "notes": "no-reference; a passthrough scores well by not distorting anything",
+      "extra": {}
+    },
+    {
+      "name": "dns_devset.dnsmos_ovr",
+      "metric": "dnsmos_ovr",
+      "role": "monitor",
+      "n": 921,
+      "value": 2.45972759001991,
+      "baseline": 2.2058599688602962,
+      "difference": {
+        "point": 0.25386762115961375,
+        "ci_low": 0.23859091509824015,
+        "ci_high": 0.2694431775654264
+      },
+      "verdict": "pass",
+      "direction": "higher_is_better",
+      "notes": "no-reference; a passthrough scores well by not distorting anything",
+      "extra": {}
+    },
+    {
+      "name": "dns_devset.dnsmos_p808",
+      "metric": "dnsmos_p808",
+      "role": "monitor",
+      "n": 921,
+      "value": 3.06657818146149,
+      "baseline": 2.908734452433106,
+      "difference": {
+        "point": 0.15784372902838387,
+        "ci_low": 0.15003462356899586,
+        "ci_high": 0.16569944588278668
+      },
+      "verdict": "pass",
+      "direction": "higher_is_better",
+      "notes": "no-reference; a passthrough scores well by not distorting anything",
+      "extra": {}
+    },
+    {
+      "name": "wer.wer",
+      "metric": "wer",
+      "role": "monitor",
+      "n": 824,
+      "value": 0.036669036798380183,
+      "baseline": 0.035040800552425484,
+      "difference": {
+        "point": 0.0016282362459546927,
+        "ci_low": -0.0002740389330195149,
+        "ci_high": 0.0036206344390507
+      },
+      "verdict": "no-resolution",
+      "direction": "lower_is_better",
+      "notes": "vctk_demand_test, large-v3, reference = corpus transcript",
+      "extra": {}
+    },
+    {
+      "name": "wer.del",
+      "metric": "del",
+      "role": "gate",
+      "n": 824,
+      "value": 0.006923865359928211,
+      "baseline": 0.0074387226709020276,
+      "difference": {
+        "point": -0.0005148573109738159,
+        "ci_low": -0.0013239187996469549,
+        "ci_high": 0.00010113268608414239
+      },
+      "verdict": "no-resolution",
+      "direction": "lower_is_better",
+      "notes": "vctk_demand_test, large-v3, reference = corpus transcript",
+      "extra": {}
+    },
+    {
+      "name": "wer.ins",
+      "metric": "ins",
+      "role": "monitor",
+      "n": 824,
+      "value": 0.0036252127726642287,
+      "baseline": 0.0027453584037321903,
+      "difference": {
+        "point": 0.0008798543689320388,
+        "ci_low": 0.0,
+        "ci_high": 0.00212378640776699
+      },
+      "verdict": "no-resolution",
+      "direction": "lower_is_better",
+      "notes": "vctk_demand_test, large-v3, reference = corpus transcript",
+      "extra": {}
+    },
+    {
+      "name": "wer.sub",
+      "metric": "sub",
+      "role": "monitor",
+      "n": 824,
+      "value": 0.026119958665787736,
+      "baseline": 0.024856719477791268,
+      "difference": {
+        "point": 0.0012632391879964697,
+        "ci_low": -0.00030434043100912016,
+        "ci_high": 0.0029261823330391282
+      },
+      "verdict": "no-resolution",
+      "direction": "lower_is_better",
+      "notes": "vctk_demand_test, large-v3, reference = corpus transcript",
+      "extra": {}
+    },
+    {
+      "name": "wer_hard.wer",
+      "metric": "wer",
+      "role": "monitor",
+      "n": 500,
+      "value": 0.1228665779347555,
+      "baseline": 0.1210188836247309,
+      "difference": {
+        "point": 0.0018476943100246,
+        "ci_low": -0.009397942519601516,
+        "ci_high": 0.019983409231820896
+      },
+      "verdict": "no-resolution",
+      "direction": "lower_is_better",
+      "notes": "libritts_demand_hard, large-v3, reference = corpus transcript",
+      "extra": {}
+    },
+    {
+      "name": "wer_hard.del",
+      "metric": "del",
+      "role": "gate",
+      "n": 500,
+      "value": 0.034775984056277,
+      "baseline": 0.04188803511449622,
+      "difference": {
+        "point": -0.007112051058219218,
+        "ci_low": -0.013575104878092383,
+        "ci_high": -0.0013324424687461557
+      },
+      "verdict": "pass",
+      "direction": "lower_is_better",
+      "notes": "libritts_demand_hard, large-v3, reference = corpus transcript",
+      "extra": {}
+    },
+    {
+      "name": "wer_hard.ins",
+      "metric": "ins",
+      "role": "monitor",
+      "n": 500,
+      "value": 0.01588156572352472,
+      "baseline": 0.01049405420311139,
+      "difference": {
+        "point": 0.005387511520413326,
+        "ci_low": -0.004368613911844105,
+        "ci_high": 0.02239553003680147
+      },
+      "verdict": "no-resolution",
+      "direction": "lower_is_better",
+      "notes": "libritts_demand_hard, large-v3, reference = corpus transcript",
+      "extra": {}
+    },
+    {
+      "name": "wer_hard.sub",
+      "metric": "sub",
+      "role": "monitor",
+      "n": 500,
+      "value": 0.07220902815495378,
+      "baseline": 0.0686367943071233,
+      "difference": {
+        "point": 0.003572233847830488,
+        "ci_low": -0.0018815812963371814,
+        "ci_high": 0.009290548987313739
+      },
+      "verdict": "no-resolution",
+      "direction": "lower_is_better",
+      "notes": "libritts_demand_hard, large-v3, reference = corpus transcript",
+      "extra": {}
+    }
+  ],
+  "lineage": {
+    "lineage": "external",
+    "variable": "ai-coustics Quail S (quail-s-16khz), aic-sdk 3.3.0 / SDK 0.25.0, run locally on CPU at enhancement level 1.0; the SDK's output delay removed before scoring"
+  }
+}

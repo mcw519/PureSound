@@ -1,0 +1,658 @@
+{
+  "date": "2026-10-20",
+  "purpose": "Apple Silicon inference: ONNX Runtime version, provider policy for frame graphs, arm64 native SSM companion",
+  "hardware": {
+    "cpu": "Apple M4",
+    "cores": 10,
+    "memory_gb": 24,
+    "machine": "arm64",
+    "os": "macOS 26.5.2 (Darwin 25.5.0)",
+    "sme": true,
+    "sme2": true
+  },
+  "software": {
+    "python": "3.12.6",
+    "numpy": "2.4.4",
+    "torch": "2.14.0"
+  },
+  "sample": "puresound/web/static/samples/noisy-speech.wav",
+  "sample_sha256": "e48ddf9277066f70e12c0535b222b9b5e74cc2395cd0e63883bd38df3b102964",
+  "end_to_end": {
+    "method": "load_model(model, provider, variant).infer({'audio': clip}) on the sample tiled four times (20 s); one warm-up call (session load), then the median of three calls; configurations run one after another in one process each",
+    "audio_seconds": 20.0,
+    "configurations": {
+      "before_auto": {
+        "onnxruntime": "1.23.2",
+        "provider": "coreml",
+        "description": "the previous macOS default: ORT 1.23.2 and auto resolving to CoreML (requested here as provider=coreml, which resolves identically)"
+      },
+      "before_cpu": {
+        "onnxruntime": "1.23.2",
+        "provider": "cpu",
+        "description": "ORT 1.23.2, one CPU thread"
+      },
+      "after_auto": {
+        "onnxruntime": "1.26.0",
+        "provider": "auto",
+        "description": "the new macOS default: ORT 1.26.0 and auto resolving to one CPU thread"
+      },
+      "after_auto_native": {
+        "onnxruntime": "1.26.0",
+        "provider": "auto",
+        "description": "as after_auto, with PURESOUND_ORT_SSM_LIBRARY set to a local arm64 build (NS models only have a companion)"
+      },
+      "after_coreml": {
+        "onnxruntime": "1.26.0",
+        "provider": "coreml",
+        "description": "ORT 1.26.0, explicit coreml"
+      }
+    },
+    "results": {
+      "voice-isolate-dpcrn-v8": {
+        "default": {
+          "before_auto": {
+            "median_rtf": 0.3004,
+            "rtf_repeats": [
+              0.3111,
+              0.2916,
+              0.3004
+            ]
+          },
+          "before_cpu": {
+            "median_rtf": 0.1468,
+            "rtf_repeats": [
+              0.1497,
+              0.1468,
+              0.1467
+            ]
+          },
+          "after_auto": {
+            "median_rtf": 0.075,
+            "rtf_repeats": [
+              0.075,
+              0.0747,
+              0.0751
+            ]
+          },
+          "after_auto_native": {
+            "median_rtf": 0.0749,
+            "rtf_repeats": [
+              0.0749,
+              0.075,
+              0.0746
+            ]
+          },
+          "after_coreml": {
+            "median_rtf": 0.2488,
+            "rtf_repeats": [
+              0.262,
+              0.2488,
+              0.2461
+            ]
+          }
+        },
+        "flash": {
+          "before_auto": {
+            "median_rtf": 0.3068,
+            "rtf_repeats": [
+              0.3068,
+              0.307,
+              0.3042
+            ]
+          },
+          "before_cpu": {
+            "median_rtf": 0.1049,
+            "rtf_repeats": [
+              0.1049,
+              0.1049,
+              0.1046
+            ]
+          },
+          "after_auto": {
+            "median_rtf": 0.0745,
+            "rtf_repeats": [
+              0.0744,
+              0.0747,
+              0.0745
+            ]
+          },
+          "after_auto_native": {
+            "median_rtf": 0.0745,
+            "rtf_repeats": [
+              0.0742,
+              0.0746,
+              0.0745
+            ]
+          },
+          "after_coreml": {
+            "median_rtf": 0.3409,
+            "rtf_repeats": [
+              0.3409,
+              0.3979,
+              0.3409
+            ]
+          }
+        }
+      },
+      "voice-isolate-dpcrn-curriculum-v1": {
+        "default": {
+          "before_auto": {
+            "median_rtf": 0.2853,
+            "rtf_repeats": [
+              0.2849,
+              0.2853,
+              0.2862
+            ]
+          },
+          "before_cpu": {
+            "median_rtf": 0.1469,
+            "rtf_repeats": [
+              0.1469,
+              0.1469,
+              0.1465
+            ]
+          },
+          "after_auto": {
+            "median_rtf": 0.0752,
+            "rtf_repeats": [
+              0.0748,
+              0.0753,
+              0.0752
+            ]
+          },
+          "after_auto_native": {
+            "median_rtf": 0.0748,
+            "rtf_repeats": [
+              0.0748,
+              0.0748,
+              0.0748
+            ]
+          },
+          "after_coreml": {
+            "median_rtf": 0.2968,
+            "rtf_repeats": [
+              0.2968,
+              0.3083,
+              0.2853
+            ]
+          }
+        },
+        "flash": {
+          "before_auto": {
+            "median_rtf": 0.3064,
+            "rtf_repeats": [
+              0.3068,
+              0.3046,
+              0.3064
+            ]
+          },
+          "before_cpu": {
+            "median_rtf": 0.1046,
+            "rtf_repeats": [
+              0.1046,
+              0.1047,
+              0.1043
+            ]
+          },
+          "after_auto": {
+            "median_rtf": 0.0743,
+            "rtf_repeats": [
+              0.0743,
+              0.0742,
+              0.0745
+            ]
+          },
+          "after_auto_native": {
+            "median_rtf": 0.0742,
+            "rtf_repeats": [
+              0.0742,
+              0.0744,
+              0.0741
+            ]
+          },
+          "after_coreml": {
+            "median_rtf": 0.3428,
+            "rtf_repeats": [
+              0.3734,
+              0.3428,
+              0.3252
+            ]
+          }
+        }
+      },
+      "voice-isolate-dpcrn-curriculum-v2": {
+        "default": {
+          "before_auto": {
+            "median_rtf": 0.3914,
+            "rtf_repeats": [
+              0.3914,
+              0.3941,
+              0.391
+            ]
+          },
+          "before_cpu": {
+            "median_rtf": 0.2245,
+            "rtf_repeats": [
+              0.2246,
+              0.2245,
+              0.2244
+            ]
+          },
+          "after_auto": {
+            "median_rtf": 0.0906,
+            "rtf_repeats": [
+              0.0909,
+              0.0903,
+              0.0906
+            ]
+          },
+          "after_auto_native": {
+            "median_rtf": 0.0971,
+            "rtf_repeats": [
+              0.1116,
+              0.0928,
+              0.0971
+            ]
+          },
+          "after_coreml": {
+            "median_rtf": 0.3671,
+            "rtf_repeats": [
+              0.3671,
+              0.4272,
+              0.3494
+            ]
+          }
+        },
+        "flash": {
+          "before_auto": {
+            "median_rtf": 0.3778,
+            "rtf_repeats": [
+              0.3778,
+              0.3813,
+              0.3775
+            ]
+          },
+          "before_cpu": {
+            "median_rtf": 0.1536,
+            "rtf_repeats": [
+              0.1536,
+              0.1532,
+              0.1538
+            ]
+          },
+          "after_auto": {
+            "median_rtf": 0.1012,
+            "rtf_repeats": [
+              0.1012,
+              0.101,
+              0.1014
+            ]
+          },
+          "after_auto_native": {
+            "median_rtf": 0.1011,
+            "rtf_repeats": [
+              0.104,
+              0.101,
+              0.1011
+            ]
+          },
+          "after_coreml": {
+            "median_rtf": 0.4294,
+            "rtf_repeats": [
+              0.4294,
+              0.467,
+              0.4237
+            ]
+          }
+        }
+      },
+      "noise-suppression-dpcrn-mamba-v1": {
+        "default": {
+          "before_auto": {
+            "median_rtf": 0.3497,
+            "rtf_repeats": [
+              0.3477,
+              0.3497,
+              0.35
+            ]
+          },
+          "before_cpu": {
+            "median_rtf": 0.1358,
+            "rtf_repeats": [
+              0.1358,
+              0.1359,
+              0.1358
+            ]
+          },
+          "after_auto": {
+            "median_rtf": 0.0909,
+            "rtf_repeats": [
+              0.0909,
+              0.0906,
+              0.0909
+            ]
+          },
+          "after_auto_native": {
+            "median_rtf": 0.081,
+            "rtf_repeats": [
+              0.081,
+              0.0815,
+              0.0808
+            ]
+          },
+          "after_coreml": {
+            "median_rtf": 0.3626,
+            "rtf_repeats": [
+              0.3626,
+              0.3737,
+              0.3584
+            ]
+          }
+        },
+        "flash": {
+          "before_auto": {
+            "median_rtf": 0.371,
+            "rtf_repeats": [
+              0.3684,
+              0.3712,
+              0.371
+            ]
+          },
+          "before_cpu": {
+            "median_rtf": 0.0992,
+            "rtf_repeats": [
+              0.0992,
+              0.0992,
+              0.0993
+            ]
+          },
+          "after_auto": {
+            "median_rtf": 0.0893,
+            "rtf_repeats": [
+              0.0894,
+              0.0893,
+              0.0891
+            ]
+          },
+          "after_auto_native": {
+            "median_rtf": 0.081,
+            "rtf_repeats": [
+              0.0801,
+              0.081,
+              0.0813
+            ]
+          },
+          "after_coreml": {
+            "median_rtf": 0.4202,
+            "rtf_repeats": [
+              0.4202,
+              0.4358,
+              0.4198
+            ]
+          }
+        }
+      },
+      "noise-suppression-dpcrn-mamba-v2": {
+        "default": {
+          "before_auto": {
+            "median_rtf": 0.3499,
+            "rtf_repeats": [
+              0.3658,
+              0.3499,
+              0.3483
+            ]
+          },
+          "before_cpu": {
+            "median_rtf": 0.1358,
+            "rtf_repeats": [
+              0.1358,
+              0.1356,
+              0.1359
+            ]
+          },
+          "after_auto": {
+            "median_rtf": 0.0903,
+            "rtf_repeats": [
+              0.0909,
+              0.0903,
+              0.0898
+            ]
+          },
+          "after_auto_native": {
+            "median_rtf": 0.0835,
+            "rtf_repeats": [
+              0.0807,
+              0.0881,
+              0.0835
+            ]
+          },
+          "after_coreml": {
+            "median_rtf": 0.3613,
+            "rtf_repeats": [
+              0.3305,
+              0.3794,
+              0.3613
+            ]
+          }
+        },
+        "flash": {
+          "before_auto": {
+            "median_rtf": 0.3695,
+            "rtf_repeats": [
+              0.3692,
+              0.3707,
+              0.3695
+            ]
+          },
+          "before_cpu": {
+            "median_rtf": 0.0988,
+            "rtf_repeats": [
+              0.0988,
+              0.0989,
+              0.0986
+            ]
+          },
+          "after_auto": {
+            "median_rtf": 0.0892,
+            "rtf_repeats": [
+              0.0892,
+              0.0895,
+              0.0891
+            ]
+          },
+          "after_auto_native": {
+            "median_rtf": 0.0897,
+            "rtf_repeats": [
+              0.1058,
+              0.0897,
+              0.0892
+            ]
+          },
+          "after_coreml": {
+            "median_rtf": 0.4062,
+            "rtf_repeats": [
+              0.4057,
+              0.4062,
+              0.4133
+            ]
+          }
+        }
+      },
+      "noise-suppression-dpcrn-mamba-v3": {
+        "default": {
+          "before_auto": {
+            "median_rtf": 0.4822,
+            "rtf_repeats": [
+              0.4822,
+              0.4824,
+              0.4808
+            ]
+          },
+          "before_cpu": {
+            "median_rtf": 0.2222,
+            "rtf_repeats": [
+              0.2222,
+              0.2227,
+              0.2222
+            ]
+          },
+          "after_auto": {
+            "median_rtf": 0.1136,
+            "rtf_repeats": [
+              0.1134,
+              0.1137,
+              0.1136
+            ]
+          },
+          "after_auto_native": {
+            "median_rtf": 0.1032,
+            "rtf_repeats": [
+              0.1032,
+              0.1024,
+              0.1043
+            ]
+          },
+          "after_coreml": {
+            "median_rtf": 0.44,
+            "rtf_repeats": [
+              0.44,
+              0.4344,
+              0.4618
+            ]
+          }
+        },
+        "flash": {
+          "before_auto": {
+            "median_rtf": 0.475,
+            "rtf_repeats": [
+              0.4676,
+              0.485,
+              0.475
+            ]
+          },
+          "before_cpu": {
+            "median_rtf": 0.1498,
+            "rtf_repeats": [
+              0.1499,
+              0.1498,
+              0.1495
+            ]
+          },
+          "after_auto": {
+            "median_rtf": 0.1235,
+            "rtf_repeats": [
+              0.1236,
+              0.1235,
+              0.1233
+            ]
+          },
+          "after_auto_native": {
+            "median_rtf": 0.1116,
+            "rtf_repeats": [
+              0.1116,
+              0.1118,
+              0.1116
+            ]
+          },
+          "after_coreml": {
+            "median_rtf": 0.4953,
+            "rtf_repeats": [
+              0.4953,
+              0.5331,
+              0.4856
+            ]
+          }
+        }
+      }
+    },
+    "noise_note": "after_auto and after_auto_native run the same graph for voice isolation; their spread there (up to 7% on curriculum-v2) is the run-to-run noise of this measurement"
+  },
+  "graph_only": {
+    "method": "session.run per STFT frame of 400 random frames with the state fed back, intra_op_num_threads=1, best of four passes; microseconds per frame",
+    "onnxruntime_1.23.2": {
+      "vi_cur1/portable": 1337,
+      "vi_cur1_flash/portable": 940,
+      "vi_cur2/portable": 2069,
+      "vi_cur2_flash/portable": 1422,
+      "ns_v2/portable": 1258,
+      "ns_v2/native": 1175,
+      "ns_v2_flash/portable": 938,
+      "ns_v2_flash/native": 829,
+      "ns_v3/portable": 2142,
+      "ns_v3/native": 2008,
+      "ns_v3_flash/portable": 1443,
+      "ns_v3_flash/native": 1303
+    },
+    "onnxruntime_1.24.1": {
+      "vi_cur1/portable": 725,
+      "vi_cur1_flash/portable": 694,
+      "vi_cur2/portable": 883,
+      "vi_cur2_flash/portable": 961,
+      "ns_v2/portable": 835,
+      "ns_v2_flash/portable": 856,
+      "ns_v3/portable": 1121,
+      "ns_v3_flash/portable": 1195
+    },
+    "onnxruntime_1.25.0": {
+      "vi_cur1/portable": 716,
+      "vi_cur1_flash/portable": 698,
+      "vi_cur2/portable": 880,
+      "vi_cur2_flash/portable": 962,
+      "ns_v2/portable": 813,
+      "ns_v2_flash/portable": 849,
+      "ns_v3/portable": 1094,
+      "ns_v3_flash/portable": 1187
+    },
+    "onnxruntime_1.26.0": {
+      "vi_cur1/portable": 712,
+      "vi_cur1_flash/portable": 701,
+      "vi_cur2/portable": 837,
+      "vi_cur2_flash/portable": 966,
+      "ns_v2/portable": 869,
+      "ns_v2/native": 785,
+      "ns_v2_flash/portable": 854,
+      "ns_v2_flash/native": 766,
+      "ns_v3/portable": 1099,
+      "ns_v3/native": 954,
+      "ns_v3_flash/portable": 1188,
+      "ns_v3_flash/native": 1078
+    },
+    "onnxruntime_1.26.0_kleidiai_disabled": {
+      "vi_cur1/portable": 1396,
+      "vi_cur1_flash/portable": 984,
+      "vi_cur2/portable": 2156,
+      "vi_cur2_flash/portable": 1466,
+      "ns_v2/portable": 1299,
+      "ns_v2_flash/portable": 941,
+      "ns_v3/portable": 2145,
+      "ns_v3_flash/portable": 1445
+    },
+    "attribution": "with mlas.disable_kleidiai=1, ORT 1.26.0 runs at the speed of 1.23.2: the gain is ORT's KleidiAI SME/SME2 matrix kernels, so chips without SME (M1-M3) should not expect it"
+  },
+  "parity": {
+    "method": "enhanced spectra of the sample, frame by frame, ORT 1.23.2 against 1.26.0 on one CPU thread",
+    "spectral_snr_db": {
+      "dpcrn_mamba_v3": 137.3,
+      "dpcrn_curriculum_v2": 135.9,
+      "dpcrn_mamba_v3_flash": 46.2
+    },
+    "note": "float graphs agree to float32 precision; the int8 graph moves with the int8 kernel, as every int8 export does",
+    "native_vs_portable_max_abs_output": {
+      "dpcrn_mamba_v3": 1.19e-07,
+      "dpcrn_mamba_v2": 1.19e-07
+    }
+  },
+  "speaker_embedding_ms": {
+    "method": "PS-spk-v1-1 on speaker-a-full.wav (4.6 s), ORT default threads, median of seven",
+    "onnxruntime_1.23.2": {
+      "cpu": 56.1,
+      "coreml": 34.7
+    },
+    "onnxruntime_1.26.0": {
+      "cpu": 22.8,
+      "coreml": 41.5
+    },
+    "cosine_cpu_vs_coreml": 1.0,
+    "note": "auto is unchanged for these graphs: CoreML wins on ORT 1.23.2, the CPU on 1.26.0"
+  }
+}

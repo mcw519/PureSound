@@ -24,6 +24,7 @@ import argparse
 import sys
 from pathlib import Path
 from collections import defaultdict
+from functools import partial
 from typing import Any, Sequence
 
 import numpy as np
@@ -101,7 +102,7 @@ def run(
     spec = {**spec, "sample_rate": sample_rate}
     per_clip = map_items(
         _score_clip, chosen, jobs=jobs,
-        builder=lambda: _build_systems(spec),
+        builder=partial(_build_systems, spec),
         progress=lambda done, total: print(f"  {done}/{total}", flush=True),
         progress_every=progress_every,
     )

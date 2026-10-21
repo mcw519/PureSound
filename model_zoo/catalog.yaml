@@ -34,6 +34,13 @@ models:
         manifest: egs/voice_isolate/pretrained_ckpt/streaming/dpcrn_v8.json
         processor: stft_frame_ort
         sha256: 322a3e3f05db85ae0b11391c386047c051ff54a16e5eda245e6a11d12e3822c8
+      - format: onnx
+        variant: flash
+        path: egs/voice_isolate/pretrained_ckpt/streaming/dpcrn_v8_flash.onnx
+        manifest: egs/voice_isolate/pretrained_ckpt/streaming/dpcrn_v8_flash.json
+        processor: stft_frame_ort
+        sha256: 41a9bdb54c3a60f6e3424506ae3914891b10fa93e4eff420088a856ac17ce59a
+        description: "int8 weights for tight CPU budgets: about 15% less CPU time, no resolvable change in WER or deletions on the moderate-reverb set."
 
   - id: voice-isolate-dpcrn-curriculum-v1
     display_name: Voice Isolation DPCRN curriculum v1
@@ -65,6 +72,13 @@ models:
         manifest: egs/voice_isolate/pretrained_ckpt/streaming/dpcrn_curriculum_v1.json
         processor: stft_frame_ort
         sha256: bf69dfbf03d01415a6307f23d8a10fa985f101d34a2bb6fccfcdc4f3250ff84e
+      - format: onnx
+        variant: flash
+        path: egs/voice_isolate/pretrained_ckpt/streaming/dpcrn_curriculum_v1_flash.onnx
+        manifest: egs/voice_isolate/pretrained_ckpt/streaming/dpcrn_curriculum_v1_flash.json
+        processor: stft_frame_ort
+        sha256: 2e18e847d75fdaa3fcf6c185c81289a0eeeb36002dd950eeebf13215ccf2506b
+        description: "int8 weights for tight CPU budgets: about 15% less CPU time, no resolvable change in WER or deletions on the moderate-reverb set."
 
   - id: voice-isolate-dpcrn-curriculum-v2
     display_name: Voice Isolation DPCRN curriculum v2 (wide)
@@ -96,13 +110,20 @@ models:
         manifest: egs/voice_isolate/pretrained_ckpt/streaming/dpcrn_curriculum_v2.json
         processor: stft_frame_ort
         sha256: 9a79e9eaeab9a6e288fec7216adb1c87a05b557948e8aa014f5f6096e1f375e4
+      - format: onnx
+        variant: flash
+        path: egs/voice_isolate/pretrained_ckpt/streaming/dpcrn_curriculum_v2_flash.onnx
+        manifest: egs/voice_isolate/pretrained_ckpt/streaming/dpcrn_curriculum_v2_flash.json
+        processor: stft_frame_ort
+        sha256: b73a0046e62d3e91d50d2f86b4dfadbd4f9c68bb5e073f1f21ace20bd140ca11
+        description: "int8 weights (per channel) for tight CPU budgets: about 17% less CPU time, no resolvable change in WER or deletions on the moderate-reverb set."
 
   - id: noise-suppression-dpcrn-mamba-v3
     display_name: Noise Suppression DPCRN-Mamba v3
     task: noise_suppression
     lifecycle: released
     roles: [candidate]
-    description: "Wider 16 kHz streaming DPCRN-Mamba with mixed-source coverage training and MetricGAN calibration. Higher PESQ and STOI than v2; lower DNSMOS OVR and slower CPU inference. Deletion gates remain unresolved, and hard-set WER is above the unprocessed input."
+    description: Wider 16 kHz streaming DPCRN-Mamba with mixed-source coverage training, calibrated against a PESQ critic and the DNSMOS P.835 judge. Higher PESQ, STOI and DNSMOS than v2 at 1.5x the CPU. Deletion gates remain unresolved, and hard-set WER is above the unprocessed input.
     inputs: [audio]
     outputs: [audio]
     audio: {sample_rate: 16000, channels: 1}
@@ -117,22 +138,23 @@ models:
       onset_guard_t_forget_s: {type: float, default: 5.0, minimum: 1.0, maximum: 60.0, description: "Quiet this long drops the anchor, so the next onset is protected again."}
       onset_guard_tau_dn_s: {type: float, default: 2.0, minimum: 0.1, maximum: 10.0, description: "Release time constant from the untouched input back to the model output."}
       onset_guard_margin_db: {type: float, default: 8.0, minimum: 3.0, maximum: 20.0, description: "How far over the tracked noise floor a frame counts as speech."}
+      pcs: {type: bool, default: false, description: "Perceptual contrast stretching of the enhanced spectrum: sharper formants and a higher PESQ, at a cost in DNSMOS signal quality and in inserted words on hard noise; see the model card."}
     source_checkpoint: egs/noise_suppression/pretrained_ckpt/dpcrn_mamba_v3.ckpt
     source_config: egs/noise_suppression/config/infer_dpcrn_mamba_wide.yaml
-    benchmark_references: [egs/noise_suppression/pretrained_ckpt/README.md, egs/noise_suppression/benchmarks/records/ns_dpcrn-mamba_capWL3_mg_ep3.json]
+    benchmark_references: [egs/noise_suppression/pretrained_ckpt/README.md, egs/noise_suppression/benchmarks/records/ns_dpcrn-mamba_v3dm_mg_ep3.json, egs/noise_suppression/benchmarks/records/ns_dpcrn-mamba_v3dm_mg_ep3_ort.json, egs/noise_suppression/benchmarks/records/ns_dpcrn-mamba_v3dm_mg_ep3_ort_pcs.json]
     artifacts:
       - format: onnx
         variant: default
         path: egs/noise_suppression/pretrained_ckpt/streaming/dpcrn_mamba_v3.onnx
         manifest: egs/noise_suppression/pretrained_ckpt/streaming/dpcrn_mamba_v3.json
         processor: stft_frame_ort
-        sha256: 8651656ab57af7ad33f0a67aa131df4c160767c56e8563043a59e77ea97dcfe9
+        sha256: 2a823d830bb87254edda35a8b7ae0743f8d6a203fc4ad3bbad9a2645c1947693
       - format: onnx
         variant: flash
         path: egs/noise_suppression/pretrained_ckpt/streaming/dpcrn_mamba_v3_flash.onnx
         manifest: egs/noise_suppression/pretrained_ckpt/streaming/dpcrn_mamba_v3_flash.json
         processor: stft_frame_ort
-        sha256: 2aab1b01855919e24b5b59d801bb9a655c617ea43208a0d1ac676888ffdb7dcf
+        sha256: 2b0523043cc3c02ef82c6bbb259ab81395e0e6ceb3a5d7a5c285a076418be1af
         description: "int8 weights for tight CPU budgets: about 20% less CPU time than the default graph, PESQ about 0.005 lower, no resolvable change in word deletions."
 
   - id: noise-suppression-dpcrn-mamba-v2
@@ -165,6 +187,13 @@ models:
         manifest: egs/noise_suppression/pretrained_ckpt/streaming/dpcrn_mamba_v2.json
         processor: stft_frame_ort
         sha256: a28cc5c9736f415a5ed603bd97cc415d11d8088cb2e288d20334a0713f723c86
+      - format: onnx
+        variant: flash
+        path: egs/noise_suppression/pretrained_ckpt/streaming/dpcrn_mamba_v2_flash.onnx
+        manifest: egs/noise_suppression/pretrained_ckpt/streaming/dpcrn_mamba_v2_flash.json
+        processor: stft_frame_ort
+        sha256: f576fb207853571df3307370a0a4920fc623fa93d2c252873166f3e3f0114098
+        description: "int8 weights for tight CPU budgets: about 11% less CPU time, PESQ within 0.004, no resolvable change in word deletions."
 
   - id: noise-suppression-dpcrn-mamba-v1
     display_name: Noise Suppression DPCRN-Mamba v1
@@ -196,6 +225,13 @@ models:
         manifest: egs/noise_suppression/pretrained_ckpt/streaming/dpcrn_mamba_v1.json
         processor: stft_frame_ort
         sha256: eabdca9fa7b0cc66c839d41e2fe07e409c9c09ad476e4dd0681a7bc63f04bfab
+      - format: onnx
+        variant: flash
+        path: egs/noise_suppression/pretrained_ckpt/streaming/dpcrn_mamba_v1_flash.onnx
+        manifest: egs/noise_suppression/pretrained_ckpt/streaming/dpcrn_mamba_v1_flash.json
+        processor: stft_frame_ort
+        sha256: ecb4e7c12aaef4b5f024494b67487c7d1b8a1d938f4ba9e3888fd278a3b82791
+        description: "int8 weights for tight CPU budgets: about 12% less CPU time, PESQ about 0.004 lower, no resolvable change in word deletions."
 
   - id: speaker-verification-ps-spk-v1
     display_name: Speaker Verification PS-spk-v1

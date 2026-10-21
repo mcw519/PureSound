@@ -22,6 +22,14 @@ if [ -n "$READOUT" ]; then
   GATE_ARGS="--presence-gate $READOUT ${GATE_EXTRA:-}"
   GATE_TAG="$(basename "$READOUT")${GATE_EXTRA:+ $GATE_EXTRA}"
 fi
+# ONSET_GUARD=1 in the environment adds the inference-only onset guard
+# (scripts/_gate_flags.py) to every stage at its default operating point;
+# GUARD_EXTRA appends knob overrides (--guard-t-arm 0.5, ...).
+GUARD_TAG="off"
+if [ -n "${ONSET_GUARD:-}" ]; then
+  GATE_ARGS="$GATE_ARGS --onset-guard ${GUARD_EXTRA:-}"
+  GUARD_TAG="on${GUARD_EXTRA:+ $GUARD_EXTRA}"
+fi
 # Recipes the stages build their models from. Override them when the checkpoint's
 # backbone is NOT the shipped LSTM -- scripts/make_arch_eval_configs.py writes a
 # matching set from the training recipe, and stage 0 refuses to run if any of them
@@ -138,7 +146,7 @@ uv run python scripts/eval_turntaking.py "$CFG_INFER" \
   --ckpt "$CKPT" --set-dir "$TT_SET" --device "$DEV" \
   --dry-blend "$BLEND" $GATE_ARGS > "$OUT/9_turntaking.log" 2>&1 || FAILED+=("9_turntaking")
 
-echo; echo "================ BENCHMARK SUMMARY [$TAG]  (dry_blend=$BLEND, presence_gate=$GATE_TAG, chain=$CHAIN) ================"
+echo; echo "================ BENCHMARK SUMMARY [$TAG]  (dry_blend=$BLEND, presence_gate=$GATE_TAG, onset_guard=$GUARD_TAG, chain=$CHAIN) ================"
 echo "--- cross-chain reference clips ---"; grep -E "qvf_(scenario|gym|price|keep|plumb)" "$OUT/1_scorecard_field.log" 2>/dev/null
 echo "--- field scorecard (sessions + verdicts) ---"; grep -E "_session|# (ours|reference):" "$OUT/1_scorecard_field.log" 2>/dev/null
 echo "    cold-start far verdicts:";  awk -F'\t' '/_far/ && $3=="ours" {v=$11; c[v]++} END {for (k in c) printf "      %-40s %d\n", k, c[k]}' "$OUT/1_scorecard_field.log" 2>/dev/null

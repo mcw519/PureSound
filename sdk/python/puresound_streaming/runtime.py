@@ -298,6 +298,14 @@ class StreamingRuntimeConfig:
                 "manifest requests mix_phase=true, which this runtime does not "
                 "implement. Re-export with mix_phase=false or add it here."
             )
+        if bool(postprocess.get("pcs", False)):
+            # Perceptual contrast stretching (puresound.audio.pcs) is a request
+            # knob of the in-repo runtime; an export that records it would need
+            # the stage copied here first.
+            raise ValueError(
+                "manifest requests pcs=true, which this runtime does not "
+                "implement. Re-export with pcs=false or add it here."
+            )
         dry_blend = float(postprocess.get("dry_blend", 1.0))
         if not 0.0 < dry_blend <= 1.0:
             raise ValueError(f"manifest dry_blend must be in (0, 1], got {dry_blend}")
@@ -707,9 +715,11 @@ class PureSoundStreamingRuntime:
         if choice == "coreml":
             return ([_COREML_PROVIDER, _CPU_PROVIDER]
                     if _COREML_PROVIDER in available else [_CPU_PROVIDER])
-        for candidate in (_CUDA_PROVIDER, _COREML_PROVIDER):
-            if candidate in available:
-                return [candidate, _CPU_PROVIDER]
+        # `auto` skips CoreML: a frame graph runs one hop per call, and the
+        # per-call dispatch outweighs that frame (1.7-4.7x slower than one CPU
+        # thread on an Apple M4). An explicit `coreml` request still gets it.
+        if _CUDA_PROVIDER in available:
+            return [_CUDA_PROVIDER, _CPU_PROVIDER]
         return [_CPU_PROVIDER]
 
     def reset(self, batch_size: int = 1) -> None:

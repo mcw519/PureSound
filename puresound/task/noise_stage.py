@@ -3,7 +3,7 @@
 Three sources, and they are three because they answer to different things:
 
 * **Recorded noise at an SNR** relative to the speech already in the mixture --
-  a cafe, a street, a fan. Optionally rendered through a channel of the *same*
+  a cafe, a street, a fan; optionally two at once (``prob_overlay``). Optionally rendered through a channel of the *same*
   room the speech was rendered in, so the noise floor is spatially coherent with
   the mixture instead of arriving dry from nowhere.
 * **White noise**, on ``prob_white_noise`` of the rows the recorded noise did not
@@ -105,6 +105,12 @@ class NoiseStage:
         if torch.rand(1) < config.prob / 4:
             dynamic_type = True
 
+        # A second noise at the same time, on rows that did not take the dynamic
+        # type; drawn only when the recipe asks for it.
+        overlay_db = None
+        if not dynamic_type and config.prob_overlay and torch.rand(1) < config.prob_overlay:
+            overlay_db = torch.FloatTensor(1).uniform_(*config.overlay_level_db).item()
+
         noise_transform = self._room_coloring(sample_rate, room_scene)
         noisy, _ = self.augmentor.add_bg_noise(
             wav=noisy,
@@ -112,13 +118,17 @@ class NoiseStage:
             dynamic_type=dynamic_type,
             sr=sample_rate,
             noise_transform=noise_transform,
+            level_reference=config.level_reference,
+            min_segment_level_db=config.min_segment_level_db,
+            segment_redraws=config.segment_redraws,
+            overlay_db=overlay_db,
         )
         # unwrap list
         noisy = noisy[0]
         if tap is not None:
             tap(
                 "noise.recorded", noisy, snr_db=snr, dynamic=dynamic_type,
-                room_colored=noise_transform is not None,
+                room_colored=noise_transform is not None, overlay_db=overlay_db,
             )
 
         # White noise joins a row that did not take the dynamic type.

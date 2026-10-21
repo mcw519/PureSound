@@ -1433,6 +1433,7 @@ def test_web_page_markup_is_balanced_and_workspaces_are_siblings():
 
 
 def test_web_serves_https_with_a_self_signed_certificate(tmp_path):
+    import contextlib
     import http.client
     import shutil
     import socket
@@ -1451,7 +1452,9 @@ def test_web_serves_https_with_a_self_signed_certificate(tmp_path):
         # Plain HTTP to the HTTPS port fails for that client only.
         with socket.create_connection(("127.0.0.1", server.server_port), timeout=5) as plain:
             plain.sendall(b"GET /api/health HTTP/1.0\r\n\r\n")
-            plain.recv(64)
+            # Linux closes this connection, macOS resets it; the server lives on.
+            with contextlib.suppress(ConnectionResetError):
+                plain.recv(64)
         context = ssl.create_default_context(cafile=str(cert))
         connection = http.client.HTTPSConnection("127.0.0.1", server.server_port, context=context, timeout=5)
         connection.request("GET", "/api/health")
@@ -1521,7 +1524,8 @@ def test_web_every_response_is_cross_origin_isolated_and_the_old_demo_is_gone():
         connection.request("GET", "/device/worker.js")
         response = connection.getresponse()
         response.read()
-        assert response.getheader("Content-Type").startswith("application/javascript")
+        # Pinned, not the host's MIME database, which differs between Linux and macOS.
+        assert response.getheader("Content-Type") == "text/javascript; charset=utf-8"
     finally:
         server.shutdown()
         server.server_close()

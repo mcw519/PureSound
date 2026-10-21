@@ -19,7 +19,7 @@ Listed in [`model_zoo/catalog.yaml`](model_zoo/catalog.yaml). Every model takes
 | Voice isolation | `voice-isolate-dpcrn-curriculum-v1` | default | keeps the talker near the microphone and suppresses distant talkers and noise; strongest on the capture hardware it was tuned for |
 | Voice isolation | `voice-isolate-dpcrn-curriculum-v2` | candidate | a wider curriculum model: lower WER and deeper distant-talker suppression than v1, at 1.4x the CPU |
 | Voice isolation | `voice-isolate-dpcrn-v8` | candidate | the conservative choice when the capture hardware is unknown |
-| Noise suppression | `noise-suppression-dpcrn-mamba-v3` | candidate | wider streaming model with higher PESQ and STOI; word-deletion gates remain unresolved |
+| Noise suppression | `noise-suppression-dpcrn-mamba-v3` | candidate | wider streaming model with higher PESQ, STOI and DNSMOS; word-deletion gates remain unresolved |
 | Noise suppression | `noise-suppression-dpcrn-mamba-v2` | default | streaming noise suppression, balanced quality and CPU cost |
 | Noise suppression | `noise-suppression-dpcrn-mamba-v1` | candidate | the same model without its final quality fine-tune; deletes fewer words on clean read speech |
 | Speaker verification | `speaker-verification-ps-spk-v1-1` | default | 192-dimensional speaker embeddings |

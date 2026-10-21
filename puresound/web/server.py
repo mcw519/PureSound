@@ -249,6 +249,12 @@ _DEFAULT_MAX_UPLOAD_BYTES = 64 * 1024 * 1024
 #: as 16-bit samples, may be at most this many times that limit.
 _MAX_DECODED_EXPANSION = 16
 
+#: Static types a browser checks, pinned so every host sends the same header.
+#: ``mimetypes`` reads the host's database: Linux's /etc/mime.types says
+#: application/javascript where Python's own table says text/javascript (RFC
+#: 9239), and a host without a .wasm entry would break streamed WebAssembly.
+_STATIC_TYPES = {".js": "text/javascript", ".mjs": "text/javascript", ".wasm": "application/wasm"}
+
 #: Environment variable listing host names, comma separated, that a server may
 #: also be reached by (for example a reverse proxy's public name).
 ALLOWED_HOSTS_ENV = "PURESOUND_ALLOWED_HOSTS"
@@ -2931,8 +2937,12 @@ class _RequestHandler(BaseHTTPRequestHandler):
         if not found:
             self._error(HTTPStatus.NOT_FOUND, "asset not found", "not_found")
             return
-        content_type = mimetypes.guess_type(candidate.name)[0] or "application/octet-stream"
-        if content_type.startswith("text/") or content_type in {"application/javascript", "application/json"}:
+        content_type = (
+            _STATIC_TYPES.get(candidate.suffix.lower())
+            or mimetypes.guess_type(candidate.name)[0]
+            or "application/octet-stream"
+        )
+        if content_type.startswith("text/") or content_type == "application/json":
             content_type += "; charset=utf-8"
         self._send(HTTPStatus.OK, candidate.read_bytes(), content_type)
 

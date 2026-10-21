@@ -108,6 +108,31 @@ recording chain, not of distance, and no version here closes it.
 restarts every 20 epochs, so checkpoints are only comparable at the cosine
 troughs -- ep19 / ep39 / ep59. Every number above comes from a trough epoch.
 
+## flash (int8) variants
+
+Each version also ships a `flash` artifact: the same weights with the LSTM and
+matrix-product weights stored as int8 and activations quantized at run time
+(`export --quantize int8`; curriculum-v2, the wide model, uses
+`--quantize int8-per-channel`, one scale per weight channel, to stay inside the
+export's error bound). Select it with `--variant flash`. Columns are the streaming
+ONNX output on the 200-clip moderate-reverb set, float and int8 on the same
+items, at `dry_blend 0.9`; differences are paired, with 95% CIs.
+
+| Measure | v8 | curriculum-v1 | curriculum-v2 |
+|---|---|---|---|
+| CPU RTF, 1 thread, float → flash | 0.260 → 0.222 (−15%) | 0.261 → 0.221 (−15%) | 0.366 → 0.303 (−17%) |
+| int8 vs float output, SI-SDR median | 39.9 dB | 41.8 dB | 45.9 dB |
+| WER, float → flash | 0.406 → 0.404, −0.004 (−0.015, +0.005) | 0.429 → 0.432, +0.004 (−0.002, +0.010) | 0.388 → 0.389, +0.004 (−0.001, +0.011) |
+| deletion rate, float → flash | 0.194 → 0.198, +0.001 (−0.006, +0.009) | 0.193 → 0.188, −0.001 (−0.008, +0.005) | 0.199 → 0.193, −0.006 (−0.017, +0.000) |
+| SI-SDR (dB) | −0.005 (−0.014, +0.005) | −0.007 (−0.014, −0.001) | +0.000 (−0.004, +0.005) |
+| PESQ-WB | −0.002 (−0.004, −0.000) | −0.001 (−0.002, −0.000) | −0.001 (−0.005, +0.001) |
+
+Words show no resolvable change and the waveform metrics move by thousandths. Use
+it when the CPU budget is tight. Timings are medians of three interleaved rounds
+on a 5-second noisy-speech sample, one thread on an AVX-512 Xeon; int8 kernels
+differ by ISA, so measure on the target CPU. Browser/WASM payloads keep the
+float graph.
+
 ## `streaming/` — per-frame ONNX exports
 
 `dpcrn_v8`, `dpcrn_curriculum_v1` and `dpcrn_curriculum_v2` (`.onnx` + `.json`), the

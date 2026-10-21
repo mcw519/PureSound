@@ -32,6 +32,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from puresound.audio.pcs import pcs_gamma, stretch_magnitude_np
 from puresound.system.onset_guard import OnsetGuard
 from puresound.system.postprocess import IDENTITY, Postprocessor
 from puresound.utils import load_hparam
@@ -330,8 +331,8 @@ def export_streaming_onnx(
         raise ValueError("optimization must be none, portable, or cpu")
     if optimization == "cpu" and native_library is None:
         raise ValueError("CPU export needs native_library for native graph validation")
-    if quantization not in {"none", "int8"}:
-        raise ValueError("quantization must be none or int8")
+    if quantization not in {"none", "int8", "int8-per-channel"}:
+        raise ValueError("quantization must be none, int8 or int8-per-channel")
     if quantization != "none" and optimization == "none":
         raise ValueError("int8 quantization is a CPU deployment option; export with optimization")
     frame_model = load_streaming_model(variant, config_path, checkpoint_path)
@@ -404,9 +405,11 @@ def export_streaming_onnx(
 
         eliminate_singleton_transposes(onnx_path)
 
-    # Use the same provider policy as inference so an export validation run on
-    # macOS can exercise CoreML, while CUDA remains preferred on NVIDIA hosts.
-    providers = resolve_providers("auto", onnxruntime.get_available_providers())
+    # Use the same provider policy as inference, so CUDA remains preferred on
+    # NVIDIA hosts and macOS validates on the CPU its `auto` streams run on.
+    providers = resolve_providers(
+        "auto", onnxruntime.get_available_providers(), frame_graph=True
+    )
     options = onnxruntime.SessionOptions()
     if optimization != "none":
         providers = ["CPUExecutionProvider"]
@@ -415,10 +418,11 @@ def export_streaming_onnx(
     _check_rollout("exported ONNX", _rollout(_ort_step(session, input_names), frames, initial_state, n_outputs),
                    reference, output_names)
     quantization_record = None
-    if quantization == "int8":
+    if quantization != "none":
         from puresound.streaming.quantization import check_int8_rollout, quantize_int8
 
-        quantization_record = quantize_int8(onnx_path)
+        per_channel = quantization == "int8-per-channel"
+        quantization_record = quantize_int8(onnx_path, per_channel=per_channel)
         session = onnxruntime.InferenceSession(str(onnx_path), sess_options=options, providers=providers)
         quantization_record["relative_error"] = {"primary": check_int8_rollout(
             "int8 ONNX", _rollout(_ort_step(session, input_names), frames, initial_state, n_outputs),
@@ -489,7 +493,7 @@ def export_streaming_onnx(
                        _rollout(_ort_step(native_session, input_names), frames, initial_state, n_outputs),
                        reference, output_names)
         if quantization_record is not None:
-            quantize_int8(native_path)
+            quantize_int8(native_path, per_channel=per_channel)
             native_session = onnxruntime.InferenceSession(
                 str(native_path), sess_options=native_options, providers=["CPUExecutionProvider"],
             )
@@ -580,7 +584,7 @@ class StreamingOrt:
         # catalog carries the section; the convention is for third-party ones.
         postprocess = dict(self.manifest.get(Postprocessor.MANIFEST_KEY) or {})
         if postprocess_overrides:
-            unknown = set(postprocess_overrides) - {"dry_blend", "spec_floor"}
+            unknown = set(postprocess_overrides) - {"dry_blend", "spec_floor", "pcs"}
             if unknown:
                 raise ValueError(
                     "unsupported postprocess override(s): "
@@ -612,6 +616,16 @@ class StreamingOrt:
             raise ValueError(
                 f"manifest dry_blend must be in (0, 1], got {self.dry_blend}"
             )
+        # Perceptual contrast stretching on each enhanced frame's magnitude
+        # (`puresound.audio.pcs`): memoryless per frame, so no latency, and the
+        # same bins the graph already produced.
+        pcs = postprocess.get("pcs", False)
+        if not isinstance(pcs, bool):
+            raise ValueError(f"manifest pcs must be a boolean, got {pcs!r}")
+        self.pcs = pcs
+        self.pcs_gamma = (
+            pcs_gamma(self.fft_length, self.sample_rate).astype(np.float32) if pcs else None
+        )
         # The overlap-add is index-aligned, so this is purely the graph's own
         # look-ahead latency: its output at a given index carries the input from
         # this many samples earlier, and the blend has to match or it mixes in a
@@ -680,7 +694,7 @@ class StreamingOrt:
 
     @staticmethod
     def _resolve_providers(provider: str, available: Sequence[str]) -> list[str]:
-        return resolve_providers(provider, available)
+        return resolve_providers(provider, available, frame_graph=True)
 
     def reset(self, batch_size: int = 1) -> None:
         if batch_size != 1:
@@ -921,6 +935,11 @@ class StreamingOrt:
         noisy_frame = np.stack([spec.real, spec.imag], axis=-1).reshape(1, self.freq_bins, 2).astype(np.float32)
         enhanced = self.run_frame(noisy_frame)[0]
         enhanced_complex = enhanced[:, 0] + 1j * enhanced[:, 1]
+        if self.pcs_gamma is not None:
+            magnitude = np.abs(enhanced_complex)
+            enhanced_complex = enhanced_complex * (
+                stretch_magnitude_np(magnitude, self.pcs_gamma) / np.maximum(magnitude, 1e-8)
+            )
         wav = np.fft.irfft(enhanced_complex, n=self.fft_length).astype(np.float32)[: self.win_length]
         return wav * self.window
 

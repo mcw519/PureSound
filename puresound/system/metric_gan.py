@@ -4,7 +4,8 @@ alongside the model, whose verdict the model is trained to raise.
 Two terms per step, added to the ordinary loss:
 
 * **discriminator** -- ``D(clean, clean) -> 1`` on the current batch, and
-  ``D(clean, enhanced) -> normalised PESQ`` on rows REPLAYED from earlier steps.
+  ``D(clean, enhanced) -> normalised PESQ`` on rows REPLAYED from earlier steps
+  (with ``noisy_pairs``, ``D(clean, noisy) -> normalised PESQ`` rows as well).
   PESQ runs on the CPU and a batch's worth would dominate the step time, so it
   is computed by a background process pool and the discriminator learns from
   whatever has come back. MetricGAN+ (Fu et al., 2021) keeps a replay buffer of
@@ -56,6 +57,11 @@ class MetricGanConfig(StrictConfig):
     buffer_rows: int = Field(default=256, gt=0)
     #: replayed rows per discriminator update
     d_rows: int = Field(default=12, gt=0)
+    #: also label and replay each row's (clean, noisy input) pair -- MetricGAN+'s
+    #: third discriminator term. The critic then sees the quality range below
+    #: the enhancer's outputs instead of extrapolating into it. Doubles the
+    #: PESQ load.
+    noisy_pairs: StrictBool = False
     sample_rate: int = Field(default=16000, gt=0)
 
 

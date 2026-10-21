@@ -66,7 +66,7 @@ four blocks to the base set:
 
 | keyword | config model | what it does |
 | --- | --- | --- |
-| `augmentation_speech_args` (base) | `SpeechAugmentation` | interferers: `prob`, `add_n_cases`, `snr_range`, `is_target`, `media_voice`, `echo_playback`, `overlap_control` |
+| `augmentation_speech_args` (base) | `SpeechAugmentation` | interferers: `prob`, `add_n_cases`, `snr_range`, `is_target`, `target_sir_range`, `media_voice`, `echo_playback`, `overlap_control`. With `is_target`, `target_sir_range: [low, high]` keeps an interferer in the target only when its realized SIR (foreground over interferers, dB) lies in the range; a quieter one stays in the mixture to be removed. Unset, every interferer is target |
 | `augmentation_noise_args` (base) | `NoiseAugmentation` | recorded noise (`noise_folder` or weighted `noise_sources`), SNR range or bands, white noise, `room_coloring`, `absolute_floor` |
 | `augmentation_reverb_args` (base) | `ReverbAugmentation` | room simulator, pre-generated bank or RIR folder; `target_rir_type`; source-level or whole-mix |
 | `augmentation_speed_args` (base) | `ContinuousSpeedAugmentation` | speed perturbation over `speed_range` in 0.05 steps, both ends included |

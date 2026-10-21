@@ -20,6 +20,16 @@ not combinable with `cuda`), `hybrid-rir` / `hybrid-rir-gpu` (the RIR generator'
 optional backends). Run repository tools with `uv run` or `.venv/bin/python`, not
 another interpreter on `PATH`. More in the [project README](../../README.md).
 
+The codec stage of the device-chain augmentation runs through TorchCodec, which
+loads the system's FFmpeg shared libraries: a distribution package on Linux,
+`brew install ffmpeg` on macOS. TorchCodec's macOS libraries carry no search
+path, and Homebrew on Apple Silicon installs to `/opt/homebrew/lib`, which the
+dynamic loader does not search; export it before running anything:
+
+```bash
+export DYLD_FALLBACK_LIBRARY_PATH=/opt/homebrew/lib
+```
+
 ## 2. Prepare data
 
 | What | Page |

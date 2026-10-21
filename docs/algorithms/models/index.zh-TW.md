@@ -39,6 +39,7 @@ English version: [index.md](index.md)
 | 頁面 | 內容 |
 | --- | --- |
 | [Activation functions](lobe/activation.zh-TW.md) | `get_activation`，依名稱查找 activation |
+| [ONNX module](lobe/onnx_module.zh-TW.md) | `OnnxModule`，把小型 ONNX 圖（公開的裁判）當可微分 torch module 執行 |
 | [Attention](lobe/attention.zh-TW.md) | positional encoding、可加 mask 的 multi-head attention 與 Transformer encoder layer |
 | [頻帶分組](lobe/banding.zh-TW.md) | ERB / mel 頻帶邊界、三角頻帶矩陣與 `BandBottleneck` |
 | [CNN blocks](lobe/cnn.zh-TW.md) | depthwise-separable convolution 與 fast Fourier convolution |

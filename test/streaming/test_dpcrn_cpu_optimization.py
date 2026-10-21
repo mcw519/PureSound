@@ -84,12 +84,17 @@ def test_lstm_supports_portable_but_refuses_ssm_fusion():
         frame.enable_cpu_optimization(native_ssm=True)
 
 
-@pytest.fixture(scope="module")
-def native_library(tmp_path_factory):
+def _skip_without_compiler():
     import sys
 
-    if not sys.platform.startswith("linux") or not shutil.which("g++"):
-        pytest.skip("optional native library requires Linux and g++")
+    compiler = "clang++" if sys.platform == "darwin" else "g++"
+    if not sys.platform.startswith(("linux", "darwin")) or not shutil.which(compiler):
+        pytest.skip(f"optional native library requires Linux or macOS and {compiler}")
+
+
+@pytest.fixture(scope="module")
+def native_library(tmp_path_factory):
+    _skip_without_compiler()
     root = tmp_path_factory.mktemp("ssm-library")
     return build_library(root / "libpuresound_ssm.so")
 
@@ -400,8 +405,7 @@ def test_export_holds_the_optimized_graph_to_the_original_model(tmp_path, monkey
 
 
 def test_rebuild_replaces_a_loaded_library_without_rewriting_it(tmp_path):
-    if not shutil.which("g++"):
-        pytest.skip("requires g++")
+    _skip_without_compiler()
     path = build_library(tmp_path / "libpuresound_ssm.so")
     loaded = os.stat(path).st_ino
     assert build_library(path) == path
@@ -433,6 +437,7 @@ def test_int8_export_quantizes_both_graphs_and_records_it(tmp_path, native_libra
                                           native_library=native_library, quantization="int8")
     record = manifest["quantization"]
     assert record["type"] == "dynamic_int8" and set(record["relative_error"]) == {"primary", "native"}
+    assert record["per_channel"] is False
     native_path = path.with_name(manifest["cpu_optimization"]["native_graph"])
     for graph in (path, native_path):
         ops = {node.op_type for node in onnx.load(graph).graph.node}
@@ -445,3 +450,17 @@ def test_int8_export_quantizes_both_graphs_and_records_it(tmp_path, native_libra
         assert np.isfinite(np.concatenate([runtime.process_samples(samples), runtime.flush()])).all()
     with pytest.raises(ValueError, match="CPU deployment"):
         export_streaming_dpcrn_onnx(config, checkpoint, tmp_path / "plain.onnx", quantization="int8")
+
+
+def test_per_channel_int8_is_recorded_and_still_quantizes_the_graph(tmp_path):
+    """Per-channel weight scales are the same operators at the same size; the
+    manifest has to say which fit a deployed graph carries."""
+    config, checkpoint = _mamba_checkpoint(tmp_path)
+    path = tmp_path / "flash_pc.onnx"
+    manifest = export_streaming_dpcrn_onnx(config, checkpoint, path, optimization="portable",
+                                          quantization="int8-per-channel")
+    record = manifest["quantization"]
+    assert record["per_channel"] is True and record["relative_error"]["primary"] < 0.1
+    assert {"DynamicQuantizeLSTM", "MatMulInteger"} <= {node.op_type for node in onnx.load(path).graph.node}
+    with pytest.raises(ValueError, match="int8-per-channel"):
+        export_streaming_dpcrn_onnx(config, checkpoint, tmp_path / "x.onnx", optimization="portable", quantization="int4")

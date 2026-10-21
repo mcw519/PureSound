@@ -28,6 +28,7 @@ enabled on the backbone.
 | [sdr](sdr.md) | `SDRLoss` | active | time-domain SDR family (SI-SNR, SD-SDR, SA-SDR, t-SDR, ...) with a separate path for target-absent rows |
 | [stft_loss](stft_loss.md) | `MultiResolutionSTFTLoss`, `SpectralLoss`, `OverSuppressionLoss` | active | spectral distances; `OverSuppressionLoss` is a one-sided penalty on removed target energy |
 | [active_bins](active_bins.md) | `ActiveBinLogMagLoss` | active | per-bin log-magnitude error counted only on bins where the clean target has speech |
+| [dnsmos](dnsmos.md) | `DNSMOSLoss` | active | DNSMOS P.835 (SIG / BAK / OVRL) run as a differentiable judge; no clean reference needed |
 | [asr_feature](asr_feature.md) | `ASRFeatureLoss` | active | feature matching through a frozen self-supervised speech model, a differentiable proxy for word errors |
 | [residual](residual.md) | `ResidualReferenceLoss` | active | supervises `noisy - enhanced` against a reference residual |
 | [dist](dist.md) | `DistHeadRegressionLoss` | active | NaN-masked distance / DRR regression for the `DistHead` |

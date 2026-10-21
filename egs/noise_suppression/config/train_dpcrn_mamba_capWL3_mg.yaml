@@ -231,6 +231,12 @@ loss_func:
     - 9
     loss: l1
     crop_seconds: 2.0
+- type: DNSMOSLoss
+  weighted: 1.0
+  args:
+    sig_weight: 1.0
+    bak_weight: 1.0
+    max_rows: 6
 curriculum:
   used: true
   tracks:

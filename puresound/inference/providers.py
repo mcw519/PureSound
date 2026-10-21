@@ -70,7 +70,9 @@ def provider_is_available(provider: str, available: Sequence[str]) -> bool:
     return target in set(available)
 
 
-def resolve_providers(provider: str, available: Sequence[str]) -> list[str]:
+def resolve_providers(
+    provider: str, available: Sequence[str], *, frame_graph: bool = False
+) -> list[str]:
     """Resolve a public provider choice with deterministic CPU fallback.
 
     ``auto`` prefers CUDA, then CoreML, then CPU. Explicit ``cuda`` and
@@ -78,6 +80,11 @@ def resolve_providers(provider: str, available: Sequence[str]) -> list[str]:
     so callers stay usable on machines without the optional backend.
     The selected session's provider list is returned by each runtime, allowing
     callers to report when the fallback happened.
+
+    ``frame_graph`` marks a streaming graph that runs one hop per call. For it
+    ``auto`` skips CoreML: the per-call dispatch outweighs a single frame's
+    work, and on an Apple M4 every catalog DPCRN ran 1.7-4.7x slower than on one
+    CPU thread. An explicit ``coreml``/``mps`` request is still honoured.
     """
 
     choice = normalize_provider(provider)
@@ -92,7 +99,8 @@ def resolve_providers(provider: str, available: Sequence[str]) -> list[str]:
         if COREML_PROVIDER in available:
             return [COREML_PROVIDER, CPU_PROVIDER]
         return [CPU_PROVIDER]
-    for candidate in (CUDA_PROVIDER, COREML_PROVIDER):
+    accelerators = (CUDA_PROVIDER,) if frame_graph else (CUDA_PROVIDER, COREML_PROVIDER)
+    for candidate in accelerators:
         if candidate in available:
             return [candidate, CPU_PROVIDER]
     return [CPU_PROVIDER]

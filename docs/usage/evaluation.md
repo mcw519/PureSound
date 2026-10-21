@@ -209,7 +209,11 @@ and still produce numbers), the scoring `chain_commit`, the `inference` operatin
 point, and each stage's `n` and interval. A frozen synthetic stage additionally
 carries the set's build commit, recipe SHA-256 and seed in
 `extra.set_provenance`; those values, not the later scoring commit, identify the
-synthesis that produced its audio. The record contract, including the `lineage`
+synthesis that produced its audio. Paths under the repository are written
+repo-relative wherever they occur in the record (`records.repo_relative`), so a
+record names the file that was used rather than the clone that ran it; paths
+outside the repository, such as a corpus on a data disk, are kept as given.
+The record contract, including the `lineage`
 block filed with each record, is in
 [`egs/noise_suppression/benchmarks/README.md`](../../egs/noise_suppression/benchmarks/README.md).
 

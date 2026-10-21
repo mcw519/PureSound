@@ -188,3 +188,39 @@ def test_named_empty_audio_is_not_silently_replaced_by_another_utterance(
     sf.write(path, np.zeros(1600), 16000)
     with pytest.raises(ValueError, match="contains no usable audio"):
         dataset.choose_an_utterance_by_speaker_name("corpus_spk1", select_channel=0, utterance=utterance)
+
+
+@pytest.mark.parametrize(
+    "target_sir_range, kept",
+    [(None, True), ((15.0, 30.0), True), ((0.0, 10.0), False)],
+    ids=["all-interferers-target", "sir-inside-range", "sir-outside-range"],
+)
+def test_target_sir_range_decides_which_interferers_are_target(
+    tmp_path, write_puresound_metafile, target_sir_range, kept
+):
+    """An interferer is part of the target only when its realized SIR falls in
+    target_sir_range; otherwise it stays in the mixture as something to remove,
+    which is how a quieter, more distant voice is taught as background."""
+    metafile = write_puresound_metafile(tmp_path / "meta.csv", speakers=3)
+    speech = dict(SPEECH_ARGS, is_target=True, snr_range=[20, 25])
+    if target_sir_range is not None:
+        speech["target_sir_range"] = list(target_sir_range)
+    dataset = NoiseSuppressionDataset(
+        **_dataset_args(metafile), augmentation_speech_args=speech, vad_label_args={"used": False},
+    )
+
+    sample = dataset[("corpus_spk0", 16000)]
+
+    left_out = sample["consistency_noise"].pow(2).sum() / sample["noisy_speech"].pow(2).sum()
+    if kept:
+        assert float(left_out) < 1e-10  # the whole mixture is target
+    else:
+        assert float(left_out) > 1e-4  # the interferer is the part to remove
+        assert torch.allclose(sample["consistency_noise"], sample["far_target"], atol=1e-6)
+
+
+def test_target_sir_range_without_is_target_is_rejected():
+    from puresound.config.augmentation import SpeechAugmentation
+
+    with pytest.raises(ValueError, match="is_target"):
+        SpeechAugmentation(**dict(SPEECH_ARGS, is_target=False, target_sir_range=[0, 10]))

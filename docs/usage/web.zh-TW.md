@@ -222,8 +222,10 @@ Ctrl/⌘ + O / I / S / E；*說明* 裡有完整列表）只在這個畫面上�
 
 ## Providers
 
-`auto` 依序嘗試 CUDA、CoreML、CPU。也可指定 `cpu`、`cuda`、`coreml`
-或 `mps`；`mps` 是 CoreML 的 alias。Response 會回報實際執行模型的 provider。
+`auto` 依序嘗試 CUDA、CoreML、CPU；串流增強模型（voice isolation 與 noise
+suppression）例外，依序嘗試 CUDA、CPU：它們的圖每次呼叫只跑一幀，CoreML 派送一次的
+時間比單一 CPU 執行緒算完這一幀還久。也可指定 `cpu`、`cuda`、`coreml` 或 `mps`；
+`mps` 是 CoreML 的 alias。Response 會回報實際執行模型的 provider。
 
 ## API
 
@@ -402,6 +404,12 @@ WAV，因為轉換器之前的階段可能超過滿刻度。一次只合成一�
 處理毫秒數與 stream 輸出的 float32 samples 回覆。回覆的串流與離線 runtime 一樣晚
 `latency_samples`。server 約每秒音訊送一次 `{"type": "stats"}`；`{"type": "stop"}` 結束
 連線。單次連線上限 30 分鐘。
+
+## PCS 後濾
+
+噪音抑制的請求可以設 `pcs: true`，對增強後的頻譜做 perceptual contrast stretching（逐幀套用，
+不增加延遲）：共振峰更銳利、PESQ 更高，代價是 DNSMOS 語音品質下降、重噪音下插入字變多。
+預設關；model card 記錄兩面。
 
 ## Onset guard
 

@@ -11,7 +11,13 @@ object so they travel together:
   back in: ``dry_blend * enhanced + (1 - dry_blend) * input``. Broadband, so it
   relieves deletion everywhere at once and leaks interference everywhere at once.
 
-Both default to a no-op and the training path never sets them, which is what
+* **``pcs``** also works in the spectral domain: perceptual contrast stretching
+  (`puresound.audio.pcs`), a fixed per-bin gamma on the enhanced log1p
+  magnitude that sharpens formant peaks where hearing is most sensitive. Not
+  relief -- it trades reference-metric score (PESQ) for signal quality as
+  DNSMOS and a hard ASR set measure it; the model card records both sides.
+
+All default to a no-op and the training path never sets them, which is what
 keeps this out of what the model learns.
 
 **``dry_blend`` puts a hard ceiling under suppression.** Whatever the model
@@ -36,6 +42,8 @@ from typing import Optional
 
 import torch
 
+from puresound.audio.pcs import pcs_gamma, stretch_magnitude
+
 
 @dataclass(frozen=True)
 class Postprocessor:
@@ -44,10 +52,13 @@ class Postprocessor:
     Args:
         dry_blend: in ``(0, 1]``. 1.0 is a no-op.
         spec_floor: in ``[0, 1)``. 0.0 is a no-op.
+        pcs: perceptual contrast stretching of the enhanced spectrum. False is
+            a no-op.
     """
 
     dry_blend: float = 1.0
     spec_floor: float = 0.0
+    pcs: bool = False
 
     #: Below this the enhanced magnitude is treated as zero rather than divided by.
     _EPS = 1e-8
@@ -66,7 +77,7 @@ class Postprocessor:
 
     @property
     def enabled(self) -> bool:
-        return self.dry_blend < 1.0 or self.spec_floor > 0.0
+        return self.dry_blend < 1.0 or self.spec_floor > 0.0 or self.pcs
 
     @property
     def suppression_ceiling_db(self) -> float:
@@ -101,6 +112,23 @@ class Postprocessor:
         enh_mag = torch.sqrt(real * real + imag * imag + self._EPS)
         mix_mag = torch.sqrt(mix_real * mix_real + mix_imag * mix_imag + self._EPS)
         scale = torch.maximum(enh_mag, self.spec_floor * mix_mag) / enh_mag
+        return torch.cat([real * scale, imag * scale], dim=1)
+
+    def stretch_spectrum(self, enh: torch.Tensor, sample_rate: int) -> torch.Tensor:
+        """PCS on the enhanced spectrum ``[N, 2, C, T]``, phase kept.
+
+        ``sample_rate`` places the bins on the band table; the STFT size is
+        ``2 * (C - 1)``. A no-op when ``pcs`` is off.
+        """
+        if not self.pcs:
+            return enh
+        real, imag = torch.chunk(enh, chunks=2, dim=1)
+        magnitude = torch.sqrt(real * real + imag * imag + self._EPS)
+        bins = enh.shape[2]
+        gamma = torch.as_tensor(
+            pcs_gamma(2 * (bins - 1), sample_rate), dtype=enh.dtype, device=enh.device
+        ).view(1, 1, bins, 1)
+        scale = stretch_magnitude(magnitude, gamma) / magnitude
         return torch.cat([real * scale, imag * scale], dim=1)
 
     def blend_waveform(self, enh: torch.Tensor, mix: torch.Tensor) -> torch.Tensor:
@@ -149,6 +177,7 @@ class Postprocessor:
         return {
             "dry_blend": float(self.dry_blend),
             "spec_floor": float(self.spec_floor),
+            "pcs": bool(self.pcs),
             "suppression_ceiling_db": self.suppression_ceiling_db,
         }
 
@@ -161,21 +190,22 @@ def resolve(
     postprocess: Optional[Postprocessor],
     dry_blend: float,
     spec_floor: float,
+    pcs: bool = False,
 ) -> Postprocessor:
     """One `Postprocessor` from either calling convention.
 
-    `forward` keeps its `dry_blend=` / `spec_floor=` keywords because the eval
-    scripts pass them by name, and also takes a built `Postprocessor`. Passing
-    both ways at once is a mistake rather than a precedence question.
+    `forward` keeps its `dry_blend=` / `spec_floor=` / `pcs=` keywords because
+    the eval scripts pass them by name, and also takes a built `Postprocessor`.
+    Passing both ways at once is a mistake rather than a precedence question.
     """
     if postprocess is None:
-        if dry_blend == 1.0 and spec_floor == 0.0:
+        if dry_blend == 1.0 and spec_floor == 0.0 and not pcs:
             return IDENTITY
-        return Postprocessor(dry_blend=dry_blend, spec_floor=spec_floor)
-    if dry_blend != 1.0 or spec_floor != 0.0:
+        return Postprocessor(dry_blend=dry_blend, spec_floor=spec_floor, pcs=pcs)
+    if dry_blend != 1.0 or spec_floor != 0.0 or pcs:
         raise ValueError(
-            "pass either a Postprocessor or dry_blend/spec_floor, not both: "
+            "pass either a Postprocessor or dry_blend/spec_floor/pcs, not both: "
             f"got {postprocess!r} alongside dry_blend={dry_blend}, "
-            f"spec_floor={spec_floor}"
+            f"spec_floor={spec_floor}, pcs={pcs}"
         )
     return postprocess

@@ -88,8 +88,9 @@ tail = runtime.flush()
 
 `process_samples()` accepts arbitrary chunk sizes and emits whatever overlap-add
 output is complete. `flush()` pads and drains the remaining audio. Providers are
-`auto` (CUDA, then CoreML on macOS, otherwise CPU), `cuda`, `coreml`, `mps` (an
-alias for CoreML) and `cpu`. The DPCRN command-line tool's `infer` and
+`auto` (CUDA, otherwise CPU), `cuda`, `coreml`, `mps` (an alias for CoreML) and
+`cpu`. `auto` skips CoreML because a frame graph runs one hop per call, and the
+per-call dispatch costs more than that frame's work. The DPCRN command-line tool's `infer` and
 `benchmark` subcommands read only the ONNX file and its manifest, so they run a
 DPARN export too:
 

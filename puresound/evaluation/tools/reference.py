@@ -23,6 +23,7 @@ import argparse
 import json
 import sys
 from collections import defaultdict
+from functools import partial
 from pathlib import Path
 from typing import Any, Sequence
 
@@ -165,7 +166,7 @@ def run(
     spec = {**spec, "set_dir": str(set_dir)}
     per_item = map_items(
         _score_item, list(items), jobs=jobs,
-        builder=lambda: _build_systems(spec),
+        builder=partial(_build_systems, spec),
         progress=lambda done, total: print(f"  {done}/{total}", flush=True),
         progress_every=progress_every,
     )

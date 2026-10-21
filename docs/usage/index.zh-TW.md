@@ -18,6 +18,15 @@ uv sync --locked --group dev --extra cuda    # NVIDIA CUDA
 `hybrid-rir` / `hybrid-rir-gpu`（RIR 產生器的選用後端）。用 `uv run` 或 `.venv/bin/python`
 執行 repo 的工具，不要用 `PATH` 上的其他直譯器。更多見[專案 README](../../README.zh-TW.md)。
 
+device-chain 增強的 codec 階段透過 TorchCodec 執行，它會載入系統的 FFmpeg 共享函式庫：
+Linux 上用發行版套件，macOS 上用 `brew install ffmpeg`。TorchCodec 的 macOS 函式庫沒有
+記錄搜尋路徑，而 Apple Silicon 上的 Homebrew 裝在 `/opt/homebrew/lib`，動態連結器不會去
+找；執行任何東西前先 export：
+
+```bash
+export DYLD_FALLBACK_LIBRARY_PATH=/opt/homebrew/lib
+```
+
 ## 2. 準備資料
 
 | 內容 | 頁面 |

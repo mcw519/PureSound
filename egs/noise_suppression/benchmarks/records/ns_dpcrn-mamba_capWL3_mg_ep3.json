@@ -703,6 +703,7 @@
       }
     },
     "released_checkpoint_sha256": "16767d352c12c7f437c3ec872d48d7e6e603b13b8b983db6f21ad4aebf726507",
-    "released_onnx_sha256": "b03045f9a125a01f588083fa433a64eba88da6242fca6bb112925862dac92ccf"
+    "released_onnx_sha256": "b03045f9a125a01f588083fa433a64eba88da6242fca6bb112925862dac92ccf",
+    "superseded": "2026-10-18: noise-suppression-dpcrn-mamba-v3 now ships the ns_dpcrn-mamba_v3dm_mg ep3 weights (same model and ladder, DNSMOS P.835 term added to this stage). These weights are kept under pretrained_ckpt/backup/, not in the zoo."
   }
 }

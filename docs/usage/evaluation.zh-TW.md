@@ -180,7 +180,9 @@ decision = verdict(delta, direction="higher_is_better")   # pass / fail / no-res
 `GateRecord` 強制要求那些一旦缺少就會默默毀掉比較的欄位：`recipe`（recipe 與 checkpoint
 不合會部分載入然後照樣產出數字）、評分時的 `chain_commit`、`inference` 操作點，以及每一關
 的 `n` 與區間。凍結的合成關卡另外會在 `extra.set_provenance` 保存建集時的 commit、recipe
-SHA-256 與 seed；辨識生成音訊的合成鏈要看這些值，而不是之後評分時的 commit。紀錄的格式
+SHA-256 與 seed；辨識生成音訊的合成鏈要看這些值，而不是之後評分時的 commit。紀錄裡任何位置
+指向 repo 內的路徑都寫成相對於 repo 的路徑（`records.repo_relative`），讓紀錄指名用了哪個檔案，
+而不是哪一份 clone 跑的；repo 外的路徑（例如資料碟上的語料）照原樣保留。紀錄的格式
 約定，包括每份紀錄歸檔時附上的 `lineage` 區塊，在
 [`egs/noise_suppression/benchmarks/README.zh-TW.md`](../../egs/noise_suppression/benchmarks/README.zh-TW.md)。
 
