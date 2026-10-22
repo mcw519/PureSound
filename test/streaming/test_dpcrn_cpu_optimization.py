@@ -27,6 +27,23 @@ from puresound.streaming.native.ssm import DOMAIN, fused_ssm_step
 from test_dpcrn_streaming import MAMBA_CONFIG, CAUSAL_CONFIG
 
 
+def _x86_without_vnni() -> bool:
+    import numpy._core._multiarray_umath as simd
+
+    if platform.machine().lower() not in {"x86_64", "amd64"}:
+        return False
+    return not simd.__cpu_features__.get("AVX512VNNI", False)
+
+
+# ONNX Runtime multiplies uint8 activations by int8 weights through 16-bit pairs
+# that saturate on x86 without VNNI (its documented U8S8 caveat), and these
+# random-weight export models drive the products into that range. The released
+# flash graphs are held to their float graphs on every CPU in test_quantization.py.
+int8_export_needs_vnni = pytest.mark.skipif(
+    _x86_without_vnni(), reason="int8 products saturate on x86 without VNNI; see test_quantization.py"
+)
+
+
 def _config(root, **options):
     config = yaml.safe_load(MAMBA_CONFIG.read_text())
     config["model"]["backbone"]["backbone_args"].update(
@@ -428,6 +445,7 @@ def test_library_dispatches_its_isa_at_load_time(native_library):
     assert not any("ssm_step" in name for name in exported_names)
 
 
+@int8_export_needs_vnni
 def test_int8_export_quantizes_both_graphs_and_records_it(tmp_path, native_library):
     import hashlib
 
@@ -452,6 +470,7 @@ def test_int8_export_quantizes_both_graphs_and_records_it(tmp_path, native_libra
         export_streaming_dpcrn_onnx(config, checkpoint, tmp_path / "plain.onnx", quantization="int8")
 
 
+@int8_export_needs_vnni
 def test_per_channel_int8_is_recorded_and_still_quantizes_the_graph(tmp_path):
     """Per-channel weight scales are the same operators at the same size; the
     manifest has to say which fit a deployed graph carries."""
