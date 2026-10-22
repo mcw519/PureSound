@@ -69,6 +69,47 @@ def benchmark_clip(seconds: float, sample_rate: int = 16000) -> np.ndarray:
     return np.resize(clip, count).astype(np.float32)
 
 
+def flash_deviation(zoo, model, seconds: float = 2.5) -> float | None:
+    """How far a model's flash (int8) graph lands from its float graph, on this CPU.
+
+    The relative RMS difference of the enhanced spectra, frame for frame, over
+    the sample clip: the graphs alone, before any post-processing. int8 kernels
+    differ by instruction set, so this is a property of the machine as much as
+    of the model. None when the model has no flash artifact.
+    """
+    import json
+
+    import onnxruntime as ort
+
+    artifacts = {artifact.variant: artifact for artifact in model.artifacts}
+    if "flash" not in artifacts or "default" not in artifacts:
+        return None
+    manifest = json.loads(zoo.path_for(artifacts["default"].manifest).read_text(encoding="utf-8"))
+    window = np.hanning(manifest["win_length"] + 1)[:-1].astype(np.float32)
+    clip = benchmark_clip(seconds, int(manifest["sample_rate"]))
+    frames = []
+    for start in range(0, clip.size - manifest["win_length"], manifest["hop_length"]):
+        spectrum = np.fft.rfft(clip[start:start + manifest["win_length"]] * window, n=manifest["fft_length"])
+        frames.append(np.stack([spectrum.real, spectrum.imag], -1).reshape(1, -1, 2).astype(np.float32))
+    first_state = 1 + len(manifest.get("extra_output_names", []))
+
+    def enhanced(variant: str) -> np.ndarray:
+        options = ort.SessionOptions()
+        options.intra_op_num_threads = 1
+        session = ort.InferenceSession(str(zoo.path_for(artifacts[variant].path)), options,
+                                       providers=["CPUExecutionProvider"])
+        state = {name: np.zeros(shape, np.float32) for name, shape in manifest["state_shapes"].items()}
+        out = []
+        for frame in frames:
+            result = session.run(manifest["output_names"], {"noisy_frame": frame, **state})
+            out.append(result[0].reshape(-1))
+            state.update(zip(manifest["state_input_names"], result[first_state:]))
+        return np.concatenate(out)
+
+    reference = enhanced("default")
+    return float(np.linalg.norm(enhanced("flash") - reference) / np.linalg.norm(reference))
+
+
 def run_benchmark(
     zoo,
     *,
@@ -113,6 +154,10 @@ def run_benchmark(
             "native_ssm": metadata.get("native_ssm"),
             "intra_op_threads": metadata.get("intra_op_threads"),
             "latency_ms": metadata.get("latency_ms"),
+            # The flash graph's distance from its float graph on this machine.
+            "int8_relative_error": (
+                flash_deviation(zoo, model) if artifact.variant == "flash" else None
+            ),
         })
     measured = {model.id: model for model, _ in pairs}
     return {

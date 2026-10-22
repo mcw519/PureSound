@@ -61,6 +61,8 @@ def test_a_record_names_the_graph_and_threads_its_timing_belongs_to(zoo):
     assert result["rtf"] > 0 and len(result["rtf_repeats"]) == 2
     assert result["provider"] == "CPUExecutionProvider"
     assert result["execution_graph"] == "dpcrn_v8.onnx" and result["native_ssm"] is False
+    # Only an int8 artifact has a distance from the float graph to report.
+    assert result["int8_relative_error"] is None
     # The manifest recommends one thread for the optimized streaming graphs.
     assert result["intra_op_threads"] == 1
     # The record carries the catalog card of what it measured, so it reads alone.
@@ -80,3 +82,4 @@ def test_the_command_prints_a_table_and_writes_the_record(tmp_path, capsys):
     assert [(r["model_id"], r["variant"]) for r in record["results"]] == [
         ("voice-isolate-dpcrn-v8", "flash")
     ]
+    assert 0 < record["results"][0]["int8_relative_error"] < 0.1

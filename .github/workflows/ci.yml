@@ -80,6 +80,10 @@ jobs:
           from puresound.inference.benchmark import machine_info;
           print(json.dumps(machine_info()));
           print(sorted(name for name, found in simd.__cpu_features__.items() if found))"
+      # Each released flash graph's distance from its float graph on this CPU,
+      # printed on every run: hosted runners vary in instruction set.
+      - name: int8 accuracy on this CPU
+        run: uv run --no-sync python -m pytest test/streaming/test_quantization.py -q -s -p no:cacheprovider
 
       - name: Tests
         if: runner.os != 'Windows'
