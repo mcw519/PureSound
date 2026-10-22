@@ -24,7 +24,7 @@ from puresound.streaming.native.build import build_library
 from puresound.streaming.native.layout import eliminate_singleton_transposes
 from puresound.streaming.native.runtime import create_session
 from puresound.streaming.native.ssm import DOMAIN, fused_ssm_step
-from test.streaming.test_dpcrn_streaming import MAMBA_CONFIG, CAUSAL_CONFIG
+from test_dpcrn_streaming import MAMBA_CONFIG, CAUSAL_CONFIG
 
 
 def _config(root, **options):

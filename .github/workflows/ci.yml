@@ -19,6 +19,11 @@ permissions:
 
 env:
   SUITE: ${{ github.event_name == 'pull_request' && 'standard' || 'full' }}
+  # The interpreter the project is developed on: uv's own CPython 3.12, not
+  # whatever the runner ships (Homebrew's newest on macOS). Those carry the
+  # standard library's `test` package, which shadows the repository's test/.
+  UV_PYTHON: "3.12"
+  UV_PYTHON_PREFERENCE: only-managed
 
 jobs:
   tests:
