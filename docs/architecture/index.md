@@ -238,6 +238,13 @@ recipe's `pretrained_ckpt/`. The catalog is validated by
 - **Validation** — `puresound models validate` checks every path, hash, manifest
   and ONNX input/output name; the test suite validates the checked-in
   catalog the same way.
+- **Benchmark** — `puresound models benchmark` (`puresound.inference.benchmark`)
+  runs every streaming artifact through `load_model(...).infer()` on one thread
+  and reports its real-time factor, cold start and the graph it ran. CI runs it
+  on Linux, macOS and Windows after each merge to `main` and weekly, and
+  `tools/benchmark_dashboard.py` publishes the trend to the `gh-pages` branch:
+  one card per model with its catalog description and artifact sizes beside
+  its chart, filterable by task, role, platform and variant.
 
 ## Legacy
 

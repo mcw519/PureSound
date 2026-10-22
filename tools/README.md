@@ -9,6 +9,7 @@ imported by `puresound` and are not part of the runtime package.
 | [`rng_fingerprint.py`](rng_fingerprint.py) | Check that a synthesis refactor preserves seeded outputs |
 | [`build_web_samples.py`](build_web_samples.py) | Rebuild the web playground's sample clips from `test/test_case/` |
 | [`build_pipeline_samples.py`](build_pipeline_samples.py) | Rebuild the pipeline inspector's sample noise and rooms (`--bank` copies rooms from a synthetic RIR bank once) |
+| [`benchmark_dashboard.py`](benchmark_dashboard.py) | Fold `puresound models benchmark` records into a history and render the CI benchmark dashboard |
 
 ## Audio annotator
 

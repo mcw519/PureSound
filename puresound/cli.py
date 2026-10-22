@@ -120,6 +120,19 @@ def build_parser() -> argparse.ArgumentParser:
     validate = model_sub.add_parser("validate", help="verify paths, hashes, sidecars and ONNX I/O")
     validate.add_argument("--no-hash", action="store_true", help="skip SHA256 checks")
     validate.add_argument("--no-graph", action="store_true", help="skip ONNX Runtime graph loading")
+    bench = model_sub.add_parser(
+        "benchmark", help="measure the real-time factor of the streaming artifacts on this machine"
+    )
+    bench.add_argument("--model", dest="models", action="append", metavar="MODEL_ID",
+                       help="measure only this model (repeatable; default: every streaming model)")
+    bench.add_argument("--variant", dest="variants", action="append", metavar="VARIANT",
+                       help="measure only this artifact variant (repeatable; default: all)")
+    bench.add_argument("--provider", choices=PROVIDER_CHOICES, default="cpu",
+                       help="ONNX Runtime provider (default: cpu)")
+    bench.add_argument("--seconds", type=float, default=10.0, help="clip length per run (default: 10)")
+    bench.add_argument("--repeats", type=int, default=3,
+                       help="timed runs per artifact after a warm-up run; the median is reported (default: 3)")
+    bench.add_argument("--json", type=Path, metavar="PATH", help="also write the full record as JSON")
 
     infer = subparsers.add_parser("infer", help="run a catalog model")
     infer.add_argument("model_id")
@@ -212,6 +225,19 @@ def main(argv: list[str] | None = None) -> int:
             if args.models_command == "inspect":
                 print(_json_dump(_model_payload(zoo.get(args.model_id), zoo)))
                 return 0
+            if args.models_command == "benchmark":
+                from puresound.inference.benchmark import format_table, run_benchmark
+
+                record = run_benchmark(
+                    zoo, models=args.models, variants=args.variants, provider=args.provider,
+                    seconds=args.seconds, repeats=args.repeats,
+                    progress=lambda label: print(f"measuring {label}", file=sys.stderr, flush=True),
+                )
+                print(format_table(record))
+                if args.json:
+                    args.json.parent.mkdir(parents=True, exist_ok=True)
+                    args.json.write_text(_json_dump(record) + "\n", encoding="utf-8")
+                return 0
             report = zoo.validate(
                 verify_hash=not args.no_hash,
                 check_graph=not args.no_graph,
@@ -265,6 +291,8 @@ def main(argv: list[str] | None = None) -> int:
                         },
                         "mps_alias": "coreml",
                         "auto_order": ["cuda", "coreml", "cpu"],
+                        # One hop per call: CoreML dispatch outweighs the frame.
+                        "auto_order_streaming": ["cuda", "cpu"],
                     }
                 )
             )

@@ -14,7 +14,8 @@ Timings are wall clock on 24 cores; the same suite takes over an hour serially.
 Every tier runs under pytest-xdist with one compute thread per worker (see
 ``_single_threaded_env``). Override the worker count with ``--jobs N``
 (``--jobs 0`` disables xdist, which is what you want when you need a debugger
-or readable live output)."""
+or readable live output). ``--paths`` narrows a tier to the given test paths,
+for a platform that supports only part of the library."""
 import argparse
 import os
 import subprocess
@@ -80,6 +81,14 @@ def main() -> None:
         default=None,
         help="xdist worker count for standard/full (default: auto; 0 disables xdist).",
     )
+    parser.add_argument(
+        "--paths",
+        nargs="+",
+        default=None,
+        metavar="PATH",
+        help="test paths to run in place of the tier's own (quick: the unit-test packages; "
+        "standard/full: test/); the tier still decides whether `slow` tests run.",
+    )
     parser.add_argument("--skip-ruff", action="store_true")
     parser.add_argument("pytest_args", nargs="*", help="Extra args passed to pytest.")
     args = parser.parse_args()
@@ -89,7 +98,9 @@ def main() -> None:
 
     pytest_cmd = [sys.executable, "-m", "pytest", "-q"]
 
-    if args.suite == "quick":
+    if args.paths:
+        pytest_cmd += args.paths
+    elif args.suite == "quick":
         pytest_cmd += QUICK_TESTS
     else:
         pytest_cmd.append("test")

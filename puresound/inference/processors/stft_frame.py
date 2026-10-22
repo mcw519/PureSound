@@ -286,6 +286,12 @@ class VoiceIsolationRuntime:
             "selected_provider": stream.providers[0] if stream.providers else "",
             "provider": ",".join(stream.providers),
             "providers": list(stream.providers),
+            # Which graph the session runs (the primary or its native SSM
+            # companion), by file name only, and its thread count (0: ORT's own
+            # default) -- what a timing has to be read against.
+            "execution_graph": stream.execution_path.name,
+            "native_ssm": bool(stream.native_ssm_enabled),
+            "intra_op_threads": int(stream.session.get_session_options().intra_op_num_threads),
             "sample_rate": sample_rate,
             "input_samples": int(samples.size),
             "output_samples": int(enhanced.size),

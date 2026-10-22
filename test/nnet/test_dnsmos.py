@@ -42,7 +42,7 @@ def loss():
 
 
 def test_scores_match_the_metric_calibration(loss):
-    torchmetrics = pytest.importorskip("torchmetrics")
+    pytest.importorskip("torchmetrics")
     try:
         from torchmetrics.functional.audio.dnsmos import deep_noise_suppression_mean_opinion_score as dnsmos
     except ImportError:  # pragma: no cover - optional metric dependencies

@@ -23,7 +23,8 @@ Browser/WASM assets keep the float graphs. The saving depends on the CPU: on an
 Apple M4 with ONNX Runtime 1.26, which runs float matrix products on the SME
 unit, flash is no faster than the default and 9-12% slower for the wide models
 (curriculum-v2, NS v3), so keep the default there
-([measurements](benchmarks/apple_m4_ort_20261020.json)).
+([measurements](benchmarks/apple_m4_ort_20261020.json)). `puresound models
+benchmark` measures both variants on the machine at hand.
 
 NS v3 also takes a `pcs` request parameter (perceptual contrast stretching of the
 enhanced spectrum, off by default): a higher PESQ and sharper formants, paid for

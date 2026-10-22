@@ -1,0 +1,170 @@
+name: CI
+
+# A pull request runs the standard tier: everything but the tests marked `slow`.
+# A push to main, the weekly schedule and a manual run take the full tier.
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "17 3 * * 1"
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+env:
+  SUITE: ${{ github.event_name == 'pull_request' && 'standard' || 'full' }}
+
+jobs:
+  tests:
+    name: tests (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 75
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15, windows-2025]
+    # Windows runs only the inference path (streaming, the facade and the
+    # Python SDK). Its result is reported but does not block until that path
+    # is green there.
+    continue-on-error: ${{ matrix.os == 'windows-2025' }}
+    steps:
+      - uses: actions/checkout@v7
+
+      # The speaker-embedding weights are Git LFS objects. Restore them from
+      # the cache and fetch only on a miss, so the LFS bandwidth is spent once
+      # per change to those files rather than on every run.
+      - name: List LFS objects
+        shell: bash
+        run: git lfs ls-files --long | cut -d ' ' -f1 | sort > .lfs-assets-id
+      - name: Restore LFS objects
+        uses: actions/cache@v6
+        with:
+          path: .git/lfs
+          key: lfs-${{ hashFiles('.lfs-assets-id') }}
+          enableCrossOsArchive: true
+      - name: Check out LFS objects
+        run: git lfs pull
+
+      # TorchCodec, which runs the codec stage of the device-chain
+      # augmentation, loads the system's FFmpeg shared libraries.
+      - name: FFmpeg (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
+      - name: FFmpeg (macOS)
+        if: runner.os == 'macOS'
+        run: brew install ffmpeg
+
+      - uses: astral-sh/setup-uv@v10
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+      - name: Install
+        run: uv sync --locked --group dev --extra cpu
+
+      - name: Tests
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          # Homebrew's FFmpeg is outside dyld's search path. The variable is
+          # exported here, inside the script: SIP strips DYLD_* from the
+          # environment a protected binary such as /bin/bash is started with.
+          if [ "$RUNNER_OS" = macOS ]; then
+            export DYLD_FALLBACK_LIBRARY_PATH="$(brew --prefix)/lib"
+          fi
+          uv run --no-sync python test/run_repo_checks.py --suite "$SUITE"
+      - name: Tests (inference path)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: >-
+          uv run --no-sync python test/run_repo_checks.py --suite "$SUITE"
+          --skip-ruff --paths test/streaming test/inference
+
+      # Outside pull requests, each platform adds one point to the benchmark
+      # dashboard: same machine and install as the tests, measured after them.
+      - name: Benchmark
+        if: ${{ !cancelled() && github.event_name != 'pull_request' }}
+        shell: bash
+        run: uv run --no-sync puresound models benchmark --json "bench/$RUNNER_OS.json"
+      - name: Upload benchmark
+        if: ${{ !cancelled() && github.event_name != 'pull_request' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: bench-${{ runner.os }}
+          path: bench/${{ runner.os }}.json
+          if-no-files-found: ignore
+
+  dashboard:
+    name: benchmark dashboard
+    needs: tests
+    if: ${{ !cancelled() && github.event_name != 'pull_request' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    concurrency:
+      group: benchmark-dashboard
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: bench-*
+          path: bench
+          merge-multiple: true
+      # The history lives on the gh-pages branch, which GitHub Pages serves.
+      - name: Update the dashboard
+        shell: bash
+        run: |
+          shopt -s nullglob
+          records=(bench/*.json)
+          if [ ${#records[@]} -eq 0 ]; then
+            echo "No benchmark records from this run; the dashboard is unchanged."
+            exit 0
+          fi
+          if git ls-remote --exit-code --heads origin gh-pages > /dev/null; then
+            git fetch --depth 1 origin gh-pages:gh-pages
+            git worktree add site gh-pages
+          else
+            git worktree add --orphan -b gh-pages site
+          fi
+          python3 tools/benchmark_dashboard.py --history site/history.json --add "${records[@]}" --out site
+          touch site/.nojekyll
+          cd site
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Benchmarks for ${GITHUB_SHA::12}" || exit 0
+          git push origin gh-pages
+
+  web-sdk:
+    name: web SDK
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: sdk/web/package-lock.json
+      # The WebAssembly port is held to the Python SDK's output on the same
+      # streaming models, so the reference streams come from that SDK alone.
+      - name: Reference streams
+        run: >-
+          uv run --no-project --with "./sdk/python[cpu]" --with soundfile
+          python sdk/web/tools/generate_fixtures.py "$RUNNER_TEMP/web-fixtures"
+      - name: Build and test
+        working-directory: sdk/web
+        env:
+          PURESOUND_WEB_FIXTURES: ${{ runner.temp }}/web-fixtures
+        run: |
+          npm ci --no-audit --no-fund
+          npm run build
+          npm test
