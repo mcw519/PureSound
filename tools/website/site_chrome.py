@@ -127,6 +127,7 @@ CSS = """
   padding: 14px max(24px, env(safe-area-inset-left, 0px));
   background: color-mix(in srgb, var(--page) 94%, transparent); border-bottom: 1px solid var(--line);
   -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); }
+.page-header.is-static { position: static; }
 .page-desc { max-width: 96ch; margin: 3px 0 0; color: var(--ink-2); font-size: var(--text-ui); line-height: 1.45; }
 .page-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; }
 a.button { text-decoration: none; }
@@ -187,13 +188,15 @@ a.button { text-decoration: none; }
 .prose h1 { margin: 0 0 12px; font-size: 22px; }
 .prose h2 { margin: 28px 0 10px; padding-top: 4px; font-size: 17px; }
 .prose h3 { margin: 20px 0 8px; font-size: 15px; }
-.prose h2, .prose h3, .prose h4 { scroll-margin-top: 96px; }
+.prose h2, .prose h3, .prose h4 { scroll-margin-top: 16px; }
 .prose p, .prose ul, .prose ol { margin: 0 0 12px; color: var(--ink-2); }
 .prose li + li { margin-top: 4px; }
 .prose a { color: var(--ink); text-decoration-color: var(--line-strong); text-underline-offset: 3px; }
 .prose a:hover { text-decoration-color: currentColor; }
 .prose strong { color: var(--ink); }
 .prose code { padding: 1px 4px; background: var(--sunken); border-radius: 3px; }
+/* A long path in running text breaks rather than widening a phone screen. */
+.prose :is(p, li) code { overflow-wrap: anywhere; }
 .prose pre { margin: 0 0 14px; padding: 12px 14px; overflow-x: auto; color: var(--on-nav); background: var(--nav);
   border-radius: var(--radius-panel); font-size: 12.5px; line-height: 1.5; }
 .prose pre code { padding: 0; color: inherit; background: none; }
@@ -201,15 +204,28 @@ a.button { text-decoration: none; }
 .prose .table-wrap { margin: 0 0 16px; overflow-x: auto; background: var(--canvas); border: 1px solid var(--line);
   border-radius: var(--radius-panel); }
 .prose .table th { white-space: normal; }
-.prose .table td { color: var(--ink); }
+.prose .table td { min-width: 7ch; color: var(--ink); }
+/* Identifiers stay whole; a wide table scrolls in its frame instead. */
+.prose .table code { white-space: nowrap; }
 .prose hr { margin: 24px 0; border: 0; border-top: 1px solid var(--line); }
 
 .site-footer { margin-top: 32px; padding-top: 16px; color: var(--ink-3); border-top: 1px solid var(--line); font-size: var(--text-small); }
 .site-footer a { color: var(--ink-2); }
 
 @media (max-width: 760px) {
+  .topbar { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 12px; padding-top: 8px; padding-bottom: 0; }
+  .brand { grid-row: 1; grid-column: 1; }
+  .topbar-end { grid-row: 1; grid-column: 2; justify-self: end; gap: 6px; margin-left: 0; }
   .topbar-end > a { display: none; }
-  .page-header { grid-template-columns: minmax(0, 1fr); }
+  .nav-switch button { padding: 0 6px; }
+  .site-nav { grid-row: 2; grid-column: 1 / -1; flex-wrap: nowrap; margin: 0 -24px; padding: 0 24px 6px; overflow-x: auto;
+    scrollbar-width: none; }
+  .site-nav::-webkit-scrollbar { display: none; }
+  .site-nav a { flex: none; }
+  /* A tall header that stuck would cover much of a phone screen. */
+  .page-header { position: static; grid-template-columns: minmax(0, 1fr); }
+  /* Wider columns scroll sideways instead of stacking a phrase per line. */
+  .prose .table td, .prose .table th { min-width: 13ch; }
   .page-actions { justify-content: flex-start; }
   .toolbar-count { margin-left: 0; }
 }
@@ -256,7 +272,12 @@ SCRIPT = """
       translate();
     });
   }
-  document.addEventListener("DOMContentLoaded", translate);
+  document.addEventListener("DOMContentLoaded", () => {
+    translate();
+    const current = document.querySelector(".site-nav [aria-current]");
+    const nav = current?.parentElement;
+    if (nav && nav.scrollWidth > nav.clientWidth) nav.scrollLeft = current.offsetLeft - nav.clientWidth / 2 + current.offsetWidth / 2;
+  });
 })();
 """
 

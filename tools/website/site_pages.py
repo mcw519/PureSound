@@ -35,8 +35,10 @@ ZH_TW = {
     "Audio never leaves the browser.":
         "已發布的串流模型在這台裝置上以 ONNX Runtime Web（WebAssembly）執行，音訊不會離開瀏覽器。",
     "Model": "模型", "Audio": "音訊", "Samples": "範例",
-    "Drop an audio file here or choose one": "把音訊檔拖到這裡，或點選檔案",
-    "Your file": "你的檔案",
+    "Drop audio here": "將音檔拖放到這裡",
+    "or click to browse · any rate, prepared to mono 16 kHz": "或點選瀏覽 · 任何取樣率，會轉成單聲道 16 kHz",
+    "Replace audio": "替換音檔",
+    "{name} · drop or click to choose another file": "{name} · 拖放或點選以選擇其他檔案",
     "Model output share": "模型輸出比例",
     "dry_blend: the share of the model output mixed with the untouched input.":
         "dry_blend：模型輸出與原始輸入混合時，模型輸出所佔的比例。",
@@ -144,7 +146,7 @@ def _doc(toc_en: list, toc_zh: list, body: str) -> str:
 
 DOC_CSS = """
 .doc { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 32px; align-items: start; }
-.toc { position: sticky; top: 96px; max-height: calc(100dvh - 120px); overflow: auto; font-size: var(--text-small); }
+.toc { position: sticky; top: 16px; max-height: calc(100dvh - 32px); overflow: auto; font-size: var(--text-small); }
 .toc ul { margin: 8px 0 0; padding: 0; list-style: none; }
 .toc li { margin: 0; }
 .toc a { display: block; padding: 4px 8px; color: var(--ink-2); border-left: 2px solid var(--line); text-decoration: none; line-height: 1.35; }
@@ -208,6 +210,8 @@ HOME_ZH = {
     "See all benchmarks": "查看所有量測",
     "Learn more": "延伸閱讀", "Documentation": "文件", "Train your own model": "訓練自己的模型",
     "License": "授權",
+    "Voice isolation model card": "人聲分離模型卡", "Noise suppression model card": "雜訊抑制模型卡",
+    "Speaker verification model card": "語者驗證模型卡",
 }
 
 HOME_CSS = """
@@ -480,7 +484,7 @@ def home(site: Site, history: dict, samples: list[dict]) -> str:
             ("start.html#train-a-model", t("Train your own model"))]
     for card_path, target in site.cards.items():
         task = next(m["task"] for m in catalog if card_of(m) == card_path)
-        more.append((target, f'{t(TASKS.get(task, task))} {t("Model card")}'))
+        more.append((target, t(f"{TASKS.get(task, task)} model card")))
     more.append((links.to("LICENSE", "README.md"), t("License")))
 
     github = f'<a class="button button-secondary" href="{esc(links.repository)}">GitHub</a>' if links.repository else ""
@@ -521,7 +525,7 @@ def start(site: Site) -> str:
     intro_en, body_en = parts("README.md", "")
     zh_path = translation("README.md")
     intro_zh, body_zh = parts(zh_path, "zh-") if zh_path else (None, None)
-    body = f"""<header class="page-header">
+    body = f"""<header class="page-header is-static">
 <div class="page-heading"><h1>{t("Get started")}</h1>
 <div class="page-desc">{bilingual(intro_en.html, intro_zh.html if intro_zh else None)}</div></div>
 <div class="page-actions"><a class="button button-secondary button-small" href="{esc(links.to("README.md", "README.md"))}">{t("Source on GitHub")}</a></div>
@@ -585,7 +589,7 @@ def _model_card(model: dict, site: Site) -> str:
     actions = []
     card = card_of(model)
     if card in site.cards:
-        actions.append(f'<a class="card-link" href="{esc(site.cards[card])}">{t("Model card")} →</a>')
+        actions.append(f'<a class="card-link" href="{esc(site.cards[card])}">{t("Model card")}</a>')
     if model["id"] in site.device_models:
         actions.append(f'<a class="card-link" href="try.html?model={esc(model["id"])}">{t("Try it")}</a>')
     if (model.get("capabilities") or {}).get("realtime_streaming"):
@@ -652,7 +656,7 @@ def card(path: str, target: str, site: Site) -> str:
                     for m in covered)
     title_en = english.title or path
     source = links.to(path, "README.md")
-    body = f"""<header class="page-header">
+    body = f"""<header class="page-header is-static">
 <div class="page-heading"><span class="caps">{t("Model card")}</span>
 <h1>{bilingual(esc(title_en), esc(chinese.title) if chinese and chinese.title else None, "span")}</h1>
 <div class="card-models" aria-label="Models in this card">{chips}</div></div>
@@ -671,7 +675,18 @@ def card(path: str, target: str, site: Site) -> str:
 
 TRY_CSS = """
 .try { display: grid; grid-template-columns: minmax(280px, 380px) minmax(0, 1fr); gap: 12px; align-items: start; }
+.try > .panel { min-width: 0; }
+.try .field { grid-template-columns: minmax(0, 1fr); }
 .sample-row { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+.sample-row .chip { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+.dropzone { min-width: 0; }
+.dropzone .upload-icon { flex: none; }
+.drop-text { display: grid; gap: 3px; min-width: 0; }
+.drop-text > span { color: var(--ink-3); font-size: var(--text-small); line-height: 1.4; }
+.dropzone.has-file { align-items: center; padding: 10px 12px; }
+.dropzone.has-file .drop-text > * { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dropzone.has-file .drop-text > span { color: var(--ink-2); }
+.run-row .button { min-width: 96px; }
 .model-note { margin: 6px 0 0; color: var(--ink-2); font-size: var(--text-small); line-height: 1.45; }
 .run-row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 18px; }
 .results { display: grid; gap: 12px; min-width: 0; }
@@ -712,6 +727,14 @@ TRY_SCRIPT = """
     $("blend-value").value = Number(blend.value).toFixed(2);
   }
 
+  /* The drop target's words: an invitation, or once a file is chosen, a replace bar. */
+  function dropText() {
+    const chosen = $("drop").classList.contains("has-file");
+    $("drop-title").textContent = site.tr(chosen ? "Replace audio" : "Drop audio here");
+    $("drop-hint").textContent = chosen ? fmt("{name} · drop or click to choose another file", { name: sourceName })
+      : site.tr("or click to browse · any rate, prepared to mono 16 kHz");
+  }
+
   /* A recording to run: decoded at the model rate and shown in the player. */
   async function pick(blob, name, chip = null) {
     const mine = ++token;
@@ -721,7 +744,7 @@ TRY_SCRIPT = """
       other.setAttribute("aria-pressed", String(other === chip));
     }
     $("drop").classList.toggle("has-file", !chip);
-    $("file-name").textContent = chip ? "" : name;
+    dropText();
     showNote("");
     download.hidden = true;
     player.progress(null);
@@ -799,6 +822,7 @@ TRY_SCRIPT = """
   site.onLanguage.push(() => {
     if (state.dataset.text) state.textContent = fmt(state.dataset.text, JSON.parse(state.dataset.vars || "{}"));
     player.update();
+    dropText();
   });
 
   const params = new URLSearchParams(location.search);
@@ -853,8 +877,9 @@ def try_it(site: Site, samples: list[dict]) -> str:
 <p class="model-note"><span id="model-note"></span> <a id="model-card" href="#" hidden>{t("Model card")}</a></p></div>
 <div class="field"><span class="field-name">{t("Audio")}</span>
 <div class="sample-row" role="group" aria-label="Samples">{chips}</div>
-<label class="dropzone" id="drop"><input id="file" type="file" accept="audio/*"><span class="upload-icon" aria-hidden="true">↑</span>
-<strong>{t("Drop an audio file here or choose one")}</strong><span id="file-name"></span></label></div>
+<label class="dropzone" id="drop"><input id="file" type="file" accept="audio/*,.wav,.flac,.mp3,.m4a"><span class="upload-icon" aria-hidden="true">↑</span>
+<span class="drop-text"><strong id="drop-title">{t("Drop audio here")}</strong>
+<span id="drop-hint">{t("or click to browse · any rate, prepared to mono 16 kHz")}</span></span></label></div>
 <div class="field-label range-label"><label for="blend">{t("Model output share")}</label><output id="blend-value" class="mono">1.00</output></div>
 <input class="range" id="blend" type="range" min="0.1" max="1" step="0.05" value="1">
 <div class="range-hint"><span>{t("input")}</span><span>{t("model")}</span></div>

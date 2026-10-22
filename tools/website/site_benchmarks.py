@@ -223,7 +223,7 @@ def _card(model: str, info: dict, variants: list[str], runs: list[dict], platfor
     default_size = (artifacts.get("default") or {}).get("size_bytes")
     card = info.get("card")
     href = links.to(card, "README.md") if card else None
-    link = f'<a class="card-link" href="{esc(href)}">{t("Model card")} →</a>' if href and href != card else ""
+    link = f'<a class="card-link" href="{esc(href)}">{t("Model card")}</a>' if href and href != card else ""
     text = " ".join([model, info.get("display_name") or "", task, " ".join(roles),
                      info.get("description") or ""]).lower()
     default_class = " is-default" if "default" in roles else ""
@@ -240,8 +240,8 @@ def _card(model: str, info: dict, variants: list[str], runs: list[dict], platfor
 {f'<dl class="facts">{"".join(facts)}</dl>' if facts else ''}
 <ul class="artifacts">{''.join(artifact_rows)}</ul>
 <figure class="chart">{_chart(runs, model, variants, platforms)}</figure>
-<table class="table mini"><caption class="caps">{t("Latest RTF, one thread")}</caption>
-<thead><tr><th>{t("variant")}</th>{head}</tr></thead><tbody>{rows}</tbody></table>
+<div class="mini-wrap"><table class="table mini"><caption class="caps">{t("Latest RTF, one thread")}</caption>
+<thead><tr><th>{t("variant")}</th>{head}</tr></thead><tbody>{rows}</tbody></table></div>
 <div class="model-footer"><div class="model-meta"><span>{t("Default artifact")}</span>
 <strong>{esc(default_file)}{f" · {default_size / 1e6:.1f} MB" if default_size else ""}</strong></div>{link}</div>
 </article>"""
@@ -276,12 +276,13 @@ CSS = """
 .chart .line.c-linux { stroke: var(--linux); } .chart .dot.c-linux { fill: var(--linux); }
 .chart .line.c-macos { stroke: var(--macos); } .chart .dot.c-macos { fill: var(--macos); }
 .chart .line.c-windows { stroke: var(--windows); } .chart .dot.c-windows { fill: var(--windows); }
-.table.mini { margin-top: 8px; }
+.mini-wrap { margin-top: 8px; overflow-x: auto; }
+.table.mini td:first-child { white-space: normal; }
 .table caption { padding-bottom: 4px; text-align: left; }
 .table td.is-over { color: var(--bad); font-weight: 600; }
 /* Platform names keep their own case under the caps table header. */
 .table th.p-linux, .table th.p-macos, .table th.p-windows { text-transform: none; letter-spacing: 0; }
-.model-card > .table + .model-footer { margin-top: 12px; }
+.model-card > .mini-wrap + .model-footer { margin-top: 12px; }
 .summary { display: grid; gap: 14px; margin-top: 16px; }
 .summary .panel-title { margin-bottom: 0; }
 .machines { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); gap: 8px; }
@@ -292,6 +293,7 @@ main.hide-p-linux .p-linux, main.hide-p-macos .p-macos, main.hide-p-windows .p-w
 @media (max-width: 760px) {
   .artifacts li { grid-template-columns: 4.5em minmax(0, 1fr); }
   .artifacts .artifact-note { grid-column: 1 / -1; }
+  .table.mini th, .table.mini td { padding-left: 6px; padding-right: 6px; }
 }
 """
 
