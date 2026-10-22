@@ -1,0 +1,141 @@
+/* Design tokens: the only place colours, type and sizes are defined.  Rules
+ * elsewhere use roles (ink, line, accent), never literals, so the dark theme
+ * is a redefinition of this file and nothing more.  _internal/DESIGN.md says
+ * what each role is for. */
+:root {
+  color-scheme: light;
+
+  /* Surfaces, back to front. */
+  --page: #f6f6f8;
+  --canvas: #ffffff;
+  --sunken: #f0f1f4;
+  --line: #e3e4ea;
+  --line-strong: #cfd1da;
+
+  /* Text: primary, secondary, tertiary (hints, units, disabled). */
+  --ink: #14151c;
+  --ink-2: #5e6170;
+  --ink-3: #8a8d9a;
+
+  /* The navigation and the audio players stay dark in both themes. */
+  --nav: #010120;
+  --nav-2: #11122d;
+  --nav-3: #1c1d3d;
+  --nav-line: rgba(255, 255, 255, 0.14);
+  --on-nav: #ffffff;
+  --on-nav-2: rgba(255, 255, 255, 0.68);
+  --on-nav-3: rgba(255, 255, 255, 0.45);
+  --nav-bad: #ff7a6e;      /* an error on the always-dark surfaces */
+
+  /* The one primary action on a screen is ink, not colour. */
+  --primary: #14151c;
+  --on-primary: #ffffff;
+
+  /* Accent: focus, selection and work in progress.  Nothing else. */
+  --accent: #fc4c02;
+  --accent-soft: rgba(252, 76, 2, 0.1);
+  --focus: #fc4c02;
+
+  /* Data series: the same colour means the same signal on every screen. */
+  --mint: #c8f6f9;        /* input, the recording as it came in */
+  --mint-ink: #146168;    /* text about mint, on a light ground */
+  --on-mint: #0b2a2d;     /* text on a mint fill, both themes */
+  --periwinkle: #bdbbff;  /* output, what a model returned */
+  --magenta: #ef2cc1;     /* interferers, the voices to remove */
+  --mic: #6fd3db;         /* the microphone in room views */
+  --speaker: #f1e6fb;     /* speaker verification */
+  --speaker-ink: #672a7c;
+
+  /* Semantic: better / needs attention / worse or failed. */
+  --good: #1e8d5b;
+  --warn: #a15c07;
+  --bad: #b42318;
+  --good-soft: rgba(30, 141, 91, 0.1);
+  --warn-soft: rgba(161, 92, 7, 0.1);
+  --bad-soft: rgba(180, 35, 24, 0.08);
+
+  /* Type.  Chinese has no Plex glyphs and falls through to the system face. */
+  --font-sans: "IBM Plex Sans", "PingFang TC", "Microsoft JhengHei", "Noto Sans TC", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --text-title: 20px;
+  --text-lead: 15px;
+  --text-body: 14px;
+  --text-ui: 13px;
+  --text-small: 12px;
+  --text-label: 10.5px;
+
+  /* Density on a 4 px grid. */
+  --control-h: 32px;
+  --control-h-small: 26px;
+  --panel-pad: 16px;
+  --gap: 16px;
+  --radius-panel: 6px;
+  --radius-control: 4px;
+  --radius-pill: 999px;
+  --shadow-overlay: 0 16px 48px rgba(1, 1, 32, 0.18);
+  --shadow-raised: 0 1px 2px rgba(1, 1, 32, 0.08);
+  --backdrop: rgba(1, 1, 32, 0.36);
+
+  /* Layout. */
+  --sidebar-w: 224px;
+  --inspector-w: 340px;
+  --header-h: 64px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --page: #0d0e20;
+    --canvas: #17182e;
+    --sunken: #121326;
+    --line: rgba(255, 255, 255, 0.1);
+    --line-strong: rgba(255, 255, 255, 0.2);
+    --ink: #ececf1;
+    --ink-2: #a4a6b5;
+    --ink-3: #7c7f92;
+    --nav: #05061a;
+    --primary: #ececf1;
+    --on-primary: #0d0e20;
+    --accent-soft: rgba(252, 76, 2, 0.16);
+    --mint-ink: #9fe8ee;
+    --speaker: rgba(229, 200, 255, 0.14);
+    --speaker-ink: #e5c8ff;
+    --good: #3ecf8e;
+    --warn: #f2b54a;
+    --bad: #ff7a6e;
+    --good-soft: rgba(62, 207, 142, 0.14);
+    --warn-soft: rgba(242, 181, 74, 0.14);
+    --bad-soft: rgba(255, 122, 110, 0.12);
+    --shadow-overlay: 0 16px 48px rgba(0, 0, 0, 0.5);
+    --shadow-raised: none;
+    --backdrop: rgba(0, 0, 0, 0.6);
+  }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --page: #0d0e20;
+  --canvas: #17182e;
+  --sunken: #121326;
+  --line: rgba(255, 255, 255, 0.1);
+  --line-strong: rgba(255, 255, 255, 0.2);
+  --ink: #ececf1;
+  --ink-2: #a4a6b5;
+  --ink-3: #7c7f92;
+  --nav: #05061a;
+  --primary: #ececf1;
+  --on-primary: #0d0e20;
+  --accent-soft: rgba(252, 76, 2, 0.16);
+  --mint-ink: #9fe8ee;
+  --speaker: rgba(229, 200, 255, 0.14);
+  --speaker-ink: #e5c8ff;
+  --good: #3ecf8e;
+  --warn: #f2b54a;
+  --bad: #ff7a6e;
+  --good-soft: rgba(62, 207, 142, 0.14);
+  --warn-soft: rgba(242, 181, 74, 0.14);
+  --bad-soft: rgba(255, 122, 110, 0.12);
+  --shadow-overlay: 0 16px 48px rgba(0, 0, 0, 0.5);
+  --shadow-raised: none;
+  --backdrop: rgba(0, 0, 0, 0.6);
+}
