@@ -208,6 +208,12 @@ SHA-256。權重與 ONNX 檔留在各 recipe 的 `pretrained_ckpt/`。catalog �
   指定的檔案。
 - **驗證** —— `puresound models validate` 檢查每個路徑、hash、manifest 與 ONNX
   輸入/輸出名稱；測試套件也以同樣方式驗證儲存庫內的 catalog。
+- **效能量測** —— `puresound models benchmark`（`puresound.inference.benchmark`）
+  以單執行緒、透過 `load_model(...).infer()` 執行每個串流 artifact，回報即時率、冷啟動
+  時間與實際執行的圖。CI 在每次合併進 `main` 後與每週一次，於 Linux、macOS、Windows
+  上執行它，再由 `tools/benchmark_dashboard.py` 把趨勢發佈到 `gh-pages` 分支：每個模型
+  一張卡片，在趨勢圖旁列出 catalog 的說明與各 artifact 的大小，可依任務、角色、平台與
+  版本篩選。
 
 ## Legacy
 

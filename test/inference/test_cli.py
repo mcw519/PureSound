@@ -32,6 +32,7 @@ def test_providers_reports_capabilities_and_mps_alias(monkeypatch, capsys):
     assert payload["capabilities"] == {"cpu": True, "cuda": True, "coreml": False}
     assert payload["mps_alias"] == "coreml"
     assert payload["auto_order"] == ["cuda", "coreml", "cpu"]
+    assert payload["auto_order_streaming"] == ["cuda", "cpu"]
 
 
 @pytest.mark.parametrize(

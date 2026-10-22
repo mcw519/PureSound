@@ -76,6 +76,13 @@ uv run puresound infer speaker-verification-ps-spk-v1-1 \
 
 語者驗證會輸出 cosine similarity 與判定結果。
 
+在這台機器上量串流模型的速度。哪個版本比較快取決於 CPU，要在預設版與 `flash` 版之間
+選擇時就用這個：
+
+```bash
+uv run puresound models benchmark
+```
+
 啟動本機 Web UI（<http://127.0.0.1:7860>）：
 
 ```bash

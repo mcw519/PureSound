@@ -77,6 +77,13 @@ uv run puresound infer speaker-verification-ps-spk-v1-1 \
 
 The speaker-verification call prints the cosine similarity and the verdict.
 
+Measure the streaming models on this machine. Which variant is faster depends on
+the CPU, so this is how to choose between a model's default and `flash` artifacts:
+
+```bash
+uv run puresound models benchmark
+```
+
 Start the local web UI at <http://127.0.0.1:7860>:
 
 ```bash
