@@ -19,6 +19,11 @@ permissions:
 
 env:
   SUITE: ${{ github.event_name == 'pull_request' && 'standard' || 'full' }}
+  # The interpreter the project is developed on: uv's own CPython 3.12, not
+  # whatever the runner ships (Homebrew's newest on macOS). Those carry the
+  # standard library's `test` package, which shadows the repository's test/.
+  UV_PYTHON: "3.12"
+  UV_PYTHON_PREFERENCE: only-managed
 
 jobs:
   tests:
@@ -60,12 +65,21 @@ jobs:
         if: runner.os == 'macOS'
         run: brew install ffmpeg
 
-      - uses: astral-sh/setup-uv@v10
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0; publishes no major-version tag
         with:
           enable-cache: true
           cache-dependency-glob: uv.lock
       - name: Install
         run: uv sync --locked --group dev --extra cpu
+      # int8 kernels, and so the flash graphs' accuracy and speed, depend on the
+      # instruction set (VNNI above all), which hosted runners do not promise.
+      - name: CPU
+        shell: bash
+        run: >-
+          uv run --no-sync python -c "import json, numpy._core._multiarray_umath as simd;
+          from puresound.inference.benchmark import machine_info;
+          print(json.dumps(machine_info()));
+          print(sorted(name for name, found in simd.__cpu_features__.items() if found))"
 
       - name: Tests
         if: runner.os != 'Windows'
@@ -148,7 +162,7 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v10
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0; publishes no major-version tag
       - uses: actions/setup-node@v7
         with:
           node-version: 24

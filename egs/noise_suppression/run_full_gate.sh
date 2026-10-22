@@ -50,8 +50,10 @@ DEVSET="${NS_DEVSET:-$DATA/dns5_devset.jsonl}"
 RTF_BUDGET="${RTF_BUDGET:-0.5}"
 # Scoring is CPU-bound and per-item, so it parallelises across cores. Default to
 # half of them, which leaves a concurrent training run alive; the RTF stage is
-# unaffected, it measures one core on purpose.
-JOBS="${GATE_JOBS:-$(( $(nproc) / 2 ))}"
+# unaffected, it measures one core on purpose. getconf, not nproc: macOS has no
+# nproc without GNU coreutils.
+CORES="$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 2)"
+JOBS="${GATE_JOBS:-$(( CORES > 1 ? CORES / 2 : 1 ))}"
 ASR_MODEL="${ASR_MODEL:-large-v3}"
 ASR_DEVICE="${ASR_DEVICE:-cuda}"
 

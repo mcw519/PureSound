@@ -28,7 +28,7 @@ from puresound.streaming import (
 )
 from puresound.system.onset_guard import OnsetGuard
 from puresound.system.postprocess import Postprocessor
-from test.streaming.test_dparn_streaming import MINIMAL_DPARN_CONFIG
+from test_dparn_streaming import MINIMAL_DPARN_CONFIG
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 RECIPES = REPO_ROOT / "test/fixtures/recipes"

@@ -11,7 +11,7 @@ from puresound.inference import InferenceCancelled
 from puresound.web import WebService
 from puresound.web import aicoustics as aic
 from puresound.web.server import WebServiceError
-from test.web.test_world import request, wait
+from test_world import request, wait
 
 
 @pytest.fixture

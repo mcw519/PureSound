@@ -8,7 +8,7 @@ import torch
 from puresound.config.augmentation import SessionRowsConfig
 from puresound.task.device_chain import ChainResult
 from puresound.task.voice_isolation import VoiceIsolationCollateFunc
-from test.task.test_session_rows import corpus as _corpus, _dataset, _row, _session
+from test_session_rows import corpus as _corpus, _dataset, _row, _session
 
 
 @pytest.fixture(scope="module")
