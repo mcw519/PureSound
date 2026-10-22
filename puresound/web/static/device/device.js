@@ -12,7 +12,15 @@
 })(typeof self !== "undefined" ? self : this, function (root) {
   "use strict";
 
-  const BASE = "/device/";
+  // The folder this file is served from, so the payload works under any base
+  // path: the playground's /device/ as well as a project site's sub-path.
+  const BASE = (() => {
+    try {
+      const src = root && root.document && root.document.currentScript && root.document.currentScript.src;
+      if (src) return new URL("./", src).href;
+    } catch { /* no document: a worker or Node */ }
+    return "/device/";
+  })();
   const MODEL_RATE = 16000;
   const MAX_THREADS = 4;
   // The longest recording a run here takes: the bound the recorder has.

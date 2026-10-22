@@ -1549,7 +1549,9 @@ def test_web_device_inference_is_packaged_and_wired():
     # One live session for both runners; only the link differs.
     assert app.count("new window.PureSoundCapture.LiveSession(") == 1 and "PureSoundCapture.serverLink(" in app
     assert "serverLink" in capture and "new WebSocket(" in capture
-    assert 'new Worker(`${BASE}worker.js`, { type: "module" })' in device and 'const BASE = "/device/";' in device
+    # The payload is found beside device.js under any base path, /device/ when it cannot tell.
+    assert 'new Worker(`${BASE}worker.js`, { type: "module" })' in device
+    assert "document.currentScript" in device and 'return "/device/";' in device
     assert './vendor/ort/ort.wasm.min.mjs' in worker and './runtime/runtime.js' in worker
     builder = (root / "sdk" / "web" / "tools" / "build_assets.py").read_text()
     assert 'DEST = ROOT / "puresound/web/static/device"' in builder

@@ -25,7 +25,7 @@ v3 必須使用 [`../config/infer_dpcrn_mamba_wide.yaml`](../config/infer_dpcrn_
 | `dpcrn_mamba_v1.ckpt` | `noise-suppression-dpcrn-mamba-v1`，候選 | 小模型 curriculum 加 ActiveBin 校準 | 最在意乾淨朗讀語音的刪字率 |
 | `dpcrn_mamba_v0.ckpt` | 已退役（`backup/`，不進版控） | 小模型 curriculum | -- |
 
-v3 另有 int8 的 `flash` variant，適合 CPU 預算吃緊時使用，見 [v3 flash](#v3-flashint8)。
+v3 另有 int8 的 `flash` variant，適合 CPU 預算吃緊時使用，見 [v3 flash](#v3)。
 
 ## 量測
 

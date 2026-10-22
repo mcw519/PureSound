@@ -211,9 +211,12 @@ SHA-256。權重與 ONNX 檔留在各 recipe 的 `pretrained_ckpt/`。catalog �
 - **效能量測** —— `puresound models benchmark`（`puresound.inference.benchmark`）
   以單執行緒、透過 `load_model(...).infer()` 執行每個串流 artifact，回報即時率、冷啟動
   時間與實際執行的圖。CI 在每次合併進 `main` 後與每週一次，於 Linux、macOS、Windows
-  上執行它，再由 `tools/benchmark_dashboard.py` 把趨勢發佈到 `gh-pages` 分支：每個模型
-  一張卡片，在趨勢圖旁列出 catalog 的說明與各 artifact 的大小，可依任務、角色、平台與
-  版本篩選。
+  上執行它，並把趨勢加進專案網站。
+- **專案網站** —— `tools/website/build_site.py` 從這個儲存庫產生網站，由 CI 發佈到
+  `gh-pages` 分支：首頁有可在瀏覽器裡比較處理前後的播放器，README 成為入門指南，
+  catalog 成為可篩選、可下載的模型列表，每張模型卡都有中英兩種語言，試用頁以
+  playground 的裝置端推論檔案執行模型，另有每個模型一張趨勢圖的效能量測。每一頁都
+  使用 playground 的樣式表。
 
 ## Legacy
 

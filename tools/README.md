@@ -9,7 +9,21 @@ imported by `puresound` and are not part of the runtime package.
 | [`rng_fingerprint.py`](rng_fingerprint.py) | Check that a synthesis refactor preserves seeded outputs |
 | [`build_web_samples.py`](build_web_samples.py) | Rebuild the web playground's sample clips from `test/test_case/` |
 | [`build_pipeline_samples.py`](build_pipeline_samples.py) | Rebuild the pipeline inspector's sample noise and rooms (`--bank` copies rooms from a synthetic RIR bank once) |
-| [`benchmark_dashboard.py`](benchmark_dashboard.py) | Fold `puresound models benchmark` records into a history and render the CI benchmark dashboard |
+| [`website/build_site.py`](website/build_site.py) | Build the project site that CI publishes to GitHub Pages: home, guide, models, model cards, an in-browser try-out and the benchmark trend |
+
+## Project site
+
+`website/build_site.py` builds the site from the READMEs, the model catalog,
+the model cards and the playground's on-device payload; CI publishes it to the
+`gh-pages` branch and folds each run's benchmark records into its history. To
+preview it locally, build the payload and the site, then serve the folder:
+
+```bash
+(cd sdk/web && npm ci && npm run build)
+python3 sdk/web/tools/build_assets.py --dest /tmp/puresound-device
+uv run python tools/website/build_site.py --out /tmp/puresound-site --device /tmp/puresound-device
+python3 -m http.server --directory /tmp/puresound-site 8000
+```
 
 ## Audio annotator
 

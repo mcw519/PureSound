@@ -103,8 +103,8 @@ jobs:
           uv run --no-sync python test/run_repo_checks.py --suite "$SUITE"
           --skip-ruff --paths test/streaming test/inference
 
-      # Outside pull requests, each platform adds one point to the benchmark
-      # dashboard: same machine and install as the tests, measured after them.
+      # Outside pull requests, each platform adds one point to the project
+      # site's benchmarks: same machine and install as the tests, measured after them.
       - name: Benchmark
         if: ${{ !cancelled() && github.event_name != 'pull_request' }}
         shell: bash
@@ -117,47 +117,62 @@ jobs:
           path: bench/${{ runner.os }}.json
           if-no-files-found: ignore
 
-  dashboard:
-    name: benchmark dashboard
+  site:
+    name: project site
     needs: tests
     if: ${{ !cancelled() && github.event_name != 'pull_request' }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 15
     permissions:
       contents: write
     concurrency:
-      group: benchmark-dashboard
+      group: project-site
       cancel-in-progress: false
     steps:
       - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0; publishes no major-version tag
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: sdk/web/package-lock.json
+      # The site's try-out runs the released models with the playground's
+      # on-device payload: the web SDK, ONNX Runtime Web and the ONNX files.
+      - name: On-device payload
+        working-directory: sdk/web
+        run: |
+          npm ci --no-audit --no-fund
+          npm run build
+          python3 tools/build_assets.py --dest "$RUNNER_TEMP/device"
       - uses: actions/download-artifact@v8
         with:
           pattern: bench-*
           path: bench
           merge-multiple: true
-      # The history lives on the gh-pages branch, which GitHub Pages serves.
-      - name: Update the dashboard
+      # GitHub Pages serves the gh-pages branch. The site is rebuilt whole
+      # from this revision; only the benchmark history carries over.
+      - name: Build and publish
         shell: bash
         run: |
           shopt -s nullglob
           records=(bench/*.json)
-          if [ ${#records[@]} -eq 0 ]; then
-            echo "No benchmark records from this run; the dashboard is unchanged."
-            exit 0
-          fi
           if git ls-remote --exit-code --heads origin gh-pages > /dev/null; then
             git fetch --depth 1 origin gh-pages:gh-pages
             git worktree add site gh-pages
           else
             git worktree add --orphan -b gh-pages site
           fi
-          python3 tools/benchmark_dashboard.py --history site/history.json --add "${records[@]}" --out site
+          if [ -f site/history.json ]; then cp site/history.json "$RUNNER_TEMP/history.json"; fi
+          git -C site rm -rq --ignore-unmatch .
+          uv run --no-project --with markdown-it-py==4.2.0 --with pyyaml==6.0.3 \
+            python tools/website/build_site.py --out site --history "$RUNNER_TEMP/history.json" \
+            --add "${records[@]}" --device "$RUNNER_TEMP/device"
           touch site/.nojekyll
           cd site
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
-          git commit -m "Benchmarks for ${GITHUB_SHA::12}" || exit 0
+          git commit -m "Site for ${GITHUB_SHA::12}" || exit 0
           git push origin gh-pages
 
   web-sdk:
