@@ -2,10 +2,11 @@
 
 The clips are what a first-time visitor can try without their own recording:
 two talkers, a near talker over a far one in a reverberant room, speech in
-noise, and a speaker-verification pair.  Speech comes from the LibriSpeech
-utterances already under ``test/test_case/`` (CC BY 4.0); the room and the
-noise are synthesised here from a fixed seed, so no other recording is used
-and the output is reproducible.
+noise, and speaker-verification pairs: one reader in two chapters of a book,
+recorded apart, and a second reader.  Speech comes from the LibriSpeech
+utterances under ``test/test_case/`` (CC BY 4.0); the room and the noise are
+synthesised here from a fixed seed, so no other recording is used and the
+output is reproducible.
 
     uv run python tools/build_web_samples.py
 
@@ -84,6 +85,10 @@ def main() -> None:
     near = load("61-70970-0040.flac")
     far = load("1272-141231-0008.flac")
     mix = load("1272-128104-0000_2035-147961-0014.wav")
+    # Reader 1272 again, two other chapters: a same-speaker trial recorded apart,
+    # as an enrollment and a later test would be.
+    enrollment = load("1272-141231-0012.flac")
+    other_chapter = load("1272-135031-0017.flac")
 
     # Near talker over a far one: the far talker reverberant and 9 dB down,
     # already talking when the near one starts, over a quiet room floor.
@@ -101,7 +106,6 @@ def main() -> None:
     noise = at_level(pink_noise(length), -40.0) + at_level(hum, -42.0) + at_level(fan, -36.0)
     noisy = speech + at_level(noise, -26.0 - 5.0)
 
-    split = far.size // 2
     clips = [
         {"id": "two-talkers", "file": "two-talkers.wav", "task": "enhancement", "title": "Two talkers",
          "description": "Two LibriSpeech readers mixed at similar levels.", "audio": mix},
@@ -109,10 +113,10 @@ def main() -> None:
          "description": "A dry near talker; a reverberant far talker (RT60 0.7 s) 9 dB down, starting first.", "audio": near_far},
         {"id": "noisy-speech", "file": "noisy-speech.wav", "task": "enhancement", "title": "Speech in noise",
          "description": "One reader over a fan band, mains hum and pink noise at 5 dB SNR.", "audio": noisy},
-        {"id": "speaker-a-1", "file": "speaker-a-1.wav", "task": "speaker", "title": "Speaker A, first half",
-         "description": "LibriSpeech reader 1272, first half of an utterance.", "audio": far[:split]},
-        {"id": "speaker-a-2", "file": "speaker-a-2.wav", "task": "speaker", "title": "Speaker A, second half",
-         "description": "The same reader, the other half of the utterance.", "audio": far[split:]},
+        {"id": "speaker-a-1", "file": "speaker-a-1.wav", "task": "speaker", "title": "Speaker A",
+         "description": "LibriSpeech reader 1272 (1272-141231-0012).", "audio": enrollment},
+        {"id": "speaker-a-2", "file": "speaker-a-2.wav", "task": "speaker", "title": "Speaker A, another chapter",
+         "description": "The same reader in another book, recorded apart (1272-135031-0017).", "audio": other_chapter},
         {"id": "speaker-b", "file": "speaker-b.wav", "task": "speaker", "title": "Speaker B",
          "description": "LibriSpeech reader 61.", "audio": near},
         {"id": "speaker-a-full", "file": "speaker-a-full.wav", "task": "world", "title": "Speaker A, full utterance",
@@ -132,8 +136,9 @@ def main() -> None:
         "# Web playground samples\n\n"
         "Built by `tools/build_web_samples.py`; do not edit by hand.\n\n"
         "Speech: LibriSpeech (Panayotov et al., 2015), CC BY 4.0, via the utterances in\n"
-        "`test/test_case/`. Rooms and noise are synthesised by the build script from a\n"
-        "fixed seed. No other recording is included.\n"
+        "`test/test_case/` (dev-clean reader 1272, test-clean reader 61). Rooms and noise\n"
+        "are synthesised by the build script from a fixed seed. No other recording is\n"
+        "included.\n"
     )
     print(f"wrote {len(index)} clips to {TARGET.relative_to(ROOT)}")
 
