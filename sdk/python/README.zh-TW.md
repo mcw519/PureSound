@@ -24,6 +24,11 @@ CPU，不選 CoreML：模型每次呼叫只跑一幀，CoreML 派送一次的時
 這一幀還久；要用 CoreML 請明確指定 `coreml`。因為 ONNX Runtime 沒有原生 MPS
 execution provider，`mps` 是 CoreML 的 alias。可用 `onnxruntime.get_available_providers()` 確認目前實際 provider。
 
+使用 CPU provider 時，runtime 會照 manifest 建議的 intra-op 執行緒數
+（`cpu_optimization.intra_op_num_threads`，已發布的圖都是 1）設定 ONNX Runtime，和
+`puresound` 套件相同。一幀的運算太小，拆給多個執行緒反而慢：ONNX Runtime 預設每個核心一個
+執行緒，會跑得更慢，還會占滿所有核心。要改用其他數目請傳 `intra_op_num_threads=`。
+
 ## 從這個資料夾安裝
 
 ```bash

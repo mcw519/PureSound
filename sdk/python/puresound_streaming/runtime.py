@@ -661,6 +661,8 @@ class PureSoundStreamingRuntime:
         manifest_path: str | Path | None = None,
         provider: str = "auto",
         session: InferenceSessionLike | None = None,
+        *,
+        intra_op_num_threads: int | None = None,
     ):
         self.onnx_path = Path(onnx_path)
         self.manifest_path = (
@@ -670,13 +672,23 @@ class PureSoundStreamingRuntime:
         )
         self.manifest = json.loads(self.manifest_path.read_text(encoding="utf-8"))
         self.config = StreamingRuntimeConfig.from_manifest(self.manifest)
+        if intra_op_num_threads is not None and intra_op_num_threads < 1:
+            raise ValueError("intra_op_num_threads must be positive")
         if session is None:
             import onnxruntime
 
             providers = self.resolve_providers(
                 provider, onnxruntime.get_available_providers()
             )
-            session = onnxruntime.InferenceSession(str(self.onnx_path), providers=providers)
+            options = onnxruntime.SessionOptions()
+            threads = self.session_threads(self.manifest, providers, intra_op_num_threads)
+            if threads is not None:
+                options.intra_op_num_threads = threads
+            session = onnxruntime.InferenceSession(
+                str(self.onnx_path), sess_options=options, providers=providers
+            )
+        elif intra_op_num_threads is not None:
+            raise ValueError("thread options cannot be applied to an injected session")
         self.session = session
         self.providers = self.session.get_providers()
         self.processor = self.create_processor(self.config, self.session)
@@ -699,6 +711,24 @@ class PureSoundStreamingRuntime:
                 f"Supported processors: {supported}"
             )
         return processor_cls(config, session)
+
+    @staticmethod
+    def session_threads(
+        manifest: dict,
+        providers: Sequence[str],
+        requested: int | None = None,
+    ) -> int | None:
+        """ONNX Runtime's intra-op threads for this graph: the caller's number,
+        else on the CPU provider the manifest's recommendation. A frame graph is
+        too small to split, and ONNX Runtime's default of one thread per core
+        makes each call slower; the exporter records 1 for the optimized graphs.
+        None leaves ONNX Runtime's default."""
+        if requested is not None:
+            return int(requested)
+        if list(providers) != [_CPU_PROVIDER]:
+            return None
+        threads = (manifest.get("cpu_optimization") or {}).get("intra_op_num_threads")
+        return None if threads is None else int(threads)
 
     @staticmethod
     def resolve_providers(provider: str, available: Sequence[str]) -> list[str]:
