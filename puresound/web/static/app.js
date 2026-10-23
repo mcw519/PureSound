@@ -486,17 +486,27 @@
     };
   }
 
+  /* A decoded file's length, rate and size, kept on the element so a language
+   * change can write the line again. */
+  function renderPreviewMeta(meta) {
+    const rate = Number(meta.dataset.rate);
+    const kHz = rate ? t("{rate} kHz file", { rate: (rate / 1000).toFixed(rate % 1000 ? 1 : 0) }) : "";
+    meta.textContent = [`${Number(meta.dataset.seconds).toFixed(2)} s`, kHz, `${(Number(meta.dataset.bytes) / 1024).toFixed(0)} KB`].filter(Boolean).join(" · ");
+  }
+
   async function previewAudio(file, elements) {
     const { preview, name, meta, panel } = elements;
     elements.file = file;
     preview.hidden = false;
     name.textContent = file.name;
+    delete meta.dataset.previewMeta;
     meta.textContent = `${(file.size / 1024).toFixed(0)} KB · ${t("decoding…")}`;
     try {
       const [buffer, fileRate] = await Promise.all([panel.loadFile(file), sniffSampleRate(file)]);
       // Another file or a clear replaced this one while it decoded.
       if (!buffer || elements.file !== file) return;
-      meta.textContent = [`${buffer.duration.toFixed(2)} s`, fileRate ? t("{rate} kHz file", { rate: (fileRate / 1000).toFixed(fileRate % 1000 ? 1 : 0) }) : "", `${(file.size / 1024).toFixed(0)} KB`].filter(Boolean).join(" · ");
+      Object.assign(meta.dataset, { previewMeta: "", seconds: buffer.duration, rate: fileRate || "", bytes: file.size });
+      renderPreviewMeta(meta);
     } catch (error) {
       if (elements.file !== file) return;
       meta.textContent = `${(file.size / 1024).toFixed(0)} KB · ${t("preview unavailable")}`;
@@ -2104,6 +2114,7 @@
     renderMeasurementModels();
     renderSampleRows();
     renderJobHistory(state.jobs);
+    document.querySelectorAll("[data-preview-meta]").forEach(renderPreviewMeta);
     Object.entries(state.dropzoneFiles).forEach(([inputId, name]) => {
       const dropzone = $(inputId)?.closest(".dropzone");
       const title = dropzone?.querySelector("[data-dropzone-title]");
