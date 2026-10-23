@@ -35,9 +35,8 @@ jobs:
       matrix:
         os: [ubuntu-24.04, macos-15, windows-2025]
     # Windows runs only the inference path (streaming, the facade and the
-    # Python SDK). Its result is reported but does not block until that path
-    # is green there.
-    continue-on-error: ${{ matrix.os == 'windows-2025' }}
+    # Python SDK), and blocks like the other platforms: that is the part a
+    # Windows deployment uses. Training and the RIR stack are not run there.
     steps:
       - uses: actions/checkout@v7
 
