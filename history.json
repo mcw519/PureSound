@@ -156,7 +156,7 @@
  "runs": [
   {
    "revision": "79fad1f1c753da5e40a0cbb00c6507c9fce2db3a",
-   "created_at": "2026-10-22T04:51:54+00:00",
+   "created_at": "2026-10-26T03:45:46+00:00",
    "platforms": {
     "linux": {
      "machine": {
@@ -165,14 +165,14 @@
       "cpu": "AMD EPYC 7763 64-Core Processor",
       "logical_cpus": 4,
       "onnxruntime": "1.26.0",
-      "ci_image": "ubuntu24 20261012.334.1"
+      "ci_image": "ubuntu24 20261023.334.3"
      },
      "results": [
       {
        "model_id": "noise-suppression-dpcrn-mamba-v1",
        "variant": "default",
-       "rtf": 0.21051588450000053,
-       "cold_start_seconds": 0.029225025000016558,
+       "rtf": 0.21283488049999733,
+       "cold_start_seconds": 0.029741340999976273,
        "native_ssm": false,
        "intra_op_threads": 1,
        "latency_ms": 30.0
@@ -180,8 +180,8 @@
       {
        "model_id": "noise-suppression-dpcrn-mamba-v1",
        "variant": "flash",
-       "rtf": 0.16673051330000135,
-       "cold_start_seconds": 0.02728426099997705,
+       "rtf": 0.16913843340000198,
+       "cold_start_seconds": 0.027845404000004237,
        "native_ssm": false,
        "intra_op_threads": 1,
        "latency_ms": 30.0
@@ -189,8 +189,8 @@
       {
        "model_id": "noise-suppression-dpcrn-mamba-v2",
        "variant": "default",
-       "rtf": 0.21039677409999627,
-       "cold_start_seconds": 0.023674099999993814,
+       "rtf": 0.21218986450000443,
+       "cold_start_seconds": 0.024651077999976678,
        "native_ssm": false,
        "intra_op_threads": 1,
        "latency_ms": 30.0
@@ -198,8 +198,8 @@
       {
        "model_id": "noise-suppression-dpcrn-mamba-v2",
        "variant": "flash",
-       "rtf": 0.16701568359999897,
-       "cold_start_seconds": 0.027244577999965713,
+       "rtf": 0.1680933345000085,
+       "cold_start_seconds": 0.02767043799997282,
        "native_ssm": false,
        "intra_op_threads": 1,
        "latency_ms": 30.0
@@ -207,8 +207,8 @@
       {
        "model_id": "noise-suppression-dpcrn-mamba-v3",
        "variant": "default",
-       "rtf": 0.3333732370000007,
-       "cold_start_seconds": 0.026456625999969674,
+       "rtf": 0.3363771014000008,
+       "cold_start_seconds": 0.02544412800000373,
        "native_ssm": false,
        "intra_op_threads": 1,
        "latency_ms": 30.0
@@ -216,8 +216,8 @@
       {
        "model_id": "noise-suppression-dpcrn-mamba-v3",
        "variant": "flash",
-       "rtf": 0.23545869420000826,
-       "cold_start_seconds": 0.027907565000020895,
+       "rtf": 0.23971693320000895,
+       "cold_start_seconds": 0.03081986600000164,
        "native_ssm": false,
        "intra_op_threads": 1,
        "latency_ms": 30.0
@@ -225,8 +225,8 @@
       {
        "model_id": "voice-isolate-dpcrn-curriculum-v1",
        "variant": "default",
-       "rtf": 0.21047488959999328,
-       "cold_start_seconds": 0.019068659000026855,
+       "rtf": 0.21323292790000323,
+       "cold_start_seconds": 0.023376913999982207,
        "native_ssm": false,
        "intra_op_threads": 1,
        "latency_ms": 30.0
@@ -234,8 +234,8 @@
       {
        "model_id": "voice-isolate-dpcrn-curriculum-v1",
        "variant": "flash",
-       "rtf": 0.1629109213999982,
-       "cold_start_seconds": 0.024399970999979814,
+       "rtf": 0.16483750639999925,
+       "cold_start_seconds": 0.02575566699999854,
        "native_ssm": false,
        "intra_op_threads": 1,
        "latency_ms": 30.0
@@ -243,8 +243,8 @@
       {
        "model_id": "voice-isolate-dpcrn-curriculum-v2",
        "variant": "default",
-       "rtf": 0.31458571460000256,
-       "cold_start_seconds": 0.020634533000020383,
+       "rtf": 0.31989443689999464,
+       "cold_start_seconds": 0.021179943999982243,
        "native_ssm": false,
        "intra_op_threads": 1,
        "latency_ms": 30.0
@@ -252,8 +252,8 @@
       {
        "model_id": "voice-isolate-dpcrn-curriculum-v2",
        "variant": "flash",
-       "rtf": 0.22718301129999646,
-       "cold_start_seconds": 0.023747926000055486,
+       "rtf": 0.22860799970000018,
+       "cold_start_seconds": 0.02465109599995685,
        "native_ssm": false,
        "intra_op_threads": 1,
        "latency_ms": 30.0
@@ -261,8 +261,8 @@
       {
        "model_id": "voice-isolate-dpcrn-v8",
        "variant": "default",
-       "rtf": 0.21138430409999956,
-       "cold_start_seconds": 0.0190337050000835,
+       "rtf": 0.21215356809999547,
+       "cold_start_seconds": 0.02189220299999306,
        "native_ssm": false,
        "intra_op_threads": 1,
        "latency_ms": 30.0
@@ -270,8 +270,8 @@
       {
        "model_id": "voice-isolate-dpcrn-v8",
        "variant": "flash",
-       "rtf": 0.1634599752999975,
-       "cold_start_seconds": 0.022889725000027283,
+       "rtf": 0.16420580220000147,
+       "cold_start_seconds": 0.024099300999978368,
        "native_ssm": false,
        "intra_op_threads": 1,
        "latency_ms": 30.0
@@ -282,17 +282,17 @@
      "machine": {
       "system": "Windows",
       "machine": "AMD64",
-      "cpu": "AMD EPYC 9V74 80-Core Processor",
+      "cpu": "AMD EPYC 7763 64-Core Processor",
       "logical_cpus": 4,
       "onnxruntime": "1.26.0",
-      "ci_image": "win25-vs2026 20261007.264.1"
+      "ci_image": "win25-vs2026 20261021.278.1"
      },
      "results": [
       {
        "model_id": "noise-suppression-dpcrn-mamba-v1",
        "variant": "default",
-       "rtf": 0.2066225700000018,
-       "cold_start_seconds": 0.042724799999973584,
+       "rtf": 0.2830645900000036,
+       "cold_start_seconds": 0.05014479999999821,
        "native_ssm": false,
        "intra_op_threads": 1,
        "latency_ms": 30.0
@@ -300,8 +300,8 @@
       {
        "model_id": "noise-suppression-dpcrn-mamba-v1",
        "variant": "flash",
-       "rtf": 0.17624458000000232,
-       "cold_start_seconds": 0.04722730000003139,
+       "rtf": 0.232200540000008,
+       "cold_start_seconds": 0.05878410000002532,
        "native_ssm": false,
        "intra_op_threads": 1,
        "latency_ms": 30.0
@@ -309,8 +309,8 @@
       {
        "model_id": "noise-suppression-dpcrn-mamba-v2",
        "variant": "default",
-       "rtf": 0.20689943000000427,
-       "cold_start_seconds": 0.037733099999968545,
+       "rtf": 0.2708297900000048,
+       "cold_start_seconds": 0.05529300000000603,
        "native_ssm": false,
        "intra_op_threads": 1,
        "latency_ms": 30.0
@@ -318,8 +318,8 @@
       {
        "model_id": "noise-suppression-dpcrn-mamba-v2",
        "variant": "flash",
-       "rtf": 0.17362348999999994,
-       "cold_start_seconds": 0.04154319999997824,
+       "rtf": 0.2360315900000046,
+       "cold_start_seconds": 0.057826200000022254,
        "native_ssm": false,
        "intra_op_threads": 1,
        "latency_ms": 30.0
@@ -327,8 +327,8 @@
       {
        "model_id": "noise-suppression-dpcrn-mamba-v3",
        "variant": "default",
-       "rtf": 0.30962354999999775,
-       "cold_start_seconds": 0.04049409999998943,
+       "rtf": 0.4403760499999976,
+       "cold_start_seconds": 0.0468614000000116,
        "native_ssm": false,
        "intra_op_threads": 1,
        "latency_ms": 30.0
@@ -336,8 +336,8 @@
       {
        "model_id": "noise-suppression-dpcrn-mamba-v3",
        "variant": "flash",
-       "rtf": 0.2422255200000052,
-       "cold_start_seconds": 0.04229550000002291,
+       "rtf": 0.3471932199999969,
+       "cold_start_seconds": 0.07563059999995403,
        "native_ssm": false,
        "intra_op_threads": 1,
        "latency_ms": 30.0
@@ -345,8 +345,8 @@
       {
        "model_id": "voice-isolate-dpcrn-curriculum-v1",
        "variant": "default",
-       "rtf": 0.19455254000000083,
-       "cold_start_seconds": 0.030188199999997778,
+       "rtf": 0.2544087300000001,
+       "cold_start_seconds": 0.04995870000004743,
        "native_ssm": false,
        "intra_op_threads": 1,
        "latency_ms": 30.0
@@ -354,8 +354,8 @@
       {
        "model_id": "voice-isolate-dpcrn-curriculum-v1",
        "variant": "flash",
-       "rtf": 0.15376367000000074,
-       "cold_start_seconds": 0.04752930000000788,
+       "rtf": 0.19631039000000783,
+       "cold_start_seconds": 0.04199119999998402,
        "native_ssm": false,
        "intra_op_threads": 1,
        "latency_ms": 30.0
@@ -363,8 +363,8 @@
       {
        "model_id": "voice-isolate-dpcrn-curriculum-v2",
        "variant": "default",
-       "rtf": 0.2675970699999993,
-       "cold_start_seconds": 0.03491309999998293,
+       "rtf": 0.37288792000000515,
+       "cold_start_seconds": 0.04178039999999328,
        "native_ssm": false,
        "intra_op_threads": 1,
        "latency_ms": 30.0
@@ -372,8 +372,8 @@
       {
        "model_id": "voice-isolate-dpcrn-curriculum-v2",
        "variant": "flash",
-       "rtf": 0.21196168999999826,
-       "cold_start_seconds": 0.036008799999990515,
+       "rtf": 0.27337536999999656,
+       "cold_start_seconds": 0.04416070000002037,
        "native_ssm": false,
        "intra_op_threads": 1,
        "latency_ms": 30.0
@@ -381,8 +381,8 @@
       {
        "model_id": "voice-isolate-dpcrn-v8",
        "variant": "default",
-       "rtf": 0.19094263999999725,
-       "cold_start_seconds": 0.03149969999998348,
+       "rtf": 0.25007011999999806,
+       "cold_start_seconds": 0.04163710000000265,
        "native_ssm": false,
        "intra_op_threads": 1,
        "latency_ms": 30.0
@@ -390,8 +390,8 @@
       {
        "model_id": "voice-isolate-dpcrn-v8",
        "variant": "flash",
-       "rtf": 0.15107609000000366,
-       "cold_start_seconds": 0.035050100000034945,
+       "rtf": 0.19847023999999464,
+       "cold_start_seconds": 0.043802000000027874,
        "native_ssm": false,
        "intra_op_threads": 1,
        "latency_ms": 30.0
@@ -411,8 +411,8 @@
       {
        "model_id": "noise-suppression-dpcrn-mamba-v1",
        "variant": "default",
-       "rtf": 0.2775442041000019,
-       "cold_start_seconds": 0.025142958000003546,
+       "rtf": 0.3197112415999982,
+       "cold_start_seconds": 0.04149891699989894,
        "native_ssm": false,
        "intra_op_threads": 1,
        "latency_ms": 30.0
@@ -420,8 +420,8 @@
       {
        "model_id": "noise-suppression-dpcrn-mamba-v1",
        "variant": "flash",
-       "rtf": 0.19419867080000017,
-       "cold_start_seconds": 0.04192699999998695,
+       "rtf": 0.22981009579999637,
+       "cold_start_seconds": 0.0402156659999946,
        "native_ssm": false,
        "intra_op_threads": 1,
        "latency_ms": 30.0
@@ -429,8 +429,8 @@
       {
        "model_id": "noise-suppression-dpcrn-mamba-v2",
        "variant": "default",
-       "rtf": 0.3033250124999995,
-       "cold_start_seconds": 0.022067417000016576,
+       "rtf": 0.3030095374999974,
+       "cold_start_seconds": 0.024707749999947737,
        "native_ssm": false,
        "intra_op_threads": 1,
        "latency_ms": 30.0
@@ -438,8 +438,8 @@
       {
        "model_id": "noise-suppression-dpcrn-mamba-v2",
        "variant": "flash",
-       "rtf": 0.19839722080000116,
-       "cold_start_seconds": 0.030013874999951895,
+       "rtf": 0.23149118329999965,
+       "cold_start_seconds": 0.03622395799993683,
        "native_ssm": false,
        "intra_op_threads": 1,
        "latency_ms": 30.0
@@ -447,8 +447,8 @@
       {
        "model_id": "noise-suppression-dpcrn-mamba-v3",
        "variant": "default",
-       "rtf": 0.45565153339999825,
-       "cold_start_seconds": 0.036948125000037635,
+       "rtf": 0.4477102875000014,
+       "cold_start_seconds": 0.050079500000038024,
        "native_ssm": false,
        "intra_op_threads": 1,
        "latency_ms": 30.0
@@ -456,8 +456,8 @@
       {
        "model_id": "noise-suppression-dpcrn-mamba-v3",
        "variant": "flash",
-       "rtf": 0.28030699580000373,
-       "cold_start_seconds": 0.02648291700000982,
+       "rtf": 0.34146670000000084,
+       "cold_start_seconds": 0.03486204099999668,
        "native_ssm": false,
        "intra_op_threads": 1,
        "latency_ms": 30.0
@@ -465,8 +465,8 @@
       {
        "model_id": "voice-isolate-dpcrn-curriculum-v1",
        "variant": "default",
-       "rtf": 0.25147688749999586,
-       "cold_start_seconds": 0.03596408299995346,
+       "rtf": 0.33507406250000715,
+       "cold_start_seconds": 0.028999749999911728,
        "native_ssm": false,
        "intra_op_threads": 1,
        "latency_ms": 30.0
@@ -474,8 +474,8 @@
       {
        "model_id": "voice-isolate-dpcrn-curriculum-v1",
        "variant": "flash",
-       "rtf": 0.19501840000000356,
-       "cold_start_seconds": 0.020434124999951564,
+       "rtf": 0.22023846670000466,
+       "cold_start_seconds": 0.042371624999987034,
        "native_ssm": false,
        "intra_op_threads": 1,
        "latency_ms": 30.0
@@ -483,8 +483,8 @@
       {
        "model_id": "voice-isolate-dpcrn-curriculum-v2",
        "variant": "default",
-       "rtf": 0.46533270420000006,
-       "cold_start_seconds": 0.02056112499997198,
+       "rtf": 0.4727608583000006,
+       "cold_start_seconds": 0.028099250000082066,
        "native_ssm": false,
        "intra_op_threads": 1,
        "latency_ms": 30.0
@@ -492,8 +492,8 @@
       {
        "model_id": "voice-isolate-dpcrn-curriculum-v2",
        "variant": "flash",
-       "rtf": 0.3175815499999999,
-       "cold_start_seconds": 0.05087766700000884,
+       "rtf": 0.3501334874999998,
+       "cold_start_seconds": 0.030452624999952604,
        "native_ssm": false,
        "intra_op_threads": 1,
        "latency_ms": 30.0
@@ -501,8 +501,8 @@
       {
        "model_id": "voice-isolate-dpcrn-v8",
        "variant": "default",
-       "rtf": 0.27058432500000434,
-       "cold_start_seconds": 0.03648737499997878,
+       "rtf": 0.33032635420000817,
+       "cold_start_seconds": 0.03594987500002844,
        "native_ssm": false,
        "intra_op_threads": 1,
        "latency_ms": 30.0
@@ -510,8 +510,8 @@
       {
        "model_id": "voice-isolate-dpcrn-v8",
        "variant": "flash",
-       "rtf": 0.18866632499999697,
-       "cold_start_seconds": 0.019612375000065185,
+       "rtf": 0.2604435458000012,
+       "cold_start_seconds": 0.09892941699990843,
        "native_ssm": false,
        "intra_op_threads": 1,
        "latency_ms": 30.0
