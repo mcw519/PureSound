@@ -241,10 +241,14 @@ recipe's `pretrained_ckpt/`. The catalog is validated by
 - **Benchmark** — `puresound models benchmark` (`puresound.inference.benchmark`)
   runs every streaming artifact through `load_model(...).infer()` on one thread
   and reports its real-time factor, cold start and the graph it ran. CI runs it
-  on Linux, macOS and Windows after each merge to `main` and weekly, and
-  `tools/benchmark_dashboard.py` publishes the trend to the `gh-pages` branch:
-  one card per model with its catalog description and artifact sizes beside
-  its chart, filterable by task, role, platform and variant.
+  on Linux, macOS and Windows after each merge to `main` and weekly, and adds
+  the trend to the project site.
+- **Project site** — `tools/website/build_site.py` builds it from this
+  repository and CI publishes it to the `gh-pages` branch: a home page with an
+  in-browser before/after player, the README as a guide, the catalog as a
+  filterable model list with downloads, each model card in both languages, a
+  try-out page running the playground's on-device payload, and the benchmark
+  trend with one chart per model. Every page uses the playground's stylesheets.
 
 ## Legacy
 

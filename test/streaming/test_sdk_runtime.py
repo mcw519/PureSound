@@ -83,8 +83,9 @@ class ScaleSession:
     whether the clamp ran.
     """
 
-    def __init__(self, path=None, providers=None, scale=1.0):
+    def __init__(self, path=None, sess_options=None, providers=None, scale=1.0):
         self.scale = scale
+        self.options = sess_options
         self.providers = providers or ["CPUExecutionProvider"]
 
     def get_providers(self):
@@ -230,6 +231,7 @@ def test_the_sdk_opens_its_own_session_and_speaks_int16(tmp_path, monkeypatch):
     monkeypatch.setitem(sys.modules, "onnxruntime", SimpleNamespace(
         get_available_providers=lambda: ["CPUExecutionProvider"],
         InferenceSession=ScaleSession,
+        SessionOptions=SimpleNamespace,
     ))
     from puresound_streaming import PureSoundStreamingRuntime
 
@@ -241,6 +243,56 @@ def test_the_sdk_opens_its_own_session_and_speaks_int16(tmp_path, monkeypatch):
 
     assert sdk.process_int16(np.zeros(600, dtype=np.int16)).dtype == np.int16
     assert sdk.flush_int16().dtype == np.int16
+
+
+@pytest.mark.parametrize("available,provider,requested,expected", [
+    # A frame graph is too small to split: the manifest's one thread on the CPU.
+    (["CPUExecutionProvider"], "cpu", None, 1),
+    (["CPUExecutionProvider"], "cpu", 3, 3),
+    # Another provider keeps ONNX Runtime's own default unless asked.
+    (["CUDAExecutionProvider", "CPUExecutionProvider"], "cuda", None, None),
+    (["CUDAExecutionProvider", "CPUExecutionProvider"], "cuda", 2, 2),
+])
+def test_the_sdk_takes_the_manifests_threads_on_the_cpu(tmp_path, monkeypatch, available, provider, requested, expected):
+    monkeypatch.syspath_prepend(str(SDK_ROOT))
+    monkeypatch.setitem(sys.modules, "onnxruntime", SimpleNamespace(
+        get_available_providers=lambda: available,
+        InferenceSession=ScaleSession,
+        SessionOptions=SimpleNamespace,
+    ))
+    from puresound_streaming import PureSoundStreamingRuntime
+
+    onnx_path = tmp_path / "m.onnx"
+    onnx_path.write_bytes(b"fake")
+    onnx_path.with_suffix(".json").write_text(json.dumps({**_manifest(), "cpu_optimization": {"intra_op_num_threads": 1}}))
+    sdk = PureSoundStreamingRuntime(onnx_path, provider=provider, intra_op_num_threads=requested)
+    assert getattr(sdk.session.options, "intra_op_num_threads", None) == expected
+
+
+def test_thread_options_are_refused_for_an_injected_session(tmp_path, monkeypatch):
+    monkeypatch.syspath_prepend(str(SDK_ROOT))
+    from puresound_streaming import PureSoundStreamingRuntime
+
+    onnx_path = tmp_path / "m.onnx"
+    onnx_path.write_bytes(b"fake")
+    onnx_path.with_suffix(".json").write_text(json.dumps(_manifest()))
+    with pytest.raises(ValueError, match="injected session"):
+        PureSoundStreamingRuntime(onnx_path, session=ScaleSession(), intra_op_num_threads=1)
+    with pytest.raises(ValueError, match="positive"):
+        PureSoundStreamingRuntime(onnx_path, session=ScaleSession(), intra_op_num_threads=0)
+
+
+def test_the_sdk_and_the_module_run_a_released_graph_on_as_many_threads(monkeypatch):
+    from puresound.streaming.base import StreamingOrt
+
+    monkeypatch.syspath_prepend(str(SDK_ROOT))
+    from puresound_streaming import PureSoundStreamingRuntime
+
+    onnx_path = SDK_ROOT.parents[1] / "egs/voice_isolate/pretrained_ckpt/streaming/dpcrn_v8.onnx"
+    sdk = PureSoundStreamingRuntime(onnx_path, provider="cpu")
+    module = StreamingOrt(onnx_path, provider="cpu", native_ssm="off")
+    threads = sdk.session.get_session_options().intra_op_num_threads
+    assert threads == module.session.get_session_options().intra_op_num_threads == 1
 
 
 @pytest.mark.parametrize("available", [

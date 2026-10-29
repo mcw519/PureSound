@@ -32,9 +32,12 @@ def inference(
     test_wav: str,
     sr: int = 16000,
     norm_gain: float = -22,
-    threshold: float = 0.8,
+    threshold: float | None = None,
 ) -> str:
-    """Run speaker verification through a runtime or a catalog model path/id."""
+    """Run speaker verification through a runtime or a catalog model path/id.
+
+    Without ``threshold`` the model's calibrated catalog default decides.
+    """
     localtime = time.strftime("%Y-%m-%d-%I-%M-%S", time.localtime())
     print(f"Uploaded audio: {anchor_wav}, {localtime}")
     if hasattr(onnx_sess, "infer"):
@@ -46,9 +49,12 @@ def inference(
         runtime = SpeakerVerificationRuntime.from_session(onnx_sess)
     else:
         raise TypeError("onnx_sess must be a catalog model id/path or runtime")
+    parameters = {"target_dbfs": float(norm_gain)}
+    if threshold is not None:
+        parameters["threshold"] = float(threshold)
     result: InferenceResult = runtime.infer(
         inputs={"enrollment": anchor_wav, "test": test_wav},
-        parameters={"target_dbfs": float(norm_gain), "threshold": float(threshold)},
+        parameters=parameters,
     )
     score = float(result.scores["cosine_similarity"])
     verdict = bool(result.scores["verdict"])
@@ -70,6 +76,7 @@ def main(args):
             if found is not None:
                 default_model = found[0].id
     runtime_cache: dict[str, Any] = {}
+    default_threshold = zoo.get(default_model).parameters["threshold"].default
 
     def wrapped_inference(model_id, enroll_wav, test_wav, norm_gain, threshold):
         if not model_id:
@@ -89,7 +96,7 @@ def main(args):
             gr.Audio(label="Upload Enrollment Speech", type="filepath", buttons=["download"]),
             gr.Audio(label="Upload Testing Speech", type="filepath", buttons=["download"]),
             gr.Slider(label="Normalized gain (dB)", minimum=-40, maximum=-16, value=-22, step=2),
-            gr.Slider(label="Cosine Threshold", minimum=0.1, maximum=0.95, value=0.8, step=0.05),
+            gr.Slider(label="Cosine Threshold", minimum=0.1, maximum=0.95, value=default_threshold, step=0.01),
         ],
         outputs=[gr.Textbox(label="Scores")],
     ).launch(server_name=args.address, server_port=args.port, share=False)

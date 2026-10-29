@@ -26,7 +26,7 @@ relief. Re-export with `--dry-blend 1.0`.
 | `dpcrn_mamba_v1.ckpt` | `noise-suppression-dpcrn-mamba-v1`, candidate | compact curriculum + ActiveBin calibration | deletion on clean read speech matters most |
 | `dpcrn_mamba_v0.ckpt` | retired (`backup/`, not tracked) | compact curriculum | -- |
 
-v3 also ships an int8 `flash` variant for tighter CPU budgets; see [v3 flash](#v3-flash-int8).
+v3 also ships an int8 `flash` variant for tighter CPU budgets; see [v3 flash](#v3).
 
 ## Measurements
 

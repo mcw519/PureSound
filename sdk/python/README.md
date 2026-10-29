@@ -26,6 +26,12 @@ to use it anyway. `mps` is an alias for CoreML because ONNX Runtime does not
 have a native MPS execution provider. Confirm the active provider
 with `onnxruntime.get_available_providers()`.
 
+On the CPU provider the runtime gives ONNX Runtime the number of intra-op
+threads the manifest recommends (`cpu_optimization.intra_op_num_threads`, 1 for
+the released graphs), as the `puresound` package does. A frame graph is too small
+to split: ONNX Runtime's default of one thread per core runs it more slowly and
+keeps every core busy. Pass `intra_op_num_threads=` to choose another number.
+
 ## Install From This Folder
 
 ```bash

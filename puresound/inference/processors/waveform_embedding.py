@@ -108,6 +108,13 @@ class SpeakerVerificationRuntime:
             raise ValueError("ONNX embedding output is empty or non-finite")
         return embedding
 
+    def embed(self, audio: Any, parameters: Mapping[str, Any] | None = None) -> np.ndarray:
+        """One recording's embedding, loaded and levelled as ``infer`` does its
+        inputs; for scoring many trials without embedding each file twice."""
+        _, target_dbfs = self._parameters(parameters)
+        samples, _ = load_audio(audio, sample_rate=self.sample_rate, target_dbfs=target_dbfs)
+        return self._embedding(samples)
+
     def infer(
         self,
         inputs: Mapping[str, Any],

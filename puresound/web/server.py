@@ -61,6 +61,7 @@ from puresound.evaluation.transcribers import (
 )
 from puresound.inference.processors.base import load_audio
 from puresound.web.exports import build_report, build_zip
+from puresound.web import world
 from puresound.web.pipeline import PipelineCatalog, PipelineRequestError
 from puresound.web.measurements import (
     align_streaming_output,
@@ -1436,33 +1437,29 @@ class WebService:
 
     # Dynamic acoustic worlds --------------------------------------------------
     def world_overview(self):
-        from puresound.web.world import overview
-        return overview()
+        return world.overview()
 
     def validate_world(self, payload):
-        from puresound.web.world import validate_request
         try:
-            return {"scene": validate_request(payload).to_dict()}
+            return {"scene": world.validate_request(payload).to_dict()}
         except (ValueError, TypeError, KeyError) as exc:
             raise WebServiceError(str(exc)) from exc
 
     def world_materials(self, payload):
-        from puresound.web.world import with_materials
         try:
-            return {"scene": with_materials(payload)}
+            return {"scene": world.with_materials(payload)}
         except (ValueError, TypeError, KeyError) as exc:
             raise WebServiceError(str(exc)) from exc
 
     def submit_world(self, payload):
-        from puresound.web.world import validate_request, sweep_scenes
         from puresound.web.aicoustics import options, capabilities
         try:
-            validate_request(payload)
+            world.validate_request(payload)
             comparison = options(payload.get("aicoustics"))
             if comparison and not capabilities()["available"]:
                 raise ValueError("Install aic-sdk==3.3.0 to enable ai-coustics comparison.")
             if payload.get("kind") == "world_sweep":
-                sweep_scenes(payload)
+                world.sweep_scenes(payload)
             model_id = payload.get("model_id")
             if model_id and self.zoo.get(model_id).task not in ENHANCEMENT_TASKS:
                 raise ValueError("world jobs require an enhancement model")
@@ -1472,18 +1469,17 @@ class WebService:
         return self._start_job(job, self._run_world_job, payload)
 
     def _world_result(self, payload, spec, assets, progress):
-        from puresound.web.world import render_report, world_zip
         from puresound.web.aicoustics import options, process
         enhance, model = self._pipeline_enhancer(payload.get("model_id"), str(payload.get("provider") or "cpu"))
         if payload.get("model_id") and enhance is None:
             raise ValueError("selected model cannot process a 16 kHz world")
         comparison_config = options(payload.get("aicoustics"))
         comparison = (lambda samples, rate, notify: process(samples, rate, comparison_config, progress=notify)) if comparison_config else None
-        report, audio, sources = render_report(spec, assets, enhance, model, progress, payload.get("assets"), comparison=comparison)
+        report, audio, sources = world.render_report(spec, assets, enhance, model, progress, payload.get("assets"), comparison=comparison)
         if comparison_config:
             report["comparisons"]["aicoustics"].update({k: v for k, v in comparison_config.items() if k != "api_key"})
         stored = {name: StoredOutput(_float_wav(samples, 16000), "audio/wav", name+".wav", 0.) for name, samples in audio.items()}
-        package = world_zip(report, audio, sources, _float_wav)
+        package = world.world_zip(report, audio, sources, _float_wav)
         stored["scene-package"] = StoredOutput(package, "application/zip", "scene.zip", 0.)
         token = self.runs.put(stored)
         report["run_id"] = token
@@ -1491,17 +1487,16 @@ class WebService:
         return report
 
     def _run_world_job(self, job_id, payload):
-        from puresound.web.world import validate_request, load_assets, sweep_scenes
         from puresound.web.aicoustics import public_request, error_message
         if not self.jobs.start(job_id, phase="preparing", progress=.01):
             return
         def progress(value, phase):
             self._update_job_progress(job_id, value, phase)
         try:
-            spec = validate_request(payload)
-            assets = load_assets(spec, payload.get("assets", {}), self.static_dir, self._upload_path)
+            spec = world.validate_request(payload)
+            assets = world.load_assets(spec, payload.get("assets", {}), self.static_dir, self._upload_path)
             if payload.get("kind") == "world_sweep":
-                cells = sweep_scenes(payload)
+                cells = world.sweep_scenes(payload)
                 reports = [{**{k: v for k, v in cell.items() if k != "scene"}, "status": "queued"} for cell in cells]
                 partial = {"axes": payload["axes"], "cells": reports, "scene": spec.to_dict(), "job_id": job_id, "request": public_request(payload)}
                 self.jobs.update_result(job_id, partial)
@@ -1651,10 +1646,8 @@ class WebService:
         raise KeyError(f"job not found: {job_id}")
 
     def job(self, job_id: str) -> dict[str, Any]:
-        from puresound.web.world import current_result
-
         job = self._store_for(job_id).snapshot(job_id)
-        return {**job, "result": current_result(job["kind"], job.get("result"))}
+        return {**job, "result": world.current_result(job["kind"], job.get("result"))}
 
     def job_export(self, job_id: str, kind: str, *, tz: str | None = None) -> tuple[bytes, str, str]:
         """``(body, content type, file name)`` for a finished job's ZIP or report."""
@@ -1678,9 +1671,7 @@ class WebService:
         return store.snapshot(job_id)
 
     def list_jobs(self, limit: int = 20) -> list[dict[str, Any]]:
-        from puresound.web.world import current_result
-
-        return [{**job, "result": current_result(job["kind"], job.get("result"))} for job in self.jobs.list_snapshots(limit)]
+        return [{**job, "result": world.current_result(job["kind"], job.get("result"))} for job in self.jobs.list_snapshots(limit)]
 
     # Transcription -----------------------------------------------------------
     def asr_capabilities(self) -> dict[str, Any]:
@@ -2756,8 +2747,7 @@ class _RequestHandler(BaseHTTPRequestHandler):
                 job_id = urllib.parse.unquote(path[len("/api/jobs/") :])
                 state = self.app.job(job_id)
                 if query.get("summary", ["0"])[0] == "1" and state["status"] in {"queued", "running"}:
-                    from puresound.web.world import sweep_progress
-                    state = {**state, "result": sweep_progress(state.get("result"))}
+                    state = {**state, "result": world.sweep_progress(state.get("result"))}
                 self._json(HTTPStatus.OK, state)
                 return
             if path.startswith("/api/uploads/"):

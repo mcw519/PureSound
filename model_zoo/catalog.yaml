@@ -245,13 +245,13 @@ models:
     capabilities: {offline_file: true, realtime_streaming: false, speaker_verification: true}
     preprocessing: {mono: true, resample: 16000, target_dbfs: -22.0}
     postprocessing: {type: cosine_similarity}
-    recommended_inference: {threshold: 0.8}
+    recommended_inference: {threshold: 0.39}
     parameters:
-      threshold: {type: float, default: 0.8, minimum: 0.0, maximum: 1.0}
+      threshold: {type: float, default: 0.39, minimum: 0.0, maximum: 1.0}
       target_dbfs: {type: float, default: -22.0, minimum: -60.0, maximum: 0.0}
     source_checkpoint: egs/speaker_embedding/pretrained/PS-spk-v1.ckpt
     source_config: egs/speaker_embedding/conf/PS-spk-v1.yaml
-    benchmark_references: [egs/speaker_embedding/README.md]
+    benchmark_references: [egs/speaker_embedding/README.md, model_zoo/benchmarks/speaker_threshold_librispeech_test_clean_20261023.json]
     artifacts:
       - format: onnx
         variant: default
@@ -272,13 +272,13 @@ models:
     capabilities: {offline_file: true, realtime_streaming: false, speaker_verification: true}
     preprocessing: {mono: true, resample: 16000, target_dbfs: -22.0}
     postprocessing: {type: cosine_similarity}
-    recommended_inference: {threshold: 0.8}
+    recommended_inference: {threshold: 0.37}
     parameters:
-      threshold: {type: float, default: 0.8, minimum: 0.0, maximum: 1.0}
+      threshold: {type: float, default: 0.37, minimum: 0.0, maximum: 1.0}
       target_dbfs: {type: float, default: -22.0, minimum: -60.0, maximum: 0.0}
     source_checkpoint: egs/speaker_embedding/pretrained/PS-spk-v1-1.ckpt
     source_config: egs/speaker_embedding/conf/PS-spk-v1-1.yaml
-    benchmark_references: [egs/speaker_embedding/README.md]
+    benchmark_references: [egs/speaker_embedding/README.md, model_zoo/benchmarks/speaker_threshold_librispeech_test_clean_20261023.json]
     artifacts:
       - format: onnx
         variant: default

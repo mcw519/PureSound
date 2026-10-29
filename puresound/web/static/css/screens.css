@@ -146,6 +146,8 @@ mark.transcribe-token { color: inherit; background: color-mix(in srgb, #ffd166 4
 .measurement-summary-item strong { display: block; margin-top: 3px; overflow: hidden; font-size: var(--text-body); font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
 .measurement-aggregate { padding: 14px; margin-bottom: 16px; background: color-mix(in srgb, var(--mint) 12%, var(--canvas)); border: 1px solid color-mix(in srgb, var(--mint-ink) 16%, transparent); border-radius: var(--radius-panel); }
 .measurement-aggregate .panel-help { margin: 6px 0 10px; }
+/* A lighter tint on the dark canvas would lift it past what tertiary text can sit on. */
+:root[data-theme="dark"] .measurement-aggregate { background: color-mix(in srgb, var(--mint) 5%, var(--canvas)); }
 .aggregate-table td.aggregate-cell strong { display: block; font-family: var(--font-mono); font-size: var(--text-small); font-weight: 500; text-align: right; }
 .aggregate-table td.aggregate-cell small { display: block; margin-top: 2px; color: var(--ink-3); font-size: 10.5px; text-align: right; }
 .aggregate-cell.is-up strong { color: var(--good); }
@@ -323,6 +325,7 @@ mark.transcribe-token { color: inherit; background: color-mix(in srgb, #ffd166 4
 .job-history-side a:hover { text-decoration: underline; }
 .job-when { font-variant-numeric: tabular-nums; }
 .job-kind { flex: none; height: 22px; display: inline-flex; align-items: center; padding: 0 8px; color: var(--mint-ink); background: color-mix(in srgb, var(--mint) 45%, transparent); border-radius: var(--radius-pill); font-size: 11.5px; font-weight: 500; }
+:root[data-theme="dark"] .job-kind:not(.job-kind-speaker, .job-kind-measurement, .job-kind-live) { background: color-mix(in srgb, var(--mint) 18%, transparent); }
 .job-kind-speaker { color: var(--speaker-ink); background: var(--speaker); }
 .job-kind-measurement { color: var(--ink); background: var(--sunken); }
 .job-kind-live { color: var(--bad); background: var(--bad-soft); }
@@ -336,6 +339,9 @@ mark.transcribe-token { color: inherit; background: color-mix(in srgb, #ffd166 4
   .measurement-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 759px) {
+  /* A run's timing drops under the title instead of squeezing its description. */
+  .panel-title { flex-wrap: wrap; }
+  .result-time { white-space: normal; }
   .sv-input-grid { grid-template-columns: minmax(0, 1fr); }
   .sv-result-body { align-items: flex-start; flex-direction: column; gap: 16px; }
   .detail-grid { grid-template-columns: minmax(0, 1fr); }

@@ -47,6 +47,13 @@ def test_speaker_verification_facade_returns_embeddings_and_verdict():
     assert result.sample_rate == 16000
 
 
+def test_a_single_embedding_matches_the_one_a_trial_scores():
+    runtime = load_model("speaker-verification-ps-spk-v1-1", provider="cpu")
+    samples = _speech_like()[:24000]
+    result = runtime.infer({"enrollment": samples, "test": samples[::-1].copy()})
+    np.testing.assert_array_equal(runtime.embed(samples), result.outputs["enrollment_embedding"])
+
+
 @pytest.mark.parametrize("model_id", ["speaker-verification-ps-spk-v1", "speaker-verification-ps-spk-v1-1"])
 def test_both_speaker_models_expose_192d_embeddings(model_id):
     runtime = load_model(model_id, provider="cpu")

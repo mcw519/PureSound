@@ -1,8 +1,12 @@
 """Build the web app's on-device inference payload from pinned dependencies and
 zoo artifacts: the compiled streaming runtime, ONNX Runtime Web, and each
 released model's ONNX file with a strict JSON manifest, plus a SHA-256 catalog
-that the page checks every download against."""
+that the page checks every download against.
 
+The payload goes beside device.js in the playground's static files, or with
+``--dest`` to another folder, such as the project site's build."""
+
+import argparse
 import hashlib
 import json
 import math
@@ -52,7 +56,8 @@ def missing_inputs():
     return [str(path) for path in inputs if not path.is_file()]
 
 
-def main():
+def main(dest=None):
+    dest = dest or DEST
     missing = missing_inputs()
     if missing:
         raise SystemExit(
@@ -60,16 +65,16 @@ def main():
             + "\n  ".join(missing)
         )
     for folder in GENERATED:
-        shutil.rmtree(DEST / folder, ignore_errors=True)
+        shutil.rmtree(dest / folder, ignore_errors=True)
     for folder in ["assets", "runtime", "vendor/ort"]:
-        (DEST / folder).mkdir(parents=True, exist_ok=True)
+        (dest / folder).mkdir(parents=True, exist_ok=True)
     for source in (SDK / "dist").glob("*.js"):
-        shutil.copyfile(source, DEST / "runtime" / source.name)
+        shutil.copyfile(source, dest / "runtime" / source.name)
     for name in ORT_FILES:
-        shutil.copyfile(ORT_DIST / name, DEST / "vendor/ort" / name)
+        shutil.copyfile(ORT_DIST / name, dest / "vendor/ort" / name)
     ort_license = (SDK / "licenses/LICENSE").read_text()
     ort_notices = (SDK / "licenses/ThirdPartyNotices.txt").read_text()
-    (DEST / "THIRD_PARTY_NOTICES.txt").write_text(
+    (dest / "THIRD_PARTY_NOTICES.txt").write_text(
         "ONNX Runtime Web 1.24.3\n" + ort_license + "\n" + ort_notices
     )
     catalog = []
@@ -99,10 +104,10 @@ def main():
                 ("mix_phase", False),
             ]
         }
-        (DEST / f"assets/{model}.json").write_text(
+        (dest / f"assets/{model}.json").write_text(
             json.dumps(sanitize(manifest), allow_nan=False)
         )
-        shutil.copyfile(stem.with_suffix(".onnx"), DEST / f"assets/{model}.onnx")
+        shutil.copyfile(stem.with_suffix(".onnx"), dest / f"assets/{model}.onnx")
         catalog.append(
             {
                 "id": model,
@@ -111,19 +116,21 @@ def main():
             }
         )
     files = {
-        str(p.relative_to(DEST)): hashlib.sha256(p.read_bytes()).hexdigest()
+        str(p.relative_to(dest)): hashlib.sha256(p.read_bytes()).hexdigest()
         for folder in GENERATED
-        for p in sorted((DEST / folder).rglob("*"))
+        for p in sorted((dest / folder).rglob("*"))
         if p.is_file()
     }
     version = hashlib.sha256(json.dumps(files, sort_keys=True).encode()).hexdigest()[
         :16
     ]
-    (DEST / "catalog.json").write_text(
+    (dest / "catalog.json").write_text(
         json.dumps({"version": version, "models": catalog, "files": files}, indent=2)
     )
-    print(f"Device inference assets built: {DEST} ({version})")
+    print(f"Device inference assets built: {dest} ({version})")
 
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--dest", type=Path, help="folder for the payload (default: beside device.js)")
+    main(parser.parse_args().dest)

@@ -28,17 +28,17 @@
       "id": "speaker-a-1",
       "file": "speaker-a-1.wav",
       "task": "speaker",
-      "title": "Speaker A, first half",
-      "description": "LibriSpeech reader 1272, first half of an utterance.",
-      "seconds": 2.3
+      "title": "Speaker A",
+      "description": "LibriSpeech reader 1272 (1272-141231-0012).",
+      "seconds": 7.74
     },
     {
       "id": "speaker-a-2",
       "file": "speaker-a-2.wav",
       "task": "speaker",
-      "title": "Speaker A, second half",
-      "description": "The same reader, the other half of the utterance.",
-      "seconds": 2.3
+      "title": "Speaker A, another chapter",
+      "description": "The same reader in another book, recorded apart (1272-135031-0017).",
+      "seconds": 6.86
     },
     {
       "id": "speaker-b",
