@@ -1,0 +1,501 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#010120">
+<link rel="icon" type="image/svg+xml" href="../favicon.svg">
+<title>Speaker Embedding · PureSound</title>
+<link rel="stylesheet" href="../css/tokens.css">
+<link rel="stylesheet" href="../css/base.css">
+<link rel="stylesheet" href="../css/components.css">
+<script>
+(() => {
+  let theme = "auto", lang = null;
+  try { theme = localStorage.getItem("puresound.theme") || "auto"; lang = localStorage.getItem("puresound.lang"); } catch {}
+  const dark = theme === "dark" || (theme === "auto" && matchMedia("(prefers-color-scheme: dark)").matches);
+  document.documentElement.dataset.theme = dark ? "dark" : "light";
+  const zh = lang ? lang === "zh-TW" : String(navigator.language || "").toLowerCase().startsWith("zh");
+  document.documentElement.lang = zh ? "zh-TW" : "en";
+})();
+</script>
+<style>
+/* Platform series: three hues outside the playground's signal colours. */
+:root { --linux: #4b4fd1; --macos: #0f7b84; --windows: #b04a92; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --linux: #a9abff; --macos: #6fd3db; --windows: #f19bd6; } }
+:root[data-theme="dark"] { --linux: #a9abff; --macos: #6fd3db; --windows: #f19bd6; }
+
+/* Content written in both languages shows the reader's one. */
+:root:not([lang="zh-TW"]) .lang-zh, :root[lang="zh-TW"] .lang-en { display: none; }
+
+/* Top bar: the playground's always-dark navigation, laid flat. */
+.topbar { position: relative; z-index: 30; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 18px; min-height: 52px;
+  padding: 8px max(24px, env(safe-area-inset-right, 0px)) 8px max(24px, env(safe-area-inset-left, 0px));
+  color: var(--on-nav); background: var(--nav); border-bottom: 1px solid var(--nav-line); }
+.topbar :focus-visible { outline-color: var(--mint); }
+.brand { display: flex; align-items: center; gap: 9px; color: var(--on-nav); font-size: 16px; font-weight: 600;
+  letter-spacing: -0.01em; text-decoration: none; }
+.brand img { width: 24px; height: 24px; }
+.site-nav { display: flex; flex-wrap: wrap; gap: 2px; }
+.site-nav a { position: relative; display: inline-flex; align-items: center; height: 32px; padding: 0 10px; color: var(--on-nav-2);
+  border-radius: var(--radius-control); font-size: var(--text-body); text-decoration: none; }
+.site-nav a:hover { color: var(--on-nav); background: rgba(255, 255, 255, 0.06); }
+.site-nav a[aria-current="page"] { color: var(--on-nav); background: var(--nav-3); }
+.site-nav a[aria-current="page"]::after { content: ""; position: absolute; left: 10px; right: 10px; bottom: 3px; height: 2px;
+  border-radius: 2px; background: var(--accent); }
+.topbar-end { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-left: auto; }
+.topbar-end > a { color: var(--on-nav-2); font-size: var(--text-small); text-decoration: none; }
+.topbar-end > a:hover { color: var(--on-nav); }
+.nav-switch { display: flex; gap: 2px; padding: 2px; background: rgba(255, 255, 255, 0.06); border-radius: var(--radius-panel); }
+.nav-switch button { min-width: 0; height: 24px; padding: 0 8px; color: var(--on-nav-2); background: transparent; border: 0;
+  border-radius: var(--radius-control); font-size: 11.5px; font-weight: 500; }
+.nav-switch button:hover { color: var(--on-nav); }
+.nav-switch button[aria-pressed="true"] { color: var(--on-nav); background: var(--nav-3); }
+
+/* Page frame and header, as the playground's screens. */
+.page { max-width: 1680px; margin: 0 auto; padding: 0 max(24px, env(safe-area-inset-right, 0px)) 48px max(24px, env(safe-area-inset-left, 0px)); }
+.page-header { position: sticky; z-index: 25; top: 0; display: grid; grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center; gap: 6px 16px; margin: 0 calc(-1 * max(24px, env(safe-area-inset-left, 0px))) 16px;
+  padding: 14px max(24px, env(safe-area-inset-left, 0px));
+  background: color-mix(in srgb, var(--page) 94%, transparent); border-bottom: 1px solid var(--line);
+  -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); }
+.page-header.is-static { position: static; }
+.page-desc { max-width: 96ch; margin: 3px 0 0; color: var(--ink-2); font-size: var(--text-ui); line-height: 1.45; }
+.page-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; }
+a.button { text-decoration: none; }
+
+/* Toolbar and model cards: the playground's Models screen. */
+.toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; margin-bottom: 14px; }
+.search-field { position: relative; min-width: 220px; flex: 1; display: flex; align-items: center; }
+.search-field > span { position: absolute; left: 10px; color: var(--ink-3); font-size: 16px; line-height: 1; pointer-events: none; }
+.search-field input { width: 100%; height: var(--control-h); padding: 0 10px 0 30px; color: var(--ink); background: var(--canvas);
+  border: 1px solid var(--line-strong); border-radius: var(--radius-control); outline: 0; font-size: var(--text-ui); }
+.search-field input:focus { border-color: var(--ink); }
+.search-field input:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+.search-field input::placeholder { color: var(--ink-3); }
+.filter-group { display: flex; align-items: center; gap: 6px; }
+.filter-group > .caps { margin-right: 2px; }
+.toolbar-count { margin-left: auto; color: var(--ink-3); font-family: var(--font-mono); font-size: 11px; white-space: nowrap; }
+.model-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 360px), 1fr)); gap: 12px; }
+.model-card { position: relative; display: flex; flex-direction: column; padding: 16px; overflow: hidden;
+  background: var(--canvas); border: 1px solid var(--line); border-radius: var(--radius-panel); transition: border-color 0.15s ease; }
+.model-card:hover { border-color: var(--line-strong); }
+.model-card.is-default { border-color: color-mix(in srgb, var(--good) 45%, var(--line)); box-shadow: inset 0 2px 0 var(--good); }
+.model-card-top { display: flex; justify-content: space-between; align-items: start; gap: 12px; }
+.model-symbol { width: 36px; height: 36px; display: grid; place-items: center; color: var(--periwinkle); background: var(--nav);
+  border-radius: var(--radius-panel); font-family: var(--font-mono); font-size: 18px; line-height: 1; }
+.model-symbol.sv { color: var(--speaker-ink); background: var(--speaker); }
+.card-heading { margin-top: 12px; }
+.model-card h3 { margin: 0; font-size: var(--text-lead); font-weight: 600; }
+.model-card-subtitle { margin: 2px 0 0; color: var(--ink-3); font-family: var(--font-mono); font-size: 11px; overflow-wrap: anywhere; }
+.model-badges { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0 10px; }
+.badge { display: inline-flex; align-items: center; height: 22px; padding: 0 8px; color: var(--ink-2); background: var(--sunken);
+  border-radius: var(--radius-pill); font-size: 11.5px; font-weight: 500; line-height: 1; white-space: nowrap; }
+.badge-task.sv { color: var(--speaker-ink); background: var(--speaker); }
+.badge-default { color: var(--good); background: var(--good-soft); }
+.badge-candidate, .badge-alternative { color: var(--ink); background: transparent; box-shadow: inset 0 0 0 1px var(--line-strong); }
+.badge-quiet { color: var(--ink-3); background: transparent; box-shadow: inset 0 0 0 1px var(--line); }
+.model-description { display: -webkit-box; margin: 0; overflow: hidden; color: var(--ink-2); font-size: var(--text-ui); line-height: 1.5;
+  -webkit-box-orient: vertical; -webkit-line-clamp: 4; line-clamp: 4; }
+.model-card.is-expanded .model-description { display: block; -webkit-line-clamp: unset; line-clamp: none; }
+.card-more { align-self: flex-start; padding: 4px 0 0; color: var(--ink-2); background: transparent; border: 0; font-size: var(--text-small);
+  text-decoration: underline; text-underline-offset: 3px; }
+.card-more:hover { color: var(--ink); }
+.model-footer { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 12px; padding-top: 12px;
+  margin-top: auto; border-top: 1px solid var(--line); }
+.model-meta { display: grid; gap: 2px; min-width: 0; color: var(--ink-3); font-size: 11.5px; }
+.model-meta strong { overflow: hidden; color: var(--ink); font-family: var(--font-mono); font-size: 11.5px; font-weight: 500;
+  text-overflow: ellipsis; white-space: nowrap; }
+.card-links { display: flex; flex-wrap: wrap; gap: 6px; }
+.card-link { flex: none; display: inline-flex; align-items: center; height: var(--control-h-small); padding: 0 9px; color: var(--ink);
+  background: var(--canvas); border: 1px solid var(--line-strong); border-radius: var(--radius-control); font-size: var(--text-small);
+  font-weight: 500; text-decoration: none; }
+.card-link:hover { background: var(--sunken); }
+.facts { display: flex; flex-wrap: wrap; gap: 4px 18px; margin: 12px 0 0; font-size: var(--text-small); }
+.facts div { display: flex; gap: 6px; align-items: baseline; }
+.facts dt { color: var(--ink-3); } .facts dd { margin: 0; color: var(--ink); }
+
+/* Text rendered from the repository's Markdown. */
+.prose { min-width: 0; max-width: 92ch; color: var(--ink); font-size: var(--text-body); line-height: 1.6; }
+.prose h1 { margin: 0 0 12px; font-size: 22px; }
+.prose h2 { margin: 28px 0 10px; padding-top: 4px; font-size: 17px; }
+.prose h3 { margin: 20px 0 8px; font-size: 15px; }
+.prose h2, .prose h3, .prose h4 { scroll-margin-top: 16px; }
+.prose p, .prose ul, .prose ol { margin: 0 0 12px; color: var(--ink-2); }
+.prose li + li { margin-top: 4px; }
+.prose a { color: var(--ink); text-decoration-color: var(--line-strong); text-underline-offset: 3px; }
+.prose a:hover { text-decoration-color: currentColor; }
+.prose strong { color: var(--ink); }
+.prose code { padding: 1px 4px; background: var(--sunken); border-radius: 3px; }
+/* A long path in running text breaks rather than widening a phone screen. */
+.prose :is(p, li) code { overflow-wrap: anywhere; }
+.prose pre { margin: 0 0 14px; padding: 12px 14px; overflow-x: auto; color: var(--on-nav); background: var(--nav);
+  border-radius: var(--radius-panel); font-size: 12.5px; line-height: 1.5; }
+.prose pre code { padding: 0; color: inherit; background: none; }
+.prose blockquote { margin: 0 0 12px; padding: 2px 14px; border-left: 3px solid var(--line-strong); }
+.prose .table-wrap { margin: 0 0 16px; overflow-x: auto; background: var(--canvas); border: 1px solid var(--line);
+  border-radius: var(--radius-panel); }
+.prose .table th { white-space: normal; }
+.prose .table td { min-width: 7ch; color: var(--ink); }
+/* Identifiers stay whole; a wide table scrolls in its frame instead. */
+.prose .table code { white-space: nowrap; }
+.prose hr { margin: 24px 0; border: 0; border-top: 1px solid var(--line); }
+
+.site-footer { margin-top: 32px; padding-top: 16px; color: var(--ink-3); border-top: 1px solid var(--line); font-size: var(--text-small); }
+.site-footer a { color: var(--ink-2); }
+
+@media (max-width: 760px) {
+  .topbar { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 12px; padding-top: 8px; padding-bottom: 0; }
+  .brand { grid-row: 1; grid-column: 1; }
+  .topbar-end { grid-row: 1; grid-column: 2; justify-self: end; gap: 6px; margin-left: 0; }
+  .topbar-end > a { display: none; }
+  .nav-switch button { padding: 0 6px; }
+  .site-nav { grid-row: 2; grid-column: 1 / -1; flex-wrap: nowrap; margin: 0 -24px; padding: 0 24px 6px; overflow-x: auto;
+    scrollbar-width: none; }
+  .site-nav::-webkit-scrollbar { display: none; }
+  .site-nav a { flex: none; }
+  /* A tall header that stuck would cover much of a phone screen. */
+  .page-header { position: static; grid-template-columns: minmax(0, 1fr); }
+  /* Wider columns scroll sideways instead of stacking a phrase per line. */
+  .prose .table td, .prose .table th { min-width: 13ch; }
+  .page-actions { justify-content: flex-start; }
+  .toolbar-count { margin-left: 0; }
+}
+
+.doc { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 32px; align-items: start; }
+.toc { position: sticky; top: 16px; max-height: calc(100dvh - 32px); overflow: auto; font-size: var(--text-small); }
+.toc ul { margin: 8px 0 0; padding: 0; list-style: none; }
+.toc li { margin: 0; }
+.toc a { display: block; padding: 4px 8px; color: var(--ink-2); border-left: 2px solid var(--line); text-decoration: none; line-height: 1.35; }
+.toc a:hover { color: var(--ink); border-left-color: var(--ink-3); }
+.toc .toc-3 a { padding-left: 20px; font-size: 11.5px; }
+@media (max-width: 900px) { .doc { grid-template-columns: minmax(0, 1fr); } .toc { position: static; max-height: none; } }
+
+.card-models { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.card-models .chip { text-decoration: none; }
+</style>
+
+</head>
+<body>
+<header class="topbar">
+<a class="brand" href="../index.html"><img src="../favicon.svg" alt="">PureSound</a>
+<nav class="site-nav" aria-label="Site"><a href="../index.html"><span data-i18n="Home">Home</span></a><a href="../start.html"><span data-i18n="Get started">Get started</span></a><a href="../models.html" aria-current="page"><span data-i18n="Models">Models</span></a><a href="../try.html"><span data-i18n="Try it">Try it</span></a><a href="../benchmarks.html"><span data-i18n="Benchmarks">Benchmarks</span></a></nav>
+<div class="topbar-end"><a href="https://github.com/mcw519/PureSound">GitHub</a>
+<div class="nav-switch" role="group" aria-label="Theme"><button type="button" data-theme-choice="auto"><span data-i18n="Auto">Auto</span></button><button type="button" data-theme-choice="light"><span data-i18n="Light">Light</span></button><button type="button" data-theme-choice="dark"><span data-i18n="Dark">Dark</span></button></div>
+<div class="nav-switch" role="group" aria-label="Language"><button type="button" data-lang="en">EN</button><button type="button" data-lang="zh-TW">中文</button></div>
+</div>
+</header>
+<main class="page">
+<header class="page-header is-static">
+<div class="page-heading"><span class="caps"><span data-i18n="Model card">Model card</span></span>
+<h1><span class="lang-en" lang="en">Speaker Embedding</span><span class="lang-zh" lang="zh-TW">語者 Embedding</span></h1>
+<div class="card-models" aria-label="Models in this card"><a class="chip" href="../models.html#speaker-verification-ps-spk-v1-1">speaker-verification-ps-spk-v1-1 <small>default</small></a><a class="chip" href="../models.html#speaker-verification-ps-spk-v1">speaker-verification-ps-spk-v1 <small>alternative</small></a></div></div>
+<div class="page-actions"><a class="button button-secondary button-small" href="../cards/speaker-embedding.html"><span data-i18n="Source on GitHub">Source on GitHub</span></a></div>
+</header>
+<div class="doc"><nav class="toc" aria-label="Contents"><span class="caps"><span data-i18n="Contents">Contents</span></span><div class="lang-en" lang="en"><ul><li class="toc-2"><a href="#train-your-own-speaker-embedding-model">Train your own speaker embedding model</a></li><li class="toc-2"><a href="#extract-speaker-embedding">Extract speaker embedding</a></li><li class="toc-2"><a href="#caculate-the-eer-scores">Caculate the EER scores</a></li><li class="toc-2"><a href="#pretrained-models">Pretrained models</a></li><li class="toc-2"><a href="#decision-threshold">Decision threshold</a></li><li class="toc-2"><a href="#export-the-model-to-onnx-format">Export the model to ONNX format</a></li><li class="toc-2"><a href="#running-your-demo-by-using-gradio">Running your demo by using Gradio</a></li></ul></div><div class="lang-zh" lang="zh-TW"><ul><li class="toc-2"><a href="#zh-訓練自己的語者-embedding-模型">訓練自己的語者 embedding 模型</a></li><li class="toc-2"><a href="#zh-萃取語者-embedding">萃取語者 embedding</a></li><li class="toc-2"><a href="#zh-計算-eer-分數">計算 EER 分數</a></li><li class="toc-2"><a href="#zh-預訓練模型">預訓練模型</a></li><li class="toc-2"><a href="#zh-判定門檻">判定門檻</a></li><li class="toc-2"><a href="#zh-匯出模型為-onnx-格式">匯出模型為 ONNX 格式</a></li><li class="toc-2"><a href="#zh-用-gradio-執行你的-demo">用 Gradio 執行你的 demo</a></li></ul></div></nav><article class="prose"><div class="lang-en" lang="en"><h2 id="train-your-own-speaker-embedding-model">Train your own speaker embedding model</h2>
+<pre><code># Generate manifest
+python -m puresound.dataset.corpus.kaldi --utt2gender_path=utt2gender.txt --insert_root_path=/corpus/path manifest wav2scp utt2spk
+# Training
+python main.py --training work.yaml
+</code></pre>
+<h2 id="extract-speaker-embedding">Extract speaker embedding</h2>
+<pre><code>python main.py --inference --ckpt_path ckpt_path work.yaml
+</code></pre>
+<h2 id="caculate-the-eer-scores">Caculate the EER scores</h2>
+<pre><code># Extract embedding for each utterances
+python main.py --inference --ckpt_path ckpt_path work.yaml
+# Scoring
+python local/compute_eer.py eer_trail_file embeddings_folder score_file
+</code></pre>
+<h2 id="pretrained-models">Pretrained models</h2>
+<div class="table-wrap"><table class="table">
+<thead>
+<tr>
+<th style="text-align:center">MODEL</th>
+<th style="text-align:center">Files</th>
+<th style="text-align:center">Feature</th>
+<th style="text-align:center">Backbone</th>
+<th style="text-align:center">Loss func</th>
+<th style="text-align:center">Vox-O EER</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:center">PS-spk-v1</td>
+<td style="text-align:center"><a href="https://github.com/mcw519/PureSound/blob/9caa3540fabe328e9a2d9da0a3950ccca1096950/egs/speaker_embedding/pretrained/PS-spk-v1.onnx">onnx</a><br><a href="https://github.com/mcw519/PureSound/blob/9caa3540fabe328e9a2d9da0a3950ccca1096950/egs/speaker_embedding/pretrained/PS-spk-v1.ckpt">pytorch</a><br><a href="https://github.com/mcw519/PureSound/blob/9caa3540fabe328e9a2d9da0a3950ccca1096950/egs/speaker_embedding/conf/PS-spk-v1.yaml">config</a></td>
+<td style="text-align:center">Fbank80</td>
+<td style="text-align:center">ECAPA-TDNN</td>
+<td style="text-align:center">AAMSoftmax<br>(m=0.3)</td>
+<td style="text-align:center">1.10</td>
+</tr>
+<tr>
+<td style="text-align:center">PS-spk-v1-1</td>
+<td style="text-align:center"><a href="https://github.com/mcw519/PureSound/blob/9caa3540fabe328e9a2d9da0a3950ccca1096950/egs/speaker_embedding/pretrained/PS-spk-v1-1.onnx">onnx</a><br><a href="https://github.com/mcw519/PureSound/blob/9caa3540fabe328e9a2d9da0a3950ccca1096950/egs/speaker_embedding/pretrained/PS-spk-v1-1.ckpt">pytorch</a><br><a href="https://github.com/mcw519/PureSound/blob/9caa3540fabe328e9a2d9da0a3950ccca1096950/egs/speaker_embedding/conf/PS-spk-v1-1.yaml">config</a></td>
+<td style="text-align:center">Fbank80</td>
+<td style="text-align:center">ECAPA-TDNN</td>
+<td style="text-align:center">AAMSoftmax<br>(m=0.3, c=3, k=5)</td>
+<td style="text-align:center">0.99</td>
+</tr>
+</tbody>
+</table></div>
+<div class="table-wrap"><table class="table">
+<thead>
+<tr>
+<th style="text-align:center">PARAMETER</th>
+<th style="text-align:center">DESCRIPTION</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:center">m</td>
+<td style="text-align:center">margin</td>
+</tr>
+<tr>
+<td style="text-align:center">c</td>
+<td style="text-align:center">sub-center</td>
+</tr>
+<tr>
+<td style="text-align:center">k</td>
+<td style="text-align:center">top-K class</td>
+</tr>
+</tbody>
+</table></div>
+<h2 id="decision-threshold">Decision threshold</h2>
+<p><code>puresound infer</code>, the web app and <code>demo.py</code> accept a trial when the cosine
+similarity of the two embeddings is above the model's threshold in
+<a href="https://github.com/mcw519/PureSound/blob/9caa3540fabe328e9a2d9da0a3950ccca1096950/model_zoo/catalog.yaml"><code>model_zoo/catalog.yaml</code></a>: <strong>0.37</strong> for
+PS-spk-v1-1 and <strong>0.39</strong> for PS-spk-v1. Both were set on LibriSpeech test-clean
+(40 readers, 2,620 utterances, every pair of utterances a trial) at the point
+where 1% of trials between two readers of the same sex are accepted, rounded to
+0.01. The full record is
+<a href="https://github.com/mcw519/PureSound/blob/9caa3540fabe328e9a2d9da0a3950ccca1096950/model_zoo/benchmarks/speaker_threshold_librispeech_test_clean_20261023.json"><code>speaker_threshold_librispeech_test_clean_20261023.json</code></a>.</p>
+<div class="table-wrap"><table class="table">
+<thead>
+<tr>
+<th>LibriSpeech test-clean</th>
+<th>PS-spk-v1-1</th>
+<th>PS-spk-v1</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>EER, every trial</td>
+<td>1.41% (at 0.33)</td>
+<td>1.87% (at 0.32)</td>
+</tr>
+<tr>
+<td>EER, same reader in two chapters</td>
+<td>1.54%</td>
+<td>2.03%</td>
+</tr>
+<tr>
+<td>EER, first 3 s of each utterance</td>
+<td>1.64%</td>
+<td>2.11%</td>
+</tr>
+<tr>
+<td>1% false acceptance, same-sex impostors</td>
+<td>at 0.372, 2.5% false rejection</td>
+<td>at 0.392, 3.9% false rejection</td>
+</tr>
+<tr>
+<td>The former default, 0.8</td>
+<td>rejects 83% of same-reader trials</td>
+<td>rejects 83%</td>
+</tr>
+</tbody>
+</table></div>
+<p>Scores are raw cosine similarities. <code>local/compute_eer.py</code> maps them to
+(score + 1) / 2 for its EER, which leaves the EER unchanged but not what a
+threshold means. LibriSpeech is clean read speech: noisy, far-field or telephone
+recordings lower same-speaker scores, so calibrate on such data before relying on
+these points there:</p>
+<pre><code>uv run python local/calibrate_threshold.py LibriSpeech/test-clean \
+    --speakers LibriSpeech/SPEAKERS.TXT --out threshold.json
+</code></pre>
+<h2 id="export-the-model-to-onnx-format">Export the model to ONNX format</h2>
+<pre><code># Generate the ONNX model as ckpt_path.onnx
+python main.py --export_onnx --pretrained_ckpt_path ckpt_path work.yaml
+</code></pre>
+<h2 id="running-your-demo-by-using-gradio">Running your demo by using <code>Gradio</code></h2>
+<pre><code>python demo.py --address=yours_ip_address --port=yours_port onnx_model_path
+</code></pre>
+</div><div class="lang-zh" lang="zh-TW"><h2 id="zh-訓練自己的語者-embedding-模型">訓練自己的語者 embedding 模型</h2>
+<pre><code># 產生 manifest
+python -m puresound.dataset.corpus.kaldi --utt2gender_path=utt2gender.txt --insert_root_path=/corpus/path manifest wav2scp utt2spk
+# 訓練
+python main.py --training work.yaml
+</code></pre>
+<h2 id="zh-萃取語者-embedding">萃取語者 embedding</h2>
+<pre><code>python main.py --inference --ckpt_path ckpt_path work.yaml
+</code></pre>
+<h2 id="zh-計算-eer-分數">計算 EER 分數</h2>
+<pre><code># 為每個 utterance 萃取 embedding
+python main.py --inference --ckpt_path ckpt_path work.yaml
+# 計分
+python local/compute_eer.py eer_trail_file embeddings_folder score_file
+</code></pre>
+<h2 id="zh-預訓練模型">預訓練模型</h2>
+<div class="table-wrap"><table class="table">
+<thead>
+<tr>
+<th style="text-align:center">MODEL</th>
+<th style="text-align:center">Files</th>
+<th style="text-align:center">Feature</th>
+<th style="text-align:center">Backbone</th>
+<th style="text-align:center">Loss func</th>
+<th style="text-align:center">Vox-O EER</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:center">PS-spk-v1</td>
+<td style="text-align:center"><a href="https://github.com/mcw519/PureSound/blob/9caa3540fabe328e9a2d9da0a3950ccca1096950/egs/speaker_embedding/pretrained/PS-spk-v1.onnx">onnx</a><br><a href="https://github.com/mcw519/PureSound/blob/9caa3540fabe328e9a2d9da0a3950ccca1096950/egs/speaker_embedding/pretrained/PS-spk-v1.ckpt">pytorch</a><br><a href="https://github.com/mcw519/PureSound/blob/9caa3540fabe328e9a2d9da0a3950ccca1096950/egs/speaker_embedding/conf/PS-spk-v1.yaml">config</a></td>
+<td style="text-align:center">Fbank80</td>
+<td style="text-align:center">ECAPA-TDNN</td>
+<td style="text-align:center">AAMSoftmax<br>(m=0.3)</td>
+<td style="text-align:center">1.10</td>
+</tr>
+<tr>
+<td style="text-align:center">PS-spk-v1-1</td>
+<td style="text-align:center"><a href="https://github.com/mcw519/PureSound/blob/9caa3540fabe328e9a2d9da0a3950ccca1096950/egs/speaker_embedding/pretrained/PS-spk-v1-1.onnx">onnx</a><br><a href="https://github.com/mcw519/PureSound/blob/9caa3540fabe328e9a2d9da0a3950ccca1096950/egs/speaker_embedding/pretrained/PS-spk-v1-1.ckpt">pytorch</a><br><a href="https://github.com/mcw519/PureSound/blob/9caa3540fabe328e9a2d9da0a3950ccca1096950/egs/speaker_embedding/conf/PS-spk-v1-1.yaml">config</a></td>
+<td style="text-align:center">Fbank80</td>
+<td style="text-align:center">ECAPA-TDNN</td>
+<td style="text-align:center">AAMSoftmax<br>(m=0.3, c=3, k=5)</td>
+<td style="text-align:center">0.99</td>
+</tr>
+</tbody>
+</table></div>
+<div class="table-wrap"><table class="table">
+<thead>
+<tr>
+<th style="text-align:center">PARAMETER</th>
+<th style="text-align:center">DESCRIPTION</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:center">m</td>
+<td style="text-align:center">margin</td>
+</tr>
+<tr>
+<td style="text-align:center">c</td>
+<td style="text-align:center">sub-center</td>
+</tr>
+<tr>
+<td style="text-align:center">k</td>
+<td style="text-align:center">top-K class</td>
+</tr>
+</tbody>
+</table></div>
+<h2 id="zh-判定門檻">判定門檻</h2>
+<p><code>puresound infer</code>、網頁介面與 <code>demo.py</code> 在兩段 embedding 的餘弦相似度高於模型門檻時判為同一人，
+門檻寫在 <a href="https://github.com/mcw519/PureSound/blob/9caa3540fabe328e9a2d9da0a3950ccca1096950/model_zoo/catalog.yaml"><code>model_zoo/catalog.yaml</code></a>：PS-spk-v1-1 為 <strong>0.37</strong>，
+PS-spk-v1 為 <strong>0.39</strong>。兩者都在 LibriSpeech test-clean（40 位朗讀者、2,620 段語句，任兩段語句
+即一組試驗）上校正，取「同性別的不同朗讀者有 1% 被誤判為同一人」的那一點，四捨五入到 0.01。
+完整紀錄見
+<a href="https://github.com/mcw519/PureSound/blob/9caa3540fabe328e9a2d9da0a3950ccca1096950/model_zoo/benchmarks/speaker_threshold_librispeech_test_clean_20261023.json"><code>speaker_threshold_librispeech_test_clean_20261023.json</code></a>。</p>
+<div class="table-wrap"><table class="table">
+<thead>
+<tr>
+<th>LibriSpeech test-clean</th>
+<th>PS-spk-v1-1</th>
+<th>PS-spk-v1</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>EER，全部試驗</td>
+<td>1.41%（門檻 0.33）</td>
+<td>1.87%（門檻 0.32）</td>
+</tr>
+<tr>
+<td>EER，同一朗讀者的不同章節</td>
+<td>1.54%</td>
+<td>2.03%</td>
+</tr>
+<tr>
+<td>EER，每段只取前 3 秒</td>
+<td>1.64%</td>
+<td>2.11%</td>
+</tr>
+<tr>
+<td>同性別冒充者誤收 1%</td>
+<td>門檻 0.372，誤拒 2.5%</td>
+<td>門檻 0.392，誤拒 3.9%</td>
+</tr>
+<tr>
+<td>先前的預設值 0.8</td>
+<td>拒掉 83% 的同一人試驗</td>
+<td>拒掉 83%</td>
+</tr>
+</tbody>
+</table></div>
+<p>分數是原始的餘弦相似度。<code>local/compute_eer.py</code> 計算 EER 時會換算成 (score + 1) / 2，
+EER 不變，但門檻代表的意義會變。LibriSpeech 是乾淨的朗讀語音；嘈雜、遠場或電話錄音會讓同一人的
+分數降低，在那類資料上使用前請先重新校正：</p>
+<pre><code>uv run python local/calibrate_threshold.py LibriSpeech/test-clean \
+    --speakers LibriSpeech/SPEAKERS.TXT --out threshold.json
+</code></pre>
+<h2 id="zh-匯出模型為-onnx-格式">匯出模型為 ONNX 格式</h2>
+<pre><code># 產生 ONNX 模型，輸出為 ckpt_path.onnx
+python main.py --export_onnx --pretrained_ckpt_path ckpt_path work.yaml
+</code></pre>
+<h2 id="zh-用-gradio-執行你的-demo">用 <code>Gradio</code> 執行你的 demo</h2>
+<pre><code>python demo.py --address=yours_ip_address --port=yours_port onnx_model_path
+</code></pre>
+</div></article></div>
+<footer class="site-footer"><span data-i18n="Built from">Built from</span> <a href="https://github.com/mcw519/PureSound/tree/9caa3540fabe328e9a2d9da0a3950ccca1096950"><code>9caa3540fabe</code></a> · Apache-2.0</footer>
+</main>
+<script>
+(() => {
+  const ZH = {"Home": "首頁", "Get started": "開始使用", "Models": "模型庫", "Try it": "線上試用", "Benchmarks": "效能量測", "Theme": "主題", "Auto": "自動", "Light": "淺色", "Dark": "深色", "Language": "語言", "Voice isolation": "人聲分離", "Noise suppression": "雜訊抑制", "Speaker verification": "語者驗證", "default": "預設", "candidate": "候選", "alternative": "替代", "fallback": "備援", "released": "已發布", "reference": "參考", "experimental": "實驗", "All": "全部", "More": "展開", "Less": "收合", "Search models": "搜尋模型", "Task": "任務", "Role": "角色", "{shown} of {total} models": "{shown} / {total} 個模型", "No models match these filters.": "沒有符合篩選條件的模型。", "Model card": "模型卡", "Contents": "目錄", "Source on GitHub": "GitHub 原始檔", "Built from": "產生自", "Try it in your browser": "在瀏覽器試用", "Streaming": "串流", "Model zoo": "模型庫", "Sample rate": "取樣率", "Look-ahead": "前瞻延遲", "Recommended": "建議設定", "Download": "下載", "Run it": "執行方式", "Model cards": "模型卡", "float weights": "浮點權重", "Models in this card": "此模型卡涵蓋的模型", "yes": "是", "no": "否", "Try a model in your browser": "在瀏覽器試用模型", "The released streaming models run on this device in ONNX Runtime Web (WebAssembly). Audio never leaves the browser.": "已發布的串流模型在這台裝置上以 ONNX Runtime Web（WebAssembly）執行，音訊不會離開瀏覽器。", "Model": "模型", "Audio": "音訊", "Samples": "範例", "Drop audio here": "將音檔拖放到這裡", "or click to browse · any rate, prepared to mono 16 kHz": "或點選瀏覽 · 任何取樣率，會轉成單聲道 16 kHz", "Replace audio": "替換音檔", "{name} · drop or click to choose another file": "{name} · 拖放或點選以選擇其他檔案", "Model output share": "模型輸出比例", "dry_blend: the share of the model output mixed with the untouched input.": "dry_blend：模型輸出與原始輸入混合時，模型輸出所佔的比例。", "input": "原始輸入", "model": "模型輸出", "Run": "執行", "Running": "執行中", "Ready": "就緒", "Unavailable": "無法使用", "Downloading the model": "下載模型中", "Processing {percent}%": "處理中 {percent}%", "Done in {seconds} s": "{seconds} 秒完成", "Input": "輸入", "Output": "輸出", "Download output": "下載輸出", "Real-time factor": "即時率", "Threads": "執行緒", "Processing time": "處理時間", "Choose a sample or a file first.": "請先選一段範例或一個檔案。", "Two talkers": "兩位說話者", "Near talker, far talker": "近處與遠處的說話者", "Speech in noise": "噪音中的語音", "This page is not cross-origin isolated, so models run on one thread here.": "這個頁面沒有跨來源隔離（cross-origin isolation），模型只能以單執行緒執行。", "Lower is faster; below 1 keeps up with real time.": "數字越小越快；低於 1 即可跟上即時。", "This build of the site has no on-device payload.": "這個版本的網站沒有附上裝置端推論檔案。"};
+  const root = document.documentElement;
+  const tr = (text) => (root.lang === "zh-TW" && ZH[text]) || text;
+  const site = { tr, onLanguage: [] };
+  window.PureSoundSite = site;
+
+  function translate() {
+    for (const el of document.querySelectorAll("[data-i18n]")) el.textContent = tr(el.dataset.i18n);
+    for (const el of document.querySelectorAll("[data-i18n-attr]")) {
+      for (const attr of el.dataset.i18nAttr.split(",")) {
+        // A dataset key may not hold "-" before a lowercase letter.
+        const key = "src_" + attr.replace(/[^a-z]/gi, "");
+        el.dataset[key] ??= el.getAttribute(attr) || "";
+        el.setAttribute(attr, tr(el.dataset[key]));
+      }
+    }
+    for (const button of document.querySelectorAll("[data-lang]")) button.setAttribute("aria-pressed", String(button.dataset.lang === root.lang));
+    for (const listener of site.onLanguage) listener();
+  }
+  site.translate = translate;
+
+  const themeButtons = document.querySelectorAll("[data-theme-choice]");
+  function setTheme(choice) {
+    try { localStorage.setItem("puresound.theme", choice); } catch {}
+    const dark = choice === "dark" || (choice === "auto" && matchMedia("(prefers-color-scheme: dark)").matches);
+    root.dataset.theme = dark ? "dark" : "light";
+    for (const button of themeButtons) button.setAttribute("aria-pressed", String(button.dataset.themeChoice === choice));
+  }
+  let theme = "auto";
+  try { theme = localStorage.getItem("puresound.theme") || "auto"; } catch {}
+  for (const button of themeButtons) button.addEventListener("click", () => setTheme(button.dataset.themeChoice));
+  setTheme(theme);
+  for (const button of document.querySelectorAll("[data-lang]")) {
+    button.addEventListener("click", () => {
+      root.lang = button.dataset.lang;
+      try { localStorage.setItem("puresound.lang", root.lang); } catch {}
+      translate();
+    });
+  }
+  document.addEventListener("DOMContentLoaded", () => {
+    translate();
+    const current = document.querySelector(".site-nav [aria-current]");
+    const nav = current?.parentElement;
+    if (nav && nav.scrollWidth > nav.clientWidth) nav.scrollLeft = current.offsetLeft - nav.clientWidth / 2 + current.offsetWidth / 2;
+  });
+})();
+</script>
+
+</body>
+</html>

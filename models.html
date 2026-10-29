@@ -1,0 +1,438 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#010120">
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
+<title>Models · PureSound</title>
+<link rel="stylesheet" href="css/tokens.css">
+<link rel="stylesheet" href="css/base.css">
+<link rel="stylesheet" href="css/components.css">
+<script>
+(() => {
+  let theme = "auto", lang = null;
+  try { theme = localStorage.getItem("puresound.theme") || "auto"; lang = localStorage.getItem("puresound.lang"); } catch {}
+  const dark = theme === "dark" || (theme === "auto" && matchMedia("(prefers-color-scheme: dark)").matches);
+  document.documentElement.dataset.theme = dark ? "dark" : "light";
+  const zh = lang ? lang === "zh-TW" : String(navigator.language || "").toLowerCase().startsWith("zh");
+  document.documentElement.lang = zh ? "zh-TW" : "en";
+})();
+</script>
+<style>
+/* Platform series: three hues outside the playground's signal colours. */
+:root { --linux: #4b4fd1; --macos: #0f7b84; --windows: #b04a92; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --linux: #a9abff; --macos: #6fd3db; --windows: #f19bd6; } }
+:root[data-theme="dark"] { --linux: #a9abff; --macos: #6fd3db; --windows: #f19bd6; }
+
+/* Content written in both languages shows the reader's one. */
+:root:not([lang="zh-TW"]) .lang-zh, :root[lang="zh-TW"] .lang-en { display: none; }
+
+/* Top bar: the playground's always-dark navigation, laid flat. */
+.topbar { position: relative; z-index: 30; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 18px; min-height: 52px;
+  padding: 8px max(24px, env(safe-area-inset-right, 0px)) 8px max(24px, env(safe-area-inset-left, 0px));
+  color: var(--on-nav); background: var(--nav); border-bottom: 1px solid var(--nav-line); }
+.topbar :focus-visible { outline-color: var(--mint); }
+.brand { display: flex; align-items: center; gap: 9px; color: var(--on-nav); font-size: 16px; font-weight: 600;
+  letter-spacing: -0.01em; text-decoration: none; }
+.brand img { width: 24px; height: 24px; }
+.site-nav { display: flex; flex-wrap: wrap; gap: 2px; }
+.site-nav a { position: relative; display: inline-flex; align-items: center; height: 32px; padding: 0 10px; color: var(--on-nav-2);
+  border-radius: var(--radius-control); font-size: var(--text-body); text-decoration: none; }
+.site-nav a:hover { color: var(--on-nav); background: rgba(255, 255, 255, 0.06); }
+.site-nav a[aria-current="page"] { color: var(--on-nav); background: var(--nav-3); }
+.site-nav a[aria-current="page"]::after { content: ""; position: absolute; left: 10px; right: 10px; bottom: 3px; height: 2px;
+  border-radius: 2px; background: var(--accent); }
+.topbar-end { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-left: auto; }
+.topbar-end > a { color: var(--on-nav-2); font-size: var(--text-small); text-decoration: none; }
+.topbar-end > a:hover { color: var(--on-nav); }
+.nav-switch { display: flex; gap: 2px; padding: 2px; background: rgba(255, 255, 255, 0.06); border-radius: var(--radius-panel); }
+.nav-switch button { min-width: 0; height: 24px; padding: 0 8px; color: var(--on-nav-2); background: transparent; border: 0;
+  border-radius: var(--radius-control); font-size: 11.5px; font-weight: 500; }
+.nav-switch button:hover { color: var(--on-nav); }
+.nav-switch button[aria-pressed="true"] { color: var(--on-nav); background: var(--nav-3); }
+
+/* Page frame and header, as the playground's screens. */
+.page { max-width: 1680px; margin: 0 auto; padding: 0 max(24px, env(safe-area-inset-right, 0px)) 48px max(24px, env(safe-area-inset-left, 0px)); }
+.page-header { position: sticky; z-index: 25; top: 0; display: grid; grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center; gap: 6px 16px; margin: 0 calc(-1 * max(24px, env(safe-area-inset-left, 0px))) 16px;
+  padding: 14px max(24px, env(safe-area-inset-left, 0px));
+  background: color-mix(in srgb, var(--page) 94%, transparent); border-bottom: 1px solid var(--line);
+  -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); }
+.page-header.is-static { position: static; }
+.page-desc { max-width: 96ch; margin: 3px 0 0; color: var(--ink-2); font-size: var(--text-ui); line-height: 1.45; }
+.page-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; }
+a.button { text-decoration: none; }
+
+/* Toolbar and model cards: the playground's Models screen. */
+.toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; margin-bottom: 14px; }
+.search-field { position: relative; min-width: 220px; flex: 1; display: flex; align-items: center; }
+.search-field > span { position: absolute; left: 10px; color: var(--ink-3); font-size: 16px; line-height: 1; pointer-events: none; }
+.search-field input { width: 100%; height: var(--control-h); padding: 0 10px 0 30px; color: var(--ink); background: var(--canvas);
+  border: 1px solid var(--line-strong); border-radius: var(--radius-control); outline: 0; font-size: var(--text-ui); }
+.search-field input:focus { border-color: var(--ink); }
+.search-field input:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+.search-field input::placeholder { color: var(--ink-3); }
+.filter-group { display: flex; align-items: center; gap: 6px; }
+.filter-group > .caps { margin-right: 2px; }
+.toolbar-count { margin-left: auto; color: var(--ink-3); font-family: var(--font-mono); font-size: 11px; white-space: nowrap; }
+.model-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 360px), 1fr)); gap: 12px; }
+.model-card { position: relative; display: flex; flex-direction: column; padding: 16px; overflow: hidden;
+  background: var(--canvas); border: 1px solid var(--line); border-radius: var(--radius-panel); transition: border-color 0.15s ease; }
+.model-card:hover { border-color: var(--line-strong); }
+.model-card.is-default { border-color: color-mix(in srgb, var(--good) 45%, var(--line)); box-shadow: inset 0 2px 0 var(--good); }
+.model-card-top { display: flex; justify-content: space-between; align-items: start; gap: 12px; }
+.model-symbol { width: 36px; height: 36px; display: grid; place-items: center; color: var(--periwinkle); background: var(--nav);
+  border-radius: var(--radius-panel); font-family: var(--font-mono); font-size: 18px; line-height: 1; }
+.model-symbol.sv { color: var(--speaker-ink); background: var(--speaker); }
+.card-heading { margin-top: 12px; }
+.model-card h3 { margin: 0; font-size: var(--text-lead); font-weight: 600; }
+.model-card-subtitle { margin: 2px 0 0; color: var(--ink-3); font-family: var(--font-mono); font-size: 11px; overflow-wrap: anywhere; }
+.model-badges { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0 10px; }
+.badge { display: inline-flex; align-items: center; height: 22px; padding: 0 8px; color: var(--ink-2); background: var(--sunken);
+  border-radius: var(--radius-pill); font-size: 11.5px; font-weight: 500; line-height: 1; white-space: nowrap; }
+.badge-task.sv { color: var(--speaker-ink); background: var(--speaker); }
+.badge-default { color: var(--good); background: var(--good-soft); }
+.badge-candidate, .badge-alternative { color: var(--ink); background: transparent; box-shadow: inset 0 0 0 1px var(--line-strong); }
+.badge-quiet { color: var(--ink-3); background: transparent; box-shadow: inset 0 0 0 1px var(--line); }
+.model-description { display: -webkit-box; margin: 0; overflow: hidden; color: var(--ink-2); font-size: var(--text-ui); line-height: 1.5;
+  -webkit-box-orient: vertical; -webkit-line-clamp: 4; line-clamp: 4; }
+.model-card.is-expanded .model-description { display: block; -webkit-line-clamp: unset; line-clamp: none; }
+.card-more { align-self: flex-start; padding: 4px 0 0; color: var(--ink-2); background: transparent; border: 0; font-size: var(--text-small);
+  text-decoration: underline; text-underline-offset: 3px; }
+.card-more:hover { color: var(--ink); }
+.model-footer { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 12px; padding-top: 12px;
+  margin-top: auto; border-top: 1px solid var(--line); }
+.model-meta { display: grid; gap: 2px; min-width: 0; color: var(--ink-3); font-size: 11.5px; }
+.model-meta strong { overflow: hidden; color: var(--ink); font-family: var(--font-mono); font-size: 11.5px; font-weight: 500;
+  text-overflow: ellipsis; white-space: nowrap; }
+.card-links { display: flex; flex-wrap: wrap; gap: 6px; }
+.card-link { flex: none; display: inline-flex; align-items: center; height: var(--control-h-small); padding: 0 9px; color: var(--ink);
+  background: var(--canvas); border: 1px solid var(--line-strong); border-radius: var(--radius-control); font-size: var(--text-small);
+  font-weight: 500; text-decoration: none; }
+.card-link:hover { background: var(--sunken); }
+.facts { display: flex; flex-wrap: wrap; gap: 4px 18px; margin: 12px 0 0; font-size: var(--text-small); }
+.facts div { display: flex; gap: 6px; align-items: baseline; }
+.facts dt { color: var(--ink-3); } .facts dd { margin: 0; color: var(--ink); }
+
+/* Text rendered from the repository's Markdown. */
+.prose { min-width: 0; max-width: 92ch; color: var(--ink); font-size: var(--text-body); line-height: 1.6; }
+.prose h1 { margin: 0 0 12px; font-size: 22px; }
+.prose h2 { margin: 28px 0 10px; padding-top: 4px; font-size: 17px; }
+.prose h3 { margin: 20px 0 8px; font-size: 15px; }
+.prose h2, .prose h3, .prose h4 { scroll-margin-top: 16px; }
+.prose p, .prose ul, .prose ol { margin: 0 0 12px; color: var(--ink-2); }
+.prose li + li { margin-top: 4px; }
+.prose a { color: var(--ink); text-decoration-color: var(--line-strong); text-underline-offset: 3px; }
+.prose a:hover { text-decoration-color: currentColor; }
+.prose strong { color: var(--ink); }
+.prose code { padding: 1px 4px; background: var(--sunken); border-radius: 3px; }
+/* A long path in running text breaks rather than widening a phone screen. */
+.prose :is(p, li) code { overflow-wrap: anywhere; }
+.prose pre { margin: 0 0 14px; padding: 12px 14px; overflow-x: auto; color: var(--on-nav); background: var(--nav);
+  border-radius: var(--radius-panel); font-size: 12.5px; line-height: 1.5; }
+.prose pre code { padding: 0; color: inherit; background: none; }
+.prose blockquote { margin: 0 0 12px; padding: 2px 14px; border-left: 3px solid var(--line-strong); }
+.prose .table-wrap { margin: 0 0 16px; overflow-x: auto; background: var(--canvas); border: 1px solid var(--line);
+  border-radius: var(--radius-panel); }
+.prose .table th { white-space: normal; }
+.prose .table td { min-width: 7ch; color: var(--ink); }
+/* Identifiers stay whole; a wide table scrolls in its frame instead. */
+.prose .table code { white-space: nowrap; }
+.prose hr { margin: 24px 0; border: 0; border-top: 1px solid var(--line); }
+
+.site-footer { margin-top: 32px; padding-top: 16px; color: var(--ink-3); border-top: 1px solid var(--line); font-size: var(--text-small); }
+.site-footer a { color: var(--ink-2); }
+
+@media (max-width: 760px) {
+  .topbar { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 12px; padding-top: 8px; padding-bottom: 0; }
+  .brand { grid-row: 1; grid-column: 1; }
+  .topbar-end { grid-row: 1; grid-column: 2; justify-self: end; gap: 6px; margin-left: 0; }
+  .topbar-end > a { display: none; }
+  .nav-switch button { padding: 0 6px; }
+  .site-nav { grid-row: 2; grid-column: 1 / -1; flex-wrap: nowrap; margin: 0 -24px; padding: 0 24px 6px; overflow-x: auto;
+    scrollbar-width: none; }
+  .site-nav::-webkit-scrollbar { display: none; }
+  .site-nav a { flex: none; }
+  /* A tall header that stuck would cover much of a phone screen. */
+  .page-header { position: static; grid-template-columns: minmax(0, 1fr); }
+  /* Wider columns scroll sideways instead of stacking a phrase per line. */
+  .prose .table td, .prose .table th { min-width: 13ch; }
+  .page-actions { justify-content: flex-start; }
+  .toolbar-count { margin-left: 0; }
+}
+
+.model-card:target { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.downloads { display: grid; gap: 6px; margin: 12px 0 0; padding: 10px 0 0; list-style: none; border-top: 1px solid var(--line);
+  font-size: var(--text-small); }
+.downloads li { display: grid; grid-template-columns: 4.5em minmax(0, 1fr) auto; gap: 4px 8px; align-items: baseline; }
+.downloads .variant-name { color: var(--ink); font-weight: 500; }
+.downloads .note { grid-column: 2 / -1; color: var(--ink-2); line-height: 1.4; }
+.downloads a { color: var(--ink); text-underline-offset: 3px; }
+.command { margin: 12px 0 0; padding: 9px 11px; overflow-x: auto; color: var(--on-nav); background: var(--nav);
+  border-radius: var(--radius-panel); font-family: var(--font-mono); font-size: 11.5px; line-height: 1.5;
+  white-space: pre-wrap; overflow-wrap: anywhere; }
+.model-card .model-footer { margin-top: auto; }
+.model-card .command + .model-footer, .model-card .downloads + .model-footer { margin-top: 12px; }
+.page-desc p { margin: 0; }</style>
+
+</head>
+<body>
+<header class="topbar">
+<a class="brand" href="index.html"><img src="favicon.svg" alt="">PureSound</a>
+<nav class="site-nav" aria-label="Site"><a href="index.html"><span data-i18n="Home">Home</span></a><a href="start.html"><span data-i18n="Get started">Get started</span></a><a href="models.html" aria-current="page"><span data-i18n="Models">Models</span></a><a href="try.html"><span data-i18n="Try it">Try it</span></a><a href="benchmarks.html"><span data-i18n="Benchmarks">Benchmarks</span></a></nav>
+<div class="topbar-end"><a href="https://github.com/mcw519/PureSound">GitHub</a>
+<div class="nav-switch" role="group" aria-label="Theme"><button type="button" data-theme-choice="auto"><span data-i18n="Auto">Auto</span></button><button type="button" data-theme-choice="light"><span data-i18n="Light">Light</span></button><button type="button" data-theme-choice="dark"><span data-i18n="Dark">Dark</span></button></div>
+<div class="nav-switch" role="group" aria-label="Language"><button type="button" data-lang="en">EN</button><button type="button" data-lang="zh-TW">中文</button></div>
+</div>
+</header>
+<main class="page">
+<header class="page-header">
+<div class="page-heading"><h1><span data-i18n="Model zoo">Model zoo</span></h1><div class="page-desc"><div class="lang-en" lang="en"><p>Listed in <a href="https://github.com/mcw519/PureSound/blob/9caa3540fabe328e9a2d9da0a3950ccca1096950/model_zoo/catalog.yaml"><code>model_zoo/catalog.yaml</code></a>. Every model takes
+16 kHz mono audio; input is converted when needed.</p>
+</div><div class="lang-zh" lang="zh-TW"><p>列在 <a href="https://github.com/mcw519/PureSound/blob/9caa3540fabe328e9a2d9da0a3950ccca1096950/model_zoo/catalog.yaml"><code>model_zoo/catalog.yaml</code></a>。每個模型都吃 16 kHz
+單聲道音訊；輸入會在需要時自動轉換。</p>
+</div></div></div>
+<div class="page-actions"><a class="button button-secondary button-small" href="https://github.com/mcw519/PureSound/blob/9caa3540fabe328e9a2d9da0a3950ccca1096950/model_zoo/catalog.yaml">catalog.yaml</a></div>
+</header>
+<div class="toolbar" id="filters">
+<label class="search-field"><span aria-hidden="true">⌕</span><input id="q" type="search" autocomplete="off"
+ placeholder="Search models" aria-label="Search models" data-i18n-attr="placeholder,aria-label"></label>
+<div class="filter-group"><span class="caps"><span data-i18n="Task">Task</span></span><div class="segmented" role="group" aria-label="Task"><button type="button" aria-pressed="true" data-filter="task" data-value="all"><span data-i18n="All">All</span></button><button type="button" aria-pressed="false" data-filter="task" data-value="voice_isolation"><span data-i18n="Voice isolation">Voice isolation</span></button><button type="button" aria-pressed="false" data-filter="task" data-value="noise_suppression"><span data-i18n="Noise suppression">Noise suppression</span></button><button type="button" aria-pressed="false" data-filter="task" data-value="speaker_embedding"><span data-i18n="Speaker verification">Speaker verification</span></button></div></div>
+<div class="filter-group"><span class="caps"><span data-i18n="Role">Role</span></span><div class="segmented" role="group" aria-label="Role"><button type="button" aria-pressed="true" data-filter="role" data-value="all"><span data-i18n="All">All</span></button><button type="button" aria-pressed="false" data-filter="role" data-value="default"><span data-i18n="default">default</span></button><button type="button" aria-pressed="false" data-filter="role" data-value="alternative"><span data-i18n="alternative">alternative</span></button><button type="button" aria-pressed="false" data-filter="role" data-value="candidate"><span data-i18n="candidate">candidate</span></button></div></div>
+<span class="toolbar-count" id="count">8 of 8 models</span>
+</div>
+<div class="model-grid" id="grid"><article class="model-card is-default" id="voice-isolate-dpcrn-curriculum-v1"
+ data-model="voice-isolate-dpcrn-curriculum-v1" data-task="voice_isolation" data-roles="default" data-text="voice-isolate-dpcrn-curriculum-v1 voice isolation dpcrn curriculum v1 voice_isolation default suppresses a distant talker further than any earlier version -- including from a cold start -- at no cost to the near talker, on the capture hardware it was tuned for. on other capture hardware it can attenuate the near talker; prefer dpcrn-v8 when the capture path is unknown.">
+<div class="model-card-top"><div class="model-symbol" aria-hidden="true">∿</div>
+<span class="badge badge-quiet"><span data-i18n="released">released</span></span></div>
+<div class="card-heading"><h3>Voice Isolation DPCRN curriculum v1</h3>
+<p class="model-card-subtitle">voice-isolate-dpcrn-curriculum-v1</p></div>
+<div class="model-badges"><span class="badge badge-task"><span data-i18n="Voice isolation">Voice isolation</span></span><span class="badge badge-default"><span data-i18n="default">default</span></span></div>
+<p class="model-description" data-clamp>Suppresses a distant talker further than any earlier version -- including from a cold start -- at no cost to the near talker, on the capture hardware it was tuned for. On other capture hardware it can attenuate the near talker; prefer dpcrn-v8 when the capture path is unknown.</p>
+<button class="card-more" type="button" data-more hidden><span data-i18n="More">More</span></button>
+<dl class="facts"><div><dt><span data-i18n="Sample rate">Sample rate</span></dt><dd class='mono'>16 kHz</dd></div><div><dt><span data-i18n="Streaming">Streaming</span></dt><dd class='mono'><span data-i18n="yes">yes</span></dd></div><div><dt><span data-i18n="Look-ahead">Look-ahead</span></dt><dd class='mono'>30 ms</dd></div><div><dt>dry_blend</dt><dd class='mono'>0.9</dd></div></dl>
+<ul class="downloads"><li><span class="variant-name">default</span><span class="mono quiet">3.2 MB · onnx</span><a href="https://github.com/mcw519/PureSound/raw/9caa3540fabe328e9a2d9da0a3950ccca1096950/egs/voice_isolate/pretrained_ckpt/streaming/dpcrn_curriculum_v1.onnx" title="SHA-256 bf69dfbf03d01415a6307f23d8a10fa985f101d34a2bb6fccfcdc4f3250ff84e" download><span data-i18n="Download">Download</span></a><span class="note"><span data-i18n="float weights">float weights</span></span></li><li><span class="variant-name">flash</span><span class="mono quiet">1.9 MB · onnx</span><a href="https://github.com/mcw519/PureSound/raw/9caa3540fabe328e9a2d9da0a3950ccca1096950/egs/voice_isolate/pretrained_ckpt/streaming/dpcrn_curriculum_v1_flash.onnx" title="SHA-256 2e18e847d75fdaa3fcf6c185c81289a0eeeb36002dd950eeebf13215ccf2506b" download><span data-i18n="Download">Download</span></a><span class="note">int8 weights for tight CPU budgets: about 15% less CPU time, no resolvable change in WER or deletions on the moderate-reverb set.</span></li></ul>
+<pre class="command"><code>uv run puresound infer voice-isolate-dpcrn-curriculum-v1 \
+  --input audio=input.wav --output audio=output.wav</code></pre>
+<div class="model-footer"><div class="card-links"><a class="card-link" href="cards/voice-isolation.html"><span data-i18n="Model card">Model card</span></a><a class="card-link" href="try.html?model=voice-isolate-dpcrn-curriculum-v1"><span data-i18n="Try it">Try it</span></a><a class="card-link" href="benchmarks.html#voice-isolate-dpcrn-curriculum-v1"><span data-i18n="Benchmarks">Benchmarks</span></a></div></div>
+</article><article class="model-card" id="voice-isolate-dpcrn-curriculum-v2"
+ data-model="voice-isolate-dpcrn-curriculum-v2" data-task="voice_isolation" data-roles="candidate" data-text="voice-isolate-dpcrn-curriculum-v2 voice isolation dpcrn curriculum v2 (wide) voice_isolation candidate a wider curriculum-v1: lower wer on reverberant speech and deeper suppression of a distant talker, including from a cold start, at 1.4x the cpu. like v1 it can attenuate the near talker on unfamiliar capture hardware; prefer dpcrn-v8 there.">
+<div class="model-card-top"><div class="model-symbol" aria-hidden="true">∿</div>
+<span class="badge badge-quiet"><span data-i18n="released">released</span></span></div>
+<div class="card-heading"><h3>Voice Isolation DPCRN curriculum v2 (wide)</h3>
+<p class="model-card-subtitle">voice-isolate-dpcrn-curriculum-v2</p></div>
+<div class="model-badges"><span class="badge badge-task"><span data-i18n="Voice isolation">Voice isolation</span></span><span class="badge badge-candidate"><span data-i18n="candidate">candidate</span></span></div>
+<p class="model-description" data-clamp>A wider curriculum-v1: lower WER on reverberant speech and deeper suppression of a distant talker, including from a cold start, at 1.4x the CPU. Like v1 it can attenuate the near talker on unfamiliar capture hardware; prefer dpcrn-v8 there.</p>
+<button class="card-more" type="button" data-more hidden><span data-i18n="More">More</span></button>
+<dl class="facts"><div><dt><span data-i18n="Sample rate">Sample rate</span></dt><dd class='mono'>16 kHz</dd></div><div><dt><span data-i18n="Streaming">Streaming</span></dt><dd class='mono'><span data-i18n="yes">yes</span></dd></div><div><dt><span data-i18n="Look-ahead">Look-ahead</span></dt><dd class='mono'>30 ms</dd></div><div><dt>dry_blend</dt><dd class='mono'>0.9</dd></div></dl>
+<ul class="downloads"><li><span class="variant-name">default</span><span class="mono quiet">4.9 MB · onnx</span><a href="https://github.com/mcw519/PureSound/raw/9caa3540fabe328e9a2d9da0a3950ccca1096950/egs/voice_isolate/pretrained_ckpt/streaming/dpcrn_curriculum_v2.onnx" title="SHA-256 9a79e9eaeab9a6e288fec7216adb1c87a05b557948e8aa014f5f6096e1f375e4" download><span data-i18n="Download">Download</span></a><span class="note"><span data-i18n="float weights">float weights</span></span></li><li><span class="variant-name">flash</span><span class="mono quiet">3.0 MB · onnx</span><a href="https://github.com/mcw519/PureSound/raw/9caa3540fabe328e9a2d9da0a3950ccca1096950/egs/voice_isolate/pretrained_ckpt/streaming/dpcrn_curriculum_v2_flash.onnx" title="SHA-256 b73a0046e62d3e91d50d2f86b4dfadbd4f9c68bb5e073f1f21ace20bd140ca11" download><span data-i18n="Download">Download</span></a><span class="note">int8 weights (per channel) for tight CPU budgets: about 17% less CPU time, no resolvable change in WER or deletions on the moderate-reverb set.</span></li></ul>
+<pre class="command"><code>uv run puresound infer voice-isolate-dpcrn-curriculum-v2 \
+  --input audio=input.wav --output audio=output.wav</code></pre>
+<div class="model-footer"><div class="card-links"><a class="card-link" href="cards/voice-isolation.html"><span data-i18n="Model card">Model card</span></a><a class="card-link" href="try.html?model=voice-isolate-dpcrn-curriculum-v2"><span data-i18n="Try it">Try it</span></a><a class="card-link" href="benchmarks.html#voice-isolate-dpcrn-curriculum-v2"><span data-i18n="Benchmarks">Benchmarks</span></a></div></div>
+</article><article class="model-card" id="voice-isolate-dpcrn-v8"
+ data-model="voice-isolate-dpcrn-v8" data-task="voice_isolation" data-roles="candidate" data-text="voice-isolate-dpcrn-v8 voice isolation dpcrn v8 voice_isolation candidate the previous default, kept as the conservative choice: shallower distant-talker suppression than curriculum-v1, but it does not attenuate the near talker on unfamiliar capture hardware.">
+<div class="model-card-top"><div class="model-symbol" aria-hidden="true">∿</div>
+<span class="badge badge-quiet"><span data-i18n="released">released</span></span></div>
+<div class="card-heading"><h3>Voice Isolation DPCRN v8</h3>
+<p class="model-card-subtitle">voice-isolate-dpcrn-v8</p></div>
+<div class="model-badges"><span class="badge badge-task"><span data-i18n="Voice isolation">Voice isolation</span></span><span class="badge badge-candidate"><span data-i18n="candidate">candidate</span></span></div>
+<p class="model-description" data-clamp>The previous default, kept as the conservative choice: shallower distant-talker suppression than curriculum-v1, but it does not attenuate the near talker on unfamiliar capture hardware.</p>
+<button class="card-more" type="button" data-more hidden><span data-i18n="More">More</span></button>
+<dl class="facts"><div><dt><span data-i18n="Sample rate">Sample rate</span></dt><dd class='mono'>16 kHz</dd></div><div><dt><span data-i18n="Streaming">Streaming</span></dt><dd class='mono'><span data-i18n="yes">yes</span></dd></div><div><dt><span data-i18n="Look-ahead">Look-ahead</span></dt><dd class='mono'>30 ms</dd></div><div><dt>dry_blend</dt><dd class='mono'>0.9</dd></div></dl>
+<ul class="downloads"><li><span class="variant-name">default</span><span class="mono quiet">3.2 MB · onnx</span><a href="https://github.com/mcw519/PureSound/raw/9caa3540fabe328e9a2d9da0a3950ccca1096950/egs/voice_isolate/pretrained_ckpt/streaming/dpcrn_v8.onnx" title="SHA-256 322a3e3f05db85ae0b11391c386047c051ff54a16e5eda245e6a11d12e3822c8" download><span data-i18n="Download">Download</span></a><span class="note"><span data-i18n="float weights">float weights</span></span></li><li><span class="variant-name">flash</span><span class="mono quiet">1.9 MB · onnx</span><a href="https://github.com/mcw519/PureSound/raw/9caa3540fabe328e9a2d9da0a3950ccca1096950/egs/voice_isolate/pretrained_ckpt/streaming/dpcrn_v8_flash.onnx" title="SHA-256 41a9bdb54c3a60f6e3424506ae3914891b10fa93e4eff420088a856ac17ce59a" download><span data-i18n="Download">Download</span></a><span class="note">int8 weights for tight CPU budgets: about 15% less CPU time, no resolvable change in WER or deletions on the moderate-reverb set.</span></li></ul>
+<pre class="command"><code>uv run puresound infer voice-isolate-dpcrn-v8 \
+  --input audio=input.wav --output audio=output.wav</code></pre>
+<div class="model-footer"><div class="card-links"><a class="card-link" href="cards/voice-isolation.html"><span data-i18n="Model card">Model card</span></a><a class="card-link" href="benchmarks.html#voice-isolate-dpcrn-v8"><span data-i18n="Benchmarks">Benchmarks</span></a></div></div>
+</article><article class="model-card is-default" id="noise-suppression-dpcrn-mamba-v2"
+ data-model="noise-suppression-dpcrn-mamba-v2" data-task="noise_suppression" data-roles="default" data-text="noise-suppression-dpcrn-mamba-v2 noise suppression dpcrn-mamba v2 noise_suppression default single-channel 16 khz streaming noise suppression (dpcrn-mamba), v1 fine-tuned with a metricgan pesq critic. on vctk-demand pesq-wb 2.57 and on dns-5 dnsmos ovr 2.83; on a harder wer set it deletes fewer words than v1, on vctk-demand slightly more -- prefer v1 if that matters.">
+<div class="model-card-top"><div class="model-symbol" aria-hidden="true">∿</div>
+<span class="badge badge-quiet"><span data-i18n="released">released</span></span></div>
+<div class="card-heading"><h3>Noise Suppression DPCRN-Mamba v2</h3>
+<p class="model-card-subtitle">noise-suppression-dpcrn-mamba-v2</p></div>
+<div class="model-badges"><span class="badge badge-task"><span data-i18n="Noise suppression">Noise suppression</span></span><span class="badge badge-default"><span data-i18n="default">default</span></span></div>
+<p class="model-description" data-clamp>Single-channel 16 kHz streaming noise suppression (DPCRN-Mamba), v1 fine-tuned with a MetricGAN PESQ critic. On VCTK-DEMAND PESQ-WB 2.57 and on DNS-5 DNSMOS OVR 2.83; on a harder WER set it deletes fewer words than v1, on VCTK-DEMAND slightly more -- prefer v1 if that matters.</p>
+<button class="card-more" type="button" data-more hidden><span data-i18n="More">More</span></button>
+<dl class="facts"><div><dt><span data-i18n="Sample rate">Sample rate</span></dt><dd class='mono'>16 kHz</dd></div><div><dt><span data-i18n="Streaming">Streaming</span></dt><dd class='mono'><span data-i18n="yes">yes</span></dd></div><div><dt><span data-i18n="Look-ahead">Look-ahead</span></dt><dd class='mono'>30 ms</dd></div><div><dt>dry_blend</dt><dd class='mono'>1.0</dd></div></dl>
+<ul class="downloads"><li><span class="variant-name">default</span><span class="mono quiet">2.3 MB · onnx</span><a href="https://github.com/mcw519/PureSound/raw/9caa3540fabe328e9a2d9da0a3950ccca1096950/egs/noise_suppression/pretrained_ckpt/streaming/dpcrn_mamba_v2.onnx" title="SHA-256 a28cc5c9736f415a5ed603bd97cc415d11d8088cb2e288d20334a0713f723c86" download><span data-i18n="Download">Download</span></a><span class="note"><span data-i18n="float weights">float weights</span></span></li><li><span class="variant-name">flash</span><span class="mono quiet">1.1 MB · onnx</span><a href="https://github.com/mcw519/PureSound/raw/9caa3540fabe328e9a2d9da0a3950ccca1096950/egs/noise_suppression/pretrained_ckpt/streaming/dpcrn_mamba_v2_flash.onnx" title="SHA-256 f576fb207853571df3307370a0a4920fc623fa93d2c252873166f3e3f0114098" download><span data-i18n="Download">Download</span></a><span class="note">int8 weights for tight CPU budgets: about 11% less CPU time, PESQ within 0.004, no resolvable change in word deletions.</span></li></ul>
+<pre class="command"><code>uv run puresound infer noise-suppression-dpcrn-mamba-v2 \
+  --input audio=input.wav --output audio=output.wav</code></pre>
+<div class="model-footer"><div class="card-links"><a class="card-link" href="cards/noise-suppression.html"><span data-i18n="Model card">Model card</span></a><a class="card-link" href="try.html?model=noise-suppression-dpcrn-mamba-v2"><span data-i18n="Try it">Try it</span></a><a class="card-link" href="benchmarks.html#noise-suppression-dpcrn-mamba-v2"><span data-i18n="Benchmarks">Benchmarks</span></a></div></div>
+</article><article class="model-card" id="noise-suppression-dpcrn-mamba-v1"
+ data-model="noise-suppression-dpcrn-mamba-v1" data-task="noise_suppression" data-roles="candidate" data-text="noise-suppression-dpcrn-mamba-v1 noise suppression dpcrn-mamba v1 noise_suppression candidate the previous default, kept as the conservative choice: v2 without its metricgan stage. slightly lower pesq and dnsmos than v2, and the lowest word-deletion rate on vctk-demand.">
+<div class="model-card-top"><div class="model-symbol" aria-hidden="true">∿</div>
+<span class="badge badge-quiet"><span data-i18n="released">released</span></span></div>
+<div class="card-heading"><h3>Noise Suppression DPCRN-Mamba v1</h3>
+<p class="model-card-subtitle">noise-suppression-dpcrn-mamba-v1</p></div>
+<div class="model-badges"><span class="badge badge-task"><span data-i18n="Noise suppression">Noise suppression</span></span><span class="badge badge-candidate"><span data-i18n="candidate">candidate</span></span></div>
+<p class="model-description" data-clamp>The previous default, kept as the conservative choice: v2 without its MetricGAN stage. Slightly lower PESQ and DNSMOS than v2, and the lowest word-deletion rate on VCTK-DEMAND.</p>
+<button class="card-more" type="button" data-more hidden><span data-i18n="More">More</span></button>
+<dl class="facts"><div><dt><span data-i18n="Sample rate">Sample rate</span></dt><dd class='mono'>16 kHz</dd></div><div><dt><span data-i18n="Streaming">Streaming</span></dt><dd class='mono'><span data-i18n="yes">yes</span></dd></div><div><dt><span data-i18n="Look-ahead">Look-ahead</span></dt><dd class='mono'>30 ms</dd></div><div><dt>dry_blend</dt><dd class='mono'>1.0</dd></div></dl>
+<ul class="downloads"><li><span class="variant-name">default</span><span class="mono quiet">2.3 MB · onnx</span><a href="https://github.com/mcw519/PureSound/raw/9caa3540fabe328e9a2d9da0a3950ccca1096950/egs/noise_suppression/pretrained_ckpt/streaming/dpcrn_mamba_v1.onnx" title="SHA-256 eabdca9fa7b0cc66c839d41e2fe07e409c9c09ad476e4dd0681a7bc63f04bfab" download><span data-i18n="Download">Download</span></a><span class="note"><span data-i18n="float weights">float weights</span></span></li><li><span class="variant-name">flash</span><span class="mono quiet">1.1 MB · onnx</span><a href="https://github.com/mcw519/PureSound/raw/9caa3540fabe328e9a2d9da0a3950ccca1096950/egs/noise_suppression/pretrained_ckpt/streaming/dpcrn_mamba_v1_flash.onnx" title="SHA-256 ecb4e7c12aaef4b5f024494b67487c7d1b8a1d938f4ba9e3888fd278a3b82791" download><span data-i18n="Download">Download</span></a><span class="note">int8 weights for tight CPU budgets: about 12% less CPU time, PESQ about 0.004 lower, no resolvable change in word deletions.</span></li></ul>
+<pre class="command"><code>uv run puresound infer noise-suppression-dpcrn-mamba-v1 \
+  --input audio=input.wav --output audio=output.wav</code></pre>
+<div class="model-footer"><div class="card-links"><a class="card-link" href="cards/noise-suppression.html"><span data-i18n="Model card">Model card</span></a><a class="card-link" href="benchmarks.html#noise-suppression-dpcrn-mamba-v1"><span data-i18n="Benchmarks">Benchmarks</span></a></div></div>
+</article><article class="model-card" id="noise-suppression-dpcrn-mamba-v3"
+ data-model="noise-suppression-dpcrn-mamba-v3" data-task="noise_suppression" data-roles="candidate" data-text="noise-suppression-dpcrn-mamba-v3 noise suppression dpcrn-mamba v3 noise_suppression candidate wider 16 khz streaming dpcrn-mamba with mixed-source coverage training, calibrated against a pesq critic and the dnsmos p.835 judge. higher pesq, stoi and dnsmos than v2 at 1.5x the cpu. deletion gates remain unresolved, and hard-set wer is above the unprocessed input.">
+<div class="model-card-top"><div class="model-symbol" aria-hidden="true">∿</div>
+<span class="badge badge-quiet"><span data-i18n="released">released</span></span></div>
+<div class="card-heading"><h3>Noise Suppression DPCRN-Mamba v3</h3>
+<p class="model-card-subtitle">noise-suppression-dpcrn-mamba-v3</p></div>
+<div class="model-badges"><span class="badge badge-task"><span data-i18n="Noise suppression">Noise suppression</span></span><span class="badge badge-candidate"><span data-i18n="candidate">candidate</span></span></div>
+<p class="model-description" data-clamp>Wider 16 kHz streaming DPCRN-Mamba with mixed-source coverage training, calibrated against a PESQ critic and the DNSMOS P.835 judge. Higher PESQ, STOI and DNSMOS than v2 at 1.5x the CPU. Deletion gates remain unresolved, and hard-set WER is above the unprocessed input.</p>
+<button class="card-more" type="button" data-more hidden><span data-i18n="More">More</span></button>
+<dl class="facts"><div><dt><span data-i18n="Sample rate">Sample rate</span></dt><dd class='mono'>16 kHz</dd></div><div><dt><span data-i18n="Streaming">Streaming</span></dt><dd class='mono'><span data-i18n="yes">yes</span></dd></div><div><dt><span data-i18n="Look-ahead">Look-ahead</span></dt><dd class='mono'>30 ms</dd></div><div><dt>dry_blend</dt><dd class='mono'>1.0</dd></div></dl>
+<ul class="downloads"><li><span class="variant-name">default</span><span class="mono quiet">4.1 MB · onnx</span><a href="https://github.com/mcw519/PureSound/raw/9caa3540fabe328e9a2d9da0a3950ccca1096950/egs/noise_suppression/pretrained_ckpt/streaming/dpcrn_mamba_v3.onnx" title="SHA-256 2a823d830bb87254edda35a8b7ae0743f8d6a203fc4ad3bbad9a2645c1947693" download><span data-i18n="Download">Download</span></a><span class="note"><span data-i18n="float weights">float weights</span></span></li><li><span class="variant-name">flash</span><span class="mono quiet">2.1 MB · onnx</span><a href="https://github.com/mcw519/PureSound/raw/9caa3540fabe328e9a2d9da0a3950ccca1096950/egs/noise_suppression/pretrained_ckpt/streaming/dpcrn_mamba_v3_flash.onnx" title="SHA-256 2b0523043cc3c02ef82c6bbb259ab81395e0e6ceb3a5d7a5c285a076418be1af" download><span data-i18n="Download">Download</span></a><span class="note">int8 weights for tight CPU budgets: about 20% less CPU time than the default graph, PESQ about 0.005 lower, no resolvable change in word deletions.</span></li></ul>
+<pre class="command"><code>uv run puresound infer noise-suppression-dpcrn-mamba-v3 \
+  --input audio=input.wav --output audio=output.wav</code></pre>
+<div class="model-footer"><div class="card-links"><a class="card-link" href="cards/noise-suppression.html"><span data-i18n="Model card">Model card</span></a><a class="card-link" href="try.html?model=noise-suppression-dpcrn-mamba-v3"><span data-i18n="Try it">Try it</span></a><a class="card-link" href="benchmarks.html#noise-suppression-dpcrn-mamba-v3"><span data-i18n="Benchmarks">Benchmarks</span></a></div></div>
+</article><article class="model-card is-default" id="speaker-verification-ps-spk-v1-1"
+ data-model="speaker-verification-ps-spk-v1-1" data-task="speaker_embedding" data-roles="default" data-text="speaker-verification-ps-spk-v1-1 speaker verification ps-spk-v1-1 speaker_embedding default 192-dimensional speaker embedding release (eer 0.99 in the release notes).">
+<div class="model-card-top"><div class="model-symbol sv" aria-hidden="true">◌</div>
+<span class="badge badge-quiet"><span data-i18n="released">released</span></span></div>
+<div class="card-heading"><h3>Speaker Verification PS-spk-v1-1</h3>
+<p class="model-card-subtitle">speaker-verification-ps-spk-v1-1</p></div>
+<div class="model-badges"><span class="badge badge-task sv"><span data-i18n="Speaker verification">Speaker verification</span></span><span class="badge badge-default"><span data-i18n="default">default</span></span></div>
+<p class="model-description" data-clamp>192-dimensional speaker embedding release (EER 0.99 in the release notes).</p>
+<button class="card-more" type="button" data-more hidden><span data-i18n="More">More</span></button>
+<dl class="facts"><div><dt><span data-i18n="Sample rate">Sample rate</span></dt><dd class='mono'>16 kHz</dd></div><div><dt><span data-i18n="Streaming">Streaming</span></dt><dd class='mono'><span data-i18n="no">no</span></dd></div><div><dt>threshold</dt><dd class='mono'>0.37</dd></div></dl>
+<ul class="downloads"><li><span class="variant-name">default</span><span class="mono quiet">59.9 MB · onnx</span><a href="https://github.com/mcw519/PureSound/raw/9caa3540fabe328e9a2d9da0a3950ccca1096950/egs/speaker_embedding/pretrained/PS-spk-v1-1.onnx" title="SHA-256 3b37a9133a1e1987b19b6eec8c5bb134e994849963929aff35ce9e7821280fd8" download><span data-i18n="Download">Download</span></a><span class="note"><span data-i18n="float weights">float weights</span></span></li></ul>
+<pre class="command"><code>uv run puresound infer speaker-verification-ps-spk-v1-1 \
+  --input enrollment=enrollment.wav --input test=test.wav</code></pre>
+<div class="model-footer"><div class="card-links"><a class="card-link" href="cards/speaker-embedding.html"><span data-i18n="Model card">Model card</span></a></div></div>
+</article><article class="model-card" id="speaker-verification-ps-spk-v1"
+ data-model="speaker-verification-ps-spk-v1" data-task="speaker_embedding" data-roles="alternative" data-text="speaker-verification-ps-spk-v1 speaker verification ps-spk-v1 speaker_embedding alternative 192-dimensional speaker embedding model (eer 1.10 in the release notes).">
+<div class="model-card-top"><div class="model-symbol sv" aria-hidden="true">◌</div>
+<span class="badge badge-quiet"><span data-i18n="released">released</span></span></div>
+<div class="card-heading"><h3>Speaker Verification PS-spk-v1</h3>
+<p class="model-card-subtitle">speaker-verification-ps-spk-v1</p></div>
+<div class="model-badges"><span class="badge badge-task sv"><span data-i18n="Speaker verification">Speaker verification</span></span><span class="badge badge-alternative"><span data-i18n="alternative">alternative</span></span></div>
+<p class="model-description" data-clamp>192-dimensional speaker embedding model (EER 1.10 in the release notes).</p>
+<button class="card-more" type="button" data-more hidden><span data-i18n="More">More</span></button>
+<dl class="facts"><div><dt><span data-i18n="Sample rate">Sample rate</span></dt><dd class='mono'>16 kHz</dd></div><div><dt><span data-i18n="Streaming">Streaming</span></dt><dd class='mono'><span data-i18n="no">no</span></dd></div><div><dt>threshold</dt><dd class='mono'>0.39</dd></div></dl>
+<ul class="downloads"><li><span class="variant-name">default</span><span class="mono quiet">59.9 MB · onnx</span><a href="https://github.com/mcw519/PureSound/raw/9caa3540fabe328e9a2d9da0a3950ccca1096950/egs/speaker_embedding/pretrained/PS-spk-v1.onnx" title="SHA-256 327007fcf88e33af876efb750a75360dbb26229a805e6e65c73396d82b1ee1ac" download><span data-i18n="Download">Download</span></a><span class="note"><span data-i18n="float weights">float weights</span></span></li></ul>
+<pre class="command"><code>uv run puresound infer speaker-verification-ps-spk-v1 \
+  --input enrollment=enrollment.wav --input test=test.wav</code></pre>
+<div class="model-footer"><div class="card-links"><a class="card-link" href="cards/speaker-embedding.html"><span data-i18n="Model card">Model card</span></a></div></div>
+</article>
+<div class="empty-state" id="no-match" hidden><span data-i18n="No models match these filters.">No models match these filters.</span></div></div>
+<footer class="site-footer"><span data-i18n="Built from">Built from</span> <a href="https://github.com/mcw519/PureSound/tree/9caa3540fabe328e9a2d9da0a3950ccca1096950"><code>9caa3540fabe</code></a> · Apache-2.0</footer>
+</main>
+<script>
+(() => {
+  const ZH = {"Home": "首頁", "Get started": "開始使用", "Models": "模型庫", "Try it": "線上試用", "Benchmarks": "效能量測", "Theme": "主題", "Auto": "自動", "Light": "淺色", "Dark": "深色", "Language": "語言", "Voice isolation": "人聲分離", "Noise suppression": "雜訊抑制", "Speaker verification": "語者驗證", "default": "預設", "candidate": "候選", "alternative": "替代", "fallback": "備援", "released": "已發布", "reference": "參考", "experimental": "實驗", "All": "全部", "More": "展開", "Less": "收合", "Search models": "搜尋模型", "Task": "任務", "Role": "角色", "{shown} of {total} models": "{shown} / {total} 個模型", "No models match these filters.": "沒有符合篩選條件的模型。", "Model card": "模型卡", "Contents": "目錄", "Source on GitHub": "GitHub 原始檔", "Built from": "產生自", "Try it in your browser": "在瀏覽器試用", "Streaming": "串流", "Model zoo": "模型庫", "Sample rate": "取樣率", "Look-ahead": "前瞻延遲", "Recommended": "建議設定", "Download": "下載", "Run it": "執行方式", "Model cards": "模型卡", "float weights": "浮點權重", "Models in this card": "此模型卡涵蓋的模型", "yes": "是", "no": "否", "Try a model in your browser": "在瀏覽器試用模型", "The released streaming models run on this device in ONNX Runtime Web (WebAssembly). Audio never leaves the browser.": "已發布的串流模型在這台裝置上以 ONNX Runtime Web（WebAssembly）執行，音訊不會離開瀏覽器。", "Model": "模型", "Audio": "音訊", "Samples": "範例", "Drop audio here": "將音檔拖放到這裡", "or click to browse · any rate, prepared to mono 16 kHz": "或點選瀏覽 · 任何取樣率，會轉成單聲道 16 kHz", "Replace audio": "替換音檔", "{name} · drop or click to choose another file": "{name} · 拖放或點選以選擇其他檔案", "Model output share": "模型輸出比例", "dry_blend: the share of the model output mixed with the untouched input.": "dry_blend：模型輸出與原始輸入混合時，模型輸出所佔的比例。", "input": "原始輸入", "model": "模型輸出", "Run": "執行", "Running": "執行中", "Ready": "就緒", "Unavailable": "無法使用", "Downloading the model": "下載模型中", "Processing {percent}%": "處理中 {percent}%", "Done in {seconds} s": "{seconds} 秒完成", "Input": "輸入", "Output": "輸出", "Download output": "下載輸出", "Real-time factor": "即時率", "Threads": "執行緒", "Processing time": "處理時間", "Choose a sample or a file first.": "請先選一段範例或一個檔案。", "Two talkers": "兩位說話者", "Near talker, far talker": "近處與遠處的說話者", "Speech in noise": "噪音中的語音", "This page is not cross-origin isolated, so models run on one thread here.": "這個頁面沒有跨來源隔離（cross-origin isolation），模型只能以單執行緒執行。", "Lower is faster; below 1 keeps up with real time.": "數字越小越快；低於 1 即可跟上即時。", "This build of the site has no on-device payload.": "這個版本的網站沒有附上裝置端推論檔案。"};
+  const root = document.documentElement;
+  const tr = (text) => (root.lang === "zh-TW" && ZH[text]) || text;
+  const site = { tr, onLanguage: [] };
+  window.PureSoundSite = site;
+
+  function translate() {
+    for (const el of document.querySelectorAll("[data-i18n]")) el.textContent = tr(el.dataset.i18n);
+    for (const el of document.querySelectorAll("[data-i18n-attr]")) {
+      for (const attr of el.dataset.i18nAttr.split(",")) {
+        // A dataset key may not hold "-" before a lowercase letter.
+        const key = "src_" + attr.replace(/[^a-z]/gi, "");
+        el.dataset[key] ??= el.getAttribute(attr) || "";
+        el.setAttribute(attr, tr(el.dataset[key]));
+      }
+    }
+    for (const button of document.querySelectorAll("[data-lang]")) button.setAttribute("aria-pressed", String(button.dataset.lang === root.lang));
+    for (const listener of site.onLanguage) listener();
+  }
+  site.translate = translate;
+
+  const themeButtons = document.querySelectorAll("[data-theme-choice]");
+  function setTheme(choice) {
+    try { localStorage.setItem("puresound.theme", choice); } catch {}
+    const dark = choice === "dark" || (choice === "auto" && matchMedia("(prefers-color-scheme: dark)").matches);
+    root.dataset.theme = dark ? "dark" : "light";
+    for (const button of themeButtons) button.setAttribute("aria-pressed", String(button.dataset.themeChoice === choice));
+  }
+  let theme = "auto";
+  try { theme = localStorage.getItem("puresound.theme") || "auto"; } catch {}
+  for (const button of themeButtons) button.addEventListener("click", () => setTheme(button.dataset.themeChoice));
+  setTheme(theme);
+  for (const button of document.querySelectorAll("[data-lang]")) {
+    button.addEventListener("click", () => {
+      root.lang = button.dataset.lang;
+      try { localStorage.setItem("puresound.lang", root.lang); } catch {}
+      translate();
+    });
+  }
+  document.addEventListener("DOMContentLoaded", () => {
+    translate();
+    const current = document.querySelector(".site-nav [aria-current]");
+    const nav = current?.parentElement;
+    if (nav && nav.scrollWidth > nav.clientWidth) nav.scrollLeft = current.offsetLeft - nav.clientWidth / 2 + current.offsetWidth / 2;
+  });
+})();
+</script>
+<script>
+(() => {
+  const site = window.PureSoundSite;
+  const count = document.getElementById("count");
+  const cards = [...document.querySelectorAll(".model-card[data-model]")];
+  const state = { task: "all", role: "all", query: "" };
+
+  function apply() {
+    let shown = 0;
+    for (const card of cards) {
+      const visible = (state.task === "all" || card.dataset.task === state.task)
+        && (state.role === "all" || card.dataset.roles.split(" ").includes(state.role))
+        && (!state.query || card.dataset.text.includes(state.query));
+      card.hidden = !visible;
+      shown += visible ? 1 : 0;
+      for (const row of document.querySelectorAll(`tr[data-model="${CSS.escape(card.dataset.model)}"]`)) row.hidden = !visible;
+    }
+    document.getElementById("no-match").hidden = shown > 0 || cards.length === 0;
+    count.textContent = site.tr("{shown} of {total} models").replace("{shown}", shown).replace("{total}", cards.length);
+    clamp();
+  }
+  // The full height is measured with the clamp lifted: under the standard
+  // line-clamp, scrollHeight reports the clamped box, not the text. Fonts
+  // arriving or a resize can change it.
+  function clamp() {
+    requestAnimationFrame(() => {
+      for (const card of cards) {
+        if (card.hidden || card.classList.contains("is-expanded")) continue;
+        const text = card.querySelector("[data-clamp]");
+        const clamped = text.getBoundingClientRect().height;
+        text.style.display = "block";
+        text.style.webkitLineClamp = "unset";
+        const full = text.getBoundingClientRect().height;
+        text.style.display = "";
+        text.style.webkitLineClamp = "";
+        card.querySelector("[data-more]").hidden = full <= clamped + 2;
+      }
+    });
+  }
+  function choose(name, value) {
+    state[name] = value;
+    for (const button of document.querySelectorAll(`[data-filter="${name}"]`)) {
+      button.setAttribute("aria-pressed", String(button.dataset.value === value));
+    }
+  }
+  document.fonts?.ready.then(clamp);
+  addEventListener("resize", clamp);
+  for (const button of document.querySelectorAll("[data-filter]")) {
+    button.addEventListener("click", () => { choose(button.dataset.filter, button.dataset.value); apply(); });
+  }
+  const task = new URLSearchParams(location.search).get("task");
+  if (task && document.querySelector(`[data-filter="task"][data-value="${CSS.escape(task)}"]`)) choose("task", task);
+  document.getElementById("q").addEventListener("input", (event) => {
+    state.query = event.target.value.trim().toLowerCase();
+    apply();
+  });
+  for (const card of cards) {
+    const more = card.querySelector("[data-more]");
+    more.addEventListener("click", () => {
+      const open = card.classList.toggle("is-expanded");
+      more.firstElementChild.dataset.i18n = open ? "Less" : "More";
+      more.firstElementChild.textContent = site.tr(more.firstElementChild.dataset.i18n);
+    });
+  }
+  site.onLanguage.push(apply);
+})();
+</script>
+</body>
+</html>

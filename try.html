@@ -1,0 +1,766 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#010120">
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
+<title>Try it · PureSound</title>
+<link rel="stylesheet" href="css/tokens.css">
+<link rel="stylesheet" href="css/base.css">
+<link rel="stylesheet" href="css/components.css">
+<script>
+(() => {
+  let theme = "auto", lang = null;
+  try { theme = localStorage.getItem("puresound.theme") || "auto"; lang = localStorage.getItem("puresound.lang"); } catch {}
+  const dark = theme === "dark" || (theme === "auto" && matchMedia("(prefers-color-scheme: dark)").matches);
+  document.documentElement.dataset.theme = dark ? "dark" : "light";
+  const zh = lang ? lang === "zh-TW" : String(navigator.language || "").toLowerCase().startsWith("zh");
+  document.documentElement.lang = zh ? "zh-TW" : "en";
+})();
+</script>
+<style>
+/* Platform series: three hues outside the playground's signal colours. */
+:root { --linux: #4b4fd1; --macos: #0f7b84; --windows: #b04a92; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --linux: #a9abff; --macos: #6fd3db; --windows: #f19bd6; } }
+:root[data-theme="dark"] { --linux: #a9abff; --macos: #6fd3db; --windows: #f19bd6; }
+
+/* Content written in both languages shows the reader's one. */
+:root:not([lang="zh-TW"]) .lang-zh, :root[lang="zh-TW"] .lang-en { display: none; }
+
+/* Top bar: the playground's always-dark navigation, laid flat. */
+.topbar { position: relative; z-index: 30; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 18px; min-height: 52px;
+  padding: 8px max(24px, env(safe-area-inset-right, 0px)) 8px max(24px, env(safe-area-inset-left, 0px));
+  color: var(--on-nav); background: var(--nav); border-bottom: 1px solid var(--nav-line); }
+.topbar :focus-visible { outline-color: var(--mint); }
+.brand { display: flex; align-items: center; gap: 9px; color: var(--on-nav); font-size: 16px; font-weight: 600;
+  letter-spacing: -0.01em; text-decoration: none; }
+.brand img { width: 24px; height: 24px; }
+.site-nav { display: flex; flex-wrap: wrap; gap: 2px; }
+.site-nav a { position: relative; display: inline-flex; align-items: center; height: 32px; padding: 0 10px; color: var(--on-nav-2);
+  border-radius: var(--radius-control); font-size: var(--text-body); text-decoration: none; }
+.site-nav a:hover { color: var(--on-nav); background: rgba(255, 255, 255, 0.06); }
+.site-nav a[aria-current="page"] { color: var(--on-nav); background: var(--nav-3); }
+.site-nav a[aria-current="page"]::after { content: ""; position: absolute; left: 10px; right: 10px; bottom: 3px; height: 2px;
+  border-radius: 2px; background: var(--accent); }
+.topbar-end { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-left: auto; }
+.topbar-end > a { color: var(--on-nav-2); font-size: var(--text-small); text-decoration: none; }
+.topbar-end > a:hover { color: var(--on-nav); }
+.nav-switch { display: flex; gap: 2px; padding: 2px; background: rgba(255, 255, 255, 0.06); border-radius: var(--radius-panel); }
+.nav-switch button { min-width: 0; height: 24px; padding: 0 8px; color: var(--on-nav-2); background: transparent; border: 0;
+  border-radius: var(--radius-control); font-size: 11.5px; font-weight: 500; }
+.nav-switch button:hover { color: var(--on-nav); }
+.nav-switch button[aria-pressed="true"] { color: var(--on-nav); background: var(--nav-3); }
+
+/* Page frame and header, as the playground's screens. */
+.page { max-width: 1680px; margin: 0 auto; padding: 0 max(24px, env(safe-area-inset-right, 0px)) 48px max(24px, env(safe-area-inset-left, 0px)); }
+.page-header { position: sticky; z-index: 25; top: 0; display: grid; grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center; gap: 6px 16px; margin: 0 calc(-1 * max(24px, env(safe-area-inset-left, 0px))) 16px;
+  padding: 14px max(24px, env(safe-area-inset-left, 0px));
+  background: color-mix(in srgb, var(--page) 94%, transparent); border-bottom: 1px solid var(--line);
+  -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); }
+.page-header.is-static { position: static; }
+.page-desc { max-width: 96ch; margin: 3px 0 0; color: var(--ink-2); font-size: var(--text-ui); line-height: 1.45; }
+.page-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; }
+a.button { text-decoration: none; }
+
+/* Toolbar and model cards: the playground's Models screen. */
+.toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; margin-bottom: 14px; }
+.search-field { position: relative; min-width: 220px; flex: 1; display: flex; align-items: center; }
+.search-field > span { position: absolute; left: 10px; color: var(--ink-3); font-size: 16px; line-height: 1; pointer-events: none; }
+.search-field input { width: 100%; height: var(--control-h); padding: 0 10px 0 30px; color: var(--ink); background: var(--canvas);
+  border: 1px solid var(--line-strong); border-radius: var(--radius-control); outline: 0; font-size: var(--text-ui); }
+.search-field input:focus { border-color: var(--ink); }
+.search-field input:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+.search-field input::placeholder { color: var(--ink-3); }
+.filter-group { display: flex; align-items: center; gap: 6px; }
+.filter-group > .caps { margin-right: 2px; }
+.toolbar-count { margin-left: auto; color: var(--ink-3); font-family: var(--font-mono); font-size: 11px; white-space: nowrap; }
+.model-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 360px), 1fr)); gap: 12px; }
+.model-card { position: relative; display: flex; flex-direction: column; padding: 16px; overflow: hidden;
+  background: var(--canvas); border: 1px solid var(--line); border-radius: var(--radius-panel); transition: border-color 0.15s ease; }
+.model-card:hover { border-color: var(--line-strong); }
+.model-card.is-default { border-color: color-mix(in srgb, var(--good) 45%, var(--line)); box-shadow: inset 0 2px 0 var(--good); }
+.model-card-top { display: flex; justify-content: space-between; align-items: start; gap: 12px; }
+.model-symbol { width: 36px; height: 36px; display: grid; place-items: center; color: var(--periwinkle); background: var(--nav);
+  border-radius: var(--radius-panel); font-family: var(--font-mono); font-size: 18px; line-height: 1; }
+.model-symbol.sv { color: var(--speaker-ink); background: var(--speaker); }
+.card-heading { margin-top: 12px; }
+.model-card h3 { margin: 0; font-size: var(--text-lead); font-weight: 600; }
+.model-card-subtitle { margin: 2px 0 0; color: var(--ink-3); font-family: var(--font-mono); font-size: 11px; overflow-wrap: anywhere; }
+.model-badges { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0 10px; }
+.badge { display: inline-flex; align-items: center; height: 22px; padding: 0 8px; color: var(--ink-2); background: var(--sunken);
+  border-radius: var(--radius-pill); font-size: 11.5px; font-weight: 500; line-height: 1; white-space: nowrap; }
+.badge-task.sv { color: var(--speaker-ink); background: var(--speaker); }
+.badge-default { color: var(--good); background: var(--good-soft); }
+.badge-candidate, .badge-alternative { color: var(--ink); background: transparent; box-shadow: inset 0 0 0 1px var(--line-strong); }
+.badge-quiet { color: var(--ink-3); background: transparent; box-shadow: inset 0 0 0 1px var(--line); }
+.model-description { display: -webkit-box; margin: 0; overflow: hidden; color: var(--ink-2); font-size: var(--text-ui); line-height: 1.5;
+  -webkit-box-orient: vertical; -webkit-line-clamp: 4; line-clamp: 4; }
+.model-card.is-expanded .model-description { display: block; -webkit-line-clamp: unset; line-clamp: none; }
+.card-more { align-self: flex-start; padding: 4px 0 0; color: var(--ink-2); background: transparent; border: 0; font-size: var(--text-small);
+  text-decoration: underline; text-underline-offset: 3px; }
+.card-more:hover { color: var(--ink); }
+.model-footer { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 12px; padding-top: 12px;
+  margin-top: auto; border-top: 1px solid var(--line); }
+.model-meta { display: grid; gap: 2px; min-width: 0; color: var(--ink-3); font-size: 11.5px; }
+.model-meta strong { overflow: hidden; color: var(--ink); font-family: var(--font-mono); font-size: 11.5px; font-weight: 500;
+  text-overflow: ellipsis; white-space: nowrap; }
+.card-links { display: flex; flex-wrap: wrap; gap: 6px; }
+.card-link { flex: none; display: inline-flex; align-items: center; height: var(--control-h-small); padding: 0 9px; color: var(--ink);
+  background: var(--canvas); border: 1px solid var(--line-strong); border-radius: var(--radius-control); font-size: var(--text-small);
+  font-weight: 500; text-decoration: none; }
+.card-link:hover { background: var(--sunken); }
+.facts { display: flex; flex-wrap: wrap; gap: 4px 18px; margin: 12px 0 0; font-size: var(--text-small); }
+.facts div { display: flex; gap: 6px; align-items: baseline; }
+.facts dt { color: var(--ink-3); } .facts dd { margin: 0; color: var(--ink); }
+
+/* Text rendered from the repository's Markdown. */
+.prose { min-width: 0; max-width: 92ch; color: var(--ink); font-size: var(--text-body); line-height: 1.6; }
+.prose h1 { margin: 0 0 12px; font-size: 22px; }
+.prose h2 { margin: 28px 0 10px; padding-top: 4px; font-size: 17px; }
+.prose h3 { margin: 20px 0 8px; font-size: 15px; }
+.prose h2, .prose h3, .prose h4 { scroll-margin-top: 16px; }
+.prose p, .prose ul, .prose ol { margin: 0 0 12px; color: var(--ink-2); }
+.prose li + li { margin-top: 4px; }
+.prose a { color: var(--ink); text-decoration-color: var(--line-strong); text-underline-offset: 3px; }
+.prose a:hover { text-decoration-color: currentColor; }
+.prose strong { color: var(--ink); }
+.prose code { padding: 1px 4px; background: var(--sunken); border-radius: 3px; }
+/* A long path in running text breaks rather than widening a phone screen. */
+.prose :is(p, li) code { overflow-wrap: anywhere; }
+.prose pre { margin: 0 0 14px; padding: 12px 14px; overflow-x: auto; color: var(--on-nav); background: var(--nav);
+  border-radius: var(--radius-panel); font-size: 12.5px; line-height: 1.5; }
+.prose pre code { padding: 0; color: inherit; background: none; }
+.prose blockquote { margin: 0 0 12px; padding: 2px 14px; border-left: 3px solid var(--line-strong); }
+.prose .table-wrap { margin: 0 0 16px; overflow-x: auto; background: var(--canvas); border: 1px solid var(--line);
+  border-radius: var(--radius-panel); }
+.prose .table th { white-space: normal; }
+.prose .table td { min-width: 7ch; color: var(--ink); }
+/* Identifiers stay whole; a wide table scrolls in its frame instead. */
+.prose .table code { white-space: nowrap; }
+.prose hr { margin: 24px 0; border: 0; border-top: 1px solid var(--line); }
+
+.site-footer { margin-top: 32px; padding-top: 16px; color: var(--ink-3); border-top: 1px solid var(--line); font-size: var(--text-small); }
+.site-footer a { color: var(--ink-2); }
+
+@media (max-width: 760px) {
+  .topbar { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 12px; padding-top: 8px; padding-bottom: 0; }
+  .brand { grid-row: 1; grid-column: 1; }
+  .topbar-end { grid-row: 1; grid-column: 2; justify-self: end; gap: 6px; margin-left: 0; }
+  .topbar-end > a { display: none; }
+  .nav-switch button { padding: 0 6px; }
+  .site-nav { grid-row: 2; grid-column: 1 / -1; flex-wrap: nowrap; margin: 0 -24px; padding: 0 24px 6px; overflow-x: auto;
+    scrollbar-width: none; }
+  .site-nav::-webkit-scrollbar { display: none; }
+  .site-nav a { flex: none; }
+  /* A tall header that stuck would cover much of a phone screen. */
+  .page-header { position: static; grid-template-columns: minmax(0, 1fr); }
+  /* Wider columns scroll sideways instead of stacking a phrase per line. */
+  .prose .table td, .prose .table th { min-width: 13ch; }
+  .page-actions { justify-content: flex-start; }
+  .toolbar-count { margin-left: 0; }
+}
+
+/* The player: dark in both themes, as the playground's audio players are. */
+.pp { min-width: 0; color: var(--on-nav); background: var(--nav); border: 1px solid var(--nav-line);
+  border-radius: var(--radius-panel); overflow: hidden; }
+.pp-stage { padding: 8px 16px 14px; }
+.pp-ruler { position: relative; height: 20px; color: var(--on-nav-3); font-family: var(--font-mono); font-size: 10px; }
+.pp-ruler span { position: absolute; top: 2px; bottom: 0; padding-left: 5px; border-left: 1px solid var(--nav-line);
+  line-height: 12px; font-variant-numeric: tabular-nums; }
+.pp-wave { position: relative; height: 132px; cursor: crosshair; touch-action: none; user-select: none; }
+.pp-wave:focus-visible { outline: 2px solid var(--focus); outline-offset: 4px; border-radius: 2px; }
+.pp-wave canvas { position: absolute; top: 0; left: 0; display: block; height: 100%; }
+.pp-dim { width: 100%; }
+.pp-played { position: absolute; top: 0; bottom: 0; left: 0; width: 0; overflow: hidden; }
+.pp-head { position: absolute; top: -6px; bottom: -6px; left: 0; width: 2px; margin-left: -1px; background: var(--accent);
+  border-radius: 1px; pointer-events: none; }
+.pp-head::before { content: ""; position: absolute; top: -3px; left: -3px; width: 8px; height: 8px; border-radius: 50%;
+  background: var(--accent); }
+.pp-hover { position: absolute; top: 0; bottom: 0; width: 1px; background: rgba(255, 255, 255, 0.4); pointer-events: none; }
+.pp-hover span { position: absolute; bottom: 4px; left: 6px; padding: 2px 5px; color: var(--on-nav); background: var(--nav-3);
+  border-radius: 3px; font-family: var(--font-mono); font-size: 10px; white-space: nowrap; }
+.pp-hover.is-flipped span { right: 6px; left: auto; }
+.pp-scan { position: absolute; top: 0; bottom: 0; left: 0; width: 0; pointer-events: none;
+  background: linear-gradient(90deg, transparent 60%, rgba(189, 187, 255, 0.14));
+  border-right: 2px solid var(--periwinkle); transition: width 0.12s linear; }
+.pp-transport { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; padding: 10px 16px;
+  background: var(--nav-2); border-top: 1px solid var(--nav-line); }
+.pp-play { width: 42px; height: 42px; flex: none; display: grid; place-items: center; padding: 0; color: var(--on-mint);
+  background: var(--mint); border: 0; border-radius: 50%; }
+.pp-play:hover:not(:disabled) { background: color-mix(in srgb, var(--mint) 70%, #ffffff); }
+.pp-play:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.pp-play:disabled { opacity: 0.35; }
+.pp-play svg { width: 16px; height: 16px; fill: currentColor; }
+.pp-play .pp-icon-pause, .pp.is-playing .pp-play .pp-icon-play { display: none; }
+.pp.is-playing .pp-play .pp-icon-pause { display: block; }
+.pp-clock { display: inline-flex; gap: 6px; font-family: var(--font-mono); font-size: 13px; font-variant-numeric: tabular-nums; }
+.pp-total { color: var(--on-nav-3); }
+.pp-ab { display: flex; gap: 2px; padding: 2px; background: rgba(255, 255, 255, 0.06); border-radius: var(--radius-panel); }
+.pp-ab button { display: inline-flex; align-items: center; gap: 7px; height: 30px; padding: 0 12px; color: var(--on-nav-2);
+  background: transparent; border: 0; border-radius: var(--radius-control); font-size: var(--text-small); font-weight: 500; }
+.pp-ab button:hover:not(:disabled) { color: var(--on-nav); }
+.pp-ab button:disabled { opacity: 0.35; }
+.pp-ab button[aria-pressed="true"] { color: var(--on-nav); background: var(--nav-3); box-shadow: inset 0 0 0 1px var(--nav-line); }
+.pp-ab i { width: 8px; height: 8px; border-radius: 50%; }
+.pp-ab i.in { background: var(--mint); } .pp-ab i.out { background: var(--periwinkle); }
+.pp-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-left: auto; }
+.pp-actions .button-primary { height: 36px; padding: 0 16px; color: var(--nav); background: var(--on-nav); border-color: var(--on-nav); }
+.pp-actions .button-primary:hover:not(:disabled) { color: var(--nav); background: var(--periwinkle); border-color: var(--periwinkle); }
+.pp-actions .button-secondary { color: var(--on-nav); background: transparent; border-color: var(--nav-line); }
+.pp-actions .button-secondary:hover:not(:disabled) { background: var(--nav-3); border-color: var(--on-nav-3); }
+@media (max-width: 560px) { .pp-actions { width: 100%; margin-left: 0; } .pp-actions .button { flex: 1; } }
+
+.try { display: grid; grid-template-columns: minmax(280px, 380px) minmax(0, 1fr); gap: 12px; align-items: start; }
+.try > .panel { min-width: 0; }
+.try .field { grid-template-columns: minmax(0, 1fr); }
+.sample-row { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+.sample-row .chip { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+.dropzone { min-width: 0; }
+.dropzone .upload-icon { flex: none; }
+.drop-text { display: grid; gap: 3px; min-width: 0; }
+.drop-text > span { color: var(--ink-3); font-size: var(--text-small); line-height: 1.4; }
+.dropzone.has-file { align-items: center; padding: 10px 12px; }
+.dropzone.has-file .drop-text > * { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dropzone.has-file .drop-text > span { color: var(--ink-2); }
+.run-row .button { min-width: 96px; }
+.model-note { margin: 6px 0 0; color: var(--ink-2); font-size: var(--text-small); line-height: 1.45; }
+.run-row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 18px; }
+.results { display: grid; gap: 12px; min-width: 0; }
+.results .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 140px), 1fr)); gap: 8px; }
+@media (max-width: 900px) { .try { grid-template-columns: minmax(0, 1fr); } }
+</style>
+<script src="device/device.js"></script>
+</head>
+<body>
+<header class="topbar">
+<a class="brand" href="index.html"><img src="favicon.svg" alt="">PureSound</a>
+<nav class="site-nav" aria-label="Site"><a href="index.html"><span data-i18n="Home">Home</span></a><a href="start.html"><span data-i18n="Get started">Get started</span></a><a href="models.html"><span data-i18n="Models">Models</span></a><a href="try.html" aria-current="page"><span data-i18n="Try it">Try it</span></a><a href="benchmarks.html"><span data-i18n="Benchmarks">Benchmarks</span></a></nav>
+<div class="topbar-end"><a href="https://github.com/mcw519/PureSound">GitHub</a>
+<div class="nav-switch" role="group" aria-label="Theme"><button type="button" data-theme-choice="auto"><span data-i18n="Auto">Auto</span></button><button type="button" data-theme-choice="light"><span data-i18n="Light">Light</span></button><button type="button" data-theme-choice="dark"><span data-i18n="Dark">Dark</span></button></div>
+<div class="nav-switch" role="group" aria-label="Language"><button type="button" data-lang="en">EN</button><button type="button" data-lang="zh-TW">中文</button></div>
+</div>
+</header>
+<main class="page">
+<header class="page-header">
+<div class="page-heading"><h1><span data-i18n="Try a model in your browser">Try a model in your browser</span></h1>
+<p class="page-desc"><span data-i18n="The released streaming models run on this device in ONNX Runtime Web (WebAssembly). Audio never leaves the browser.">The released streaming models run on this device in ONNX Runtime Web (WebAssembly). Audio never leaves the browser.</span></p></div>
+<div class="page-actions"><span class="state" id="state"></span></div>
+</header>
+<div class="try">
+<section class="panel panel-pad">
+<div class="field"><label for="model"><span data-i18n="Model">Model</span></label><select class="control" id="model"><optgroup label="Voice isolation" data-i18n-attr="label"><option value="voice-isolate-dpcrn-curriculum-v1">Voice Isolation DPCRN curriculum v1 · default</option><option value="voice-isolate-dpcrn-curriculum-v2">Voice Isolation DPCRN curriculum v2 (wide) · candidate</option></optgroup><optgroup label="Noise suppression" data-i18n-attr="label"><option value="noise-suppression-dpcrn-mamba-v2">Noise Suppression DPCRN-Mamba v2 · default</option><option value="noise-suppression-dpcrn-mamba-v3">Noise Suppression DPCRN-Mamba v3 · candidate</option></optgroup></select>
+<p class="model-note"><span id="model-note"></span> <a id="model-card" href="#" hidden><span data-i18n="Model card">Model card</span></a></p></div>
+<div class="field"><span class="field-name"><span data-i18n="Audio">Audio</span></span>
+<div class="sample-row" role="group" aria-label="Samples"><button type="button" class="chip" aria-pressed="false" data-sample="samples/two-talkers.wav" data-sample-id="two-talkers" title="Two LibriSpeech readers mixed at similar levels."><span data-i18n="Two talkers">Two talkers</span> <small>5.9 s</small></button><button type="button" class="chip" aria-pressed="false" data-sample="samples/near-and-far.wav" data-sample-id="near-and-far" title="A dry near talker; a reverberant far talker (RT60 0.7 s) 9 dB down, starting first."><span data-i18n="Near talker, far talker">Near talker, far talker</span> <small>6.0 s</small></button><button type="button" class="chip" aria-pressed="false" data-sample="samples/noisy-speech.wav" data-sample-id="noisy-speech" title="One reader over a fan band, mains hum and pink noise at 5 dB SNR."><span data-i18n="Speech in noise">Speech in noise</span> <small>5.0 s</small></button></div>
+<label class="dropzone" id="drop"><input id="file" type="file" accept="audio/*,.wav,.flac,.mp3,.m4a"><span class="upload-icon" aria-hidden="true">↑</span>
+<span class="drop-text"><strong id="drop-title"><span data-i18n="Drop audio here">Drop audio here</span></strong>
+<span id="drop-hint"><span data-i18n="or click to browse · any rate, prepared to mono 16 kHz">or click to browse · any rate, prepared to mono 16 kHz</span></span></span></label></div>
+<div class="field-label range-label"><label for="blend"><span data-i18n="Model output share">Model output share</span></label><output id="blend-value" class="mono">1.00</output></div>
+<input class="range" id="blend" type="range" min="0.1" max="1" step="0.05" value="1">
+<div class="range-hint"><span><span data-i18n="input">input</span></span><span><span data-i18n="model">model</span></span></div>
+<p class="toggle-hint"><span data-i18n="dry_blend: the share of the model output mixed with the untouched input.">dry_blend: the share of the model output mixed with the untouched input.</span></p>
+<div class="run-row"><button class="button button-primary" id="run" type="button"><span data-i18n="Run">Run</span></button></div>
+<p class="form-note" id="note" role="status"></p>
+<p class="panel-help" id="isolation" hidden><span data-i18n="This page is not cross-origin isolated, so models run on one thread here.">This page is not cross-origin isolated, so models run on one thread here.</span></p>
+</section>
+<section class="results">
+<div class="pp" data-player>
+<div class="pp-stage">
+<div class="pp-ruler" aria-hidden="true"></div>
+<div class="pp-wave" role="slider" tabindex="0" aria-label="Playback position" data-i18n-attr="aria-label"
+ aria-valuemin="0" aria-valuemax="0" aria-valuenow="0">
+<canvas class="pp-dim"></canvas><div class="pp-played"><canvas class="pp-bright"></canvas></div>
+<div class="pp-scan" hidden></div><div class="pp-hover" hidden><span></span></div><div class="pp-head"></div>
+</div>
+</div>
+<div class="pp-transport">
+<button class="pp-play" type="button" aria-label="Play" data-i18n-attr="aria-label" disabled><svg viewBox="0 0 16 16" aria-hidden="true" class="pp-icon-play"><path d="M4.5 2.6v10.8L13.3 8z"/></svg><svg viewBox="0 0 16 16" aria-hidden="true" class="pp-icon-pause"><path d="M4 2.5h3v11H4zM9 2.5h3v11H9z"/></svg></button>
+<span class="pp-clock"><span class="pp-now">0:00.0</span><span class="pp-total">/ 0:00.0</span></span>
+<div class="pp-ab" role="group" aria-label="Listen to" data-i18n-attr="aria-label">
+<button type="button" data-ab="a" aria-pressed="true"><i class="in"></i><span data-i18n="Input">Input</span></button>
+<button type="button" data-ab="b" aria-pressed="false" disabled><i class="out"></i><span data-i18n="Output">Output</span></button>
+</div>
+<div class="pp-actions"><a class="button button-secondary" id="download" href="#" hidden><span data-i18n="Download output">Download output</span></a></div>
+</div>
+</div>
+<div id="figures" hidden>
+<div class="stats">
+<div class="stat"><span><span data-i18n="Real-time factor">Real-time factor</span></span><strong id="rtf">—</strong></div>
+<div class="stat"><span><span data-i18n="Threads">Threads</span></span><strong id="threads">—</strong></div>
+<div class="stat"><span><span data-i18n="Look-ahead">Look-ahead</span></span><strong id="latency">—</strong></div>
+<div class="stat"><span><span data-i18n="Processing time">Processing time</span></span><strong id="seconds">—</strong></div>
+</div>
+<p class="panel-help"><span data-i18n="Lower is faster; below 1 keeps up with real time.">Lower is faster; below 1 keeps up with real time.</span></p>
+</div>
+</section>
+</div>
+<script type="application/json" id="try-models">[{"id": "voice-isolate-dpcrn-curriculum-v1", "task": "voice_isolation", "description": "Suppresses a distant talker further than any earlier version -- including from a cold start -- at no cost to the near talker, on the capture hardware it was tuned for. On other capture hardware it can attenuate the near talker; prefer dpcrn-v8 when the capture path is unknown.", "card": "cards/voice-isolation.html", "dry_blend": 0.9}, {"id": "voice-isolate-dpcrn-curriculum-v2", "task": "voice_isolation", "description": "A wider curriculum-v1: lower WER on reverberant speech and deeper suppression of a distant talker, including from a cold start, at 1.4x the CPU. Like v1 it can attenuate the near talker on unfamiliar capture hardware; prefer dpcrn-v8 there.", "card": "cards/voice-isolation.html", "dry_blend": 0.9}, {"id": "noise-suppression-dpcrn-mamba-v2", "task": "noise_suppression", "description": "Single-channel 16 kHz streaming noise suppression (DPCRN-Mamba), v1 fine-tuned with a MetricGAN PESQ critic. On VCTK-DEMAND PESQ-WB 2.57 and on DNS-5 DNSMOS OVR 2.83; on a harder WER set it deletes fewer words than v1, on VCTK-DEMAND slightly more -- prefer v1 if that matters.", "card": "cards/noise-suppression.html", "dry_blend": 1.0}, {"id": "noise-suppression-dpcrn-mamba-v3", "task": "noise_suppression", "description": "Wider 16 kHz streaming DPCRN-Mamba with mixed-source coverage training, calibrated against a PESQ critic and the DNSMOS P.835 judge. Higher PESQ, STOI and DNSMOS than v2 at 1.5x the CPU. Deletion gates remain unresolved, and hard-set WER is above the unprocessed input.", "card": "cards/noise-suppression.html", "dry_blend": 1.0}]</script>
+<footer class="site-footer"><span data-i18n="Built from">Built from</span> <a href="https://github.com/mcw519/PureSound/tree/9caa3540fabe328e9a2d9da0a3950ccca1096950"><code>9caa3540fabe</code></a> · Apache-2.0</footer>
+</main>
+<script>
+(() => {
+  const ZH = {"Home": "首頁", "Get started": "開始使用", "Models": "模型庫", "Try it": "線上試用", "Benchmarks": "效能量測", "Theme": "主題", "Auto": "自動", "Light": "淺色", "Dark": "深色", "Language": "語言", "Voice isolation": "人聲分離", "Noise suppression": "雜訊抑制", "Speaker verification": "語者驗證", "default": "預設", "candidate": "候選", "alternative": "替代", "fallback": "備援", "released": "已發布", "reference": "參考", "experimental": "實驗", "All": "全部", "More": "展開", "Less": "收合", "Search models": "搜尋模型", "Task": "任務", "Role": "角色", "{shown} of {total} models": "{shown} / {total} 個模型", "No models match these filters.": "沒有符合篩選條件的模型。", "Model card": "模型卡", "Contents": "目錄", "Source on GitHub": "GitHub 原始檔", "Built from": "產生自", "Try it in your browser": "在瀏覽器試用", "Streaming": "串流", "Model zoo": "模型庫", "Sample rate": "取樣率", "Look-ahead": "前瞻延遲", "Recommended": "建議設定", "Download": "下載", "Run it": "執行方式", "Model cards": "模型卡", "float weights": "浮點權重", "Models in this card": "此模型卡涵蓋的模型", "yes": "是", "no": "否", "Try a model in your browser": "在瀏覽器試用模型", "The released streaming models run on this device in ONNX Runtime Web (WebAssembly). Audio never leaves the browser.": "已發布的串流模型在這台裝置上以 ONNX Runtime Web（WebAssembly）執行，音訊不會離開瀏覽器。", "Model": "模型", "Audio": "音訊", "Samples": "範例", "Drop audio here": "將音檔拖放到這裡", "or click to browse · any rate, prepared to mono 16 kHz": "或點選瀏覽 · 任何取樣率，會轉成單聲道 16 kHz", "Replace audio": "替換音檔", "{name} · drop or click to choose another file": "{name} · 拖放或點選以選擇其他檔案", "Model output share": "模型輸出比例", "dry_blend: the share of the model output mixed with the untouched input.": "dry_blend：模型輸出與原始輸入混合時，模型輸出所佔的比例。", "input": "原始輸入", "model": "模型輸出", "Run": "執行", "Running": "執行中", "Ready": "就緒", "Unavailable": "無法使用", "Downloading the model": "下載模型中", "Processing {percent}%": "處理中 {percent}%", "Done in {seconds} s": "{seconds} 秒完成", "Input": "輸入", "Output": "輸出", "Download output": "下載輸出", "Real-time factor": "即時率", "Threads": "執行緒", "Processing time": "處理時間", "Choose a sample or a file first.": "請先選一段範例或一個檔案。", "Two talkers": "兩位說話者", "Near talker, far talker": "近處與遠處的說話者", "Speech in noise": "噪音中的語音", "This page is not cross-origin isolated, so models run on one thread here.": "這個頁面沒有跨來源隔離（cross-origin isolation），模型只能以單執行緒執行。", "Lower is faster; below 1 keeps up with real time.": "數字越小越快；低於 1 即可跟上即時。", "This build of the site has no on-device payload.": "這個版本的網站沒有附上裝置端推論檔案。", "Play": "播放", "Pause": "暫停", "Playback position": "播放位置", "Listen to": "聆聽"};
+  const root = document.documentElement;
+  const tr = (text) => (root.lang === "zh-TW" && ZH[text]) || text;
+  const site = { tr, onLanguage: [] };
+  window.PureSoundSite = site;
+
+  function translate() {
+    for (const el of document.querySelectorAll("[data-i18n]")) el.textContent = tr(el.dataset.i18n);
+    for (const el of document.querySelectorAll("[data-i18n-attr]")) {
+      for (const attr of el.dataset.i18nAttr.split(",")) {
+        // A dataset key may not hold "-" before a lowercase letter.
+        const key = "src_" + attr.replace(/[^a-z]/gi, "");
+        el.dataset[key] ??= el.getAttribute(attr) || "";
+        el.setAttribute(attr, tr(el.dataset[key]));
+      }
+    }
+    for (const button of document.querySelectorAll("[data-lang]")) button.setAttribute("aria-pressed", String(button.dataset.lang === root.lang));
+    for (const listener of site.onLanguage) listener();
+  }
+  site.translate = translate;
+
+  const themeButtons = document.querySelectorAll("[data-theme-choice]");
+  function setTheme(choice) {
+    try { localStorage.setItem("puresound.theme", choice); } catch {}
+    const dark = choice === "dark" || (choice === "auto" && matchMedia("(prefers-color-scheme: dark)").matches);
+    root.dataset.theme = dark ? "dark" : "light";
+    for (const button of themeButtons) button.setAttribute("aria-pressed", String(button.dataset.themeChoice === choice));
+  }
+  let theme = "auto";
+  try { theme = localStorage.getItem("puresound.theme") || "auto"; } catch {}
+  for (const button of themeButtons) button.addEventListener("click", () => setTheme(button.dataset.themeChoice));
+  setTheme(theme);
+  for (const button of document.querySelectorAll("[data-lang]")) {
+    button.addEventListener("click", () => {
+      root.lang = button.dataset.lang;
+      try { localStorage.setItem("puresound.lang", root.lang); } catch {}
+      translate();
+    });
+  }
+  document.addEventListener("DOMContentLoaded", () => {
+    translate();
+    const current = document.querySelector(".site-nav [aria-current]");
+    const nav = current?.parentElement;
+    if (nav && nav.scrollWidth > nav.clientWidth) nav.scrollLeft = current.offsetLeft - nav.clientWidth / 2 + current.offsetWidth / 2;
+  });
+})();
+</script>
+<script>
+window.PureSoundWav = (samples, rate) => {
+  const view = new DataView(new ArrayBuffer(44 + samples.length * 2));
+  const text = (offset, value) => [...value].forEach((c, i) => view.setUint8(offset + i, c.charCodeAt(0)));
+  text(0, "RIFF"); view.setUint32(4, 36 + samples.length * 2, true); text(8, "WAVEfmt ");
+  view.setUint32(16, 16, true); view.setUint16(20, 1, true); view.setUint16(22, 1, true);
+  view.setUint32(24, rate, true); view.setUint32(28, rate * 2, true); view.setUint16(32, 2, true);
+  view.setUint16(34, 16, true); text(36, "data"); view.setUint32(40, samples.length * 2, true);
+  samples.forEach((value, i) => view.setInt16(44 + i * 2, Math.max(-1, Math.min(1, value)) * 0x7fff, true));
+  return new Blob([view], { type: "audio/wav" });
+};
+
+window.PureSoundPlayer = class {
+  constructor(root, tr = (text) => text) {
+    this.root = root;
+    this.tr = tr;
+    const $ = (selector) => root.querySelector(selector);
+    this.wave = $(".pp-wave"); this.dim = $(".pp-dim"); this.bright = $(".pp-bright"); this.played = $(".pp-played");
+    this.head = $(".pp-head"); this.hover = $(".pp-hover"); this.scan = $(".pp-scan"); this.ruler = $(".pp-ruler");
+    this.now = $(".pp-now"); this.total = $(".pp-total"); this.playButton = $(".pp-play");
+    this.ab = [...root.querySelectorAll("[data-ab]")];
+    this.input = null; this.output = null; this.rate = 16000; this.active = "a";
+    this.offset = 0; this.playing = false; this.reveal = 1; this.sources = []; this.gains = {}; this.buffers = {};
+
+    this.playButton.addEventListener("click", () => (this.playing ? this.pause() : this.play()));
+    for (const button of this.ab) button.addEventListener("click", () => this.listen(button.dataset.ab));
+    const at = (event) => {
+      const box = this.wave.getBoundingClientRect();
+      return Math.min(1, Math.max(0, (event.clientX - box.left) / box.width)) * this.duration;
+    };
+    this.wave.addEventListener("pointerdown", (event) => {
+      if (!this.input) return;
+      this.wave.setPointerCapture(event.pointerId);
+      this.dragging = true;
+      this.seek(at(event));
+    });
+    this.wave.addEventListener("pointermove", (event) => {
+      if (!this.input) return;
+      if (this.dragging) this.seek(at(event));
+      const box = this.wave.getBoundingClientRect();
+      this.hover.hidden = false;
+      this.hover.style.left = (event.clientX - box.left) + "px";
+      this.hover.classList.toggle("is-flipped", event.clientX - box.left > box.width - 80);
+      this.hover.firstElementChild.textContent = this.format(at(event));
+    });
+    this.wave.addEventListener("pointerup", () => { this.dragging = false; });
+    this.wave.addEventListener("pointerleave", () => { this.hover.hidden = true; });
+    this.wave.addEventListener("keydown", (event) => {
+      if (!this.input) return;
+      const jump = event.shiftKey ? 5 : 1;
+      const moves = { ArrowRight: this.position() + jump, ArrowLeft: this.position() - jump, Home: 0, End: this.duration };
+      if (event.key in moves) this.seek(moves[event.key]);
+      else if (event.key === " " || event.key === "Enter") this.playing ? this.pause() : this.play();
+      else return;
+      event.preventDefault();
+    });
+    new ResizeObserver(() => this.draw()).observe(this.wave);
+  }
+
+  get duration() { return this.input ? this.input.length / this.rate : 0; }
+
+  format(seconds) {
+    const t = Math.max(0, seconds);
+    return Math.floor(t / 60) + ":" + (t % 60).toFixed(1).padStart(4, "0");
+  }
+
+  /* A new recording: the model's output, if any, is dropped. */
+  load(input, rate) {
+    this.stopSources();
+    this.playing = false;
+    Object.assign(this, { input, rate, output: null, offset: 0, peaks: null, buffers: {}, reveal: 1 });
+    this.ab[1].disabled = true;
+    this.playButton.disabled = false;
+    this.listen("a");
+    this.renderRuler();
+    this.update();
+  }
+
+  /* What the model returned, on the recording's time axis; it is heard next. */
+  setOutput(output) {
+    Object.assign(this, { output, peaks: null });
+    delete this.buffers.b;
+    if (this.playing) this.restart();
+    this.ab[1].disabled = false;
+    this.listen("b");
+    if (matchMedia("(prefers-reduced-motion: reduce)").matches) { this.reveal = 1; this.draw(); return; }
+    const started = performance.now();
+    const step = (now) => {
+      const x = Math.min(1, (now - started) / 700);
+      this.reveal = 1 - (1 - x) ** 3;
+      this.draw();
+      if (x < 1) requestAnimationFrame(step);
+    };
+    this.reveal = 0;
+    requestAnimationFrame(step);
+  }
+
+  /* How far a model run has got, 0 to 1; null when none is running. */
+  progress(value) {
+    this.scan.hidden = value == null;
+    if (value != null) this.scan.style.width = Math.round(value * 1000) / 10 + "%";
+  }
+
+  listen(which) {
+    this.active = which === "b" && this.output ? "b" : "a";
+    for (const button of this.ab) button.setAttribute("aria-pressed", String(button.dataset.ab === this.active));
+    const ctx = this.ctx;
+    for (const [key, gain] of Object.entries(this.gains)) {
+      gain.gain.setTargetAtTime(key === this.active ? 1 : 0, ctx.currentTime, 0.006);
+    }
+    this.draw();
+  }
+
+  // ------------------------------------------------------------ playback
+
+  buffer(samples) {
+    const buffer = this.ctx.createBuffer(1, samples.length, this.rate);
+    buffer.copyToChannel(samples, 0);
+    return buffer;
+  }
+
+  position() {
+    if (!this.playing) return this.offset;
+    return Math.min(this.duration, this.ctx.currentTime - this.startedAt);
+  }
+
+  async play() {
+    if (!this.input) return;
+    this.ctx = this.ctx || new (window.AudioContext || window.webkitAudioContext)();
+    await this.ctx.resume();
+    if (this.offset >= this.duration - 0.02) this.offset = 0;
+    this.playing = true;
+    this.restart();
+    const tick = () => {
+      if (!this.playing) return;
+      if (this.position() >= this.duration) { this.pause(); this.offset = this.duration; this.update(); return; }
+      this.update();
+      requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  }
+
+  /* Both tracks from `offset`, one of them silent. */
+  restart() {
+    const offset = this.playing && this.sources.length ? this.position() : this.offset;
+    this.stopSources();
+    this.buffers.a = this.buffers.a || this.buffer(this.input);
+    if (this.output) this.buffers.b = this.buffers.b || this.buffer(this.output);
+    for (const key of ["a", "b"]) {
+      if (!this.buffers[key]) continue;
+      const source = this.ctx.createBufferSource();
+      source.buffer = this.buffers[key];
+      const gain = this.ctx.createGain();
+      gain.gain.value = key === this.active ? 1 : 0;
+      source.connect(gain).connect(this.ctx.destination);
+      source.start(0, offset);
+      this.sources.push(source);
+      this.gains[key] = gain;
+    }
+    this.startedAt = this.ctx.currentTime - offset;
+    this.offset = offset;
+    this.update();
+  }
+
+  pause() {
+    this.offset = this.position();
+    this.playing = false;
+    this.stopSources();
+    this.update();
+  }
+
+  seek(seconds) {
+    this.offset = Math.min(this.duration, Math.max(0, seconds));
+    if (this.playing) { this.stopSources(); this.restart(); }
+    this.update();
+  }
+
+  stopSources() {
+    for (const source of this.sources) { try { source.stop(); } catch { /* not started */ } source.disconnect(); }
+    this.sources = [];
+    this.gains = {};
+  }
+
+  // ------------------------------------------------------------ drawing
+
+  update() {
+    const fraction = this.duration ? this.position() / this.duration : 0;
+    this.played.style.width = fraction * 100 + "%";
+    this.head.style.left = fraction * 100 + "%";
+    this.now.textContent = this.format(this.position());
+    this.total.textContent = "/ " + this.format(this.duration);
+    this.root.classList.toggle("is-playing", this.playing);
+    this.playButton.setAttribute("aria-label", this.tr(this.playing ? "Pause" : "Play"));
+    this.wave.setAttribute("aria-valuemax", this.duration.toFixed(1));
+    this.wave.setAttribute("aria-valuenow", this.position().toFixed(1));
+    this.wave.setAttribute("aria-valuetext", this.now.textContent);
+  }
+
+  renderRuler() {
+    const d = this.duration;
+    const step = [0.5, 1, 2, 5, 10, 15, 30, 60, 120, 300, 600].find((s) => d / s <= 8) || 600;
+    const label = (s) => (d < 60 ? (Math.round(s * 10) / 10) + "s" : this.format(s).replace(/\.\d$/, ""));
+    let html = "";
+    for (let s = 0; s <= d * 0.94; s += step) html += `<span style="left:${(s / d) * 100}%">${label(s)}</span>`;
+    this.ruler.innerHTML = d ? html : "";
+  }
+
+  /* Per bar, the loudest sample of each track, scaled by the recording's loudest. */
+  peaksFor(count) {
+    if (this.peaks && this.peaks.count === count) return this.peaks;
+    const reduce = (samples) => {
+      if (!samples) return null;
+      const out = new Float32Array(count);
+      for (let bar = 0; bar < count; bar += 1) {
+        let peak = 0;
+        for (let i = Math.floor((bar * samples.length) / count), end = Math.floor(((bar + 1) * samples.length) / count); i < end; i += 1) {
+          const value = Math.abs(samples[i]);
+          if (value > peak) peak = value;
+        }
+        out[bar] = peak;
+      }
+      return out;
+    };
+    const a = reduce(this.input), b = reduce(this.output);
+    const top = Math.max(1e-4, ...a);
+    // A gentle curve, so quiet passages still show beside loud ones.
+    for (const values of [a, b]) if (values) for (let i = 0; i < count; i += 1) values[i] = Math.min(1, values[i] / top) ** 0.75;
+    this.peaks = { count, a, b };
+    return this.peaks;
+  }
+
+  draw() {
+    const ratio = devicePixelRatio || 1;
+    const cssWidth = this.wave.clientWidth;
+    const width = Math.round(cssWidth * ratio), height = Math.round(this.wave.clientHeight * ratio);
+    if (!width || !height) return;
+    this.bright.style.width = cssWidth + "px";
+    const style = getComputedStyle(document.documentElement);
+    const colour = { a: style.getPropertyValue("--mint").trim(), b: style.getPropertyValue("--periwinkle").trim() };
+    const bar = Math.max(1, Math.round(2 * ratio)), step = bar + Math.max(1, Math.round(ratio));
+    const count = Math.floor(width / step);
+    for (const [canvas, dimmed] of [[this.dim, true], [this.bright, false]]) {
+      canvas.width = width;
+      canvas.height = height;
+      const g = canvas.getContext("2d");
+      g.clearRect(0, 0, width, height);
+      g.globalAlpha = 0.12;
+      g.fillStyle = "#ffffff";
+      g.fillRect(0, Math.floor(height / 2), width, Math.max(1, Math.round(ratio)));
+      if (!this.input) continue;
+      const peaks = this.peaksFor(count);
+      const order = !this.output ? [["a", 1]] : this.active === "b" ? [["a", 0.3], ["b", 1]] : [["b", 0.3], ["a", 1]];
+      for (const [key, alpha] of order) {
+        const values = peaks[key];
+        g.globalAlpha = alpha * (dimmed ? 0.36 : 1);
+        g.fillStyle = colour[key];
+        const limit = key === "b" ? Math.floor(count * this.reveal) : count;
+        for (let i = 0; i < limit; i += 1) {
+          const half = Math.max(ratio, values[i] * (height / 2 - 2 * ratio));
+          g.fillRect(i * step, height / 2 - half, bar, half * 2);
+        }
+      }
+    }
+  }
+};
+
+(() => {
+  const site = window.PureSoundSite;
+  const device = window.PureSoundDevice;
+  const MODELS = JSON.parse(document.getElementById("try-models").textContent);
+  const $ = (id) => document.getElementById(id);
+  const select = $("model"), blend = $("blend"), run = $("run"), state = $("state"), note = $("note");
+  const file = $("file"), download = $("download");
+  const player = new window.PureSoundPlayer(document.querySelector("[data-player]"), site.tr);
+  let sourceName = "", busy = false, token = 0, outputUrl = null;
+
+  const fmt = (text, vars) => site.tr(text).replace(/\{(\w+)\}/g, (m, k) => (vars[k] ?? m));
+  function setState(kind, text, vars = {}) {
+    state.className = "state" + (kind ? " is-" + kind : "");
+    state.dataset.text = text;
+    state.dataset.vars = JSON.stringify(vars);
+    state.textContent = fmt(text, vars);
+  }
+  function showNote(text, error = false) {
+    note.textContent = text ? site.tr(text) : "";
+    note.classList.toggle("is-error", error);
+  }
+
+  function describe() {
+    const model = MODELS.find((m) => m.id === select.value);
+    if (!model) return;
+    $("model-note").textContent = model.description || "";
+    $("model-card").hidden = !model.card;
+    if (model.card) $("model-card").href = model.card;
+    blend.value = model.dry_blend;
+    $("blend-value").value = Number(blend.value).toFixed(2);
+  }
+
+  /* The drop target's words: an invitation, or once a file is chosen, a replace bar. */
+  function dropText() {
+    const chosen = $("drop").classList.contains("has-file");
+    $("drop-title").textContent = site.tr(chosen ? "Replace audio" : "Drop audio here");
+    $("drop-hint").textContent = chosen ? fmt("{name} · drop or click to choose another file", { name: sourceName })
+      : site.tr("or click to browse · any rate, prepared to mono 16 kHz");
+  }
+
+  /* A recording to run: decoded at the model rate and shown in the player. */
+  async function pick(blob, name, chip = null) {
+    const mine = ++token;
+    sourceName = name;
+    for (const other of document.querySelectorAll("[data-sample]")) {
+      other.classList.toggle("is-active", other === chip);
+      other.setAttribute("aria-pressed", String(other === chip));
+    }
+    $("drop").classList.toggle("has-file", !chip);
+    dropText();
+    showNote("");
+    download.hidden = true;
+    player.progress(null);
+    try {
+      const { samples, sampleRate } = await device.decode(blob, { sampleRate: 16000 });
+      if (mine === token) player.load(samples, sampleRate);
+    } catch (error) {
+      if (mine === token) showNote(error.message || String(error), true);
+    }
+  }
+
+  async function start() {
+    if (busy) return;
+    if (!player.input) { showNote("Choose a sample or a file first.", true); return; }
+    busy = true;
+    run.disabled = true;
+    const mine = token;
+    showNote("");
+    setState("run", "Running");
+    try {
+      const result = await device.process(player.input, {
+        model: select.value, sampleRate: player.rate, dryBlend: Number(blend.value),
+        onProgress: (value, phase) => {
+          if (mine !== token) return;
+          if (phase === "load") { setState("run", "Downloading the model"); player.progress(0); }
+          else {
+            player.progress(value);
+            setState("run", "Processing {percent}%", { percent: Math.round(value * 100) });
+          }
+        },
+      });
+      if (mine !== token) return;
+      player.progress(null);
+      player.setOutput(result.output);
+      if (outputUrl) URL.revokeObjectURL(outputUrl);
+      outputUrl = URL.createObjectURL(window.PureSoundWav(result.output, result.sampleRate));
+      download.href = outputUrl;
+      download.download = sourceName.replace(/\.[^.]+$/, "") + "." + result.model + ".wav";
+      download.hidden = false;
+      $("rtf").textContent = result.rtf.toFixed(3);
+      $("threads").textContent = result.threads;
+      $("latency").textContent = Math.round(result.latencyMs) + " ms";
+      $("seconds").textContent = result.seconds.toFixed(1) + " s";
+      $("figures").hidden = false;
+      setState("ok", "Done in {seconds} s", { seconds: result.seconds.toFixed(1) });
+    } catch (error) {
+      player.progress(null);
+      setState("err", "Unavailable");
+      showNote(error.message || String(error), true);
+    } finally {
+      busy = false;
+      run.disabled = false;
+    }
+  }
+
+  for (const chip of document.querySelectorAll("[data-sample]")) {
+    chip.addEventListener("click", async () => {
+      const response = await fetch(chip.dataset.sample);
+      pick(await response.blob(), chip.dataset.sample.split("/").pop(), chip);
+    });
+  }
+  file.addEventListener("change", () => { if (file.files[0]) pick(file.files[0], file.files[0].name); });
+  const drop = $("drop");
+  drop.addEventListener("dragover", (event) => { event.preventDefault(); drop.classList.add("is-dragging"); });
+  drop.addEventListener("dragleave", () => drop.classList.remove("is-dragging"));
+  drop.addEventListener("drop", (event) => {
+    event.preventDefault();
+    drop.classList.remove("is-dragging");
+    const dropped = event.dataTransfer.files[0];
+    if (dropped) pick(dropped, dropped.name);
+  });
+  select.addEventListener("change", describe);
+  blend.addEventListener("input", () => { $("blend-value").value = Number(blend.value).toFixed(2); });
+  run.addEventListener("click", start);
+  site.onLanguage.push(() => {
+    if (state.dataset.text) state.textContent = fmt(state.dataset.text, JSON.parse(state.dataset.vars || "{}"));
+    player.update();
+    dropText();
+  });
+
+  const params = new URLSearchParams(location.search);
+  if (MODELS.some((m) => m.id === params.get("model"))) select.value = params.get("model");
+  describe();
+  const samples = [...document.querySelectorAll("[data-sample]")];
+  (samples.find((chip) => chip.dataset.sampleId === params.get("sample")) || samples[0])?.click();
+  device.status().then((status) => {
+    if (!status.ready) {
+      setState("err", "Unavailable");
+      showNote(status.reason, true);
+      run.disabled = true;
+      return;
+    }
+    for (const option of select.options) option.disabled = !status.models.includes(option.value);
+    $("isolation").hidden = status.isolated;
+    setState("ok", "Ready");
+  });
+})();
+</script>
+</body>
+</html>

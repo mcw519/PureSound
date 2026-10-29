@@ -1,0 +1,40 @@
+{
+  "version": "b983e54ce5b6812e",
+  "models": [
+    {
+      "id": "noise-suppression-dpcrn-mamba-v3",
+      "manifest": "assets/noise-suppression-dpcrn-mamba-v3.json",
+      "model": "assets/noise-suppression-dpcrn-mamba-v3.onnx"
+    },
+    {
+      "id": "noise-suppression-dpcrn-mamba-v2",
+      "manifest": "assets/noise-suppression-dpcrn-mamba-v2.json",
+      "model": "assets/noise-suppression-dpcrn-mamba-v2.onnx"
+    },
+    {
+      "id": "voice-isolate-dpcrn-curriculum-v2",
+      "manifest": "assets/voice-isolate-dpcrn-curriculum-v2.json",
+      "model": "assets/voice-isolate-dpcrn-curriculum-v2.onnx"
+    },
+    {
+      "id": "voice-isolate-dpcrn-curriculum-v1",
+      "manifest": "assets/voice-isolate-dpcrn-curriculum-v1.json",
+      "model": "assets/voice-isolate-dpcrn-curriculum-v1.onnx"
+    }
+  ],
+  "files": {
+    "assets/noise-suppression-dpcrn-mamba-v2.json": "558ee340d606ebde0cebc0543b5e8a1d5bc931a35ae196b44e92ee1ac2035689",
+    "assets/noise-suppression-dpcrn-mamba-v2.onnx": "a28cc5c9736f415a5ed603bd97cc415d11d8088cb2e288d20334a0713f723c86",
+    "assets/noise-suppression-dpcrn-mamba-v3.json": "234acec808c4beaead373388ca8d4932a90360542b733ef921aa921d2f09d62c",
+    "assets/noise-suppression-dpcrn-mamba-v3.onnx": "2a823d830bb87254edda35a8b7ae0743f8d6a203fc4ad3bbad9a2645c1947693",
+    "assets/voice-isolate-dpcrn-curriculum-v1.json": "bf8227e65030a32a250c32d51bde7fead5bec4d0a3e1179b143de551b5fe2015",
+    "assets/voice-isolate-dpcrn-curriculum-v1.onnx": "bf69dfbf03d01415a6307f23d8a10fa985f101d34a2bb6fccfcdc4f3250ff84e",
+    "assets/voice-isolate-dpcrn-curriculum-v2.json": "7ecc2ffa691e7cf054770f3b9e4c08dcd403c71b89dd09aae0dbf1d76b289fde",
+    "assets/voice-isolate-dpcrn-curriculum-v2.onnx": "9a79e9eaeab9a6e288fec7216adb1c87a05b557948e8aa014f5f6096e1f375e4",
+    "runtime/audio.js": "6426aea4ca0d556e30331789f90426f31854b8662bfdee90a3858cf9d0f29194",
+    "runtime/runtime.js": "9e44e07bba609104b60dfd9133a10a53f6e8551944e5e549eb5a4ce1962996fb",
+    "vendor/ort/ort-wasm-simd-threaded.mjs": "5687566b1bc1c8cf628d76c2ddb16b2a3b81a7997273d4666564880495088e57",
+    "vendor/ort/ort-wasm-simd-threaded.wasm": "be0e129949062ad50290ef94683fac8be5bb6156f709e030b7a5f1661a2f6c17",
+    "vendor/ort/ort.wasm.min.mjs": "d5a6d7bc8ee587648fb3742dde8c0094d17cbd3822a68bbec8ddfcd4f2adb88e"
+  }
+}

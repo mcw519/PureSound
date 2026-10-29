@@ -1,0 +1,469 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#010120">
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
+<title>Get started · PureSound</title>
+<link rel="stylesheet" href="css/tokens.css">
+<link rel="stylesheet" href="css/base.css">
+<link rel="stylesheet" href="css/components.css">
+<script>
+(() => {
+  let theme = "auto", lang = null;
+  try { theme = localStorage.getItem("puresound.theme") || "auto"; lang = localStorage.getItem("puresound.lang"); } catch {}
+  const dark = theme === "dark" || (theme === "auto" && matchMedia("(prefers-color-scheme: dark)").matches);
+  document.documentElement.dataset.theme = dark ? "dark" : "light";
+  const zh = lang ? lang === "zh-TW" : String(navigator.language || "").toLowerCase().startsWith("zh");
+  document.documentElement.lang = zh ? "zh-TW" : "en";
+})();
+</script>
+<style>
+/* Platform series: three hues outside the playground's signal colours. */
+:root { --linux: #4b4fd1; --macos: #0f7b84; --windows: #b04a92; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --linux: #a9abff; --macos: #6fd3db; --windows: #f19bd6; } }
+:root[data-theme="dark"] { --linux: #a9abff; --macos: #6fd3db; --windows: #f19bd6; }
+
+/* Content written in both languages shows the reader's one. */
+:root:not([lang="zh-TW"]) .lang-zh, :root[lang="zh-TW"] .lang-en { display: none; }
+
+/* Top bar: the playground's always-dark navigation, laid flat. */
+.topbar { position: relative; z-index: 30; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 18px; min-height: 52px;
+  padding: 8px max(24px, env(safe-area-inset-right, 0px)) 8px max(24px, env(safe-area-inset-left, 0px));
+  color: var(--on-nav); background: var(--nav); border-bottom: 1px solid var(--nav-line); }
+.topbar :focus-visible { outline-color: var(--mint); }
+.brand { display: flex; align-items: center; gap: 9px; color: var(--on-nav); font-size: 16px; font-weight: 600;
+  letter-spacing: -0.01em; text-decoration: none; }
+.brand img { width: 24px; height: 24px; }
+.site-nav { display: flex; flex-wrap: wrap; gap: 2px; }
+.site-nav a { position: relative; display: inline-flex; align-items: center; height: 32px; padding: 0 10px; color: var(--on-nav-2);
+  border-radius: var(--radius-control); font-size: var(--text-body); text-decoration: none; }
+.site-nav a:hover { color: var(--on-nav); background: rgba(255, 255, 255, 0.06); }
+.site-nav a[aria-current="page"] { color: var(--on-nav); background: var(--nav-3); }
+.site-nav a[aria-current="page"]::after { content: ""; position: absolute; left: 10px; right: 10px; bottom: 3px; height: 2px;
+  border-radius: 2px; background: var(--accent); }
+.topbar-end { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-left: auto; }
+.topbar-end > a { color: var(--on-nav-2); font-size: var(--text-small); text-decoration: none; }
+.topbar-end > a:hover { color: var(--on-nav); }
+.nav-switch { display: flex; gap: 2px; padding: 2px; background: rgba(255, 255, 255, 0.06); border-radius: var(--radius-panel); }
+.nav-switch button { min-width: 0; height: 24px; padding: 0 8px; color: var(--on-nav-2); background: transparent; border: 0;
+  border-radius: var(--radius-control); font-size: 11.5px; font-weight: 500; }
+.nav-switch button:hover { color: var(--on-nav); }
+.nav-switch button[aria-pressed="true"] { color: var(--on-nav); background: var(--nav-3); }
+
+/* Page frame and header, as the playground's screens. */
+.page { max-width: 1680px; margin: 0 auto; padding: 0 max(24px, env(safe-area-inset-right, 0px)) 48px max(24px, env(safe-area-inset-left, 0px)); }
+.page-header { position: sticky; z-index: 25; top: 0; display: grid; grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center; gap: 6px 16px; margin: 0 calc(-1 * max(24px, env(safe-area-inset-left, 0px))) 16px;
+  padding: 14px max(24px, env(safe-area-inset-left, 0px));
+  background: color-mix(in srgb, var(--page) 94%, transparent); border-bottom: 1px solid var(--line);
+  -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); }
+.page-header.is-static { position: static; }
+.page-desc { max-width: 96ch; margin: 3px 0 0; color: var(--ink-2); font-size: var(--text-ui); line-height: 1.45; }
+.page-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; }
+a.button { text-decoration: none; }
+
+/* Toolbar and model cards: the playground's Models screen. */
+.toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; margin-bottom: 14px; }
+.search-field { position: relative; min-width: 220px; flex: 1; display: flex; align-items: center; }
+.search-field > span { position: absolute; left: 10px; color: var(--ink-3); font-size: 16px; line-height: 1; pointer-events: none; }
+.search-field input { width: 100%; height: var(--control-h); padding: 0 10px 0 30px; color: var(--ink); background: var(--canvas);
+  border: 1px solid var(--line-strong); border-radius: var(--radius-control); outline: 0; font-size: var(--text-ui); }
+.search-field input:focus { border-color: var(--ink); }
+.search-field input:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+.search-field input::placeholder { color: var(--ink-3); }
+.filter-group { display: flex; align-items: center; gap: 6px; }
+.filter-group > .caps { margin-right: 2px; }
+.toolbar-count { margin-left: auto; color: var(--ink-3); font-family: var(--font-mono); font-size: 11px; white-space: nowrap; }
+.model-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 360px), 1fr)); gap: 12px; }
+.model-card { position: relative; display: flex; flex-direction: column; padding: 16px; overflow: hidden;
+  background: var(--canvas); border: 1px solid var(--line); border-radius: var(--radius-panel); transition: border-color 0.15s ease; }
+.model-card:hover { border-color: var(--line-strong); }
+.model-card.is-default { border-color: color-mix(in srgb, var(--good) 45%, var(--line)); box-shadow: inset 0 2px 0 var(--good); }
+.model-card-top { display: flex; justify-content: space-between; align-items: start; gap: 12px; }
+.model-symbol { width: 36px; height: 36px; display: grid; place-items: center; color: var(--periwinkle); background: var(--nav);
+  border-radius: var(--radius-panel); font-family: var(--font-mono); font-size: 18px; line-height: 1; }
+.model-symbol.sv { color: var(--speaker-ink); background: var(--speaker); }
+.card-heading { margin-top: 12px; }
+.model-card h3 { margin: 0; font-size: var(--text-lead); font-weight: 600; }
+.model-card-subtitle { margin: 2px 0 0; color: var(--ink-3); font-family: var(--font-mono); font-size: 11px; overflow-wrap: anywhere; }
+.model-badges { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0 10px; }
+.badge { display: inline-flex; align-items: center; height: 22px; padding: 0 8px; color: var(--ink-2); background: var(--sunken);
+  border-radius: var(--radius-pill); font-size: 11.5px; font-weight: 500; line-height: 1; white-space: nowrap; }
+.badge-task.sv { color: var(--speaker-ink); background: var(--speaker); }
+.badge-default { color: var(--good); background: var(--good-soft); }
+.badge-candidate, .badge-alternative { color: var(--ink); background: transparent; box-shadow: inset 0 0 0 1px var(--line-strong); }
+.badge-quiet { color: var(--ink-3); background: transparent; box-shadow: inset 0 0 0 1px var(--line); }
+.model-description { display: -webkit-box; margin: 0; overflow: hidden; color: var(--ink-2); font-size: var(--text-ui); line-height: 1.5;
+  -webkit-box-orient: vertical; -webkit-line-clamp: 4; line-clamp: 4; }
+.model-card.is-expanded .model-description { display: block; -webkit-line-clamp: unset; line-clamp: none; }
+.card-more { align-self: flex-start; padding: 4px 0 0; color: var(--ink-2); background: transparent; border: 0; font-size: var(--text-small);
+  text-decoration: underline; text-underline-offset: 3px; }
+.card-more:hover { color: var(--ink); }
+.model-footer { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 12px; padding-top: 12px;
+  margin-top: auto; border-top: 1px solid var(--line); }
+.model-meta { display: grid; gap: 2px; min-width: 0; color: var(--ink-3); font-size: 11.5px; }
+.model-meta strong { overflow: hidden; color: var(--ink); font-family: var(--font-mono); font-size: 11.5px; font-weight: 500;
+  text-overflow: ellipsis; white-space: nowrap; }
+.card-links { display: flex; flex-wrap: wrap; gap: 6px; }
+.card-link { flex: none; display: inline-flex; align-items: center; height: var(--control-h-small); padding: 0 9px; color: var(--ink);
+  background: var(--canvas); border: 1px solid var(--line-strong); border-radius: var(--radius-control); font-size: var(--text-small);
+  font-weight: 500; text-decoration: none; }
+.card-link:hover { background: var(--sunken); }
+.facts { display: flex; flex-wrap: wrap; gap: 4px 18px; margin: 12px 0 0; font-size: var(--text-small); }
+.facts div { display: flex; gap: 6px; align-items: baseline; }
+.facts dt { color: var(--ink-3); } .facts dd { margin: 0; color: var(--ink); }
+
+/* Text rendered from the repository's Markdown. */
+.prose { min-width: 0; max-width: 92ch; color: var(--ink); font-size: var(--text-body); line-height: 1.6; }
+.prose h1 { margin: 0 0 12px; font-size: 22px; }
+.prose h2 { margin: 28px 0 10px; padding-top: 4px; font-size: 17px; }
+.prose h3 { margin: 20px 0 8px; font-size: 15px; }
+.prose h2, .prose h3, .prose h4 { scroll-margin-top: 16px; }
+.prose p, .prose ul, .prose ol { margin: 0 0 12px; color: var(--ink-2); }
+.prose li + li { margin-top: 4px; }
+.prose a { color: var(--ink); text-decoration-color: var(--line-strong); text-underline-offset: 3px; }
+.prose a:hover { text-decoration-color: currentColor; }
+.prose strong { color: var(--ink); }
+.prose code { padding: 1px 4px; background: var(--sunken); border-radius: 3px; }
+/* A long path in running text breaks rather than widening a phone screen. */
+.prose :is(p, li) code { overflow-wrap: anywhere; }
+.prose pre { margin: 0 0 14px; padding: 12px 14px; overflow-x: auto; color: var(--on-nav); background: var(--nav);
+  border-radius: var(--radius-panel); font-size: 12.5px; line-height: 1.5; }
+.prose pre code { padding: 0; color: inherit; background: none; }
+.prose blockquote { margin: 0 0 12px; padding: 2px 14px; border-left: 3px solid var(--line-strong); }
+.prose .table-wrap { margin: 0 0 16px; overflow-x: auto; background: var(--canvas); border: 1px solid var(--line);
+  border-radius: var(--radius-panel); }
+.prose .table th { white-space: normal; }
+.prose .table td { min-width: 7ch; color: var(--ink); }
+/* Identifiers stay whole; a wide table scrolls in its frame instead. */
+.prose .table code { white-space: nowrap; }
+.prose hr { margin: 24px 0; border: 0; border-top: 1px solid var(--line); }
+
+.site-footer { margin-top: 32px; padding-top: 16px; color: var(--ink-3); border-top: 1px solid var(--line); font-size: var(--text-small); }
+.site-footer a { color: var(--ink-2); }
+
+@media (max-width: 760px) {
+  .topbar { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 12px; padding-top: 8px; padding-bottom: 0; }
+  .brand { grid-row: 1; grid-column: 1; }
+  .topbar-end { grid-row: 1; grid-column: 2; justify-self: end; gap: 6px; margin-left: 0; }
+  .topbar-end > a { display: none; }
+  .nav-switch button { padding: 0 6px; }
+  .site-nav { grid-row: 2; grid-column: 1 / -1; flex-wrap: nowrap; margin: 0 -24px; padding: 0 24px 6px; overflow-x: auto;
+    scrollbar-width: none; }
+  .site-nav::-webkit-scrollbar { display: none; }
+  .site-nav a { flex: none; }
+  /* A tall header that stuck would cover much of a phone screen. */
+  .page-header { position: static; grid-template-columns: minmax(0, 1fr); }
+  /* Wider columns scroll sideways instead of stacking a phrase per line. */
+  .prose .table td, .prose .table th { min-width: 13ch; }
+  .page-actions { justify-content: flex-start; }
+  .toolbar-count { margin-left: 0; }
+}
+
+.doc { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 32px; align-items: start; }
+.toc { position: sticky; top: 16px; max-height: calc(100dvh - 32px); overflow: auto; font-size: var(--text-small); }
+.toc ul { margin: 8px 0 0; padding: 0; list-style: none; }
+.toc li { margin: 0; }
+.toc a { display: block; padding: 4px 8px; color: var(--ink-2); border-left: 2px solid var(--line); text-decoration: none; line-height: 1.35; }
+.toc a:hover { color: var(--ink); border-left-color: var(--ink-3); }
+.toc .toc-3 a { padding-left: 20px; font-size: 11.5px; }
+@media (max-width: 900px) { .doc { grid-template-columns: minmax(0, 1fr); } .toc { position: static; max-height: none; } }
+.page-desc p { margin: 0; }</style>
+
+</head>
+<body>
+<header class="topbar">
+<a class="brand" href="index.html"><img src="favicon.svg" alt="">PureSound</a>
+<nav class="site-nav" aria-label="Site"><a href="index.html"><span data-i18n="Home">Home</span></a><a href="start.html" aria-current="page"><span data-i18n="Get started">Get started</span></a><a href="models.html"><span data-i18n="Models">Models</span></a><a href="try.html"><span data-i18n="Try it">Try it</span></a><a href="benchmarks.html"><span data-i18n="Benchmarks">Benchmarks</span></a></nav>
+<div class="topbar-end"><a href="https://github.com/mcw519/PureSound">GitHub</a>
+<div class="nav-switch" role="group" aria-label="Theme"><button type="button" data-theme-choice="auto"><span data-i18n="Auto">Auto</span></button><button type="button" data-theme-choice="light"><span data-i18n="Light">Light</span></button><button type="button" data-theme-choice="dark"><span data-i18n="Dark">Dark</span></button></div>
+<div class="nav-switch" role="group" aria-label="Language"><button type="button" data-lang="en">EN</button><button type="button" data-lang="zh-TW">中文</button></div>
+</div>
+</header>
+<main class="page">
+<header class="page-header is-static">
+<div class="page-heading"><h1><span data-i18n="Get started">Get started</span></h1>
+<div class="page-desc"><div class="lang-en" lang="en"><p>PureSound is a PyTorch toolkit for single-channel speech enhancement: training
+recipes with on-the-fly data synthesis, a benchmark gate, streaming ONNX export,
+and a model zoo you can run from the command line, a local web UI or a small
+standalone Python runtime.</p>
+</div><div class="lang-zh" lang="zh-TW"><p>PureSound 是一套以 PyTorch 開發的單聲道語音增強工具：包含即時合成訓練資料的訓練
+recipe、評測閘門、串流 ONNX 匯出，以及可從指令列、本機 Web UI 或小型獨立 Python
+runtime 執行的 model zoo。</p>
+</div></div></div>
+<div class="page-actions"><a class="button button-secondary button-small" href="https://github.com/mcw519/PureSound/blob/9caa3540fabe328e9a2d9da0a3950ccca1096950/README.md"><span data-i18n="Source on GitHub">Source on GitHub</span></a></div>
+</header>
+<div class="doc"><nav class="toc" aria-label="Contents"><span class="caps"><span data-i18n="Contents">Contents</span></span><div class="lang-en" lang="en"><ul><li class="toc-2"><a href="#install">Install</a></li><li class="toc-2"><a href="#quick-start">Quick start</a></li><li class="toc-2"><a href="#train-a-model">Train a model</a></li><li class="toc-2"><a href="#documentation">Documentation</a></li><li class="toc-2"><a href="#development">Development</a></li><li class="toc-2"><a href="#license">License</a></li></ul></div><div class="lang-zh" lang="zh-TW"><ul><li class="toc-2"><a href="#zh-安裝">安裝</a></li><li class="toc-2"><a href="#zh-快速開始">快速開始</a></li><li class="toc-2"><a href="#zh-訓練模型">訓練模型</a></li><li class="toc-2"><a href="#zh-文件">文件</a></li><li class="toc-2"><a href="#zh-開發">開發</a></li><li class="toc-2"><a href="#zh-授權">授權</a></li></ul></div></nav><article class="prose"><div class="lang-en" lang="en"><h2 id="install">Install</h2>
+<p>Python 3.12 or newer; <a href="https://docs.astral.sh/uv/">uv</a> is the recommended setup.
+Choose one ONNX Runtime backend:</p>
+<pre><code class="language-bash">git clone https://github.com/mcw519/PureSound.git
+cd PureSound
+
+# CPU ONNX Runtime (CoreML on macOS)
+uv sync --locked --group dev --extra cpu
+
+# NVIDIA CUDA ONNX Runtime
+uv sync --locked --group dev --extra cuda
+</code></pre>
+<p>The <code>cpu</code> and <code>cuda</code> extras cannot be installed together, and the <code>asr</code> extra
+(local Whisper for the WER stage) cannot be combined with <code>cuda</code>.</p>
+<p>With pip instead:</p>
+<pre><code class="language-bash">python -m pip install -r requirements.txt
+python -m pip install -e . --no-deps
+</code></pre>
+<h2 id="quick-start">Quick start</h2>
+<p>List the released models and the ONNX Runtime providers available here:</p>
+<pre><code class="language-bash">uv run puresound models list
+uv run puresound providers
+</code></pre>
+<p>Run a model on a file:</p>
+<pre><code class="language-bash">uv run puresound infer voice-isolate-dpcrn-curriculum-v1 \
+  --input audio=input.wav --output audio=output.wav --provider auto
+
+uv run puresound infer speaker-verification-ps-spk-v1-1 \
+  --input enrollment=enrollment.wav --input test=test.wav
+</code></pre>
+<p>The speaker-verification call prints the cosine similarity and the verdict.</p>
+<p>Measure the streaming models on this machine. Which variant is faster depends on
+the CPU, so this is how to choose between a model's default and <code>flash</code> artifacts:</p>
+<pre><code class="language-bash">uv run puresound models benchmark
+</code></pre>
+<p>Start the local web UI at <a href="http://127.0.0.1:7860">http://127.0.0.1:7860</a>:</p>
+<pre><code class="language-bash">uv run puresound web
+</code></pre>
+<p>It has no authentication; do not expose it to an untrusted network.</p>
+<p>To embed a released model in another project without installing PureSound, use
+the standalone runtime in <a href="https://github.com/mcw519/PureSound/blob/9caa3540fabe328e9a2d9da0a3950ccca1096950/sdk/python/README.md"><code>sdk/python</code></a>: it needs only
+NumPy, ONNX Runtime, the ONNX file and its JSON manifest.</p>
+<h2 id="train-a-model">Train a model</h2>
+<p>Each recipe under <code>egs/</code> is run from its own directory, because a recipe's data
+and output paths are relative to it. Point the metafile and folder paths in the
+recipe at your data first.</p>
+<pre><code class="language-bash">cd egs/voice_isolate
+uv run python main.py config/train_dpcrn.yaml --training
+</code></pre>
+<div class="table-wrap"><table class="table">
+<thead>
+<tr>
+<th>task</th>
+<th>recipe</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Noise suppression</td>
+<td><a href="https://github.com/mcw519/PureSound/blob/9caa3540fabe328e9a2d9da0a3950ccca1096950/egs/noise_suppression/README.md">egs/noise_suppression</a></td>
+</tr>
+<tr>
+<td>Voice isolation</td>
+<td><a href="https://github.com/mcw519/PureSound/blob/9caa3540fabe328e9a2d9da0a3950ccca1096950/egs/voice_isolate/README.md">egs/voice_isolate</a></td>
+</tr>
+<tr>
+<td>Speaker embedding</td>
+<td><a href="cards/speaker-embedding.html">egs/speaker_embedding</a></td>
+</tr>
+<tr>
+<td>Target speaker extraction (frozen legacy)</td>
+<td><a href="https://github.com/mcw519/PureSound/blob/9caa3540fabe328e9a2d9da0a3950ccca1096950/egs/target_speaker_extraction/README.md">egs/target_speaker_extraction</a></td>
+</tr>
+<tr>
+<td>RIR bank generation</td>
+<td><a href="https://github.com/mcw519/PureSound/blob/9caa3540fabe328e9a2d9da0a3950ccca1096950/egs/rir_generation/README.md">egs/rir_generation</a></td>
+</tr>
+</tbody>
+</table></div>
+<h2 id="documentation">Documentation</h2>
+<p><a href="https://github.com/mcw519/PureSound/blob/9caa3540fabe328e9a2d9da0a3950ccca1096950/docs/index.md">docs/index.md</a> is the entry point, in three parts:</p>
+<ul>
+<li><a href="https://github.com/mcw519/PureSound/blob/9caa3540fabe328e9a2d9da0a3950ccca1096950/docs/architecture/index.md">Architecture</a> — how the packages fit together and
+how data flows from corpus to deployment</li>
+<li><a href="https://github.com/mcw519/PureSound/blob/9caa3540fabe328e9a2d9da0a3950ccca1096950/docs/index.md#algorithms">Algorithms</a> — what each model, loss, synthesis stage
+and metric computes</li>
+<li><a href="https://github.com/mcw519/PureSound/blob/9caa3540fabe328e9a2d9da0a3950ccca1096950/docs/index.md#usage">Usage</a> — preparing data, training, evaluating, exporting
+and deploying</li>
+</ul>
+<p>Where a new file belongs: <a href="https://github.com/mcw519/PureSound/blob/9caa3540fabe328e9a2d9da0a3950ccca1096950/docs/repository_layout.md">docs/repository_layout.md</a>.</p>
+<h2 id="development">Development</h2>
+<pre><code class="language-bash">uv run python test/run_repo_checks.py --suite standard   # everyday
+uv run python test/run_repo_checks.py                    # full suite, before a release
+./build_puresound.sh                                     # build the package
+</code></pre>
+<pre><code class="language-text">puresound/   the library
+egs/         recipe drivers, configs, released checkpoints
+docs/        documentation
+model_zoo/   released-model catalog
+sdk/python/  standalone streaming runtime
+test/        tests and public fixtures
+</code></pre>
+<h2 id="license">License</h2>
+<p>Original PureSound code, SDKs, configuration files, documentation, and models
+trained by Milo Wu or PureSound contributors are licensed under <a href="https://github.com/mcw519/PureSound/blob/9caa3540fabe328e9a2d9da0a3950ccca1096950/LICENSE">Apache-2.0</a>,
+including the model zoo's checkpoints and ONNX exports. Others may use, modify,
+use commercially, and redistribute these models under the license's terms.
+See <a href="https://github.com/mcw519/PureSound/blob/9caa3540fabe328e9a2d9da0a3950ccca1096950/NOTICE">NOTICE</a> for the scope and exclusions. Third-party material, including
+third-party models, retains its own license. Datasets and audio recordings are
+excluded unless explicitly licensed otherwise; check their individual license and
+provenance information before reuse.</p>
+</div><div class="lang-zh" lang="zh-TW"><h2 id="zh-安裝">安裝</h2>
+<p>需要 Python 3.12 以上；建議使用 <a href="https://docs.astral.sh/uv/">uv</a>。選擇一種 ONNX
+Runtime backend：</p>
+<pre><code class="language-bash">git clone https://github.com/mcw519/PureSound.git
+cd PureSound
+
+# CPU 版 ONNX Runtime（macOS 上為 CoreML）
+uv sync --locked --group dev --extra cpu
+
+# NVIDIA CUDA 版 ONNX Runtime
+uv sync --locked --group dev --extra cuda
+</code></pre>
+<p><code>cpu</code> 與 <code>cuda</code> extra 不能同時安裝，<code>asr</code> extra（WER stage 用的本機 Whisper）也
+不能與 <code>cuda</code> 一起使用。</p>
+<p>改用 pip：</p>
+<pre><code class="language-bash">python -m pip install -r requirements.txt
+python -m pip install -e . --no-deps
+</code></pre>
+<h2 id="zh-快速開始">快速開始</h2>
+<p>列出已發布模型與這台機器可用的 ONNX Runtime provider：</p>
+<pre><code class="language-bash">uv run puresound models list
+uv run puresound providers
+</code></pre>
+<p>對一個檔案執行模型：</p>
+<pre><code class="language-bash">uv run puresound infer voice-isolate-dpcrn-curriculum-v1 \
+  --input audio=input.wav --output audio=output.wav --provider auto
+
+uv run puresound infer speaker-verification-ps-spk-v1-1 \
+  --input enrollment=enrollment.wav --input test=test.wav
+</code></pre>
+<p>語者驗證會輸出 cosine similarity 與判定結果。</p>
+<p>在這台機器上量串流模型的速度。哪個版本比較快取決於 CPU，要在預設版與 <code>flash</code> 版之間
+選擇時就用這個：</p>
+<pre><code class="language-bash">uv run puresound models benchmark
+</code></pre>
+<p>啟動本機 Web UI（<a href="http://127.0.0.1:7860">http://127.0.0.1:7860</a>）：</p>
+<pre><code class="language-bash">uv run puresound web
+</code></pre>
+<p>它沒有驗證機制，請勿開放到不可信任的網路。</p>
+<p>若要在其他專案中嵌入已發布模型而不安裝 PureSound，請用
+<a href="https://github.com/mcw519/PureSound/blob/9caa3540fabe328e9a2d9da0a3950ccca1096950/sdk/python/README.zh-TW.md"><code>sdk/python</code></a> 的獨立 runtime：只需要 NumPy、ONNX
+Runtime、ONNX 檔與它的 JSON manifest。</p>
+<h2 id="zh-訓練模型">訓練模型</h2>
+<p><code>egs/</code> 下的每個 recipe 都要在自己的目錄裡執行，因為 recipe 裡的資料與輸出路徑
+是相對於該目錄。請先把 recipe 裡的 metafile 與資料夾路徑指向你的資料。</p>
+<pre><code class="language-bash">cd egs/voice_isolate
+uv run python main.py config/train_dpcrn.yaml --training
+</code></pre>
+<div class="table-wrap"><table class="table">
+<thead>
+<tr>
+<th>任務</th>
+<th>recipe</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>降噪</td>
+<td><a href="https://github.com/mcw519/PureSound/blob/9caa3540fabe328e9a2d9da0a3950ccca1096950/egs/noise_suppression/README.zh-TW.md">egs/noise_suppression</a></td>
+</tr>
+<tr>
+<td>人聲分離</td>
+<td><a href="https://github.com/mcw519/PureSound/blob/9caa3540fabe328e9a2d9da0a3950ccca1096950/egs/voice_isolate/README.zh-TW.md">egs/voice_isolate</a></td>
+</tr>
+<tr>
+<td>語者 embedding</td>
+<td><a href="cards/speaker-embedding.html">egs/speaker_embedding</a></td>
+</tr>
+<tr>
+<td>目標語者萃取（凍結的 legacy）</td>
+<td><a href="https://github.com/mcw519/PureSound/blob/9caa3540fabe328e9a2d9da0a3950ccca1096950/egs/target_speaker_extraction/README.zh-TW.md">egs/target_speaker_extraction</a></td>
+</tr>
+<tr>
+<td>RIR bank 生成</td>
+<td><a href="https://github.com/mcw519/PureSound/blob/9caa3540fabe328e9a2d9da0a3950ccca1096950/egs/rir_generation/README.zh-TW.md">egs/rir_generation</a></td>
+</tr>
+</tbody>
+</table></div>
+<h2 id="zh-文件">文件</h2>
+<p>入口是 <a href="https://github.com/mcw519/PureSound/blob/9caa3540fabe328e9a2d9da0a3950ccca1096950/docs/index.zh-TW.md">docs/index.zh-TW.md</a>，分成三部分：</p>
+<ul>
+<li><a href="https://github.com/mcw519/PureSound/blob/9caa3540fabe328e9a2d9da0a3950ccca1096950/docs/architecture/index.zh-TW.md">架構</a>——各 package 如何組合，以及資料如何從
+語料流到部署</li>
+<li><a href="https://github.com/mcw519/PureSound/blob/9caa3540fabe328e9a2d9da0a3950ccca1096950/docs/index.zh-TW.md#%E6%BC%94%E7%AE%97%E6%B3%95">演算法</a>——每個模型、loss、合成階段與指標計算什麼</li>
+<li><a href="https://github.com/mcw519/PureSound/blob/9caa3540fabe328e9a2d9da0a3950ccca1096950/docs/index.zh-TW.md#%E4%BD%BF%E7%94%A8%E6%96%B9%E5%BC%8F">使用方式</a>——準備資料、訓練、評測、匯出與部署</li>
+</ul>
+<p>新檔案該放哪：<a href="https://github.com/mcw519/PureSound/blob/9caa3540fabe328e9a2d9da0a3950ccca1096950/docs/repository_layout.zh-TW.md">docs/repository_layout.zh-TW.md</a>。</p>
+<h2 id="zh-開發">開發</h2>
+<pre><code class="language-bash">uv run python test/run_repo_checks.py --suite standard   # 日常檢查
+uv run python test/run_repo_checks.py                    # 完整測試，release 前執行
+./build_puresound.sh                                     # 建立 package
+</code></pre>
+<pre><code class="language-text">puresound/   函式庫
+egs/         recipe driver、設定檔、已發布 checkpoint
+docs/        文件
+model_zoo/   已發布模型目錄
+sdk/python/  獨立串流 runtime
+test/        測試與公開 test fixtures
+</code></pre>
+<h2 id="zh-授權">授權</h2>
+<p>PureSound 自有程式碼、SDK、設定檔、文件，以及 Milo Wu 或 PureSound 貢獻者自行
+訓練的模型均採用 <a href="https://github.com/mcw519/PureSound/blob/9caa3540fabe328e9a2d9da0a3950ccca1096950/LICENSE">Apache-2.0</a>，包含 model zoo 發布的 checkpoint 與
+ONNX 匯出。其他人可以依授權條款使用、修改、商用與再散佈這些模型。
+適用範圍與排除項目請見 <a href="https://github.com/mcw519/PureSound/blob/9caa3540fabe328e9a2d9da0a3950ccca1096950/NOTICE">NOTICE</a>。第三方內容（包含第三方模型）保留
+各自的授權。資料集與音訊錄音除非另有明確授權，均不包含在此次 Apache-2.0
+授權中；使用前請查閱各項目的授權與來源資訊。</p>
+</div></article></div>
+<footer class="site-footer"><span data-i18n="Built from">Built from</span> <a href="https://github.com/mcw519/PureSound/tree/9caa3540fabe328e9a2d9da0a3950ccca1096950"><code>9caa3540fabe</code></a> · Apache-2.0</footer>
+</main>
+<script>
+(() => {
+  const ZH = {"Home": "首頁", "Get started": "開始使用", "Models": "模型庫", "Try it": "線上試用", "Benchmarks": "效能量測", "Theme": "主題", "Auto": "自動", "Light": "淺色", "Dark": "深色", "Language": "語言", "Voice isolation": "人聲分離", "Noise suppression": "雜訊抑制", "Speaker verification": "語者驗證", "default": "預設", "candidate": "候選", "alternative": "替代", "fallback": "備援", "released": "已發布", "reference": "參考", "experimental": "實驗", "All": "全部", "More": "展開", "Less": "收合", "Search models": "搜尋模型", "Task": "任務", "Role": "角色", "{shown} of {total} models": "{shown} / {total} 個模型", "No models match these filters.": "沒有符合篩選條件的模型。", "Model card": "模型卡", "Contents": "目錄", "Source on GitHub": "GitHub 原始檔", "Built from": "產生自", "Try it in your browser": "在瀏覽器試用", "Streaming": "串流", "Model zoo": "模型庫", "Sample rate": "取樣率", "Look-ahead": "前瞻延遲", "Recommended": "建議設定", "Download": "下載", "Run it": "執行方式", "Model cards": "模型卡", "float weights": "浮點權重", "Models in this card": "此模型卡涵蓋的模型", "yes": "是", "no": "否", "Try a model in your browser": "在瀏覽器試用模型", "The released streaming models run on this device in ONNX Runtime Web (WebAssembly). Audio never leaves the browser.": "已發布的串流模型在這台裝置上以 ONNX Runtime Web（WebAssembly）執行，音訊不會離開瀏覽器。", "Model": "模型", "Audio": "音訊", "Samples": "範例", "Drop audio here": "將音檔拖放到這裡", "or click to browse · any rate, prepared to mono 16 kHz": "或點選瀏覽 · 任何取樣率，會轉成單聲道 16 kHz", "Replace audio": "替換音檔", "{name} · drop or click to choose another file": "{name} · 拖放或點選以選擇其他檔案", "Model output share": "模型輸出比例", "dry_blend: the share of the model output mixed with the untouched input.": "dry_blend：模型輸出與原始輸入混合時，模型輸出所佔的比例。", "input": "原始輸入", "model": "模型輸出", "Run": "執行", "Running": "執行中", "Ready": "就緒", "Unavailable": "無法使用", "Downloading the model": "下載模型中", "Processing {percent}%": "處理中 {percent}%", "Done in {seconds} s": "{seconds} 秒完成", "Input": "輸入", "Output": "輸出", "Download output": "下載輸出", "Real-time factor": "即時率", "Threads": "執行緒", "Processing time": "處理時間", "Choose a sample or a file first.": "請先選一段範例或一個檔案。", "Two talkers": "兩位說話者", "Near talker, far talker": "近處與遠處的說話者", "Speech in noise": "噪音中的語音", "This page is not cross-origin isolated, so models run on one thread here.": "這個頁面沒有跨來源隔離（cross-origin isolation），模型只能以單執行緒執行。", "Lower is faster; below 1 keeps up with real time.": "數字越小越快；低於 1 即可跟上即時。", "This build of the site has no on-device payload.": "這個版本的網站沒有附上裝置端推論檔案。", "Clean up speech in real time, on an ordinary CPU": "在一般 CPU 上即時清理語音", "Remove background noise and distant talkers from a recording or a live stream. The released models run in this browser, from the command line, or inside your own app.": "把錄音或即時串流裡的背景噪音與遠處的說話聲去掉。已發布的模型可以直接在瀏覽器、指令列，或你自己的應用程式裡執行。", "Clean it up": "開始清理", "Original": "原始", "Cleaned": "清理後", "Runs in this browser. Nothing is uploaded.": "在這個瀏覽器裡執行，不會上傳任何資料。", "Cleaning {percent}%": "清理中 {percent}%", "Cleaned in {seconds} s on this device": "在這台裝置上花了 {seconds} 秒清理完成", "Pick a clip, then press Clean it up.": "選一段音訊，再按「開始清理」。", "This browser can't run the models here. Try the command line instead.": "這個瀏覽器無法在這裡執行模型，請改用指令列。", "What do you need?": "你需要什麼？", "How to run it": "執行方式", "In your browser": "在瀏覽器裡", "Nothing to install: run the released models on your own audio.": "不用安裝，直接用已發布的模型處理你的音訊。", "From the command line": "從指令列", "Process files with one command after installing with uv or pip.": "用 uv 或 pip 安裝後，一行指令就能處理檔案。", "In a local web app": "在本機 Web 介面", "Compare models, record from a microphone and inspect the results on your own machine.": "在自己的電腦上比較模型、用麥克風錄音並檢視結果。", "Inside your own app": "放進你的應用程式", "A standalone runtime that needs only NumPy, ONNX Runtime and the model file.": "獨立的 runtime，只需要 NumPy、ONNX Runtime 與模型檔。", "Install guide": "安裝說明", "Python SDK": "Python SDK", "Web SDK": "Web SDK", "Speed on one CPU thread": "單一 CPU 執行緒的速度", "Real-time factor of each default model in the latest CI run: 0.25 means a minute of audio takes 15 seconds. Lower is faster; below 1 keeps up with a live stream.": "各預設模型在最近一次 CI 量測的即時率：0.25 代表一分鐘的音訊要 15 秒處理。數字越小越快；低於 1 就跟得上即時串流。", "See all benchmarks": "查看所有量測", "Learn more": "延伸閱讀", "Documentation": "文件", "Train your own model": "訓練自己的模型", "License": "授權", "Voice isolation model card": "人聲分離模型卡", "Noise suppression model card": "雜訊抑制模型卡", "Speaker verification model card": "語者驗證模型卡"};
+  const root = document.documentElement;
+  const tr = (text) => (root.lang === "zh-TW" && ZH[text]) || text;
+  const site = { tr, onLanguage: [] };
+  window.PureSoundSite = site;
+
+  function translate() {
+    for (const el of document.querySelectorAll("[data-i18n]")) el.textContent = tr(el.dataset.i18n);
+    for (const el of document.querySelectorAll("[data-i18n-attr]")) {
+      for (const attr of el.dataset.i18nAttr.split(",")) {
+        // A dataset key may not hold "-" before a lowercase letter.
+        const key = "src_" + attr.replace(/[^a-z]/gi, "");
+        el.dataset[key] ??= el.getAttribute(attr) || "";
+        el.setAttribute(attr, tr(el.dataset[key]));
+      }
+    }
+    for (const button of document.querySelectorAll("[data-lang]")) button.setAttribute("aria-pressed", String(button.dataset.lang === root.lang));
+    for (const listener of site.onLanguage) listener();
+  }
+  site.translate = translate;
+
+  const themeButtons = document.querySelectorAll("[data-theme-choice]");
+  function setTheme(choice) {
+    try { localStorage.setItem("puresound.theme", choice); } catch {}
+    const dark = choice === "dark" || (choice === "auto" && matchMedia("(prefers-color-scheme: dark)").matches);
+    root.dataset.theme = dark ? "dark" : "light";
+    for (const button of themeButtons) button.setAttribute("aria-pressed", String(button.dataset.themeChoice === choice));
+  }
+  let theme = "auto";
+  try { theme = localStorage.getItem("puresound.theme") || "auto"; } catch {}
+  for (const button of themeButtons) button.addEventListener("click", () => setTheme(button.dataset.themeChoice));
+  setTheme(theme);
+  for (const button of document.querySelectorAll("[data-lang]")) {
+    button.addEventListener("click", () => {
+      root.lang = button.dataset.lang;
+      try { localStorage.setItem("puresound.lang", root.lang); } catch {}
+      translate();
+    });
+  }
+  document.addEventListener("DOMContentLoaded", () => {
+    translate();
+    const current = document.querySelector(".site-nav [aria-current]");
+    const nav = current?.parentElement;
+    if (nav && nav.scrollWidth > nav.clientWidth) nav.scrollLeft = current.offsetLeft - nav.clientWidth / 2 + current.offsetWidth / 2;
+  });
+})();
+</script>
+
+</body>
+</html>

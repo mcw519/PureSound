@@ -1,0 +1,1236 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#010120">
+<link rel="icon" type="image/svg+xml" href="../favicon.svg">
+<title>noise_suppression — pretrained checkpoints · PureSound</title>
+<link rel="stylesheet" href="../css/tokens.css">
+<link rel="stylesheet" href="../css/base.css">
+<link rel="stylesheet" href="../css/components.css">
+<script>
+(() => {
+  let theme = "auto", lang = null;
+  try { theme = localStorage.getItem("puresound.theme") || "auto"; lang = localStorage.getItem("puresound.lang"); } catch {}
+  const dark = theme === "dark" || (theme === "auto" && matchMedia("(prefers-color-scheme: dark)").matches);
+  document.documentElement.dataset.theme = dark ? "dark" : "light";
+  const zh = lang ? lang === "zh-TW" : String(navigator.language || "").toLowerCase().startsWith("zh");
+  document.documentElement.lang = zh ? "zh-TW" : "en";
+})();
+</script>
+<style>
+/* Platform series: three hues outside the playground's signal colours. */
+:root { --linux: #4b4fd1; --macos: #0f7b84; --windows: #b04a92; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --linux: #a9abff; --macos: #6fd3db; --windows: #f19bd6; } }
+:root[data-theme="dark"] { --linux: #a9abff; --macos: #6fd3db; --windows: #f19bd6; }
+
+/* Content written in both languages shows the reader's one. */
+:root:not([lang="zh-TW"]) .lang-zh, :root[lang="zh-TW"] .lang-en { display: none; }
+
+/* Top bar: the playground's always-dark navigation, laid flat. */
+.topbar { position: relative; z-index: 30; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 18px; min-height: 52px;
+  padding: 8px max(24px, env(safe-area-inset-right, 0px)) 8px max(24px, env(safe-area-inset-left, 0px));
+  color: var(--on-nav); background: var(--nav); border-bottom: 1px solid var(--nav-line); }
+.topbar :focus-visible { outline-color: var(--mint); }
+.brand { display: flex; align-items: center; gap: 9px; color: var(--on-nav); font-size: 16px; font-weight: 600;
+  letter-spacing: -0.01em; text-decoration: none; }
+.brand img { width: 24px; height: 24px; }
+.site-nav { display: flex; flex-wrap: wrap; gap: 2px; }
+.site-nav a { position: relative; display: inline-flex; align-items: center; height: 32px; padding: 0 10px; color: var(--on-nav-2);
+  border-radius: var(--radius-control); font-size: var(--text-body); text-decoration: none; }
+.site-nav a:hover { color: var(--on-nav); background: rgba(255, 255, 255, 0.06); }
+.site-nav a[aria-current="page"] { color: var(--on-nav); background: var(--nav-3); }
+.site-nav a[aria-current="page"]::after { content: ""; position: absolute; left: 10px; right: 10px; bottom: 3px; height: 2px;
+  border-radius: 2px; background: var(--accent); }
+.topbar-end { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-left: auto; }
+.topbar-end > a { color: var(--on-nav-2); font-size: var(--text-small); text-decoration: none; }
+.topbar-end > a:hover { color: var(--on-nav); }
+.nav-switch { display: flex; gap: 2px; padding: 2px; background: rgba(255, 255, 255, 0.06); border-radius: var(--radius-panel); }
+.nav-switch button { min-width: 0; height: 24px; padding: 0 8px; color: var(--on-nav-2); background: transparent; border: 0;
+  border-radius: var(--radius-control); font-size: 11.5px; font-weight: 500; }
+.nav-switch button:hover { color: var(--on-nav); }
+.nav-switch button[aria-pressed="true"] { color: var(--on-nav); background: var(--nav-3); }
+
+/* Page frame and header, as the playground's screens. */
+.page { max-width: 1680px; margin: 0 auto; padding: 0 max(24px, env(safe-area-inset-right, 0px)) 48px max(24px, env(safe-area-inset-left, 0px)); }
+.page-header { position: sticky; z-index: 25; top: 0; display: grid; grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center; gap: 6px 16px; margin: 0 calc(-1 * max(24px, env(safe-area-inset-left, 0px))) 16px;
+  padding: 14px max(24px, env(safe-area-inset-left, 0px));
+  background: color-mix(in srgb, var(--page) 94%, transparent); border-bottom: 1px solid var(--line);
+  -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); }
+.page-header.is-static { position: static; }
+.page-desc { max-width: 96ch; margin: 3px 0 0; color: var(--ink-2); font-size: var(--text-ui); line-height: 1.45; }
+.page-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; }
+a.button { text-decoration: none; }
+
+/* Toolbar and model cards: the playground's Models screen. */
+.toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; margin-bottom: 14px; }
+.search-field { position: relative; min-width: 220px; flex: 1; display: flex; align-items: center; }
+.search-field > span { position: absolute; left: 10px; color: var(--ink-3); font-size: 16px; line-height: 1; pointer-events: none; }
+.search-field input { width: 100%; height: var(--control-h); padding: 0 10px 0 30px; color: var(--ink); background: var(--canvas);
+  border: 1px solid var(--line-strong); border-radius: var(--radius-control); outline: 0; font-size: var(--text-ui); }
+.search-field input:focus { border-color: var(--ink); }
+.search-field input:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+.search-field input::placeholder { color: var(--ink-3); }
+.filter-group { display: flex; align-items: center; gap: 6px; }
+.filter-group > .caps { margin-right: 2px; }
+.toolbar-count { margin-left: auto; color: var(--ink-3); font-family: var(--font-mono); font-size: 11px; white-space: nowrap; }
+.model-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 360px), 1fr)); gap: 12px; }
+.model-card { position: relative; display: flex; flex-direction: column; padding: 16px; overflow: hidden;
+  background: var(--canvas); border: 1px solid var(--line); border-radius: var(--radius-panel); transition: border-color 0.15s ease; }
+.model-card:hover { border-color: var(--line-strong); }
+.model-card.is-default { border-color: color-mix(in srgb, var(--good) 45%, var(--line)); box-shadow: inset 0 2px 0 var(--good); }
+.model-card-top { display: flex; justify-content: space-between; align-items: start; gap: 12px; }
+.model-symbol { width: 36px; height: 36px; display: grid; place-items: center; color: var(--periwinkle); background: var(--nav);
+  border-radius: var(--radius-panel); font-family: var(--font-mono); font-size: 18px; line-height: 1; }
+.model-symbol.sv { color: var(--speaker-ink); background: var(--speaker); }
+.card-heading { margin-top: 12px; }
+.model-card h3 { margin: 0; font-size: var(--text-lead); font-weight: 600; }
+.model-card-subtitle { margin: 2px 0 0; color: var(--ink-3); font-family: var(--font-mono); font-size: 11px; overflow-wrap: anywhere; }
+.model-badges { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0 10px; }
+.badge { display: inline-flex; align-items: center; height: 22px; padding: 0 8px; color: var(--ink-2); background: var(--sunken);
+  border-radius: var(--radius-pill); font-size: 11.5px; font-weight: 500; line-height: 1; white-space: nowrap; }
+.badge-task.sv { color: var(--speaker-ink); background: var(--speaker); }
+.badge-default { color: var(--good); background: var(--good-soft); }
+.badge-candidate, .badge-alternative { color: var(--ink); background: transparent; box-shadow: inset 0 0 0 1px var(--line-strong); }
+.badge-quiet { color: var(--ink-3); background: transparent; box-shadow: inset 0 0 0 1px var(--line); }
+.model-description { display: -webkit-box; margin: 0; overflow: hidden; color: var(--ink-2); font-size: var(--text-ui); line-height: 1.5;
+  -webkit-box-orient: vertical; -webkit-line-clamp: 4; line-clamp: 4; }
+.model-card.is-expanded .model-description { display: block; -webkit-line-clamp: unset; line-clamp: none; }
+.card-more { align-self: flex-start; padding: 4px 0 0; color: var(--ink-2); background: transparent; border: 0; font-size: var(--text-small);
+  text-decoration: underline; text-underline-offset: 3px; }
+.card-more:hover { color: var(--ink); }
+.model-footer { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 12px; padding-top: 12px;
+  margin-top: auto; border-top: 1px solid var(--line); }
+.model-meta { display: grid; gap: 2px; min-width: 0; color: var(--ink-3); font-size: 11.5px; }
+.model-meta strong { overflow: hidden; color: var(--ink); font-family: var(--font-mono); font-size: 11.5px; font-weight: 500;
+  text-overflow: ellipsis; white-space: nowrap; }
+.card-links { display: flex; flex-wrap: wrap; gap: 6px; }
+.card-link { flex: none; display: inline-flex; align-items: center; height: var(--control-h-small); padding: 0 9px; color: var(--ink);
+  background: var(--canvas); border: 1px solid var(--line-strong); border-radius: var(--radius-control); font-size: var(--text-small);
+  font-weight: 500; text-decoration: none; }
+.card-link:hover { background: var(--sunken); }
+.facts { display: flex; flex-wrap: wrap; gap: 4px 18px; margin: 12px 0 0; font-size: var(--text-small); }
+.facts div { display: flex; gap: 6px; align-items: baseline; }
+.facts dt { color: var(--ink-3); } .facts dd { margin: 0; color: var(--ink); }
+
+/* Text rendered from the repository's Markdown. */
+.prose { min-width: 0; max-width: 92ch; color: var(--ink); font-size: var(--text-body); line-height: 1.6; }
+.prose h1 { margin: 0 0 12px; font-size: 22px; }
+.prose h2 { margin: 28px 0 10px; padding-top: 4px; font-size: 17px; }
+.prose h3 { margin: 20px 0 8px; font-size: 15px; }
+.prose h2, .prose h3, .prose h4 { scroll-margin-top: 16px; }
+.prose p, .prose ul, .prose ol { margin: 0 0 12px; color: var(--ink-2); }
+.prose li + li { margin-top: 4px; }
+.prose a { color: var(--ink); text-decoration-color: var(--line-strong); text-underline-offset: 3px; }
+.prose a:hover { text-decoration-color: currentColor; }
+.prose strong { color: var(--ink); }
+.prose code { padding: 1px 4px; background: var(--sunken); border-radius: 3px; }
+/* A long path in running text breaks rather than widening a phone screen. */
+.prose :is(p, li) code { overflow-wrap: anywhere; }
+.prose pre { margin: 0 0 14px; padding: 12px 14px; overflow-x: auto; color: var(--on-nav); background: var(--nav);
+  border-radius: var(--radius-panel); font-size: 12.5px; line-height: 1.5; }
+.prose pre code { padding: 0; color: inherit; background: none; }
+.prose blockquote { margin: 0 0 12px; padding: 2px 14px; border-left: 3px solid var(--line-strong); }
+.prose .table-wrap { margin: 0 0 16px; overflow-x: auto; background: var(--canvas); border: 1px solid var(--line);
+  border-radius: var(--radius-panel); }
+.prose .table th { white-space: normal; }
+.prose .table td { min-width: 7ch; color: var(--ink); }
+/* Identifiers stay whole; a wide table scrolls in its frame instead. */
+.prose .table code { white-space: nowrap; }
+.prose hr { margin: 24px 0; border: 0; border-top: 1px solid var(--line); }
+
+.site-footer { margin-top: 32px; padding-top: 16px; color: var(--ink-3); border-top: 1px solid var(--line); font-size: var(--text-small); }
+.site-footer a { color: var(--ink-2); }
+
+@media (max-width: 760px) {
+  .topbar { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 12px; padding-top: 8px; padding-bottom: 0; }
+  .brand { grid-row: 1; grid-column: 1; }
+  .topbar-end { grid-row: 1; grid-column: 2; justify-self: end; gap: 6px; margin-left: 0; }
+  .topbar-end > a { display: none; }
+  .nav-switch button { padding: 0 6px; }
+  .site-nav { grid-row: 2; grid-column: 1 / -1; flex-wrap: nowrap; margin: 0 -24px; padding: 0 24px 6px; overflow-x: auto;
+    scrollbar-width: none; }
+  .site-nav::-webkit-scrollbar { display: none; }
+  .site-nav a { flex: none; }
+  /* A tall header that stuck would cover much of a phone screen. */
+  .page-header { position: static; grid-template-columns: minmax(0, 1fr); }
+  /* Wider columns scroll sideways instead of stacking a phrase per line. */
+  .prose .table td, .prose .table th { min-width: 13ch; }
+  .page-actions { justify-content: flex-start; }
+  .toolbar-count { margin-left: 0; }
+}
+
+.doc { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 32px; align-items: start; }
+.toc { position: sticky; top: 16px; max-height: calc(100dvh - 32px); overflow: auto; font-size: var(--text-small); }
+.toc ul { margin: 8px 0 0; padding: 0; list-style: none; }
+.toc li { margin: 0; }
+.toc a { display: block; padding: 4px 8px; color: var(--ink-2); border-left: 2px solid var(--line); text-decoration: none; line-height: 1.35; }
+.toc a:hover { color: var(--ink); border-left-color: var(--ink-3); }
+.toc .toc-3 a { padding-left: 20px; font-size: 11.5px; }
+@media (max-width: 900px) { .doc { grid-template-columns: minmax(0, 1fr); } .toc { position: static; max-height: none; } }
+
+.card-models { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.card-models .chip { text-decoration: none; }
+</style>
+
+</head>
+<body>
+<header class="topbar">
+<a class="brand" href="../index.html"><img src="../favicon.svg" alt="">PureSound</a>
+<nav class="site-nav" aria-label="Site"><a href="../index.html"><span data-i18n="Home">Home</span></a><a href="../start.html"><span data-i18n="Get started">Get started</span></a><a href="../models.html" aria-current="page"><span data-i18n="Models">Models</span></a><a href="../try.html"><span data-i18n="Try it">Try it</span></a><a href="../benchmarks.html"><span data-i18n="Benchmarks">Benchmarks</span></a></nav>
+<div class="topbar-end"><a href="https://github.com/mcw519/PureSound">GitHub</a>
+<div class="nav-switch" role="group" aria-label="Theme"><button type="button" data-theme-choice="auto"><span data-i18n="Auto">Auto</span></button><button type="button" data-theme-choice="light"><span data-i18n="Light">Light</span></button><button type="button" data-theme-choice="dark"><span data-i18n="Dark">Dark</span></button></div>
+<div class="nav-switch" role="group" aria-label="Language"><button type="button" data-lang="en">EN</button><button type="button" data-lang="zh-TW">中文</button></div>
+</div>
+</header>
+<main class="page">
+<header class="page-header is-static">
+<div class="page-heading"><span class="caps"><span data-i18n="Model card">Model card</span></span>
+<h1><span class="lang-en" lang="en">noise_suppression — pretrained checkpoints</span><span class="lang-zh" lang="zh-TW">noise_suppression — 預訓練 checkpoint</span></h1>
+<div class="card-models" aria-label="Models in this card"><a class="chip" href="../models.html#noise-suppression-dpcrn-mamba-v2">noise-suppression-dpcrn-mamba-v2 <small>default</small></a><a class="chip" href="../models.html#noise-suppression-dpcrn-mamba-v1">noise-suppression-dpcrn-mamba-v1 <small>candidate</small></a><a class="chip" href="../models.html#noise-suppression-dpcrn-mamba-v3">noise-suppression-dpcrn-mamba-v3 <small>candidate</small></a></div></div>
+<div class="page-actions"><a class="button button-secondary button-small" href="../cards/noise-suppression.html"><span data-i18n="Source on GitHub">Source on GitHub</span></a></div>
+</header>
+<div class="doc"><nav class="toc" aria-label="Contents"><span class="caps"><span data-i18n="Contents">Contents</span></span><div class="lang-en" lang="en"><ul><li class="toc-2"><a href="#versions">Versions</a></li><li class="toc-2"><a href="#measurements">Measurements</a></li><li class="toc-2"><a href="#release-decisions">Release decisions</a></li><li class="toc-2"><a href="#flash-int8-variants">flash (int8) variants</a></li><li class="toc-3"><a href="#v3">v3</a></li><li class="toc-3"><a href="#v1-and-v2">v1 and v2</a></li><li class="toc-2"><a href="#pcs-post-filter-optional">PCS post-filter (optional)</a></li><li class="toc-2"><a href="#reproduce-v3">Reproduce v3</a></li><li class="toc-2"><a href="#export-validation">Export validation</a></li></ul></div><div class="lang-zh" lang="zh-TW"><ul><li class="toc-2"><a href="#zh-版本">版本</a></li><li class="toc-2"><a href="#zh-量測">量測</a></li><li class="toc-2"><a href="#zh-發版決定">發版決定</a></li><li class="toc-2"><a href="#zh-flashint8variant">flash（int8）variant</a></li><li class="toc-3"><a href="#zh-v3">v3</a></li><li class="toc-3"><a href="#zh-v1-與-v2">v1 與 v2</a></li><li class="toc-2"><a href="#zh-pcs-後濾可選">PCS 後濾（可選）</a></li><li class="toc-2"><a href="#zh-重現-v3">重現 v3</a></li><li class="toc-2"><a href="#zh-匯出驗證">匯出驗證</a></li></ul></div></nav><article class="prose"><div class="lang-en" lang="en"><p>Single-channel 16 kHz speech enhancement, streaming, no enrollment. All versions
+use DPCRN with a Mamba temporal path over 24 ERB bands. Benchmark stages:
+<a href="https://github.com/mcw519/PureSound/blob/9caa3540fabe328e9a2d9da0a3950ccca1096950/egs/noise_suppression/benchmarks/stages.md"><code>../benchmarks/stages.md</code></a>.</p>
+<pre><code class="language-bash">uv run puresound infer noise-suppression-dpcrn-mamba-v3 \
+    --input audio=in.wav --output audio=out.wav --provider cpu
+</code></pre>
+<p>v1/v2 use <a href="https://github.com/mcw519/PureSound/blob/9caa3540fabe328e9a2d9da0a3950ccca1096950/egs/noise_suppression/config/infer_dpcrn.yaml"><code>../config/infer_dpcrn.yaml</code></a>.
+v3 requires <a href="https://github.com/mcw519/PureSound/blob/9caa3540fabe328e9a2d9da0a3950ccca1096950/egs/noise_suppression/config/infer_dpcrn_mamba_wide.yaml"><code>../config/infer_dpcrn_mamba_wide.yaml</code></a>:
+channels <code>[2,48,96,128]</code> and hidden size 128, versus <code>[2,32,64,96]</code> and 96.
+All streaming exports record <code>dry_blend: 1.0</code>, with no onset guard or post-graph
+relief. Re-export with <code>--dry-blend 1.0</code>.</p>
+<h2 id="versions">Versions</h2>
+<div class="table-wrap"><table class="table">
+<thead>
+<tr>
+<th>Version</th>
+<th>Zoo id / role</th>
+<th>Training</th>
+<th>Choose it when</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>dpcrn_mamba_v3.ckpt</code></td>
+<td><code>noise-suppression-dpcrn-mamba-v3</code>, released candidate</td>
+<td>wider model + mixed-source coverage training + ActiveBin + MetricGAN with a DNSMOS P.835 term</td>
+<td>higher PESQ, STOI and DNSMOS matter; see the ASR and CPU trade-offs below</td>
+</tr>
+<tr>
+<td><strong><code>dpcrn_mamba_v2.ckpt</code></strong></td>
+<td><code>noise-suppression-dpcrn-mamba-v2</code>, <strong>default</strong></td>
+<td>v1 + 4 epochs with a PESQ critic</td>
+<td>balanced quality and CPU cost</td>
+</tr>
+<tr>
+<td><code>dpcrn_mamba_v1.ckpt</code></td>
+<td><code>noise-suppression-dpcrn-mamba-v1</code>, candidate</td>
+<td>compact curriculum + ActiveBin calibration</td>
+<td>deletion on clean read speech matters most</td>
+</tr>
+<tr>
+<td><code>dpcrn_mamba_v0.ckpt</code></td>
+<td>retired (<code>backup/</code>, not tracked)</td>
+<td>compact curriculum</td>
+<td>--</td>
+</tr>
+</tbody>
+</table></div>
+<p>v3 also ships an int8 <code>flash</code> variant for tighter CPU budgets; see <a href="#v3">v3 flash</a>.</p>
+<h2 id="measurements">Measurements</h2>
+<p>All values use <code>dry_blend: 1.0</code>. Columns report means on the same sets, not
+paired confidence intervals between released versions.</p>
+<div class="table-wrap"><table class="table">
+<thead>
+<tr>
+<th>Set</th>
+<th>Metric</th>
+<th>Unprocessed</th>
+<th>v1</th>
+<th>v2</th>
+<th>v3</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>VCTK-DEMAND (n=824)</td>
+<td>PESQ-WB</td>
+<td>1.968</td>
+<td>2.551</td>
+<td>2.567</td>
+<td><strong>2.600</strong></td>
+</tr>
+<tr>
+<td></td>
+<td>STOI</td>
+<td>0.9210</td>
+<td>0.9213</td>
+<td>0.9231</td>
+<td><strong>0.9295</strong></td>
+</tr>
+<tr>
+<td></td>
+<td>SI-SDR (dB)</td>
+<td>8.45</td>
+<td><strong>18.38</strong></td>
+<td>18.04</td>
+<td>16.79</td>
+</tr>
+<tr>
+<td></td>
+<td>deletion rate (Whisper large-v3)</td>
+<td>0.00744</td>
+<td><strong>0.00643</strong></td>
+<td>0.00870</td>
+<td>0.00721</td>
+</tr>
+<tr>
+<td>frozen synthetic (500 clips; PESQ n=499)</td>
+<td>PESQ-WB</td>
+<td>1.471</td>
+<td>2.354</td>
+<td>2.409</td>
+<td><strong>2.440</strong></td>
+</tr>
+<tr>
+<td>DNS-5 dev (n=921)</td>
+<td>DNSMOS SIG / BAK / OVR / P.808</td>
+<td>2.99 / 2.56 / 2.21 / 2.91</td>
+<td>3.18 / 3.82 / 2.81 / 3.38</td>
+<td>3.19 / 3.85 / 2.83 / 3.42</td>
+<td><strong>3.24 / 3.89 / 2.88 / 3.44</strong></td>
+</tr>
+<tr>
+<td>hard WER set (n=500)</td>
+<td>raw WER, including recognizer loops</td>
+<td>0.12251</td>
+<td>--</td>
+<td>0.16006</td>
+<td>0.17482</td>
+</tr>
+<tr>
+<td></td>
+<td>deletion rate</td>
+<td>0.04235</td>
+<td>--</td>
+<td>0.04728</td>
+<td>0.04669</td>
+</tr>
+<tr>
+<td>--</td>
+<td>CPU RTF, 1 thread (checkpoint gate)</td>
+<td>--</td>
+<td>0.171</td>
+<td>0.164</td>
+<td>0.249</td>
+</tr>
+<tr>
+<td>--</td>
+<td>CPU RTF, 1 thread (original streaming ONNX, 10 s probe)</td>
+<td>--</td>
+<td>--</td>
+<td>0.408</td>
+<td>0.570</td>
+</tr>
+<tr>
+<td>--</td>
+<td>CPU RTF, 1 thread (current optimized ONNX, 5 s speech)</td>
+<td>--</td>
+<td>0.299</td>
+<td>0.311</td>
+<td>0.446</td>
+</tr>
+<tr>
+<td>--</td>
+<td>CPU RTF, 1 thread (current native SSM companion, 5 s speech)</td>
+<td>--</td>
+<td>0.257</td>
+<td>0.266</td>
+<td>0.390</td>
+</tr>
+<tr>
+<td>--</td>
+<td>Graph look-ahead (ms)</td>
+<td>--</td>
+<td>30</td>
+<td>30</td>
+<td>30</td>
+</tr>
+<tr>
+<td>--</td>
+<td>Streaming algorithmic buffering (ms, excluding compute)</td>
+<td>--</td>
+<td>52–62</td>
+<td>52–62</td>
+<td>52–62</td>
+</tr>
+</tbody>
+</table></div>
+<p>Records: <a href="https://github.com/mcw519/PureSound/blob/9caa3540fabe328e9a2d9da0a3950ccca1096950/egs/noise_suppression/benchmarks/records/ns_dpcrn-mamba_v3dm_mg_ep3.json">v3</a>,
+<a href="https://github.com/mcw519/PureSound/blob/9caa3540fabe328e9a2d9da0a3950ccca1096950/egs/noise_suppression/benchmarks/records/ns_dpcrn-mamba_metricgan_ft_ep3.json">v2</a>,
+<a href="https://github.com/mcw519/PureSound/blob/9caa3540fabe328e9a2d9da0a3950ccca1096950/egs/noise_suppression/benchmarks/records/ns_dpcrn-mamba_activebin_ft_ep1.json">v1</a>.</p>
+<h2 id="release-decisions">Release decisions</h2>
+<ul>
+<li>v3 was updated on 2026-10-18: the same wide model and training ladder, with a
+DNSMOS P.835 term beside the PESQ critic in the final stage (run
+<code>ns_dpcrn-mamba_v3dm_mg</code>). Paired against the previous v3 weights on DNS-5
+dev: SIG +0.050, BAK +0.090, OVR +0.076, P.808 +0.028, all resolvable and in
+every noise category; VCTK-DEMAND PESQ −0.031 and SI-SDR −0.34 dB; word
+deletions unchanged within resolution. The previous weights stay under
+<code>backup/</code> (not tracked).</li>
+<li>v3 remains a selectable candidate; v2 remains the default. v3 passes both
+PESQ gates and the checkpoint CPU budget, but both deletion gates are
+<code>no-resolution</code> (intervals cross zero). This does not establish
+non-inferiority or a word-preservation improvement.</li>
+<li>v3's raw hard-set WER includes 6 recognizer loops, versus 1 on the input.
+Excluding a pair when either hypothesis exceeds 1.5 times the reference word
+count leaves 493 pairs: model WER <strong>0.143382</strong>, input <strong>0.116340</strong>, delta
+<strong>+0.027042</strong>. These trimmed means use a different subset from earlier
+releases and must not be treated as a paired v3-versus-v2 ranking. Keep loop
+failures visible as a separate deployment metric.</li>
+<li>v2 was released over a narrow VCTK deletion failure, with the accepted
+trade-off recorded in its benchmark lineage. v1 remains available for its
+lower VCTK deletion rate.</li>
+</ul>
+<h2 id="flash-int8-variants">flash (int8) variants</h2>
+<p><code>flash</code> is an artifact variant of each version, not a new checkpoint: the same
+weights, with the LSTM and matrix-product weights stored as int8 and activations
+quantized at run time (<code>export --quantize int8</code>), in both the standard graph and
+the native companion. Select it with <code>--variant flash</code>. Each column below is the
+streaming ONNX output on the same items, scored as paired differences; the float
+columns therefore differ slightly from the checkpoint records.</p>
+<h3 id="v3">v3</h3>
+<div class="table-wrap"><table class="table">
+<thead>
+<tr>
+<th>Measure</th>
+<th>v3</th>
+<th>v3 flash</th>
+<th>Paired difference (95% CI)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>CPU RTF, 1 thread, standard / native graph</td>
+<td>0.454 / 0.387</td>
+<td>0.370 / 0.304</td>
+<td>−18.5% / −21.5%</td>
+</tr>
+<tr>
+<td>frozen synthetic PESQ-WB</td>
+<td>2.499</td>
+<td>2.496</td>
+<td>−0.0028 (−0.0038, −0.0019)</td>
+</tr>
+<tr>
+<td>VCTK-DEMAND PESQ-WB</td>
+<td>2.598</td>
+<td>2.591</td>
+<td>−0.0070 (−0.0097, −0.0051)</td>
+</tr>
+<tr>
+<td>VCTK-DEMAND SI-SDR (dB)</td>
+<td>16.79</td>
+<td>16.77</td>
+<td>−0.016 (−0.027, −0.006)</td>
+</tr>
+<tr>
+<td>DNS-5 dev DNSMOS OVR</td>
+<td>2.884</td>
+<td>2.883</td>
+<td>−0.0004 (−0.0014, +0.0005)</td>
+</tr>
+<tr>
+<td>VCTK-DEMAND deletion rate</td>
+<td>0.0061</td>
+<td>0.0061</td>
+<td>+0.0000 (+0.0000, +0.0000)</td>
+</tr>
+<tr>
+<td>hard-set deletion rate</td>
+<td>0.0451</td>
+<td>0.0439</td>
+<td>−0.0009 (−0.0043, +0.0025)</td>
+</tr>
+</tbody>
+</table></div>
+<p>PESQ and SI-SDR are resolvably lower by a few thousandths; DNSMOS OVR and word
+deletions show no resolvable change. Use it when the CPU budget is tight. The
+timings are medians of nine interleaved repeats on a 5-second noisy-speech
+sample, one thread on an AVX-512 Xeon, measured on the 2026-10-05 export; the
+2026-10-18 weights run in a graph of the same shape and operator count. Read the
+ratios, and since int8 kernels differ by ISA, measure on the target CPU.
+Browser/WASM payloads keep the float graph. Word rates used Whisper large-v3 in
+<code>float16</code> (no recognizer loops on this run), so they are not comparable with the
+table above.</p>
+<h3 id="v1-and-v2">v1 and v2</h3>
+<div class="table-wrap"><table class="table">
+<thead>
+<tr>
+<th>Measure</th>
+<th>v1 float → flash</th>
+<th>Paired difference (95% CI)</th>
+<th>v2 float → flash</th>
+<th>Paired difference (95% CI)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>CPU RTF, 1 thread, standard / native graph</td>
+<td>0.312 / 0.256 → 0.276 / 0.224</td>
+<td>−12% / −12%</td>
+<td>0.310 / 0.258 → 0.278 / 0.228</td>
+<td>−10% / −12%</td>
+</tr>
+<tr>
+<td>frozen synthetic PESQ-WB</td>
+<td>2.433 → 2.428</td>
+<td>−0.0054 (−0.0064, −0.0045)</td>
+<td>2.490 → 2.491</td>
+<td>+0.0015 (+0.0006, +0.0023)</td>
+</tr>
+<tr>
+<td>VCTK-DEMAND PESQ-WB</td>
+<td>2.553 → 2.550</td>
+<td>−0.0032 (−0.0050, −0.0016)</td>
+<td>2.572 → 2.568</td>
+<td>−0.0039 (−0.0081, −0.0009)</td>
+</tr>
+<tr>
+<td>VCTK-DEMAND SI-SDR (dB)</td>
+<td>18.41 → 18.38</td>
+<td>−0.031 (−0.036, −0.027)</td>
+<td>18.14 → 18.13</td>
+<td>−0.005 (−0.010, +0.000)</td>
+</tr>
+<tr>
+<td>DNS-5 dev DNSMOS OVR</td>
+<td>2.808 → 2.807</td>
+<td>−0.0009 (−0.0016, −0.0001)</td>
+<td>2.828 → 2.828</td>
+<td>−0.0002 (−0.0009, +0.0005)</td>
+</tr>
+<tr>
+<td>VCTK-DEMAND deletion rate</td>
+<td>0.0077 → 0.0076</td>
+<td>−0.0001 (−0.0003, +0.0000)</td>
+<td>0.0077 → 0.0077</td>
+<td>+0.0000</td>
+</tr>
+<tr>
+<td>VCTK-DEMAND WER</td>
+<td>0.0359 → 0.0349</td>
+<td>−0.0002 (−0.0017, +0.0019)</td>
+<td>0.0338 → 0.0352</td>
+<td>+0.0018 (−0.0001, +0.0044)</td>
+</tr>
+</tbody>
+</table></div>
+<p>The same picture as v3, a little smaller on CPU: quality moves by thousandths and
+words do not move resolvably. Timings are medians of three interleaved rounds on
+the same 5-second sample and CPU as v3's; word rates here used Whisper large-v3 in
+<code>float16</code>.</p>
+<h2 id="pcs-post-filter-optional">PCS post-filter (optional)</h2>
+<p><code>pcs: true</code> applies perceptual contrast stretching (Chao et al., Interspeech
+2022) to the enhanced spectrum before the inverse STFT: a fixed per-band gamma
+of 1.0-1.4 on the log1p magnitude, largest over 400-4400 Hz, phase untouched.
+It is a request parameter, off by default, applied per frame by the streaming
+runtime with no added latency (<code>--param pcs=true</code> on the CLI; <code>pcs</code> in the web
+UI). Each column below is the streaming ONNX output of v3 on the same items
+(records <code>ns_dpcrn-mamba_v3dm_mg_ep3_ort</code> and <code>..._ort_pcs</code>).</p>
+<div class="table-wrap"><table class="table">
+<thead>
+<tr>
+<th>Measure</th>
+<th>v3</th>
+<th>v3 + PCS</th>
+<th>Paired difference (95% CI)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>frozen synthetic PESQ-WB</td>
+<td>2.499</td>
+<td><strong>2.703</strong></td>
+<td>+0.204 (+0.192, +0.218)</td>
+</tr>
+<tr>
+<td>VCTK-DEMAND PESQ-WB</td>
+<td>2.598</td>
+<td><strong>2.994</strong></td>
+<td>+0.397 (+0.385, +0.409)</td>
+</tr>
+<tr>
+<td>VCTK-DEMAND harmonic contrast gap (dB)</td>
+<td>−0.24</td>
+<td><strong>+0.31</strong></td>
+<td>+0.556 (+0.528, +0.586)</td>
+</tr>
+<tr>
+<td>VCTK-DEMAND STOI / ESTOI</td>
+<td>0.929 / 0.837</td>
+<td>0.926 / 0.834</td>
+<td>−0.0031 / −0.0034</td>
+</tr>
+<tr>
+<td>DNS-5 dev DNSMOS SIG</td>
+<td>3.241</td>
+<td>3.118</td>
+<td>−0.123 (−0.131, −0.114)</td>
+</tr>
+<tr>
+<td>DNS-5 dev DNSMOS BAK</td>
+<td>3.891</td>
+<td>3.864</td>
+<td>−0.028 (−0.035, −0.021)</td>
+</tr>
+<tr>
+<td>DNS-5 dev DNSMOS OVR</td>
+<td>2.884</td>
+<td>2.778</td>
+<td>−0.106 (−0.115, −0.097)</td>
+</tr>
+<tr>
+<td>DNS-5 dev DNSMOS P.808</td>
+<td>3.437</td>
+<td>3.347</td>
+<td>−0.089 (−0.102, −0.077)</td>
+</tr>
+<tr>
+<td>VCTK-DEMAND WER / deletion rate</td>
+<td>0.041 / 0.0070</td>
+<td>0.041 / 0.0071</td>
+<td>+0.000 (−0.003, +0.003) / +0.0002 (−0.0010, +0.0012)</td>
+</tr>
+<tr>
+<td>hard-set raw WER / insertion rate</td>
+<td>0.157 / 0.024</td>
+<td>0.158 / 0.026</td>
+<td>+0.001 (−0.013, +0.018) / +0.002 (−0.012, +0.018)</td>
+</tr>
+</tbody>
+</table></div>
+<p>What it buys: sharper formant peaks, which PESQ and the harmonic-contrast gap
+reward strongly -- v3 + PCS scores above every model in this table on PESQ. What
+it costs: every DNSMOS scale is resolvably lower (speech quality most) and STOI
+slips a little. On the previous v3 weights PCS also doubled the recognizer's
+insertions on the hard set; on the current weights that change is no longer
+resolvable.
+SI-SDR is not listed because the stretch is non-linear and the metric no longer
+measures distortion. Turn it on when PESQ is the number being compared; leave
+it off for listening and for ASR.</p>
+<h2 id="reproduce-v3">Reproduce v3</h2>
+<p>Run these recipes in order with seed 1234, warm-starting each stage from the
+previous stage's last checkpoint. The run names remain experiment names; v3 is
+assigned only to the released artifact.</p>
+<div class="table-wrap"><table class="table">
+<thead>
+<tr>
+<th>Recipe</th>
+<th>Warm start</th>
+<th>Epochs / last checkpoint</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><a href="https://github.com/mcw519/PureSound/blob/9caa3540fabe328e9a2d9da0a3950ccca1096950/egs/noise_suppression/config/train_dpcrn_mamba_capW_s0.yaml"><code>train_dpcrn_mamba_capW_s0.yaml</code></a></td>
+<td>scratch; DNS-5 data, SNR [0,20]</td>
+<td>20 / ep19, step40000</td>
+</tr>
+<tr>
+<td><a href="https://github.com/mcw519/PureSound/blob/9caa3540fabe328e9a2d9da0a3950ccca1096950/egs/noise_suppression/config/train_dpcrn_mamba_capWL3_s1.yaml"><code>train_dpcrn_mamba_capWL3_s1.yaml</code></a></td>
+<td>capW_s0 ep19; mixed speech/noise, coverage sampler, SNR [-10,40], 4-second rows</td>
+<td>20 / ep19, step80000</td>
+</tr>
+<tr>
+<td><a href="https://github.com/mcw519/PureSound/blob/9caa3540fabe328e9a2d9da0a3950ccca1096950/egs/noise_suppression/config/train_dpcrn_mamba_capWL3_ft.yaml"><code>train_dpcrn_mamba_capWL3_ft.yaml</code></a></td>
+<td>capWL3_s1 ep19; ActiveBin calibration</td>
+<td>2 / ep1, step4000</td>
+</tr>
+<tr>
+<td><a href="https://github.com/mcw519/PureSound/blob/9caa3540fabe328e9a2d9da0a3950ccca1096950/egs/noise_suppression/config/train_dpcrn_mamba_capWL3_mg.yaml"><code>train_dpcrn_mamba_capWL3_mg.yaml</code></a></td>
+<td>capWL3_ft ep1; PESQ MetricGAN + DNSMOS P.835 term (<code>DNSMOSLoss</code>)</td>
+<td>4 / ep3, step8000</td>
+</tr>
+</tbody>
+</table></div>
+<p>The recipes are snapshots of the configurations used for this run. Point corpus
+and RIR paths at your copies; the short stages use the pool with silent files
+removed. <code>target_clipping: own_quantile</code> is preserved to match training.
+The released checkpoint contains inference weights and source provenance,
+excluding the critic, losses, optimizer and sampler state. Its inference weights
+are unchanged from <code>ns_dpcrn-mamba_v3dm_mg</code> ep3.</p>
+<h2 id="export-validation">Export validation</h2>
+<p>The release's inference output is bit-identical to the source checkpoint on
+random input, a frozen NS mixture and a hard-set mixture. CPU ONNX streaming
+parity is 103.1 dB on the export's verification probe after aligning the
+480-sample look-ahead delay; maximum sample error is below 7e-7 (2026-10-18
+export; the graph has the same shape as the 2026-10-04 re-export, so its
+timings carry over).</p>
+<p>A historical release-environment benchmark used the original streaming ONNX runtime with
+one CPU thread, 10-second input, two warm-ups and three interleaved repeats:
+v2 RTF <strong>0.408</strong>, v3 <strong>0.570</strong>. That original v3 export exceeded the <strong>0.5</strong>
+streaming budget. Its full-utterance checkpoint measured <strong>0.270</strong> there; the
+original checkpoint gate above measured <strong>0.242</strong>. These are different execution
+paths, and the checkpoint gate does not establish the streaming runtime's cost.
+Full validation results are preserved in the v3 record's release lineage.</p>
+<p>All three NS releases have since been re-exported with fixed batch=1 and
+frequency-major layout. Their standard ONNX graphs are now the model-zoo defaults;
+the sidecars additionally reference SHA256-validated native SSM companions.
+On the same 5-second noisy-speech sample, an interleaved old/new measurement gave:
+v1 <strong>0.393 → 0.299 / 0.257</strong>, v2 <strong>0.406 → 0.311 / 0.266</strong>, and v3
+<strong>0.572 → 0.446 / 0.390</strong> (standard / native). v3 now meets the 0.5 budget on
+this CPU. The <a href="https://github.com/mcw519/PureSound/blob/9caa3540fabe328e9a2d9da0a3950ccca1096950/model_zoo/benchmarks/onnx_reexport_20261004.json">re-export report</a>
+records the sample, timing repeats, hashes and 30-second stateful checks. These
+5-second speech timings and the older 10-second probe are separate benchmarks.
+See <a href="https://github.com/mcw519/PureSound/blob/9caa3540fabe328e9a2d9da0a3950ccca1096950/docs/usage/streaming/dpcrn_onnx.md">CPU setup</a> for library selection.</p>
+<p>The checkpoint gate processes a whole 10-second waveform in one PyTorch call.
+The streaming runtime processes one 10 ms hop at a time, with roughly 1,000
+ONNX calls per 10 seconds plus state exchange, STFT/iSTFT and overlap-add.
+These paths differ in batching, backend and orchestration; the measurements do
+not isolate each contribution. RTF is compute time divided by audio duration:
+0.570 means about 5.7 seconds of computation for 10 seconds of audio. It does
+not measure the wait for future input and must be reported separately from latency.</p>
+<p>v3 has a 160-sample hop (10 ms), a 512-sample analysis window (32 ms) and
+three look-ahead frames (30 ms). Streaming algorithmic buffering is therefore
+<code>lookahead + window − hop</code> to <code>lookahead + window</code>, or <strong>52–62 ms</strong>, depending
+on sample position within the hop. Budget <strong>62 ms</strong> before compute time,
+additional input chunk buffering, audio device buffering and transport. v1/v2
+have the same geometry and algorithmic latency. The 480-sample (30 ms) waveform
+alignment offset remains the graph look-ahead; it is not the complete streaming
+buffering delay. These derived values are recorded under <code>algorithmic_latency</code>
+in the v3 ONNX manifest and release validation record.</p>
+<p>The generated device payload also passes ONNX Runtime Web 1.24.3 WASM
+validation on Node: normalized RMS error versus native streaming is 3.30e-7;
+irregular chunk sizes and a stream reset reproduce the same output.</p>
+</div><div class="lang-zh" lang="zh-TW"><p>單聲道 16 kHz 語音增強，可串流、不需 enrollment。各版本都是 DPCRN，時間路徑使用
+24 個 ERB 頻帶上的 Mamba。關卡見 <a href="https://github.com/mcw519/PureSound/blob/9caa3540fabe328e9a2d9da0a3950ccca1096950/egs/noise_suppression/benchmarks/stages.zh-TW.md"><code>../benchmarks/stages.zh-TW.md</code></a>。</p>
+<pre><code class="language-bash">uv run puresound infer noise-suppression-dpcrn-mamba-v3 \
+    --input audio=in.wav --output audio=out.wav --provider cpu
+</code></pre>
+<p>v1/v2 使用 <a href="https://github.com/mcw519/PureSound/blob/9caa3540fabe328e9a2d9da0a3950ccca1096950/egs/noise_suppression/config/infer_dpcrn.yaml"><code>../config/infer_dpcrn.yaml</code></a>。
+v3 必須使用 <a href="https://github.com/mcw519/PureSound/blob/9caa3540fabe328e9a2d9da0a3950ccca1096950/egs/noise_suppression/config/infer_dpcrn_mamba_wide.yaml"><code>../config/infer_dpcrn_mamba_wide.yaml</code></a>：
+通道 <code>[2,48,96,128]</code>、hidden size 128；v1/v2 則為 <code>[2,32,64,96]</code>、96。
+串流匯出皆為 <code>dry_blend: 1.0</code>，不使用 onset guard 或 graph 後緩解。
+重新匯出要傳 <code>--dry-blend 1.0</code>。</p>
+<h2 id="zh-版本">版本</h2>
+<div class="table-wrap"><table class="table">
+<thead>
+<tr>
+<th>版本</th>
+<th>zoo id / 角色</th>
+<th>訓練</th>
+<th>適用情況</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>dpcrn_mamba_v3.ckpt</code></td>
+<td><code>noise-suppression-dpcrn-mamba-v3</code>，已發布候選</td>
+<td>加寬模型、多來源 coverage 訓練、ActiveBin、MetricGAN 加 DNSMOS P.835 項</td>
+<td>在意較高 PESQ、STOI 與 DNSMOS；辨識與 CPU 取捨見下</td>
+</tr>
+<tr>
+<td><strong><code>dpcrn_mamba_v2.ckpt</code></strong></td>
+<td><code>noise-suppression-dpcrn-mamba-v2</code>，<strong>預設</strong></td>
+<td>v1 加 PESQ critic 微調 4 epoch</td>
+<td>平衡音質與 CPU 成本</td>
+</tr>
+<tr>
+<td><code>dpcrn_mamba_v1.ckpt</code></td>
+<td><code>noise-suppression-dpcrn-mamba-v1</code>，候選</td>
+<td>小模型 curriculum 加 ActiveBin 校準</td>
+<td>最在意乾淨朗讀語音的刪字率</td>
+</tr>
+<tr>
+<td><code>dpcrn_mamba_v0.ckpt</code></td>
+<td>已退役（<code>backup/</code>，不進版控）</td>
+<td>小模型 curriculum</td>
+<td>--</td>
+</tr>
+</tbody>
+</table></div>
+<p>v3 另有 int8 的 <code>flash</code> variant，適合 CPU 預算吃緊時使用，見 <a href="#zh-v3">v3 flash</a>。</p>
+<h2 id="zh-量測">量測</h2>
+<p>皆使用 <code>dry_blend: 1.0</code>。欄位是相同測試集上的平均值，不代表版本之間的配對信賴區間。</p>
+<div class="table-wrap"><table class="table">
+<thead>
+<tr>
+<th>資料集</th>
+<th>指標</th>
+<th>未處理</th>
+<th>v1</th>
+<th>v2</th>
+<th>v3</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>VCTK-DEMAND（n=824）</td>
+<td>PESQ-WB</td>
+<td>1.968</td>
+<td>2.551</td>
+<td>2.567</td>
+<td><strong>2.600</strong></td>
+</tr>
+<tr>
+<td></td>
+<td>STOI</td>
+<td>0.9210</td>
+<td>0.9213</td>
+<td>0.9231</td>
+<td><strong>0.9295</strong></td>
+</tr>
+<tr>
+<td></td>
+<td>SI-SDR（dB）</td>
+<td>8.45</td>
+<td><strong>18.38</strong></td>
+<td>18.04</td>
+<td>16.79</td>
+</tr>
+<tr>
+<td></td>
+<td>刪字率（Whisper large-v3）</td>
+<td>0.00744</td>
+<td><strong>0.00643</strong></td>
+<td>0.00870</td>
+<td>0.00721</td>
+</tr>
+<tr>
+<td>凍結合成集（500 段；PESQ n=499）</td>
+<td>PESQ-WB</td>
+<td>1.471</td>
+<td>2.354</td>
+<td>2.409</td>
+<td><strong>2.440</strong></td>
+</tr>
+<tr>
+<td>DNS-5 dev（n=921）</td>
+<td>DNSMOS SIG / BAK / OVR / P.808</td>
+<td>2.99 / 2.56 / 2.21 / 2.91</td>
+<td>3.18 / 3.82 / 2.81 / 3.38</td>
+<td>3.19 / 3.85 / 2.83 / 3.42</td>
+<td><strong>3.24 / 3.89 / 2.88 / 3.44</strong></td>
+</tr>
+<tr>
+<td>困難 WER 集（n=500）</td>
+<td>原始 WER，含辨識器重複轉寫</td>
+<td>0.12251</td>
+<td>--</td>
+<td>0.16006</td>
+<td>0.17482</td>
+</tr>
+<tr>
+<td></td>
+<td>刪字率</td>
+<td>0.04235</td>
+<td>--</td>
+<td>0.04728</td>
+<td>0.04669</td>
+</tr>
+<tr>
+<td>--</td>
+<td>CPU RTF，單執行緒（checkpoint 關卡）</td>
+<td>--</td>
+<td>0.171</td>
+<td>0.164</td>
+<td>0.249</td>
+</tr>
+<tr>
+<td>--</td>
+<td>CPU RTF，單執行緒（原始串流 ONNX，10 秒探測）</td>
+<td>--</td>
+<td>--</td>
+<td>0.408</td>
+<td>0.570</td>
+</tr>
+<tr>
+<td>--</td>
+<td>CPU RTF，單執行緒（目前最佳化 ONNX，5 秒語音）</td>
+<td>--</td>
+<td>0.299</td>
+<td>0.311</td>
+<td>0.446</td>
+</tr>
+<tr>
+<td>--</td>
+<td>CPU RTF，單執行緒（目前 native SSM companion，5 秒語音）</td>
+<td>--</td>
+<td>0.257</td>
+<td>0.266</td>
+<td>0.390</td>
+</tr>
+<tr>
+<td>--</td>
+<td>Graph look-ahead（ms）</td>
+<td>--</td>
+<td>30</td>
+<td>30</td>
+<td>30</td>
+</tr>
+<tr>
+<td>--</td>
+<td>串流演算法緩衝延遲（ms，不含運算）</td>
+<td>--</td>
+<td>52–62</td>
+<td>52–62</td>
+<td>52–62</td>
+</tr>
+</tbody>
+</table></div>
+<p>紀錄：<a href="https://github.com/mcw519/PureSound/blob/9caa3540fabe328e9a2d9da0a3950ccca1096950/egs/noise_suppression/benchmarks/records/ns_dpcrn-mamba_v3dm_mg_ep3.json">v3</a>、
+<a href="https://github.com/mcw519/PureSound/blob/9caa3540fabe328e9a2d9da0a3950ccca1096950/egs/noise_suppression/benchmarks/records/ns_dpcrn-mamba_metricgan_ft_ep3.json">v2</a>、
+<a href="https://github.com/mcw519/PureSound/blob/9caa3540fabe328e9a2d9da0a3950ccca1096950/egs/noise_suppression/benchmarks/records/ns_dpcrn-mamba_activebin_ft_ep1.json">v1</a>。</p>
+<h2 id="zh-發版決定">發版決定</h2>
+<ul>
+<li>v3 於 2026-10-18 更新：同一個加寬模型與訓練階梯，最後一階在 PESQ critic 旁加入 DNSMOS P.835 項
+（run <code>ns_dpcrn-mamba_v3dm_mg</code>）。與前一版 v3 權重在 DNS-5 dev 配對：SIG +0.050、BAK +0.090、
+OVR +0.076、P.808 +0.028，皆可解析且每個噪音類別都升；VCTK-DEMAND PESQ −0.031、SI-SDR −0.34 dB；
+刪字在解析度內沒變。前一版權重留在 <code>backup/</code>（不進版控）。</li>
+<li>v3 仍為可選候選，v2 維持預設。v3 的兩個 PESQ 關卡與 checkpoint CPU 預算通過，
+但兩個刪字護欄皆為 <code>no-resolution</code>（信賴區間跨零）；這不能證明沒有退步或保字能力改善。</li>
+<li>v3 困難集有 6 段辨識器重複轉寫，未處理輸入有 1 段。任一側的假設字數超過參考字數
+1.5 倍就排除該配對，留下 493 段：模型 WER <strong>0.143382</strong>、輸入 <strong>0.116340</strong>、
+差 <strong>+0.027042</strong>。這個子集與先前版本不同，不能當成 v3 對 v2 的配對排名；
+重複轉寫失敗也應另外保留為部署指標。</li>
+<li>v2 曾在 VCTK 刪字護欄勉強未過時發布，接受的取捨記在其 benchmark lineage。
+v1 繼續提供較低的 VCTK 刪字率。</li>
+</ul>
+<h2 id="zh-flashint8variant">flash（int8）variant</h2>
+<p><code>flash</code> 是每個版本的 artifact variant，不是新 checkpoint：權重相同，標準圖與 native companion
+中 LSTM 與矩陣乘法的權重存成 int8，activation 在執行時量化（<code>export --quantize int8</code>）。使用
+<code>--variant flash</code> 選用。下表各欄都是同一批輸入的串流 ONNX 輸出，以逐句配對差比較，所以浮點欄
+與 checkpoint 紀錄略有不同。</p>
+<h3 id="zh-v3">v3</h3>
+<div class="table-wrap"><table class="table">
+<thead>
+<tr>
+<th>量測</th>
+<th>v3</th>
+<th>v3 flash</th>
+<th>配對差（95% CI）</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>CPU RTF，單執行緒，標準 / native 圖</td>
+<td>0.454 / 0.387</td>
+<td>0.370 / 0.304</td>
+<td>−18.5% / −21.5%</td>
+</tr>
+<tr>
+<td>frozen 合成集 PESQ-WB</td>
+<td>2.499</td>
+<td>2.496</td>
+<td>−0.0028（−0.0038, −0.0019）</td>
+</tr>
+<tr>
+<td>VCTK-DEMAND PESQ-WB</td>
+<td>2.598</td>
+<td>2.591</td>
+<td>−0.0070（−0.0097, −0.0051）</td>
+</tr>
+<tr>
+<td>VCTK-DEMAND SI-SDR（dB）</td>
+<td>16.79</td>
+<td>16.77</td>
+<td>−0.016（−0.027, −0.006）</td>
+</tr>
+<tr>
+<td>DNS-5 dev DNSMOS OVR</td>
+<td>2.884</td>
+<td>2.883</td>
+<td>−0.0004（−0.0014, +0.0005）</td>
+</tr>
+<tr>
+<td>VCTK-DEMAND 刪字率</td>
+<td>0.0061</td>
+<td>0.0061</td>
+<td>+0.0000（+0.0000, +0.0000）</td>
+</tr>
+<tr>
+<td>hard 集刪字率</td>
+<td>0.0451</td>
+<td>0.0439</td>
+<td>−0.0009（−0.0043, +0.0025）</td>
+</tr>
+</tbody>
+</table></div>
+<p>PESQ 與 SI-SDR 可解析地低千分之幾；DNSMOS OVR 與刪字沒有可解析的變化。適合 CPU 預算吃緊時使用。
+計時是在 AVX-512 Xeon 上以單執行緒處理 5 秒含噪語音、九次交錯測量的中位數，量的是 2026-10-05 的匯出；
+2026-10-18 的權重跑在形狀與運算數相同的圖上。請看比例，且 int8 kernel 的效率因指令集而異，
+請在目標 CPU 上實測。瀏覽器／WASM 仍使用浮點圖。字錯率使用 <code>float16</code> 的 Whisper large-v3
+（這次沒有辨識器重複轉寫），不能與上方表格直接比較。</p>
+<h3 id="zh-v1-與-v2">v1 與 v2</h3>
+<div class="table-wrap"><table class="table">
+<thead>
+<tr>
+<th>量測</th>
+<th>v1 浮點 → flash</th>
+<th>配對差（95% CI）</th>
+<th>v2 浮點 → flash</th>
+<th>配對差（95% CI）</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>CPU RTF，單執行緒，標準 / native 圖</td>
+<td>0.312 / 0.256 → 0.276 / 0.224</td>
+<td>−12% / −12%</td>
+<td>0.310 / 0.258 → 0.278 / 0.228</td>
+<td>−10% / −12%</td>
+</tr>
+<tr>
+<td>frozen 合成集 PESQ-WB</td>
+<td>2.433 → 2.428</td>
+<td>−0.0054（−0.0064, −0.0045）</td>
+<td>2.490 → 2.491</td>
+<td>+0.0015（+0.0006, +0.0023）</td>
+</tr>
+<tr>
+<td>VCTK-DEMAND PESQ-WB</td>
+<td>2.553 → 2.550</td>
+<td>−0.0032（−0.0050, −0.0016）</td>
+<td>2.572 → 2.568</td>
+<td>−0.0039（−0.0081, −0.0009）</td>
+</tr>
+<tr>
+<td>VCTK-DEMAND SI-SDR（dB）</td>
+<td>18.41 → 18.38</td>
+<td>−0.031（−0.036, −0.027）</td>
+<td>18.14 → 18.13</td>
+<td>−0.005（−0.010, +0.000）</td>
+</tr>
+<tr>
+<td>DNS-5 dev DNSMOS OVR</td>
+<td>2.808 → 2.807</td>
+<td>−0.0009（−0.0016, −0.0001）</td>
+<td>2.828 → 2.828</td>
+<td>−0.0002（−0.0009, +0.0005）</td>
+</tr>
+<tr>
+<td>VCTK-DEMAND 刪字率</td>
+<td>0.0077 → 0.0076</td>
+<td>−0.0001（−0.0003, +0.0000）</td>
+<td>0.0077 → 0.0077</td>
+<td>+0.0000</td>
+</tr>
+<tr>
+<td>VCTK-DEMAND WER</td>
+<td>0.0359 → 0.0349</td>
+<td>−0.0002（−0.0017, +0.0019）</td>
+<td>0.0338 → 0.0352</td>
+<td>+0.0018（−0.0001, +0.0044）</td>
+</tr>
+</tbody>
+</table></div>
+<p>與 v3 同樣的結果，CPU 節省略小：品質只差千分之幾，字沒有可解析的變化。計時與 v3 相同樣本、
+相同 CPU，三輪交錯量測的中位數；這裡的字錯率使用 <code>float16</code> 的 Whisper large-v3。</p>
+<h2 id="zh-pcs-後濾可選">PCS 後濾（可選）</h2>
+<p><code>pcs: true</code> 在逆 STFT 之前對增強後的頻譜做 perceptual contrast stretching（Chao 等，
+Interspeech 2022）：log1p 幅度逐帶乘上固定的 γ 1.0–1.4，400–4400 Hz 最大，相位不動。
+它是請求參數，預設關，串流 runtime 逐幀套用、不增加延遲（CLI 用 <code>--param pcs=true</code>；
+web UI 有 <code>pcs</code> 開關）。下表兩欄都是 v3 在同一批輸入上的串流 ONNX 輸出（紀錄
+<code>ns_dpcrn-mamba_v3dm_mg_ep3_ort</code> 與 <code>..._ort_pcs</code>）。</p>
+<div class="table-wrap"><table class="table">
+<thead>
+<tr>
+<th>量測</th>
+<th>v3</th>
+<th>v3 + PCS</th>
+<th>配對差（95% CI）</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>frozen 合成集 PESQ-WB</td>
+<td>2.499</td>
+<td><strong>2.703</strong></td>
+<td>+0.204（+0.192, +0.218）</td>
+</tr>
+<tr>
+<td>VCTK-DEMAND PESQ-WB</td>
+<td>2.598</td>
+<td><strong>2.994</strong></td>
+<td>+0.397（+0.385, +0.409）</td>
+</tr>
+<tr>
+<td>VCTK-DEMAND 諧波對比間隙（dB）</td>
+<td>−0.24</td>
+<td><strong>+0.31</strong></td>
+<td>+0.556（+0.528, +0.586）</td>
+</tr>
+<tr>
+<td>VCTK-DEMAND STOI / ESTOI</td>
+<td>0.929 / 0.837</td>
+<td>0.926 / 0.834</td>
+<td>−0.0031 / −0.0034</td>
+</tr>
+<tr>
+<td>DNS-5 dev DNSMOS SIG</td>
+<td>3.241</td>
+<td>3.118</td>
+<td>−0.123（−0.131, −0.114）</td>
+</tr>
+<tr>
+<td>DNS-5 dev DNSMOS BAK</td>
+<td>3.891</td>
+<td>3.864</td>
+<td>−0.028（−0.035, −0.021）</td>
+</tr>
+<tr>
+<td>DNS-5 dev DNSMOS OVR</td>
+<td>2.884</td>
+<td>2.778</td>
+<td>−0.106（−0.115, −0.097）</td>
+</tr>
+<tr>
+<td>DNS-5 dev DNSMOS P.808</td>
+<td>3.437</td>
+<td>3.347</td>
+<td>−0.089（−0.102, −0.077）</td>
+</tr>
+<tr>
+<td>VCTK-DEMAND WER / 刪字率</td>
+<td>0.041 / 0.0070</td>
+<td>0.041 / 0.0071</td>
+<td>+0.000（−0.003, +0.003）／ +0.0002（−0.0010, +0.0012）</td>
+</tr>
+<tr>
+<td>hard 集原始 WER / 插入字率</td>
+<td>0.157 / 0.024</td>
+<td>0.158 / 0.026</td>
+<td>+0.001（−0.013, +0.018）／ +0.002（−0.012, +0.018）</td>
+</tr>
+</tbody>
+</table></div>
+<p>它買到的：共振峰更銳利，PESQ 和諧波對比間隙對此獎勵很大——v3 + PCS 的 PESQ 高於本頁
+所有模型。它付出的：DNSMOS 每個尺度都可解析地較低（語音品質掉最多），STOI 小退。前一版 v3 權重上
+PCS 還讓 hard 集的辨識器插入字變成兩倍；目前的權重上這個變化已無法解析。SI-SDR 不列，因為拉伸是非線性的，該指標不再量失真。要比
+PESQ 數字時開；聆聽與 ASR 用途請關。</p>
+<h2 id="zh-重現-v3">重現 v3</h2>
+<p>使用 seed 1234 依序執行，每階用前一階最後一顆 checkpoint warm-start。
+run 保留實驗名稱，v3 只用於已發布的模型。</p>
+<div class="table-wrap"><table class="table">
+<thead>
+<tr>
+<th>Recipe</th>
+<th>起點</th>
+<th>Epoch 數／最後 checkpoint</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><a href="https://github.com/mcw519/PureSound/blob/9caa3540fabe328e9a2d9da0a3950ccca1096950/egs/noise_suppression/config/train_dpcrn_mamba_capW_s0.yaml"><code>train_dpcrn_mamba_capW_s0.yaml</code></a></td>
+<td>從零開始；DNS-5、SNR [0,20]</td>
+<td>20／ep19、step40000</td>
+</tr>
+<tr>
+<td><a href="https://github.com/mcw519/PureSound/blob/9caa3540fabe328e9a2d9da0a3950ccca1096950/egs/noise_suppression/config/train_dpcrn_mamba_capWL3_s1.yaml"><code>train_dpcrn_mamba_capWL3_s1.yaml</code></a></td>
+<td>capW_s0 ep19；多來源語音／噪音、coverage sampler、SNR [-10,40]、4 秒片段</td>
+<td>20／ep19、step80000</td>
+</tr>
+<tr>
+<td><a href="https://github.com/mcw519/PureSound/blob/9caa3540fabe328e9a2d9da0a3950ccca1096950/egs/noise_suppression/config/train_dpcrn_mamba_capWL3_ft.yaml"><code>train_dpcrn_mamba_capWL3_ft.yaml</code></a></td>
+<td>capWL3_s1 ep19；ActiveBin 校準</td>
+<td>2／ep1、step4000</td>
+</tr>
+<tr>
+<td><a href="https://github.com/mcw519/PureSound/blob/9caa3540fabe328e9a2d9da0a3950ccca1096950/egs/noise_suppression/config/train_dpcrn_mamba_capWL3_mg.yaml"><code>train_dpcrn_mamba_capWL3_mg.yaml</code></a></td>
+<td>capWL3_ft ep1；PESQ MetricGAN 加 DNSMOS P.835 項（<code>DNSMOSLoss</code>）</td>
+<td>4／ep3、step8000</td>
+</tr>
+</tbody>
+</table></div>
+<p>配方保存這次使用的設定；語料與 RIR 路徑須指向自己的副本，短階段使用已移除全靜音檔的池。
+<code>target_clipping: own_quantile</code> 保留訓練時的值。發布的 checkpoint 包含推論權重與來源資訊，
+移除 critic、loss、optimizer 與 sampler 狀態；推論權重與 <code>ns_dpcrn-mamba_v3dm_mg</code> ep3 相同。</p>
+<h2 id="zh-匯出驗證">匯出驗證</h2>
+<p>隨機輸入、凍結 NS 混音、困難集混音三段測試中，發布模型的推論輸出與來源 checkpoint
+逐位相同。CPU ONNX 串流對齊 480 樣本的 look-ahead 延遲後，在匯出驗證探測上一致性為
+103.1 dB，最大樣本誤差低於 7e-7（2026-10-18 匯出；圖形狀與 2026-10-04 重新匯出相同，計時沿用）。</p>
+<p>較早一次發布環境測量使用原始串流 ONNX runtime：CPU 單執行緒、10 秒輸入、兩次暖機、
+三次交錯測量，v2 RTF <strong>0.408</strong>、v3 <strong>0.570</strong>。當時的原始 v3 匯出超過 <strong>0.5</strong> 的串流預算。
+v3 全句 checkpoint 在此測得 <strong>0.270</strong>，原始 checkpoint 關卡則為 <strong>0.242</strong>；
+兩者與串流 ONNX 是不同執行路徑，checkpoint 關卡不能代表串流 runtime 的成本。
+完整驗證結果保存在 v3 紀錄的 release lineage。</p>
+<p>三個 NS 發布版本之後都以固定 batch=1 與 frequency-major 排列重新匯出。標準 ONNX 圖現為
+model zoo 預設；sidecar 另外引用經 SHA256 驗證的 native SSM companion。以同一段 5 秒含噪
+語音交錯測量新舊匯出：v1 <strong>0.393 → 0.299 / 0.257</strong>、v2 <strong>0.406 → 0.311 / 0.266</strong>、
+v3 <strong>0.572 → 0.446 / 0.390</strong>（標準 / native）。v3 在這顆 CPU 上已符合 0.5 預算。
+<a href="https://github.com/mcw519/PureSound/blob/9caa3540fabe328e9a2d9da0a3950ccca1096950/model_zoo/benchmarks/onnx_reexport_20261004.json">重新匯出報告</a>記錄了樣本、計時重複、
+雜湊值與 30 秒有狀態檢查。這組 5 秒語音計時與較早的 10 秒探測是兩個不同的 benchmark。
+函式庫選擇見 <a href="https://github.com/mcw519/PureSound/blob/9caa3540fabe328e9a2d9da0a3950ccca1096950/docs/usage/streaming/dpcrn_onnx.zh-TW.md">CPU 設定</a>。</p>
+<p>checkpoint 關卡用一次 PyTorch 呼叫處理完整 10 秒音訊。串流 runtime 每 10 ms hop
+處理一次，10 秒約需 1,000 次 ONNX 呼叫，並逐幀交換狀態、執行 STFT／iSTFT 與重疊相加。
+兩者的批次方式、後端與呼叫成本不同；目前量測沒有拆分各項成本。
+RTF 是運算耗時除以音訊長度：0.570 表示 10 秒音訊約需 5.7 秒運算，
+不衡量等待未來輸入的時間，因此須與延遲分開呈現。</p>
+<p>v3 的 hop 為 160 樣本（10 ms）、分析窗為 512 樣本（32 ms）、look-ahead 為 3 幀（30 ms）。
+串流演算法緩衝延遲為 <code>lookahead + 窗長 − hop</code> 到 <code>lookahead + 窗長</code>，
+即 <strong>52–62 ms</strong>，依樣本在 hop 中的位置而異。裝置預算以 <strong>62 ms</strong> 為基準，
+再加運算時間、額外輸入分塊緩衝、音訊裝置緩衝與傳輸。v1/v2 的幾何與演算法延遲相同。
+波形對齊仍使用 480 樣本（30 ms）的 graph look-ahead，這與完整串流緩衝延遲不同。
+這些推導值已保存於 v3 ONNX manifest 與發布驗證紀錄的 <code>algorithmic_latency</code>。</p>
+<p>瀏覽器用的產物另通過 Node 上 ONNX Runtime Web 1.24.3 WASM 驗證：
+與原生串流相比，正規化 RMS 誤差為 3.30e-7；不規則分塊與重設串流後的輸出一致。</p>
+</div></article></div>
+<footer class="site-footer"><span data-i18n="Built from">Built from</span> <a href="https://github.com/mcw519/PureSound/tree/9caa3540fabe328e9a2d9da0a3950ccca1096950"><code>9caa3540fabe</code></a> · Apache-2.0</footer>
+</main>
+<script>
+(() => {
+  const ZH = {"Home": "首頁", "Get started": "開始使用", "Models": "模型庫", "Try it": "線上試用", "Benchmarks": "效能量測", "Theme": "主題", "Auto": "自動", "Light": "淺色", "Dark": "深色", "Language": "語言", "Voice isolation": "人聲分離", "Noise suppression": "雜訊抑制", "Speaker verification": "語者驗證", "default": "預設", "candidate": "候選", "alternative": "替代", "fallback": "備援", "released": "已發布", "reference": "參考", "experimental": "實驗", "All": "全部", "More": "展開", "Less": "收合", "Search models": "搜尋模型", "Task": "任務", "Role": "角色", "{shown} of {total} models": "{shown} / {total} 個模型", "No models match these filters.": "沒有符合篩選條件的模型。", "Model card": "模型卡", "Contents": "目錄", "Source on GitHub": "GitHub 原始檔", "Built from": "產生自", "Try it in your browser": "在瀏覽器試用", "Streaming": "串流", "Model zoo": "模型庫", "Sample rate": "取樣率", "Look-ahead": "前瞻延遲", "Recommended": "建議設定", "Download": "下載", "Run it": "執行方式", "Model cards": "模型卡", "float weights": "浮點權重", "Models in this card": "此模型卡涵蓋的模型", "yes": "是", "no": "否", "Try a model in your browser": "在瀏覽器試用模型", "The released streaming models run on this device in ONNX Runtime Web (WebAssembly). Audio never leaves the browser.": "已發布的串流模型在這台裝置上以 ONNX Runtime Web（WebAssembly）執行，音訊不會離開瀏覽器。", "Model": "模型", "Audio": "音訊", "Samples": "範例", "Drop audio here": "將音檔拖放到這裡", "or click to browse · any rate, prepared to mono 16 kHz": "或點選瀏覽 · 任何取樣率，會轉成單聲道 16 kHz", "Replace audio": "替換音檔", "{name} · drop or click to choose another file": "{name} · 拖放或點選以選擇其他檔案", "Model output share": "模型輸出比例", "dry_blend: the share of the model output mixed with the untouched input.": "dry_blend：模型輸出與原始輸入混合時，模型輸出所佔的比例。", "input": "原始輸入", "model": "模型輸出", "Run": "執行", "Running": "執行中", "Ready": "就緒", "Unavailable": "無法使用", "Downloading the model": "下載模型中", "Processing {percent}%": "處理中 {percent}%", "Done in {seconds} s": "{seconds} 秒完成", "Input": "輸入", "Output": "輸出", "Download output": "下載輸出", "Real-time factor": "即時率", "Threads": "執行緒", "Processing time": "處理時間", "Choose a sample or a file first.": "請先選一段範例或一個檔案。", "Two talkers": "兩位說話者", "Near talker, far talker": "近處與遠處的說話者", "Speech in noise": "噪音中的語音", "This page is not cross-origin isolated, so models run on one thread here.": "這個頁面沒有跨來源隔離（cross-origin isolation），模型只能以單執行緒執行。", "Lower is faster; below 1 keeps up with real time.": "數字越小越快；低於 1 即可跟上即時。", "This build of the site has no on-device payload.": "這個版本的網站沒有附上裝置端推論檔案。"};
+  const root = document.documentElement;
+  const tr = (text) => (root.lang === "zh-TW" && ZH[text]) || text;
+  const site = { tr, onLanguage: [] };
+  window.PureSoundSite = site;
+
+  function translate() {
+    for (const el of document.querySelectorAll("[data-i18n]")) el.textContent = tr(el.dataset.i18n);
+    for (const el of document.querySelectorAll("[data-i18n-attr]")) {
+      for (const attr of el.dataset.i18nAttr.split(",")) {
+        // A dataset key may not hold "-" before a lowercase letter.
+        const key = "src_" + attr.replace(/[^a-z]/gi, "");
+        el.dataset[key] ??= el.getAttribute(attr) || "";
+        el.setAttribute(attr, tr(el.dataset[key]));
+      }
+    }
+    for (const button of document.querySelectorAll("[data-lang]")) button.setAttribute("aria-pressed", String(button.dataset.lang === root.lang));
+    for (const listener of site.onLanguage) listener();
+  }
+  site.translate = translate;
+
+  const themeButtons = document.querySelectorAll("[data-theme-choice]");
+  function setTheme(choice) {
+    try { localStorage.setItem("puresound.theme", choice); } catch {}
+    const dark = choice === "dark" || (choice === "auto" && matchMedia("(prefers-color-scheme: dark)").matches);
+    root.dataset.theme = dark ? "dark" : "light";
+    for (const button of themeButtons) button.setAttribute("aria-pressed", String(button.dataset.themeChoice === choice));
+  }
+  let theme = "auto";
+  try { theme = localStorage.getItem("puresound.theme") || "auto"; } catch {}
+  for (const button of themeButtons) button.addEventListener("click", () => setTheme(button.dataset.themeChoice));
+  setTheme(theme);
+  for (const button of document.querySelectorAll("[data-lang]")) {
+    button.addEventListener("click", () => {
+      root.lang = button.dataset.lang;
+      try { localStorage.setItem("puresound.lang", root.lang); } catch {}
+      translate();
+    });
+  }
+  document.addEventListener("DOMContentLoaded", () => {
+    translate();
+    const current = document.querySelector(".site-nav [aria-current]");
+    const nav = current?.parentElement;
+    if (nav && nav.scrollWidth > nav.clientWidth) nav.scrollLeft = current.offsetLeft - nav.clientWidth / 2 + current.offsetWidth / 2;
+  });
+})();
+</script>
+
+</body>
+</html>
