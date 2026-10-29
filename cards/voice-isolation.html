@@ -196,7 +196,7 @@ a.button { text-decoration: none; }
 the near speaker, suppress far and competing speakers and noise.</p>
 <p><strong><code>dpcrn_curriculum_v1.ckpt</code> is the model-zoo default</strong>, with <code>dpcrn_curriculum_v2.ckpt</code>
 and <code>dpcrn_v8.ckpt</code> beside it as candidates; those three are the versions registered in
-<a href="https://github.com/mcw519/PureSound/blob/9caa3540fabe328e9a2d9da0a3950ccca1096950/model_zoo/catalog.yaml"><code>model_zoo/catalog.yaml</code></a>. All three are DPCRN
+<a href="https://github.com/mcw519/PureSound/blob/504ee3ae9a7fdeb520218aaffdabe5134c8b2159/model_zoo/catalog.yaml"><code>model_zoo/catalog.yaml</code></a>. All three are DPCRN
 (complex ratio mask, 16 kHz, 30 ms look-ahead). <code>dpcrn_v8</code> and <code>dpcrn_curriculum_v1</code>
 share one width and load with <code>config/infer_dpcrn.yaml</code>; <code>dpcrn_curriculum_v2</code> is
 wider and loads with <code>config/infer_dpcrn_wide.yaml</code>:</p>
@@ -374,7 +374,7 @@ v8 does not. On recordings from capture chains unlike the training data, both ca
 attenuate the near talker; v8 does not.</p>
 <p>BUT-OFFICE is a 200-utterance set whose bootstrap interval is usually too wide to
 separate a model from leaving the audio alone, so it is a monitor; the primary WER
-gate is <code>wer_set_moderate_test</code> (<a href="https://github.com/mcw519/PureSound/blob/9caa3540fabe328e9a2d9da0a3950ccca1096950/egs/voice_isolate/scripts/WER_SETS.md"><code>../scripts/WER_SETS.md</code></a>).</p>
+gate is <code>wer_set_moderate_test</code> (<a href="https://github.com/mcw519/PureSound/blob/504ee3ae9a7fdeb520218aaffdabe5134c8b2159/egs/voice_isolate/scripts/WER_SETS.md"><code>../scripts/WER_SETS.md</code></a>).</p>
 <h2 id="choosing-a-version">Choosing a version</h2>
 <p>Take <code>dpcrn_curriculum_v1.ckpt</code> with <code>dry_blend 0.9</code> -- the model-zoo default; it
 suppresses a far voice even before any near talker has spoken. Take
@@ -465,7 +465,7 @@ single-time inter-LSTM update, combining the trained input/hidden projections
 into one matrix multiplication over all frequency positions. The trained intra
 bidirectional LSTMs and all state ports are retained. On the same 5-second
 noisy-speech sample, interleaved single-thread CPU RTF improved from <strong>0.366 to
-0.258</strong> for each release. The <a href="https://github.com/mcw519/PureSound/blob/9caa3540fabe328e9a2d9da0a3950ccca1096950/model_zoo/benchmarks/onnx_reexport_20261004.json">re-export report</a>
+0.258</strong> for each release. The <a href="https://github.com/mcw519/PureSound/blob/504ee3ae9a7fdeb520218aaffdabe5134c8b2159/model_zoo/benchmarks/onnx_reexport_20261004.json">re-export report</a>
 includes original/new hashes and 30-second streaming parity checks. <code>dpcrn_curriculum_v2</code> was exported the same way afterwards: offline-versus-streaming
 parity 95.2 dB on a real recording (curriculum-v1 95.7), and streaming RTF <strong>0.362</strong>
 against curriculum-v1's 0.256 on the same sample, interleaved, single thread.</p>
@@ -482,12 +482,12 @@ uv run python scripts/streaming_onnx.py verify \
     config/infer_dpcrn.yaml pretrained_ckpt/dpcrn_v8.ckpt \
     pretrained_ckpt/streaming/dpcrn_v8.onnx --input_audio speech.wav --provider cpu
 </code></pre>
-<p>Retraining: <a href="https://github.com/mcw519/PureSound/blob/9caa3540fabe328e9a2d9da0a3950ccca1096950/egs/voice_isolate/README.md#train"><code>../README.md</code></a>. The checkpoints here are the
+<p>Retraining: <a href="https://github.com/mcw519/PureSound/blob/504ee3ae9a7fdeb520218aaffdabe5134c8b2159/egs/voice_isolate/README.md#train"><code>../README.md</code></a>. The checkpoints here are the
 judged trough epochs of their training runs.</p>
 </div><div class="lang-zh" lang="zh-TW"><p>近場（&lt;1 m）前景人聲隔離，單聲道、不需 enrollment：保留近距講話者，壓制遠距／競爭
 講話者與噪音。</p>
 <p><strong><code>dpcrn_curriculum_v1.ckpt</code> 是 model zoo 的預設</strong>，<code>dpcrn_curriculum_v2.ckpt</code>
-與 <code>dpcrn_v8.ckpt</code> 在旁邊作為候選；這三個是登錄在 <a href="https://github.com/mcw519/PureSound/blob/9caa3540fabe328e9a2d9da0a3950ccca1096950/model_zoo/catalog.yaml"><code>model_zoo/catalog.yaml</code></a>
+與 <code>dpcrn_v8.ckpt</code> 在旁邊作為候選；這三個是登錄在 <a href="https://github.com/mcw519/PureSound/blob/504ee3ae9a7fdeb520218aaffdabe5134c8b2159/model_zoo/catalog.yaml"><code>model_zoo/catalog.yaml</code></a>
 裡的版本。三者都是 DPCRN（complex ratio mask、16 kHz、30 ms look-ahead）。<code>dpcrn_v8</code> 與
 <code>dpcrn_curriculum_v1</code> 寬度相同，用 <code>config/infer_dpcrn.yaml</code> 載入；<code>dpcrn_curriculum_v2</code>
 較寬，要用 <code>config/infer_dpcrn_wide.yaml</code> 載入：</p>
@@ -657,7 +657,7 @@ blend。</p>
 遠處講話者」（−7.1 與 −12.4 dB），v8 不行。在收音鏈與訓練資料不同的錄音上，兩者都可能衰減
 近講者，v8 不會。</p>
 <p>BUT-OFFICE 是一個 200 句的集合，它的 bootstrap 區間通常太寬，分不出模型與不處理之間的差別，
-所以它是監看；主要的 WER 閘門是 <code>wer_set_moderate_test</code>（<a href="https://github.com/mcw519/PureSound/blob/9caa3540fabe328e9a2d9da0a3950ccca1096950/egs/voice_isolate/scripts/WER_SETS.md"><code>../scripts/WER_SETS.md</code></a>）。</p>
+所以它是監看；主要的 WER 閘門是 <code>wer_set_moderate_test</code>（<a href="https://github.com/mcw519/PureSound/blob/504ee3ae9a7fdeb520218aaffdabe5134c8b2159/egs/voice_isolate/scripts/WER_SETS.md"><code>../scripts/WER_SETS.md</code></a>）。</p>
 <h2 id="zh-如何選版本">如何選版本</h2>
 <p>選 <code>dpcrn_curriculum_v1.ckpt</code> 搭配 <code>dry_blend 0.9</code>——它是 model zoo 的預設，在任何近講者
 開口之前就能壓下遠場人聲。收音鏈未知、或與訓練語料差很多時選 <code>dpcrn_v8.ckpt</code>：它放棄這份
@@ -737,7 +737,7 @@ blend，輸入延後 <code>streaming_delay_frames</code>，不增加延遲。</p
 <p><code>dpcrn_v8</code> 與 <code>dpcrn_curriculum_v1</code> 的匯出採用 batch=1 的 frequency-major 佈局與向量化的單步
 inter-LSTM 更新，把訓練好的 input/hidden 投影合成一次涵蓋所有頻率位置的矩陣乘法；訓練好的
 intra 雙向 LSTM 與所有 state port 都保留。在同一份 5 秒噪音語音樣本上，交錯量測的單執行緒
-CPU RTF 每個版本都從 <strong>0.366 降到 0.258</strong>。<a href="https://github.com/mcw519/PureSound/blob/9caa3540fabe328e9a2d9da0a3950ccca1096950/model_zoo/benchmarks/onnx_reexport_20261004.json">重新匯出報告</a>
+CPU RTF 每個版本都從 <strong>0.366 降到 0.258</strong>。<a href="https://github.com/mcw519/PureSound/blob/504ee3ae9a7fdeb520218aaffdabe5134c8b2159/model_zoo/benchmarks/onnx_reexport_20261004.json">重新匯出報告</a>
 附有新舊雜湊與 30 秒的串流一致性檢查。<code>dpcrn_curriculum_v2</code> 之後用同樣方式匯出：在一支真實
 錄音上離線對串流的一致性 95.2 dB（curriculum-v1 為 95.7），串流 RTF <strong>0.362</strong>，
 curriculum-v1 在同一份樣本上是 0.256（單執行緒、交錯量測）。</p>
@@ -752,10 +752,10 @@ uv run python scripts/streaming_onnx.py verify \
     config/infer_dpcrn.yaml pretrained_ckpt/dpcrn_v8.ckpt \
     pretrained_ckpt/streaming/dpcrn_v8.onnx --input_audio speech.wav --provider cpu
 </code></pre>
-<p>重新訓練：<a href="https://github.com/mcw519/PureSound/blob/9caa3540fabe328e9a2d9da0a3950ccca1096950/egs/voice_isolate/README.zh-TW.md#%E8%A8%93%E7%B7%B4"><code>../README.zh-TW.md</code></a>。這裡的 checkpoint 都是各自訓練 run
+<p>重新訓練：<a href="https://github.com/mcw519/PureSound/blob/504ee3ae9a7fdeb520218aaffdabe5134c8b2159/egs/voice_isolate/README.zh-TW.md#%E8%A8%93%E7%B7%B4"><code>../README.zh-TW.md</code></a>。這裡的 checkpoint 都是各自訓練 run
 中經判準的谷底 epoch。</p>
 </div></article></div>
-<footer class="site-footer"><span data-i18n="Built from">Built from</span> <a href="https://github.com/mcw519/PureSound/tree/9caa3540fabe328e9a2d9da0a3950ccca1096950"><code>9caa3540fabe</code></a> · Apache-2.0</footer>
+<footer class="site-footer"><span data-i18n="Built from">Built from</span> <a href="https://github.com/mcw519/PureSound/tree/504ee3ae9a7fdeb520218aaffdabe5134c8b2159"><code>504ee3ae9a7f</code></a> · Apache-2.0</footer>
 </main>
 <script>
 (() => {

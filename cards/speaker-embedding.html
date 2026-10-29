@@ -222,7 +222,7 @@ python local/compute_eer.py eer_trail_file embeddings_folder score_file
 <tbody>
 <tr>
 <td style="text-align:center">PS-spk-v1</td>
-<td style="text-align:center"><a href="https://github.com/mcw519/PureSound/blob/9caa3540fabe328e9a2d9da0a3950ccca1096950/egs/speaker_embedding/pretrained/PS-spk-v1.onnx">onnx</a><br><a href="https://github.com/mcw519/PureSound/blob/9caa3540fabe328e9a2d9da0a3950ccca1096950/egs/speaker_embedding/pretrained/PS-spk-v1.ckpt">pytorch</a><br><a href="https://github.com/mcw519/PureSound/blob/9caa3540fabe328e9a2d9da0a3950ccca1096950/egs/speaker_embedding/conf/PS-spk-v1.yaml">config</a></td>
+<td style="text-align:center"><a href="https://github.com/mcw519/PureSound/blob/504ee3ae9a7fdeb520218aaffdabe5134c8b2159/egs/speaker_embedding/pretrained/PS-spk-v1.onnx">onnx</a><br><a href="https://github.com/mcw519/PureSound/blob/504ee3ae9a7fdeb520218aaffdabe5134c8b2159/egs/speaker_embedding/pretrained/PS-spk-v1.ckpt">pytorch</a><br><a href="https://github.com/mcw519/PureSound/blob/504ee3ae9a7fdeb520218aaffdabe5134c8b2159/egs/speaker_embedding/conf/PS-spk-v1.yaml">config</a></td>
 <td style="text-align:center">Fbank80</td>
 <td style="text-align:center">ECAPA-TDNN</td>
 <td style="text-align:center">AAMSoftmax<br>(m=0.3)</td>
@@ -230,7 +230,7 @@ python local/compute_eer.py eer_trail_file embeddings_folder score_file
 </tr>
 <tr>
 <td style="text-align:center">PS-spk-v1-1</td>
-<td style="text-align:center"><a href="https://github.com/mcw519/PureSound/blob/9caa3540fabe328e9a2d9da0a3950ccca1096950/egs/speaker_embedding/pretrained/PS-spk-v1-1.onnx">onnx</a><br><a href="https://github.com/mcw519/PureSound/blob/9caa3540fabe328e9a2d9da0a3950ccca1096950/egs/speaker_embedding/pretrained/PS-spk-v1-1.ckpt">pytorch</a><br><a href="https://github.com/mcw519/PureSound/blob/9caa3540fabe328e9a2d9da0a3950ccca1096950/egs/speaker_embedding/conf/PS-spk-v1-1.yaml">config</a></td>
+<td style="text-align:center"><a href="https://github.com/mcw519/PureSound/blob/504ee3ae9a7fdeb520218aaffdabe5134c8b2159/egs/speaker_embedding/pretrained/PS-spk-v1-1.onnx">onnx</a><br><a href="https://github.com/mcw519/PureSound/blob/504ee3ae9a7fdeb520218aaffdabe5134c8b2159/egs/speaker_embedding/pretrained/PS-spk-v1-1.ckpt">pytorch</a><br><a href="https://github.com/mcw519/PureSound/blob/504ee3ae9a7fdeb520218aaffdabe5134c8b2159/egs/speaker_embedding/conf/PS-spk-v1-1.yaml">config</a></td>
 <td style="text-align:center">Fbank80</td>
 <td style="text-align:center">ECAPA-TDNN</td>
 <td style="text-align:center">AAMSoftmax<br>(m=0.3, c=3, k=5)</td>
@@ -263,12 +263,12 @@ python local/compute_eer.py eer_trail_file embeddings_folder score_file
 <h2 id="decision-threshold">Decision threshold</h2>
 <p><code>puresound infer</code>, the web app and <code>demo.py</code> accept a trial when the cosine
 similarity of the two embeddings is above the model's threshold in
-<a href="https://github.com/mcw519/PureSound/blob/9caa3540fabe328e9a2d9da0a3950ccca1096950/model_zoo/catalog.yaml"><code>model_zoo/catalog.yaml</code></a>: <strong>0.37</strong> for
+<a href="https://github.com/mcw519/PureSound/blob/504ee3ae9a7fdeb520218aaffdabe5134c8b2159/model_zoo/catalog.yaml"><code>model_zoo/catalog.yaml</code></a>: <strong>0.37</strong> for
 PS-spk-v1-1 and <strong>0.39</strong> for PS-spk-v1. Both were set on LibriSpeech test-clean
 (40 readers, 2,620 utterances, every pair of utterances a trial) at the point
 where 1% of trials between two readers of the same sex are accepted, rounded to
 0.01. The full record is
-<a href="https://github.com/mcw519/PureSound/blob/9caa3540fabe328e9a2d9da0a3950ccca1096950/model_zoo/benchmarks/speaker_threshold_librispeech_test_clean_20261023.json"><code>speaker_threshold_librispeech_test_clean_20261023.json</code></a>.</p>
+<a href="https://github.com/mcw519/PureSound/blob/504ee3ae9a7fdeb520218aaffdabe5134c8b2159/model_zoo/benchmarks/speaker_threshold_librispeech_test_clean_20261023.json"><code>speaker_threshold_librispeech_test_clean_20261023.json</code></a>.</p>
 <div class="table-wrap"><table class="table">
 <thead>
 <tr>
@@ -350,7 +350,7 @@ python local/compute_eer.py eer_trail_file embeddings_folder score_file
 <tbody>
 <tr>
 <td style="text-align:center">PS-spk-v1</td>
-<td style="text-align:center"><a href="https://github.com/mcw519/PureSound/blob/9caa3540fabe328e9a2d9da0a3950ccca1096950/egs/speaker_embedding/pretrained/PS-spk-v1.onnx">onnx</a><br><a href="https://github.com/mcw519/PureSound/blob/9caa3540fabe328e9a2d9da0a3950ccca1096950/egs/speaker_embedding/pretrained/PS-spk-v1.ckpt">pytorch</a><br><a href="https://github.com/mcw519/PureSound/blob/9caa3540fabe328e9a2d9da0a3950ccca1096950/egs/speaker_embedding/conf/PS-spk-v1.yaml">config</a></td>
+<td style="text-align:center"><a href="https://github.com/mcw519/PureSound/blob/504ee3ae9a7fdeb520218aaffdabe5134c8b2159/egs/speaker_embedding/pretrained/PS-spk-v1.onnx">onnx</a><br><a href="https://github.com/mcw519/PureSound/blob/504ee3ae9a7fdeb520218aaffdabe5134c8b2159/egs/speaker_embedding/pretrained/PS-spk-v1.ckpt">pytorch</a><br><a href="https://github.com/mcw519/PureSound/blob/504ee3ae9a7fdeb520218aaffdabe5134c8b2159/egs/speaker_embedding/conf/PS-spk-v1.yaml">config</a></td>
 <td style="text-align:center">Fbank80</td>
 <td style="text-align:center">ECAPA-TDNN</td>
 <td style="text-align:center">AAMSoftmax<br>(m=0.3)</td>
@@ -358,7 +358,7 @@ python local/compute_eer.py eer_trail_file embeddings_folder score_file
 </tr>
 <tr>
 <td style="text-align:center">PS-spk-v1-1</td>
-<td style="text-align:center"><a href="https://github.com/mcw519/PureSound/blob/9caa3540fabe328e9a2d9da0a3950ccca1096950/egs/speaker_embedding/pretrained/PS-spk-v1-1.onnx">onnx</a><br><a href="https://github.com/mcw519/PureSound/blob/9caa3540fabe328e9a2d9da0a3950ccca1096950/egs/speaker_embedding/pretrained/PS-spk-v1-1.ckpt">pytorch</a><br><a href="https://github.com/mcw519/PureSound/blob/9caa3540fabe328e9a2d9da0a3950ccca1096950/egs/speaker_embedding/conf/PS-spk-v1-1.yaml">config</a></td>
+<td style="text-align:center"><a href="https://github.com/mcw519/PureSound/blob/504ee3ae9a7fdeb520218aaffdabe5134c8b2159/egs/speaker_embedding/pretrained/PS-spk-v1-1.onnx">onnx</a><br><a href="https://github.com/mcw519/PureSound/blob/504ee3ae9a7fdeb520218aaffdabe5134c8b2159/egs/speaker_embedding/pretrained/PS-spk-v1-1.ckpt">pytorch</a><br><a href="https://github.com/mcw519/PureSound/blob/504ee3ae9a7fdeb520218aaffdabe5134c8b2159/egs/speaker_embedding/conf/PS-spk-v1-1.yaml">config</a></td>
 <td style="text-align:center">Fbank80</td>
 <td style="text-align:center">ECAPA-TDNN</td>
 <td style="text-align:center">AAMSoftmax<br>(m=0.3, c=3, k=5)</td>
@@ -390,11 +390,11 @@ python local/compute_eer.py eer_trail_file embeddings_folder score_file
 </table></div>
 <h2 id="zh-判定門檻">判定門檻</h2>
 <p><code>puresound infer</code>、網頁介面與 <code>demo.py</code> 在兩段 embedding 的餘弦相似度高於模型門檻時判為同一人，
-門檻寫在 <a href="https://github.com/mcw519/PureSound/blob/9caa3540fabe328e9a2d9da0a3950ccca1096950/model_zoo/catalog.yaml"><code>model_zoo/catalog.yaml</code></a>：PS-spk-v1-1 為 <strong>0.37</strong>，
+門檻寫在 <a href="https://github.com/mcw519/PureSound/blob/504ee3ae9a7fdeb520218aaffdabe5134c8b2159/model_zoo/catalog.yaml"><code>model_zoo/catalog.yaml</code></a>：PS-spk-v1-1 為 <strong>0.37</strong>，
 PS-spk-v1 為 <strong>0.39</strong>。兩者都在 LibriSpeech test-clean（40 位朗讀者、2,620 段語句，任兩段語句
 即一組試驗）上校正，取「同性別的不同朗讀者有 1% 被誤判為同一人」的那一點，四捨五入到 0.01。
 完整紀錄見
-<a href="https://github.com/mcw519/PureSound/blob/9caa3540fabe328e9a2d9da0a3950ccca1096950/model_zoo/benchmarks/speaker_threshold_librispeech_test_clean_20261023.json"><code>speaker_threshold_librispeech_test_clean_20261023.json</code></a>。</p>
+<a href="https://github.com/mcw519/PureSound/blob/504ee3ae9a7fdeb520218aaffdabe5134c8b2159/model_zoo/benchmarks/speaker_threshold_librispeech_test_clean_20261023.json"><code>speaker_threshold_librispeech_test_clean_20261023.json</code></a>。</p>
 <div class="table-wrap"><table class="table">
 <thead>
 <tr>
@@ -445,7 +445,7 @@ python main.py --export_onnx --pretrained_ckpt_path ckpt_path work.yaml
 <pre><code>python demo.py --address=yours_ip_address --port=yours_port onnx_model_path
 </code></pre>
 </div></article></div>
-<footer class="site-footer"><span data-i18n="Built from">Built from</span> <a href="https://github.com/mcw519/PureSound/tree/9caa3540fabe328e9a2d9da0a3950ccca1096950"><code>9caa3540fabe</code></a> · Apache-2.0</footer>
+<footer class="site-footer"><span data-i18n="Built from">Built from</span> <a href="https://github.com/mcw519/PureSound/tree/504ee3ae9a7fdeb520218aaffdabe5134c8b2159"><code>504ee3ae9a7f</code></a> · Apache-2.0</footer>
 </main>
 <script>
 (() => {

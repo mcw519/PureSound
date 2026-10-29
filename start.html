@@ -193,7 +193,7 @@ standalone Python runtime.</p>
 recipe、評測閘門、串流 ONNX 匯出，以及可從指令列、本機 Web UI 或小型獨立 Python
 runtime 執行的 model zoo。</p>
 </div></div></div>
-<div class="page-actions"><a class="button button-secondary button-small" href="https://github.com/mcw519/PureSound/blob/9caa3540fabe328e9a2d9da0a3950ccca1096950/README.md"><span data-i18n="Source on GitHub">Source on GitHub</span></a></div>
+<div class="page-actions"><a class="button button-secondary button-small" href="https://github.com/mcw519/PureSound/blob/504ee3ae9a7fdeb520218aaffdabe5134c8b2159/README.md"><span data-i18n="Source on GitHub">Source on GitHub</span></a></div>
 </header>
 <div class="doc"><nav class="toc" aria-label="Contents"><span class="caps"><span data-i18n="Contents">Contents</span></span><div class="lang-en" lang="en"><ul><li class="toc-2"><a href="#install">Install</a></li><li class="toc-2"><a href="#quick-start">Quick start</a></li><li class="toc-2"><a href="#train-a-model">Train a model</a></li><li class="toc-2"><a href="#documentation">Documentation</a></li><li class="toc-2"><a href="#development">Development</a></li><li class="toc-2"><a href="#license">License</a></li></ul></div><div class="lang-zh" lang="zh-TW"><ul><li class="toc-2"><a href="#zh-安裝">安裝</a></li><li class="toc-2"><a href="#zh-快速開始">快速開始</a></li><li class="toc-2"><a href="#zh-訓練模型">訓練模型</a></li><li class="toc-2"><a href="#zh-文件">文件</a></li><li class="toc-2"><a href="#zh-開發">開發</a></li><li class="toc-2"><a href="#zh-授權">授權</a></li></ul></div></nav><article class="prose"><div class="lang-en" lang="en"><h2 id="install">Install</h2>
 <p>Python 3.12 or newer; <a href="https://docs.astral.sh/uv/">uv</a> is the recommended setup.
@@ -235,7 +235,7 @@ the CPU, so this is how to choose between a model's default and <code>flash</cod
 </code></pre>
 <p>It has no authentication; do not expose it to an untrusted network.</p>
 <p>To embed a released model in another project without installing PureSound, use
-the standalone runtime in <a href="https://github.com/mcw519/PureSound/blob/9caa3540fabe328e9a2d9da0a3950ccca1096950/sdk/python/README.md"><code>sdk/python</code></a>: it needs only
+the standalone runtime in <a href="https://github.com/mcw519/PureSound/blob/504ee3ae9a7fdeb520218aaffdabe5134c8b2159/sdk/python/README.md"><code>sdk/python</code></a>: it needs only
 NumPy, ONNX Runtime, the ONNX file and its JSON manifest.</p>
 <h2 id="train-a-model">Train a model</h2>
 <p>Each recipe under <code>egs/</code> is run from its own directory, because a recipe's data
@@ -254,11 +254,11 @@ uv run python main.py config/train_dpcrn.yaml --training
 <tbody>
 <tr>
 <td>Noise suppression</td>
-<td><a href="https://github.com/mcw519/PureSound/blob/9caa3540fabe328e9a2d9da0a3950ccca1096950/egs/noise_suppression/README.md">egs/noise_suppression</a></td>
+<td><a href="https://github.com/mcw519/PureSound/blob/504ee3ae9a7fdeb520218aaffdabe5134c8b2159/egs/noise_suppression/README.md">egs/noise_suppression</a></td>
 </tr>
 <tr>
 <td>Voice isolation</td>
-<td><a href="https://github.com/mcw519/PureSound/blob/9caa3540fabe328e9a2d9da0a3950ccca1096950/egs/voice_isolate/README.md">egs/voice_isolate</a></td>
+<td><a href="https://github.com/mcw519/PureSound/blob/504ee3ae9a7fdeb520218aaffdabe5134c8b2159/egs/voice_isolate/README.md">egs/voice_isolate</a></td>
 </tr>
 <tr>
 <td>Speaker embedding</td>
@@ -266,25 +266,25 @@ uv run python main.py config/train_dpcrn.yaml --training
 </tr>
 <tr>
 <td>Target speaker extraction (frozen legacy)</td>
-<td><a href="https://github.com/mcw519/PureSound/blob/9caa3540fabe328e9a2d9da0a3950ccca1096950/egs/target_speaker_extraction/README.md">egs/target_speaker_extraction</a></td>
+<td><a href="https://github.com/mcw519/PureSound/blob/504ee3ae9a7fdeb520218aaffdabe5134c8b2159/egs/target_speaker_extraction/README.md">egs/target_speaker_extraction</a></td>
 </tr>
 <tr>
 <td>RIR bank generation</td>
-<td><a href="https://github.com/mcw519/PureSound/blob/9caa3540fabe328e9a2d9da0a3950ccca1096950/egs/rir_generation/README.md">egs/rir_generation</a></td>
+<td><a href="https://github.com/mcw519/PureSound/blob/504ee3ae9a7fdeb520218aaffdabe5134c8b2159/egs/rir_generation/README.md">egs/rir_generation</a></td>
 </tr>
 </tbody>
 </table></div>
 <h2 id="documentation">Documentation</h2>
-<p><a href="https://github.com/mcw519/PureSound/blob/9caa3540fabe328e9a2d9da0a3950ccca1096950/docs/index.md">docs/index.md</a> is the entry point, in three parts:</p>
+<p><a href="https://github.com/mcw519/PureSound/blob/504ee3ae9a7fdeb520218aaffdabe5134c8b2159/docs/index.md">docs/index.md</a> is the entry point, in three parts:</p>
 <ul>
-<li><a href="https://github.com/mcw519/PureSound/blob/9caa3540fabe328e9a2d9da0a3950ccca1096950/docs/architecture/index.md">Architecture</a> — how the packages fit together and
+<li><a href="https://github.com/mcw519/PureSound/blob/504ee3ae9a7fdeb520218aaffdabe5134c8b2159/docs/architecture/index.md">Architecture</a> — how the packages fit together and
 how data flows from corpus to deployment</li>
-<li><a href="https://github.com/mcw519/PureSound/blob/9caa3540fabe328e9a2d9da0a3950ccca1096950/docs/index.md#algorithms">Algorithms</a> — what each model, loss, synthesis stage
+<li><a href="https://github.com/mcw519/PureSound/blob/504ee3ae9a7fdeb520218aaffdabe5134c8b2159/docs/index.md#algorithms">Algorithms</a> — what each model, loss, synthesis stage
 and metric computes</li>
-<li><a href="https://github.com/mcw519/PureSound/blob/9caa3540fabe328e9a2d9da0a3950ccca1096950/docs/index.md#usage">Usage</a> — preparing data, training, evaluating, exporting
+<li><a href="https://github.com/mcw519/PureSound/blob/504ee3ae9a7fdeb520218aaffdabe5134c8b2159/docs/index.md#usage">Usage</a> — preparing data, training, evaluating, exporting
 and deploying</li>
 </ul>
-<p>Where a new file belongs: <a href="https://github.com/mcw519/PureSound/blob/9caa3540fabe328e9a2d9da0a3950ccca1096950/docs/repository_layout.md">docs/repository_layout.md</a>.</p>
+<p>Where a new file belongs: <a href="https://github.com/mcw519/PureSound/blob/504ee3ae9a7fdeb520218aaffdabe5134c8b2159/docs/repository_layout.md">docs/repository_layout.md</a>.</p>
 <h2 id="development">Development</h2>
 <pre><code class="language-bash">uv run python test/run_repo_checks.py --suite standard   # everyday
 uv run python test/run_repo_checks.py                    # full suite, before a release
@@ -299,10 +299,10 @@ test/        tests and public fixtures
 </code></pre>
 <h2 id="license">License</h2>
 <p>Original PureSound code, SDKs, configuration files, documentation, and models
-trained by Milo Wu or PureSound contributors are licensed under <a href="https://github.com/mcw519/PureSound/blob/9caa3540fabe328e9a2d9da0a3950ccca1096950/LICENSE">Apache-2.0</a>,
+trained by Milo Wu or PureSound contributors are licensed under <a href="https://github.com/mcw519/PureSound/blob/504ee3ae9a7fdeb520218aaffdabe5134c8b2159/LICENSE">Apache-2.0</a>,
 including the model zoo's checkpoints and ONNX exports. Others may use, modify,
 use commercially, and redistribute these models under the license's terms.
-See <a href="https://github.com/mcw519/PureSound/blob/9caa3540fabe328e9a2d9da0a3950ccca1096950/NOTICE">NOTICE</a> for the scope and exclusions. Third-party material, including
+See <a href="https://github.com/mcw519/PureSound/blob/504ee3ae9a7fdeb520218aaffdabe5134c8b2159/NOTICE">NOTICE</a> for the scope and exclusions. Third-party material, including
 third-party models, retains its own license. Datasets and audio recordings are
 excluded unless explicitly licensed otherwise; check their individual license and
 provenance information before reuse.</p>
@@ -346,7 +346,7 @@ uv run puresound infer speaker-verification-ps-spk-v1-1 \
 </code></pre>
 <p>它沒有驗證機制，請勿開放到不可信任的網路。</p>
 <p>若要在其他專案中嵌入已發布模型而不安裝 PureSound，請用
-<a href="https://github.com/mcw519/PureSound/blob/9caa3540fabe328e9a2d9da0a3950ccca1096950/sdk/python/README.zh-TW.md"><code>sdk/python</code></a> 的獨立 runtime：只需要 NumPy、ONNX
+<a href="https://github.com/mcw519/PureSound/blob/504ee3ae9a7fdeb520218aaffdabe5134c8b2159/sdk/python/README.zh-TW.md"><code>sdk/python</code></a> 的獨立 runtime：只需要 NumPy、ONNX
 Runtime、ONNX 檔與它的 JSON manifest。</p>
 <h2 id="zh-訓練模型">訓練模型</h2>
 <p><code>egs/</code> 下的每個 recipe 都要在自己的目錄裡執行，因為 recipe 裡的資料與輸出路徑
@@ -364,11 +364,11 @@ uv run python main.py config/train_dpcrn.yaml --training
 <tbody>
 <tr>
 <td>降噪</td>
-<td><a href="https://github.com/mcw519/PureSound/blob/9caa3540fabe328e9a2d9da0a3950ccca1096950/egs/noise_suppression/README.zh-TW.md">egs/noise_suppression</a></td>
+<td><a href="https://github.com/mcw519/PureSound/blob/504ee3ae9a7fdeb520218aaffdabe5134c8b2159/egs/noise_suppression/README.zh-TW.md">egs/noise_suppression</a></td>
 </tr>
 <tr>
 <td>人聲分離</td>
-<td><a href="https://github.com/mcw519/PureSound/blob/9caa3540fabe328e9a2d9da0a3950ccca1096950/egs/voice_isolate/README.zh-TW.md">egs/voice_isolate</a></td>
+<td><a href="https://github.com/mcw519/PureSound/blob/504ee3ae9a7fdeb520218aaffdabe5134c8b2159/egs/voice_isolate/README.zh-TW.md">egs/voice_isolate</a></td>
 </tr>
 <tr>
 <td>語者 embedding</td>
@@ -376,23 +376,23 @@ uv run python main.py config/train_dpcrn.yaml --training
 </tr>
 <tr>
 <td>目標語者萃取（凍結的 legacy）</td>
-<td><a href="https://github.com/mcw519/PureSound/blob/9caa3540fabe328e9a2d9da0a3950ccca1096950/egs/target_speaker_extraction/README.zh-TW.md">egs/target_speaker_extraction</a></td>
+<td><a href="https://github.com/mcw519/PureSound/blob/504ee3ae9a7fdeb520218aaffdabe5134c8b2159/egs/target_speaker_extraction/README.zh-TW.md">egs/target_speaker_extraction</a></td>
 </tr>
 <tr>
 <td>RIR bank 生成</td>
-<td><a href="https://github.com/mcw519/PureSound/blob/9caa3540fabe328e9a2d9da0a3950ccca1096950/egs/rir_generation/README.zh-TW.md">egs/rir_generation</a></td>
+<td><a href="https://github.com/mcw519/PureSound/blob/504ee3ae9a7fdeb520218aaffdabe5134c8b2159/egs/rir_generation/README.zh-TW.md">egs/rir_generation</a></td>
 </tr>
 </tbody>
 </table></div>
 <h2 id="zh-文件">文件</h2>
-<p>入口是 <a href="https://github.com/mcw519/PureSound/blob/9caa3540fabe328e9a2d9da0a3950ccca1096950/docs/index.zh-TW.md">docs/index.zh-TW.md</a>，分成三部分：</p>
+<p>入口是 <a href="https://github.com/mcw519/PureSound/blob/504ee3ae9a7fdeb520218aaffdabe5134c8b2159/docs/index.zh-TW.md">docs/index.zh-TW.md</a>，分成三部分：</p>
 <ul>
-<li><a href="https://github.com/mcw519/PureSound/blob/9caa3540fabe328e9a2d9da0a3950ccca1096950/docs/architecture/index.zh-TW.md">架構</a>——各 package 如何組合，以及資料如何從
+<li><a href="https://github.com/mcw519/PureSound/blob/504ee3ae9a7fdeb520218aaffdabe5134c8b2159/docs/architecture/index.zh-TW.md">架構</a>——各 package 如何組合，以及資料如何從
 語料流到部署</li>
-<li><a href="https://github.com/mcw519/PureSound/blob/9caa3540fabe328e9a2d9da0a3950ccca1096950/docs/index.zh-TW.md#%E6%BC%94%E7%AE%97%E6%B3%95">演算法</a>——每個模型、loss、合成階段與指標計算什麼</li>
-<li><a href="https://github.com/mcw519/PureSound/blob/9caa3540fabe328e9a2d9da0a3950ccca1096950/docs/index.zh-TW.md#%E4%BD%BF%E7%94%A8%E6%96%B9%E5%BC%8F">使用方式</a>——準備資料、訓練、評測、匯出與部署</li>
+<li><a href="https://github.com/mcw519/PureSound/blob/504ee3ae9a7fdeb520218aaffdabe5134c8b2159/docs/index.zh-TW.md#%E6%BC%94%E7%AE%97%E6%B3%95">演算法</a>——每個模型、loss、合成階段與指標計算什麼</li>
+<li><a href="https://github.com/mcw519/PureSound/blob/504ee3ae9a7fdeb520218aaffdabe5134c8b2159/docs/index.zh-TW.md#%E4%BD%BF%E7%94%A8%E6%96%B9%E5%BC%8F">使用方式</a>——準備資料、訓練、評測、匯出與部署</li>
 </ul>
-<p>新檔案該放哪：<a href="https://github.com/mcw519/PureSound/blob/9caa3540fabe328e9a2d9da0a3950ccca1096950/docs/repository_layout.zh-TW.md">docs/repository_layout.zh-TW.md</a>。</p>
+<p>新檔案該放哪：<a href="https://github.com/mcw519/PureSound/blob/504ee3ae9a7fdeb520218aaffdabe5134c8b2159/docs/repository_layout.zh-TW.md">docs/repository_layout.zh-TW.md</a>。</p>
 <h2 id="zh-開發">開發</h2>
 <pre><code class="language-bash">uv run python test/run_repo_checks.py --suite standard   # 日常檢查
 uv run python test/run_repo_checks.py                    # 完整測試，release 前執行
@@ -407,13 +407,13 @@ test/        測試與公開 test fixtures
 </code></pre>
 <h2 id="zh-授權">授權</h2>
 <p>PureSound 自有程式碼、SDK、設定檔、文件，以及 Milo Wu 或 PureSound 貢獻者自行
-訓練的模型均採用 <a href="https://github.com/mcw519/PureSound/blob/9caa3540fabe328e9a2d9da0a3950ccca1096950/LICENSE">Apache-2.0</a>，包含 model zoo 發布的 checkpoint 與
+訓練的模型均採用 <a href="https://github.com/mcw519/PureSound/blob/504ee3ae9a7fdeb520218aaffdabe5134c8b2159/LICENSE">Apache-2.0</a>，包含 model zoo 發布的 checkpoint 與
 ONNX 匯出。其他人可以依授權條款使用、修改、商用與再散佈這些模型。
-適用範圍與排除項目請見 <a href="https://github.com/mcw519/PureSound/blob/9caa3540fabe328e9a2d9da0a3950ccca1096950/NOTICE">NOTICE</a>。第三方內容（包含第三方模型）保留
+適用範圍與排除項目請見 <a href="https://github.com/mcw519/PureSound/blob/504ee3ae9a7fdeb520218aaffdabe5134c8b2159/NOTICE">NOTICE</a>。第三方內容（包含第三方模型）保留
 各自的授權。資料集與音訊錄音除非另有明確授權，均不包含在此次 Apache-2.0
 授權中；使用前請查閱各項目的授權與來源資訊。</p>
 </div></article></div>
-<footer class="site-footer"><span data-i18n="Built from">Built from</span> <a href="https://github.com/mcw519/PureSound/tree/9caa3540fabe328e9a2d9da0a3950ccca1096950"><code>9caa3540fabe</code></a> · Apache-2.0</footer>
+<footer class="site-footer"><span data-i18n="Built from">Built from</span> <a href="https://github.com/mcw519/PureSound/tree/504ee3ae9a7fdeb520218aaffdabe5134c8b2159"><code>504ee3ae9a7f</code></a> · Apache-2.0</footer>
 </main>
 <script>
 (() => {

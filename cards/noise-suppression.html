@@ -194,12 +194,12 @@ a.button { text-decoration: none; }
 </header>
 <div class="doc"><nav class="toc" aria-label="Contents"><span class="caps"><span data-i18n="Contents">Contents</span></span><div class="lang-en" lang="en"><ul><li class="toc-2"><a href="#versions">Versions</a></li><li class="toc-2"><a href="#measurements">Measurements</a></li><li class="toc-2"><a href="#release-decisions">Release decisions</a></li><li class="toc-2"><a href="#flash-int8-variants">flash (int8) variants</a></li><li class="toc-3"><a href="#v3">v3</a></li><li class="toc-3"><a href="#v1-and-v2">v1 and v2</a></li><li class="toc-2"><a href="#pcs-post-filter-optional">PCS post-filter (optional)</a></li><li class="toc-2"><a href="#reproduce-v3">Reproduce v3</a></li><li class="toc-2"><a href="#export-validation">Export validation</a></li></ul></div><div class="lang-zh" lang="zh-TW"><ul><li class="toc-2"><a href="#zh-版本">版本</a></li><li class="toc-2"><a href="#zh-量測">量測</a></li><li class="toc-2"><a href="#zh-發版決定">發版決定</a></li><li class="toc-2"><a href="#zh-flashint8variant">flash（int8）variant</a></li><li class="toc-3"><a href="#zh-v3">v3</a></li><li class="toc-3"><a href="#zh-v1-與-v2">v1 與 v2</a></li><li class="toc-2"><a href="#zh-pcs-後濾可選">PCS 後濾（可選）</a></li><li class="toc-2"><a href="#zh-重現-v3">重現 v3</a></li><li class="toc-2"><a href="#zh-匯出驗證">匯出驗證</a></li></ul></div></nav><article class="prose"><div class="lang-en" lang="en"><p>Single-channel 16 kHz speech enhancement, streaming, no enrollment. All versions
 use DPCRN with a Mamba temporal path over 24 ERB bands. Benchmark stages:
-<a href="https://github.com/mcw519/PureSound/blob/9caa3540fabe328e9a2d9da0a3950ccca1096950/egs/noise_suppression/benchmarks/stages.md"><code>../benchmarks/stages.md</code></a>.</p>
+<a href="https://github.com/mcw519/PureSound/blob/504ee3ae9a7fdeb520218aaffdabe5134c8b2159/egs/noise_suppression/benchmarks/stages.md"><code>../benchmarks/stages.md</code></a>.</p>
 <pre><code class="language-bash">uv run puresound infer noise-suppression-dpcrn-mamba-v3 \
     --input audio=in.wav --output audio=out.wav --provider cpu
 </code></pre>
-<p>v1/v2 use <a href="https://github.com/mcw519/PureSound/blob/9caa3540fabe328e9a2d9da0a3950ccca1096950/egs/noise_suppression/config/infer_dpcrn.yaml"><code>../config/infer_dpcrn.yaml</code></a>.
-v3 requires <a href="https://github.com/mcw519/PureSound/blob/9caa3540fabe328e9a2d9da0a3950ccca1096950/egs/noise_suppression/config/infer_dpcrn_mamba_wide.yaml"><code>../config/infer_dpcrn_mamba_wide.yaml</code></a>:
+<p>v1/v2 use <a href="https://github.com/mcw519/PureSound/blob/504ee3ae9a7fdeb520218aaffdabe5134c8b2159/egs/noise_suppression/config/infer_dpcrn.yaml"><code>../config/infer_dpcrn.yaml</code></a>.
+v3 requires <a href="https://github.com/mcw519/PureSound/blob/504ee3ae9a7fdeb520218aaffdabe5134c8b2159/egs/noise_suppression/config/infer_dpcrn_mamba_wide.yaml"><code>../config/infer_dpcrn_mamba_wide.yaml</code></a>:
 channels <code>[2,48,96,128]</code> and hidden size 128, versus <code>[2,32,64,96]</code> and 96.
 All streaming exports record <code>dry_blend: 1.0</code>, with no onset guard or post-graph
 relief. Re-export with <code>--dry-blend 1.0</code>.</p>
@@ -370,9 +370,9 @@ paired confidence intervals between released versions.</p>
 </tr>
 </tbody>
 </table></div>
-<p>Records: <a href="https://github.com/mcw519/PureSound/blob/9caa3540fabe328e9a2d9da0a3950ccca1096950/egs/noise_suppression/benchmarks/records/ns_dpcrn-mamba_v3dm_mg_ep3.json">v3</a>,
-<a href="https://github.com/mcw519/PureSound/blob/9caa3540fabe328e9a2d9da0a3950ccca1096950/egs/noise_suppression/benchmarks/records/ns_dpcrn-mamba_metricgan_ft_ep3.json">v2</a>,
-<a href="https://github.com/mcw519/PureSound/blob/9caa3540fabe328e9a2d9da0a3950ccca1096950/egs/noise_suppression/benchmarks/records/ns_dpcrn-mamba_activebin_ft_ep1.json">v1</a>.</p>
+<p>Records: <a href="https://github.com/mcw519/PureSound/blob/504ee3ae9a7fdeb520218aaffdabe5134c8b2159/egs/noise_suppression/benchmarks/records/ns_dpcrn-mamba_v3dm_mg_ep3.json">v3</a>,
+<a href="https://github.com/mcw519/PureSound/blob/504ee3ae9a7fdeb520218aaffdabe5134c8b2159/egs/noise_suppression/benchmarks/records/ns_dpcrn-mamba_metricgan_ft_ep3.json">v2</a>,
+<a href="https://github.com/mcw519/PureSound/blob/504ee3ae9a7fdeb520218aaffdabe5134c8b2159/egs/noise_suppression/benchmarks/records/ns_dpcrn-mamba_activebin_ft_ep1.json">v1</a>.</p>
 <h2 id="release-decisions">Release decisions</h2>
 <ul>
 <li>v3 was updated on 2026-10-18: the same wide model and training ladder, with a
@@ -637,22 +637,22 @@ assigned only to the released artifact.</p>
 </thead>
 <tbody>
 <tr>
-<td><a href="https://github.com/mcw519/PureSound/blob/9caa3540fabe328e9a2d9da0a3950ccca1096950/egs/noise_suppression/config/train_dpcrn_mamba_capW_s0.yaml"><code>train_dpcrn_mamba_capW_s0.yaml</code></a></td>
+<td><a href="https://github.com/mcw519/PureSound/blob/504ee3ae9a7fdeb520218aaffdabe5134c8b2159/egs/noise_suppression/config/train_dpcrn_mamba_capW_s0.yaml"><code>train_dpcrn_mamba_capW_s0.yaml</code></a></td>
 <td>scratch; DNS-5 data, SNR [0,20]</td>
 <td>20 / ep19, step40000</td>
 </tr>
 <tr>
-<td><a href="https://github.com/mcw519/PureSound/blob/9caa3540fabe328e9a2d9da0a3950ccca1096950/egs/noise_suppression/config/train_dpcrn_mamba_capWL3_s1.yaml"><code>train_dpcrn_mamba_capWL3_s1.yaml</code></a></td>
+<td><a href="https://github.com/mcw519/PureSound/blob/504ee3ae9a7fdeb520218aaffdabe5134c8b2159/egs/noise_suppression/config/train_dpcrn_mamba_capWL3_s1.yaml"><code>train_dpcrn_mamba_capWL3_s1.yaml</code></a></td>
 <td>capW_s0 ep19; mixed speech/noise, coverage sampler, SNR [-10,40], 4-second rows</td>
 <td>20 / ep19, step80000</td>
 </tr>
 <tr>
-<td><a href="https://github.com/mcw519/PureSound/blob/9caa3540fabe328e9a2d9da0a3950ccca1096950/egs/noise_suppression/config/train_dpcrn_mamba_capWL3_ft.yaml"><code>train_dpcrn_mamba_capWL3_ft.yaml</code></a></td>
+<td><a href="https://github.com/mcw519/PureSound/blob/504ee3ae9a7fdeb520218aaffdabe5134c8b2159/egs/noise_suppression/config/train_dpcrn_mamba_capWL3_ft.yaml"><code>train_dpcrn_mamba_capWL3_ft.yaml</code></a></td>
 <td>capWL3_s1 ep19; ActiveBin calibration</td>
 <td>2 / ep1, step4000</td>
 </tr>
 <tr>
-<td><a href="https://github.com/mcw519/PureSound/blob/9caa3540fabe328e9a2d9da0a3950ccca1096950/egs/noise_suppression/config/train_dpcrn_mamba_capWL3_mg.yaml"><code>train_dpcrn_mamba_capWL3_mg.yaml</code></a></td>
+<td><a href="https://github.com/mcw519/PureSound/blob/504ee3ae9a7fdeb520218aaffdabe5134c8b2159/egs/noise_suppression/config/train_dpcrn_mamba_capWL3_mg.yaml"><code>train_dpcrn_mamba_capWL3_mg.yaml</code></a></td>
 <td>capWL3_ft ep1; PESQ MetricGAN + DNSMOS P.835 term (<code>DNSMOSLoss</code>)</td>
 <td>4 / ep3, step8000</td>
 </tr>
@@ -684,10 +684,10 @@ the sidecars additionally reference SHA256-validated native SSM companions.
 On the same 5-second noisy-speech sample, an interleaved old/new measurement gave:
 v1 <strong>0.393 → 0.299 / 0.257</strong>, v2 <strong>0.406 → 0.311 / 0.266</strong>, and v3
 <strong>0.572 → 0.446 / 0.390</strong> (standard / native). v3 now meets the 0.5 budget on
-this CPU. The <a href="https://github.com/mcw519/PureSound/blob/9caa3540fabe328e9a2d9da0a3950ccca1096950/model_zoo/benchmarks/onnx_reexport_20261004.json">re-export report</a>
+this CPU. The <a href="https://github.com/mcw519/PureSound/blob/504ee3ae9a7fdeb520218aaffdabe5134c8b2159/model_zoo/benchmarks/onnx_reexport_20261004.json">re-export report</a>
 records the sample, timing repeats, hashes and 30-second stateful checks. These
 5-second speech timings and the older 10-second probe are separate benchmarks.
-See <a href="https://github.com/mcw519/PureSound/blob/9caa3540fabe328e9a2d9da0a3950ccca1096950/docs/usage/streaming/dpcrn_onnx.md">CPU setup</a> for library selection.</p>
+See <a href="https://github.com/mcw519/PureSound/blob/504ee3ae9a7fdeb520218aaffdabe5134c8b2159/docs/usage/streaming/dpcrn_onnx.md">CPU setup</a> for library selection.</p>
 <p>The checkpoint gate processes a whole 10-second waveform in one PyTorch call.
 The streaming runtime processes one 10 ms hop at a time, with roughly 1,000
 ONNX calls per 10 seconds plus state exchange, STFT/iSTFT and overlap-add.
@@ -708,12 +708,12 @@ in the v3 ONNX manifest and release validation record.</p>
 validation on Node: normalized RMS error versus native streaming is 3.30e-7;
 irregular chunk sizes and a stream reset reproduce the same output.</p>
 </div><div class="lang-zh" lang="zh-TW"><p>單聲道 16 kHz 語音增強，可串流、不需 enrollment。各版本都是 DPCRN，時間路徑使用
-24 個 ERB 頻帶上的 Mamba。關卡見 <a href="https://github.com/mcw519/PureSound/blob/9caa3540fabe328e9a2d9da0a3950ccca1096950/egs/noise_suppression/benchmarks/stages.zh-TW.md"><code>../benchmarks/stages.zh-TW.md</code></a>。</p>
+24 個 ERB 頻帶上的 Mamba。關卡見 <a href="https://github.com/mcw519/PureSound/blob/504ee3ae9a7fdeb520218aaffdabe5134c8b2159/egs/noise_suppression/benchmarks/stages.zh-TW.md"><code>../benchmarks/stages.zh-TW.md</code></a>。</p>
 <pre><code class="language-bash">uv run puresound infer noise-suppression-dpcrn-mamba-v3 \
     --input audio=in.wav --output audio=out.wav --provider cpu
 </code></pre>
-<p>v1/v2 使用 <a href="https://github.com/mcw519/PureSound/blob/9caa3540fabe328e9a2d9da0a3950ccca1096950/egs/noise_suppression/config/infer_dpcrn.yaml"><code>../config/infer_dpcrn.yaml</code></a>。
-v3 必須使用 <a href="https://github.com/mcw519/PureSound/blob/9caa3540fabe328e9a2d9da0a3950ccca1096950/egs/noise_suppression/config/infer_dpcrn_mamba_wide.yaml"><code>../config/infer_dpcrn_mamba_wide.yaml</code></a>：
+<p>v1/v2 使用 <a href="https://github.com/mcw519/PureSound/blob/504ee3ae9a7fdeb520218aaffdabe5134c8b2159/egs/noise_suppression/config/infer_dpcrn.yaml"><code>../config/infer_dpcrn.yaml</code></a>。
+v3 必須使用 <a href="https://github.com/mcw519/PureSound/blob/504ee3ae9a7fdeb520218aaffdabe5134c8b2159/egs/noise_suppression/config/infer_dpcrn_mamba_wide.yaml"><code>../config/infer_dpcrn_mamba_wide.yaml</code></a>：
 通道 <code>[2,48,96,128]</code>、hidden size 128；v1/v2 則為 <code>[2,32,64,96]</code>、96。
 串流匯出皆為 <code>dry_blend: 1.0</code>，不使用 onset guard 或 graph 後緩解。
 重新匯出要傳 <code>--dry-blend 1.0</code>。</p>
@@ -883,9 +883,9 @@ v3 必須使用 <a href="https://github.com/mcw519/PureSound/blob/9caa3540fabe32
 </tr>
 </tbody>
 </table></div>
-<p>紀錄：<a href="https://github.com/mcw519/PureSound/blob/9caa3540fabe328e9a2d9da0a3950ccca1096950/egs/noise_suppression/benchmarks/records/ns_dpcrn-mamba_v3dm_mg_ep3.json">v3</a>、
-<a href="https://github.com/mcw519/PureSound/blob/9caa3540fabe328e9a2d9da0a3950ccca1096950/egs/noise_suppression/benchmarks/records/ns_dpcrn-mamba_metricgan_ft_ep3.json">v2</a>、
-<a href="https://github.com/mcw519/PureSound/blob/9caa3540fabe328e9a2d9da0a3950ccca1096950/egs/noise_suppression/benchmarks/records/ns_dpcrn-mamba_activebin_ft_ep1.json">v1</a>。</p>
+<p>紀錄：<a href="https://github.com/mcw519/PureSound/blob/504ee3ae9a7fdeb520218aaffdabe5134c8b2159/egs/noise_suppression/benchmarks/records/ns_dpcrn-mamba_v3dm_mg_ep3.json">v3</a>、
+<a href="https://github.com/mcw519/PureSound/blob/504ee3ae9a7fdeb520218aaffdabe5134c8b2159/egs/noise_suppression/benchmarks/records/ns_dpcrn-mamba_metricgan_ft_ep3.json">v2</a>、
+<a href="https://github.com/mcw519/PureSound/blob/504ee3ae9a7fdeb520218aaffdabe5134c8b2159/egs/noise_suppression/benchmarks/records/ns_dpcrn-mamba_activebin_ft_ep1.json">v1</a>。</p>
 <h2 id="zh-發版決定">發版決定</h2>
 <ul>
 <li>v3 於 2026-10-18 更新：同一個加寬模型與訓練階梯，最後一階在 PESQ critic 旁加入 DNSMOS P.835 項
@@ -1126,22 +1126,22 @@ run 保留實驗名稱，v3 只用於已發布的模型。</p>
 </thead>
 <tbody>
 <tr>
-<td><a href="https://github.com/mcw519/PureSound/blob/9caa3540fabe328e9a2d9da0a3950ccca1096950/egs/noise_suppression/config/train_dpcrn_mamba_capW_s0.yaml"><code>train_dpcrn_mamba_capW_s0.yaml</code></a></td>
+<td><a href="https://github.com/mcw519/PureSound/blob/504ee3ae9a7fdeb520218aaffdabe5134c8b2159/egs/noise_suppression/config/train_dpcrn_mamba_capW_s0.yaml"><code>train_dpcrn_mamba_capW_s0.yaml</code></a></td>
 <td>從零開始；DNS-5、SNR [0,20]</td>
 <td>20／ep19、step40000</td>
 </tr>
 <tr>
-<td><a href="https://github.com/mcw519/PureSound/blob/9caa3540fabe328e9a2d9da0a3950ccca1096950/egs/noise_suppression/config/train_dpcrn_mamba_capWL3_s1.yaml"><code>train_dpcrn_mamba_capWL3_s1.yaml</code></a></td>
+<td><a href="https://github.com/mcw519/PureSound/blob/504ee3ae9a7fdeb520218aaffdabe5134c8b2159/egs/noise_suppression/config/train_dpcrn_mamba_capWL3_s1.yaml"><code>train_dpcrn_mamba_capWL3_s1.yaml</code></a></td>
 <td>capW_s0 ep19；多來源語音／噪音、coverage sampler、SNR [-10,40]、4 秒片段</td>
 <td>20／ep19、step80000</td>
 </tr>
 <tr>
-<td><a href="https://github.com/mcw519/PureSound/blob/9caa3540fabe328e9a2d9da0a3950ccca1096950/egs/noise_suppression/config/train_dpcrn_mamba_capWL3_ft.yaml"><code>train_dpcrn_mamba_capWL3_ft.yaml</code></a></td>
+<td><a href="https://github.com/mcw519/PureSound/blob/504ee3ae9a7fdeb520218aaffdabe5134c8b2159/egs/noise_suppression/config/train_dpcrn_mamba_capWL3_ft.yaml"><code>train_dpcrn_mamba_capWL3_ft.yaml</code></a></td>
 <td>capWL3_s1 ep19；ActiveBin 校準</td>
 <td>2／ep1、step4000</td>
 </tr>
 <tr>
-<td><a href="https://github.com/mcw519/PureSound/blob/9caa3540fabe328e9a2d9da0a3950ccca1096950/egs/noise_suppression/config/train_dpcrn_mamba_capWL3_mg.yaml"><code>train_dpcrn_mamba_capWL3_mg.yaml</code></a></td>
+<td><a href="https://github.com/mcw519/PureSound/blob/504ee3ae9a7fdeb520218aaffdabe5134c8b2159/egs/noise_suppression/config/train_dpcrn_mamba_capWL3_mg.yaml"><code>train_dpcrn_mamba_capWL3_mg.yaml</code></a></td>
 <td>capWL3_ft ep1；PESQ MetricGAN 加 DNSMOS P.835 項（<code>DNSMOSLoss</code>）</td>
 <td>4／ep3、step8000</td>
 </tr>
@@ -1163,9 +1163,9 @@ v3 全句 checkpoint 在此測得 <strong>0.270</strong>，原始 checkpoint 關
 model zoo 預設；sidecar 另外引用經 SHA256 驗證的 native SSM companion。以同一段 5 秒含噪
 語音交錯測量新舊匯出：v1 <strong>0.393 → 0.299 / 0.257</strong>、v2 <strong>0.406 → 0.311 / 0.266</strong>、
 v3 <strong>0.572 → 0.446 / 0.390</strong>（標準 / native）。v3 在這顆 CPU 上已符合 0.5 預算。
-<a href="https://github.com/mcw519/PureSound/blob/9caa3540fabe328e9a2d9da0a3950ccca1096950/model_zoo/benchmarks/onnx_reexport_20261004.json">重新匯出報告</a>記錄了樣本、計時重複、
+<a href="https://github.com/mcw519/PureSound/blob/504ee3ae9a7fdeb520218aaffdabe5134c8b2159/model_zoo/benchmarks/onnx_reexport_20261004.json">重新匯出報告</a>記錄了樣本、計時重複、
 雜湊值與 30 秒有狀態檢查。這組 5 秒語音計時與較早的 10 秒探測是兩個不同的 benchmark。
-函式庫選擇見 <a href="https://github.com/mcw519/PureSound/blob/9caa3540fabe328e9a2d9da0a3950ccca1096950/docs/usage/streaming/dpcrn_onnx.zh-TW.md">CPU 設定</a>。</p>
+函式庫選擇見 <a href="https://github.com/mcw519/PureSound/blob/504ee3ae9a7fdeb520218aaffdabe5134c8b2159/docs/usage/streaming/dpcrn_onnx.zh-TW.md">CPU 設定</a>。</p>
 <p>checkpoint 關卡用一次 PyTorch 呼叫處理完整 10 秒音訊。串流 runtime 每 10 ms hop
 處理一次，10 秒約需 1,000 次 ONNX 呼叫，並逐幀交換狀態、執行 STFT／iSTFT 與重疊相加。
 兩者的批次方式、後端與呼叫成本不同；目前量測沒有拆分各項成本。
@@ -1180,7 +1180,7 @@ RTF 是運算耗時除以音訊長度：0.570 表示 10 秒音訊約需 5.7 秒�
 <p>瀏覽器用的產物另通過 Node 上 ONNX Runtime Web 1.24.3 WASM 驗證：
 與原生串流相比，正規化 RMS 誤差為 3.30e-7；不規則分塊與重設串流後的輸出一致。</p>
 </div></article></div>
-<footer class="site-footer"><span data-i18n="Built from">Built from</span> <a href="https://github.com/mcw519/PureSound/tree/9caa3540fabe328e9a2d9da0a3950ccca1096950"><code>9caa3540fabe</code></a> · Apache-2.0</footer>
+<footer class="site-footer"><span data-i18n="Built from">Built from</span> <a href="https://github.com/mcw519/PureSound/tree/504ee3ae9a7fdeb520218aaffdabe5134c8b2159"><code>504ee3ae9a7f</code></a> · Apache-2.0</footer>
 </main>
 <script>
 (() => {
