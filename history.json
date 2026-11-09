@@ -924,7 +924,7 @@
   },
   {
    "revision": "504ee3ae9a7fdeb520218aaffdabe5134c8b2159",
-   "created_at": "2026-11-02T03:29:47+00:00",
+   "created_at": "2026-11-09T03:31:25+00:00",
    "platforms": {
     "linux": {
      "machine": {
@@ -933,14 +933,14 @@
       "cpu": "AMD EPYC 7763 64-Core Processor",
       "logical_cpus": 4,
       "onnxruntime": "1.26.0",
-      "ci_image": "ubuntu24 20261026.354.1"
+      "ci_image": "ubuntu24 20261101.360.1"
      },
      "results": [
       {
        "model_id": "noise-suppression-dpcrn-mamba-v1",
        "variant": "default",
-       "rtf": 0.2116905352999993,
-       "cold_start_seconds": 0.030942373000016232,
+       "rtf": 0.24257374829999206,
+       "cold_start_seconds": 0.03228417099990111,
        "native_ssm": false,
        "intra_op_threads": 1,
        "latency_ms": 30.0,
@@ -949,8 +949,8 @@
       {
        "model_id": "noise-suppression-dpcrn-mamba-v1",
        "variant": "flash",
-       "rtf": 0.1680789756999957,
-       "cold_start_seconds": 0.028427136000004793,
+       "rtf": 0.18997580289999405,
+       "cold_start_seconds": 0.03259135099995092,
        "native_ssm": false,
        "intra_op_threads": 1,
        "latency_ms": 30.0,
@@ -959,8 +959,8 @@
       {
        "model_id": "noise-suppression-dpcrn-mamba-v2",
        "variant": "default",
-       "rtf": 0.21210224450001078,
-       "cold_start_seconds": 0.024426025999900958,
+       "rtf": 0.24606147570000303,
+       "cold_start_seconds": 0.026131456000030084,
        "native_ssm": false,
        "intra_op_threads": 1,
        "latency_ms": 30.0,
@@ -969,8 +969,8 @@
       {
        "model_id": "noise-suppression-dpcrn-mamba-v2",
        "variant": "flash",
-       "rtf": 0.16869267889999265,
-       "cold_start_seconds": 0.02828901300006237,
+       "rtf": 0.18064959250000356,
+       "cold_start_seconds": 0.028346945000066626,
        "native_ssm": false,
        "intra_op_threads": 1,
        "latency_ms": 30.0,
@@ -979,8 +979,8 @@
       {
        "model_id": "noise-suppression-dpcrn-mamba-v3",
        "variant": "default",
-       "rtf": 0.33664586260000534,
-       "cold_start_seconds": 0.027506741000024704,
+       "rtf": 0.3815605595000079,
+       "cold_start_seconds": 0.028704796999932114,
        "native_ssm": false,
        "intra_op_threads": 1,
        "latency_ms": 30.0,
@@ -989,8 +989,8 @@
       {
        "model_id": "noise-suppression-dpcrn-mamba-v3",
        "variant": "flash",
-       "rtf": 0.23808542470000021,
-       "cold_start_seconds": 0.0289623290000236,
+       "rtf": 0.2491351653000038,
+       "cold_start_seconds": 0.032235538000009,
        "native_ssm": false,
        "intra_op_threads": 1,
        "latency_ms": 30.0,
@@ -999,8 +999,8 @@
       {
        "model_id": "voice-isolate-dpcrn-curriculum-v1",
        "variant": "default",
-       "rtf": 0.21265610409999453,
-       "cold_start_seconds": 0.021240569000042342,
+       "rtf": 0.22000926639999535,
+       "cold_start_seconds": 0.02033770100001675,
        "native_ssm": false,
        "intra_op_threads": 1,
        "latency_ms": 30.0,
@@ -1009,8 +1009,8 @@
       {
        "model_id": "voice-isolate-dpcrn-curriculum-v1",
        "variant": "flash",
-       "rtf": 0.16397250380000514,
-       "cold_start_seconds": 0.02321441699996285,
+       "rtf": 0.17881637299999512,
+       "cold_start_seconds": 0.02507743900002879,
        "native_ssm": false,
        "intra_op_threads": 1,
        "latency_ms": 30.0,
@@ -1019,8 +1019,8 @@
       {
        "model_id": "voice-isolate-dpcrn-curriculum-v2",
        "variant": "default",
-       "rtf": 0.3224257953000006,
-       "cold_start_seconds": 0.020242594000023928,
+       "rtf": 0.34945142600000734,
+       "cold_start_seconds": 0.022707638999918345,
        "native_ssm": false,
        "intra_op_threads": 1,
        "latency_ms": 30.0,
@@ -1029,8 +1029,8 @@
       {
        "model_id": "voice-isolate-dpcrn-curriculum-v2",
        "variant": "flash",
-       "rtf": 0.23091977600000746,
-       "cold_start_seconds": 0.02594659600003979,
+       "rtf": 0.2526469898999949,
+       "cold_start_seconds": 0.02659183999992365,
        "native_ssm": false,
        "intra_op_threads": 1,
        "latency_ms": 30.0,
@@ -1039,8 +1039,8 @@
       {
        "model_id": "voice-isolate-dpcrn-v8",
        "variant": "default",
-       "rtf": 0.21297302099999343,
-       "cold_start_seconds": 0.02048894199992901,
+       "rtf": 0.21575821959999075,
+       "cold_start_seconds": 0.02276636099998086,
        "native_ssm": false,
        "intra_op_threads": 1,
        "latency_ms": 30.0,
@@ -1049,8 +1049,8 @@
       {
        "model_id": "voice-isolate-dpcrn-v8",
        "variant": "flash",
-       "rtf": 0.16419800410000107,
-       "cold_start_seconds": 0.02384180599995034,
+       "rtf": 0.16752206230000866,
+       "cold_start_seconds": 0.023664057000019056,
        "native_ssm": false,
        "intra_op_threads": 1,
        "latency_ms": 30.0,
@@ -1062,17 +1062,17 @@
      "machine": {
       "system": "Windows",
       "machine": "AMD64",
-      "cpu": "AMD EPYC 9V45 96-Core Processor",
+      "cpu": "AMD EPYC 9V74 80-Core Processor",
       "logical_cpus": 4,
       "onnxruntime": "1.26.0",
-      "ci_image": "win25-vs2026 20261021.278.1"
+      "ci_image": "win25-vs2026 20261103.298.1"
      },
      "results": [
       {
        "model_id": "noise-suppression-dpcrn-mamba-v1",
        "variant": "default",
-       "rtf": 0.14030429999999683,
-       "cold_start_seconds": 0.033849300000042604,
+       "rtf": 0.20806617000000074,
+       "cold_start_seconds": 0.049345899999991616,
        "native_ssm": false,
        "intra_op_threads": 1,
        "latency_ms": 30.0,
@@ -1081,8 +1081,8 @@
       {
        "model_id": "noise-suppression-dpcrn-mamba-v1",
        "variant": "flash",
-       "rtf": 0.11801656000000094,
-       "cold_start_seconds": 0.033173299999987194,
+       "rtf": 0.17397301000000312,
+       "cold_start_seconds": 0.04287699999997585,
        "native_ssm": false,
        "intra_op_threads": 1,
        "latency_ms": 30.0,
@@ -1091,8 +1091,8 @@
       {
        "model_id": "noise-suppression-dpcrn-mamba-v2",
        "variant": "default",
-       "rtf": 0.14541227000000276,
-       "cold_start_seconds": 0.0466998999999646,
+       "rtf": 0.20923773999999754,
+       "cold_start_seconds": 0.036225500000000466,
        "native_ssm": false,
        "intra_op_threads": 1,
        "latency_ms": 30.0,
@@ -1101,8 +1101,8 @@
       {
        "model_id": "noise-suppression-dpcrn-mamba-v2",
        "variant": "flash",
-       "rtf": 0.12549528000000124,
-       "cold_start_seconds": 0.03824140000000398,
+       "rtf": 0.1751052100000038,
+       "cold_start_seconds": 0.040427599999986796,
        "native_ssm": false,
        "intra_op_threads": 1,
        "latency_ms": 30.0,
@@ -1111,8 +1111,8 @@
       {
        "model_id": "noise-suppression-dpcrn-mamba-v3",
        "variant": "default",
-       "rtf": 0.2110231199999987,
-       "cold_start_seconds": 0.046562999999991916,
+       "rtf": 0.30372126999999977,
+       "cold_start_seconds": 0.03665110000002869,
        "native_ssm": false,
        "intra_op_threads": 1,
        "latency_ms": 30.0,
@@ -1121,8 +1121,8 @@
       {
        "model_id": "noise-suppression-dpcrn-mamba-v3",
        "variant": "flash",
-       "rtf": 0.16243016999999896,
-       "cold_start_seconds": 0.046776800000031926,
+       "rtf": 0.23851726000000326,
+       "cold_start_seconds": 0.04196089999999231,
        "native_ssm": false,
        "intra_op_threads": 1,
        "latency_ms": 30.0,
@@ -1131,8 +1131,8 @@
       {
        "model_id": "voice-isolate-dpcrn-curriculum-v1",
        "variant": "default",
-       "rtf": 0.11986874999999486,
-       "cold_start_seconds": 0.023965400000008685,
+       "rtf": 0.1920271600000035,
+       "cold_start_seconds": 0.030826100000012957,
        "native_ssm": false,
        "intra_op_threads": 1,
        "latency_ms": 30.0,
@@ -1141,8 +1141,8 @@
       {
        "model_id": "voice-isolate-dpcrn-curriculum-v1",
        "variant": "flash",
-       "rtf": 0.09331816000000118,
-       "cold_start_seconds": 0.03385179999997945,
+       "rtf": 0.15237556000000155,
+       "cold_start_seconds": 0.03489830000000893,
        "native_ssm": false,
        "intra_op_threads": 1,
        "latency_ms": 30.0,
@@ -1151,8 +1151,8 @@
       {
        "model_id": "voice-isolate-dpcrn-curriculum-v2",
        "variant": "default",
-       "rtf": 0.16968540000000304,
-       "cold_start_seconds": 0.025459999999952743,
+       "rtf": 0.26755684999999974,
+       "cold_start_seconds": 0.029570499999977073,
        "native_ssm": false,
        "intra_op_threads": 1,
        "latency_ms": 30.0,
@@ -1161,8 +1161,8 @@
       {
        "model_id": "voice-isolate-dpcrn-curriculum-v2",
        "variant": "flash",
-       "rtf": 0.1350735400000019,
-       "cold_start_seconds": 0.029873100000031627,
+       "rtf": 0.21135686000000078,
+       "cold_start_seconds": 0.0357326000000171,
        "native_ssm": false,
        "intra_op_threads": 1,
        "latency_ms": 30.0,
@@ -1171,8 +1171,8 @@
       {
        "model_id": "voice-isolate-dpcrn-v8",
        "variant": "default",
-       "rtf": 0.12085063999999761,
-       "cold_start_seconds": 0.025306499999999232,
+       "rtf": 0.19196375999999873,
+       "cold_start_seconds": 0.02872589999998354,
        "native_ssm": false,
        "intra_op_threads": 1,
        "latency_ms": 30.0,
@@ -1181,8 +1181,8 @@
       {
        "model_id": "voice-isolate-dpcrn-v8",
        "variant": "flash",
-       "rtf": 0.09160458000000063,
-       "cold_start_seconds": 0.03514039999998886,
+       "rtf": 0.15168452000000343,
+       "cold_start_seconds": 0.03395279999995182,
        "native_ssm": false,
        "intra_op_threads": 1,
        "latency_ms": 30.0,
@@ -1197,14 +1197,14 @@
       "cpu": "Apple M1 (Virtual)",
       "logical_cpus": 3,
       "onnxruntime": "1.26.0",
-      "ci_image": "macos15 20261028.0489.1"
+      "ci_image": "macos15 20261104.0514.1"
      },
      "results": [
       {
        "model_id": "noise-suppression-dpcrn-mamba-v1",
        "variant": "default",
-       "rtf": 0.26192863339999806,
-       "cold_start_seconds": 0.02597158399998989,
+       "rtf": 0.37016693749999946,
+       "cold_start_seconds": 0.027084042000012687,
        "native_ssm": false,
        "intra_op_threads": 1,
        "latency_ms": 30.0,
@@ -1213,8 +1213,8 @@
       {
        "model_id": "noise-suppression-dpcrn-mamba-v1",
        "variant": "flash",
-       "rtf": 0.17514545419999764,
-       "cold_start_seconds": 0.03246712499998239,
+       "rtf": 0.25357276249999927,
+       "cold_start_seconds": 0.04846883299995852,
        "native_ssm": false,
        "intra_op_threads": 1,
        "latency_ms": 30.0,
@@ -1223,8 +1223,8 @@
       {
        "model_id": "noise-suppression-dpcrn-mamba-v2",
        "variant": "default",
-       "rtf": 0.2458949333000021,
-       "cold_start_seconds": 0.018530166999994435,
+       "rtf": 0.3686135583000009,
+       "cold_start_seconds": 0.03497949999996308,
        "native_ssm": false,
        "intra_op_threads": 1,
        "latency_ms": 30.0,
@@ -1233,8 +1233,8 @@
       {
        "model_id": "noise-suppression-dpcrn-mamba-v2",
        "variant": "flash",
-       "rtf": 0.18695099579999805,
-       "cold_start_seconds": 0.02154316700000436,
+       "rtf": 0.26068314999999986,
+       "cold_start_seconds": 0.03238408400000026,
        "native_ssm": false,
        "intra_op_threads": 1,
        "latency_ms": 30.0,
@@ -1243,8 +1243,8 @@
       {
        "model_id": "noise-suppression-dpcrn-mamba-v3",
        "variant": "default",
-       "rtf": 0.4095458457999996,
-       "cold_start_seconds": 0.023939459000018815,
+       "rtf": 0.5235213375000001,
+       "cold_start_seconds": 0.030320582999991075,
        "native_ssm": false,
        "intra_op_threads": 1,
        "latency_ms": 30.0,
@@ -1253,8 +1253,8 @@
       {
        "model_id": "noise-suppression-dpcrn-mamba-v3",
        "variant": "flash",
-       "rtf": 0.27850036250000587,
-       "cold_start_seconds": 0.024122458000022107,
+       "rtf": 0.327724745799992,
+       "cold_start_seconds": 0.033807874999979504,
        "native_ssm": false,
        "intra_op_threads": 1,
        "latency_ms": 30.0,
@@ -1263,8 +1263,8 @@
       {
        "model_id": "voice-isolate-dpcrn-curriculum-v1",
        "variant": "default",
-       "rtf": 0.28900561660000224,
-       "cold_start_seconds": 0.03477366599997822,
+       "rtf": 0.3509613583000032,
+       "cold_start_seconds": 0.02381045799995718,
        "native_ssm": false,
        "intra_op_threads": 1,
        "latency_ms": 30.0,
@@ -1273,8 +1273,8 @@
       {
        "model_id": "voice-isolate-dpcrn-curriculum-v1",
        "variant": "flash",
-       "rtf": 0.20068820000000187,
-       "cold_start_seconds": 0.02223975000003975,
+       "rtf": 0.2548321084000008,
+       "cold_start_seconds": 0.03259854100008397,
        "native_ssm": false,
        "intra_op_threads": 1,
        "latency_ms": 30.0,
@@ -1283,8 +1283,8 @@
       {
        "model_id": "voice-isolate-dpcrn-curriculum-v2",
        "variant": "default",
-       "rtf": 0.40359175419999926,
-       "cold_start_seconds": 0.02057841600003485,
+       "rtf": 0.49482641670000477,
+       "cold_start_seconds": 0.029869250000047032,
        "native_ssm": false,
        "intra_op_threads": 1,
        "latency_ms": 30.0,
@@ -1293,8 +1293,8 @@
       {
        "model_id": "voice-isolate-dpcrn-curriculum-v2",
        "variant": "flash",
-       "rtf": 0.2681101666999893,
-       "cold_start_seconds": 0.023853082999949038,
+       "rtf": 0.3675965708000035,
+       "cold_start_seconds": 0.03393366699992839,
        "native_ssm": false,
        "intra_op_threads": 1,
        "latency_ms": 30.0,
@@ -1303,8 +1303,8 @@
       {
        "model_id": "voice-isolate-dpcrn-v8",
        "variant": "default",
-       "rtf": 0.2768623625000032,
-       "cold_start_seconds": 0.01890704199990978,
+       "rtf": 0.3240730249999956,
+       "cold_start_seconds": 0.03866658399999778,
        "native_ssm": false,
        "intra_op_threads": 1,
        "latency_ms": 30.0,
@@ -1313,8 +1313,8 @@
       {
        "model_id": "voice-isolate-dpcrn-v8",
        "variant": "flash",
-       "rtf": 0.19505580420000115,
-       "cold_start_seconds": 0.027928416000008838,
+       "rtf": 0.2424805957999979,
+       "cold_start_seconds": 0.08944858300003489,
        "native_ssm": false,
        "intra_op_threads": 1,
        "latency_ms": 30.0,
